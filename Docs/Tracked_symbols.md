@@ -1,0 +1,20 @@
+Growth Stocks
+NVDA
+PLTR
+CRWD
+AVGO
+META
+MSFT
+AMZN
+ETFs
+VOO
+QQQ
+CIBR
+ITA
+VGT
+Dividend Stocks
+JNJ
+PG
+KO
+PEP
+ABBV
