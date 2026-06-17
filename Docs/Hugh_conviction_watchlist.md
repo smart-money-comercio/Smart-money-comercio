@@ -1,0 +1,15 @@
+AI & Software
+NVDA
+PLTR
+MSFT
+Cyber
+CRWD
+PANW
+Defense
+AVAV
+KTOS
+LMT
+ETFs
+QQQ
+VOO
+ITA
