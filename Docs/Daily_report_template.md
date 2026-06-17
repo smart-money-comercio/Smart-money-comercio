@@ -42,3 +42,19 @@ Defense Intelligence
 Congressional Activity
 
 AI Summary
+
+## Defense Intelligence
+
+Top Defense Opportunities
+
+1. AVAV
+2. KTOS
+3. PLTR
+
+Recent Defense Contracts
+
+Recent NATO Awards
+
+Recent AI Warfare Programs
+
+Recent Counter-Drone Awards
