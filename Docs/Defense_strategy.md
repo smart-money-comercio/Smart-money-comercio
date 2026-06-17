@@ -40,3 +40,16 @@ Earnings Beat
 +10
 Maximum Defense Score: 
 100
+
+Tracked Companies 
+
+AVAV
+KTOS
+PLTR
+CRWD
+LMT
+TDY
+ONDS
+PANW
+NOC
+RTX
