@@ -37,3 +37,11 @@ Success Criteria
 [ ] First Telegram Alert Received
 [ ] First AI Report Generated
 [ ] First Defense Intelligence Report Generated
+
+MVP SUCCESS CRITERIA
+
+1. Daily Telegram report delivered automatically.
+2. Top 10 stocks ranked each morning.
+3. Defense Intelligence section included.
+4. No manual intervention required.
+5. Runs successfully for 30 consecutive days.
