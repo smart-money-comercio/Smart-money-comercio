@@ -1,7 +1,12 @@
 import os
+import sys
 import requests
 from dotenv import load_dotenv
-from daily_report import build_daily_report
+
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(ROOT_DIR)
+
+from src.reports.daily_report import build_daily_report
 
 load_dotenv()
 
