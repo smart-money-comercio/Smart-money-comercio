@@ -14,6 +14,7 @@ from src.insiders.insider_scoring import get_insider_trades
 from src.reports.daily_report import build_daily_report
 from src.scoring.scoring_engine import get_stock_scores
 from src.scoring.stock_lookup import get_stock
+from src.congress.congress_real_data import get_real_congress_trades
 
 load_dotenv()
 
@@ -33,6 +34,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/smartmoney - Smart money signals\n"
         "/conviction - Highest signal-overlap ideas\n"
         "/insiders - Insider buying intelligence\n"
+        "/realcongress - Real congressional disclosures\n"
         "/help - Command list"
     )
 
@@ -188,6 +190,25 @@ async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)
 
+async def realcongress(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    trades = get_real_congress_trades(limit=10)
+
+    if not trades:
+        await update.message.reply_text("No congressional trades found.")
+        return
+
+    text = "🏛️ REAL CONGRESSIONAL DISCLOSURES\n\n"
+
+    for trade in trades:
+        text += (
+            f"{trade['politician']} ({trade['source']})\n"
+            f"{trade['transaction']}: {trade['ticker']}\n"
+            f"Amount: {trade['amount_range']}\n"
+            f"Disclosure: {trade['disclosure_date']}\n\n"
+        )
+
+    await update.message.reply_text(text)
+
 
 async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -249,6 +270,7 @@ def main():
     app.add_handler(CommandHandler("smartmoney", smartmoney))
     app.add_handler(CommandHandler("insiders", insiders))
     app.add_handler(CommandHandler("conviction", conviction))
+    app.add_handler(CommandHandler("realcongress", realcongress))
 
     print("Smart Money AI bot is running...")
     app.run_polling()
