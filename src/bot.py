@@ -20,6 +20,7 @@ from src.sec.sec_data import get_sec_filings
 from src.sec.sec_summary import summarize_sec_filing
 from src.market.earnings_data import get_earnings_data, summarize_earnings
 from src.reports.scorecard import build_scorecard
+from src.screeners.undervalued_screener import get_undervalued_ideas
 
 load_dotenv()
 
@@ -34,6 +35,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/market SYMBOL - Real market data\n"
         "/quote SYMBOL - Fast market quote\n"
         "/earnings SYMBOL - Earnings and profitability summary\n"
+        "/undervalued - Screen for undervalued Smart Money ideas\n"
         "/top10 - Top ranked stocks\n"
         "/growth - Growth and AI stocks\n"
         "/dividends - Dividend and high-income stocks\n"
@@ -597,6 +599,55 @@ Market data is pulled from a public market-data source and should be verified be
 
     await update.message.reply_text(message) 
 
+async def undervalued(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🔎 Scanning watchlist for undervalued ideas..."
+    )
+
+    try:
+        ideas = get_undervalued_ideas(limit=10)
+    except Exception as error:
+        await update.message.reply_text(
+            f"Undervalued screen error:\n{error}"
+        )
+        return
+
+    if not ideas:
+        await update.message.reply_text(
+            "No undervalued ideas found based on the current screen."
+        )
+        return
+
+    text = "💎 UNDERVALUED SMART MONEY IDEAS\n\n"
+
+    for i, idea in enumerate(ideas, start=1):
+        reasons = ", ".join(idea["reasons"][:3])
+
+        price_text = f"${idea['price']:.2f}" if idea["price"] else "N/A"
+        pe_text = idea["pe_ratio"] if idea["pe_ratio"] else "N/A"
+        forward_pe_text = idea["forward_pe"] if idea["forward_pe"] else "N/A"
+
+        text += (
+            f"{i}. {idea['ticker']}\n"
+            f"Category: {idea['category']}\n"
+            f"Price: {price_text}\n"
+            f"Smart Money Score: {idea['final_score']}\n"
+            f"Undervalued Score: {idea['undervalued_score']}\n"
+            f"Risk: {idea['risk_level']} ({idea['risk_score']}/100)\n"
+            f"P/E: {pe_text}\n"
+            f"Forward P/E: {forward_pe_text}\n"
+            f"Dividend Yield: {format_percent(idea['dividend_yield'])}\n"
+            f"Why: {reasons}\n\n"
+        )
+
+    text += (
+        "Note: This screen looks for strong Smart Money scores, reasonable valuation, "
+        "earnings support, dividend support, and manageable risk. "
+        "This is research, not financial advice."
+    )
+
+    await update.message.reply_text(text)
+
 async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("Usage: /risk PLTR")
@@ -800,6 +851,7 @@ def main():
     app.add_handler(CommandHandler("filing", filing))
     app.add_handler(CommandHandler("earnings", earnings))
     app.add_handler(CommandHandler("scorecard", scorecard))
+    app.add_handler(CommandHandler("undervalued", undervalued))
 
     print("Smart Money AI bot is running...")
     app.run_polling()
