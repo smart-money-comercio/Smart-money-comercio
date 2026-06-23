@@ -14,7 +14,7 @@ from src.insiders.insider_scoring import get_insider_trades
 from src.reports.daily_report import build_daily_report
 from src.scoring.scoring_engine import get_stock_scores
 from src.scoring.stock_lookup import get_stock
-from src.congress.congress_real_data import get_real_congress_trades
+from src.scoring.risk_engine import get_risk_profile
 
 load_dotenv()
 
@@ -37,6 +37,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/conviction - Highest signal-overlap ideas\n"
         "/insiders - Insider buying intelligence\n"
         "/realcongress - Real congressional disclosures\n"
+        "/portfolio - Smart Money portfolio model\n"
+        "/risk SYMBOL - Risk profile\n"
         "/help - Command list"
     )
 
@@ -58,6 +60,65 @@ async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)
 
+async def portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    scores = get_stock_scores()
+
+    growth = [
+        stock for stock in scores
+        if "Growth" in stock["category"] or "AI" in stock["category"]
+    ]
+
+    defense = [
+        stock for stock in scores
+        if (
+            "Defense" in stock["category"]
+            or "Cyber" in stock["category"]
+            or "Drones" in stock["category"]
+            or "Autonomous" in stock["category"]
+            or "Space" in stock["category"]
+            or "Missile" in stock["category"]
+        )
+    ]
+
+    etfs = [
+        stock for stock in scores
+        if "ETF" in stock["category"]
+    ]
+
+    dividends = [
+        stock for stock in scores
+        if "Dividend" in stock["category"] or "High Dividend" in stock["category"]
+    ]
+
+    growth = sorted(growth, key=lambda x: x["final_score"], reverse=True)
+    defense = sorted(defense, key=lambda x: x["final_score"], reverse=True)
+    etfs = sorted(etfs, key=lambda x: x["final_score"], reverse=True)
+    dividends = sorted(dividends, key=lambda x: x["final_score"], reverse=True)
+
+    text = "📊 SMART MONEY PORTFOLIO MODEL\n\n"
+
+    text += "🚀 Growth Allocation: 40%\n"
+    for stock in growth[:3]:
+        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
+
+    text += "\n🛡️ Defense / Cyber / AI Warfare Allocation: 20%\n"
+    for stock in defense[:3]:
+        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
+
+    text += "\n📈 ETF Allocation: 25%\n"
+    for stock in etfs[:3]:
+        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
+
+    text += "\n💰 Dividend / High-Income Allocation: 15%\n"
+    for stock in dividends[:3]:
+        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
+
+    text += (
+        "\nNote: This is a research model based on Smart Money AI scoring. "
+        "It is not financial advice. Review risk, valuation, dividend safety, and diversification before investing."
+    )
+
+    await update.message.reply_text(text)
 
 async def defense(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = sorted(
@@ -272,8 +333,47 @@ async def dividends(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)    
 
+async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /risk PLTR")
+        return
+
+    symbol = context.args[0].upper()
+    stock = get_stock(symbol)
+
+    if not stock:
+        await update.message.reply_text(f"{symbol} not found in watchlist.")
+        return
+
+    risk_profile = get_risk_profile(stock)
+
+    factors = "\n".join(
+        [f"- {factor}" for factor in risk_profile["risk_factors"]]
+    )
+
+    message = f"""
+⚠️ RISK PROFILE: {risk_profile['ticker']}
+
+Risk Level:
+{risk_profile['risk_level']}
+
+Risk Score:
+{risk_profile['risk_score']}/100
+
+Category:
+{stock['category']}
+
+Key Risk Factors:
+{factors}
+
+Note:
+This risk score is a research estimate based on category, volatility profile, and concentration risk. It is not financial advice.
+"""
+
+    await update.message.reply_text(message)
 
 async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     if not context.args:
         await update.message.reply_text("Usage: /ticker PLTR")
         return
@@ -285,6 +385,7 @@ async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"{symbol} not found in watchlist.")
         return
 
+    risk_profile = get_risk_profile(stock)
     analysis = analyze_stock(stock)
 
     message = f"""
@@ -307,6 +408,12 @@ Insider Score:
 
 Final Score:
 {stock['final_score']}
+
+⚠️ Risk Level:
+{risk_profile['risk_level']}
+
+Risk Score:
+{risk_profile['risk_score']}/100
 
 🧠 AI ANALYSIS
 
@@ -336,6 +443,8 @@ def main():
     app.add_handler(CommandHandler("realcongress", realcongress))
     app.add_handler(CommandHandler("growth", growth))
     app.add_handler(CommandHandler("dividends", dividends))
+    app.add_handler(CommandHandler("portfolio", portfolio))
+    app.add_handler(CommandHandler("risk", risk))
 
     print("Smart Money AI bot is running...")
     app.run_polling()
