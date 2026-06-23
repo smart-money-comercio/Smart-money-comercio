@@ -1,0 +1,192 @@
+import os
+import sys
+
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(ROOT_DIR)
+
+from telegram.ext import MessageHandler, filters
+from src.scoring.stock_lookup import get_stock
+from src.agents.analyst_agent import analyze_stock
+from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from src.congress.congress_scoring import get_congress_trades, get_top_congress_buys
+
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(ROOT_DIR)
+
+from src.reports.daily_report import build_daily_report
+from src.scoring.scoring_engine import get_stock_scores
+
+load_dotenv()
+
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🚀 Smart Money AI is online.\n\n"
+        "Commands:\n"
+        "/report - Latest full report\n"
+        "/top10 - Top ranked stocks\n"
+        "/congress - Congressional trading intelligence\n"
+        "/defense - Defense rankings\n"
+        "/watchlist - Tracked companies\n"
+        "/ticker - Summary\n"
+        "/smartmoney - Smart money signals\n"
+        "/help - Command list\n"
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await start(update, context)
+
+
+async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(build_daily_report())
+
+
+async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    scores = get_stock_scores()
+    text = "🔥 TOP 10 SMART MONEY PICKS\n\n"
+    for i, stock in enumerate(scores[:10], start=1):
+        text += f"{i}. {stock['ticker']} - {stock['final_score']} ({stock['category']})\n"
+    await update.message.reply_text(text)
+
+
+async def defense(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    scores = sorted(
+        get_stock_scores(),
+        key=lambda x: x["defense_score"],
+        reverse=True
+    )
+
+    text = "🛡️ DEFENSE INTELLIGENCE RANKINGS\n\n"
+    for i, stock in enumerate(scores[:10], start=1):
+        text += f"{i}. {stock['ticker']} - Defense Score: {stock['defense_score']} ({stock['category']})\n"
+
+    await update.message.reply_text(text)
+
+
+async def watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    scores = get_stock_scores()
+    text = "📋 SMART MONEY WATCHLIST\n\n"
+    for stock in scores:
+        text += f"- {stock['ticker']} | {stock['category']}\n"
+    await update.message.reply_text(text)
+
+async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    trades = get_congress_trades()
+
+    text = "🏛️ CONGRESSIONAL TRADING INTELLIGENCE\n\n"
+
+    for trade in trades:
+        text += (
+            f"{trade['politician']}\n"
+            f"{trade['transaction']}: {trade['ticker']}\n"
+            f"Sector: {trade['sector']}\n"
+            f"Amount: {trade['amount_range']}\n\n"
+        )
+
+    await update.message.reply_text(text)
+
+async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    scores = get_stock_scores()
+
+    scores = sorted(
+        scores,
+        key=lambda x: x.get("congress_score", 0),
+        reverse=True
+    )
+
+    text = "🧠 SMART MONEY SIGNALS\n\n"
+
+    for stock in scores[:5]:
+
+        congress_score = stock.get("congress_score", 0)
+
+        if congress_score > 0:
+            signal = "Congressional activity detected"
+        else:
+            signal = "No current congressional signal"
+
+        text += (
+            f"{stock['ticker']}\n"
+            f"Category: {stock['category']}\n"
+            f"Congress Score: {congress_score}\n"
+            f"Final Score: {stock['final_score']}\n"
+            f"Signal: {signal}\n\n"
+        )
+
+    text += (
+        "🧠 Insight:\n"
+        "Congressional activity is currently strongest where score values are above zero. "
+        "These signals should be treated as research inputs, not standalone buy recommendations."
+    )
+
+    await update.message.reply_text(text)
+
+async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /ticker PLTR"
+        )
+        return
+
+    symbol = context.args[0].upper()
+
+    stock = get_stock(symbol)
+
+    if not stock:
+        await update.message.reply_text(
+            f"{symbol} not found in watchlist."
+        )
+        return
+
+    analysis = analyze_stock(stock)
+
+    message = f"""
+📈 {stock['ticker']}
+
+Category:
+{stock['category']}
+
+Smart Score:
+{stock['smart_score']}
+
+Defense Score:
+{stock['defense_score']}
+
+Final Score:
+{stock['final_score']}
+
+🧠 AI ANALYSIS
+
+{analysis}
+"""
+
+    await update.message.reply_text(message)
+
+def main():
+    if not BOT_TOKEN:
+        raise ValueError("TELEGRAM_BOT_TOKEN is missing from .env")
+
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("report", report))
+    app.add_handler(CommandHandler("congress", congress))
+    app.add_handler(CommandHandler("smartmoney", smartmoney))
+    app.add_handler(CommandHandler("top10", top10))
+    app.add_handler(CommandHandler("defense", defense))
+    app.add_handler(CommandHandler("watchlist", watchlist))
+    app.add_handler(CommandHandler("ticker", ticker))
+    print("Smart Money AI bot is running...")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()

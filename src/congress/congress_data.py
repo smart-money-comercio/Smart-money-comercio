@@ -1,0 +1,42 @@
+CONGRESS_TRADES = [
+    {
+        "politician": "Nancy Pelosi",
+        "ticker": "NVDA",
+        "transaction": "Purchase",
+        "sector": "AI Infrastructure",
+        "amount_range": "$1M - $5M",
+        "disclosure_date": "Recent",
+    },
+    {
+        "politician": "Nancy Pelosi",
+        "ticker": "AVGO",
+        "transaction": "Purchase",
+        "sector": "Semiconductors",
+        "amount_range": "$500K - $1M",
+        "disclosure_date": "Recent",
+    },
+    {
+        "politician": "Ro Khanna",
+        "ticker": "MSFT",
+        "transaction": "Purchase",
+        "sector": "AI / Cloud",
+        "amount_range": "$15K - $50K",
+        "disclosure_date": "Recent",
+    },
+    {
+        "politician": "Tommy Tuberville",
+        "ticker": "LMT",
+        "transaction": "Purchase",
+        "sector": "Defense",
+        "amount_range": "$50K - $100K",
+        "disclosure_date": "Recent",
+    },
+    {
+        "politician": "Josh Gottheimer",
+        "ticker": "PANW",
+        "transaction": "Purchase",
+        "sector": "Cybersecurity",
+        "amount_range": "$15K - $50K",
+        "disclosure_date": "Recent",
+    },
+]

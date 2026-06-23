@@ -1,9 +1,11 @@
 from datetime import datetime
 from src.scoring.scoring_engine import get_stock_scores
+from src.agents.analyst_agent import generate_ai_summary
 
 def build_daily_report():
     today = datetime.now().strftime("%B %d, %Y")
     scores = get_stock_scores()
+    ai_summary = generate_ai_summary(scores)
 
     top_picks = "\n".join(
         [f"{i+1}. {s['ticker']} - Score: {s['final_score']} ({s['category']})"
@@ -31,8 +33,8 @@ Defense / AI Warfare: 20%
 ETFs: 25%
 Dividend: 15%
 
-🧠 AI SUMMARY
-Defense, AI, cybersecurity, drones, and autonomous systems remain priority investment themes.
+🧠 AI ANALYST SUMMARY
+{ai_summary}
 
 Status: MVP scoring engine active
 """
