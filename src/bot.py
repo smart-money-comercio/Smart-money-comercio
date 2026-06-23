@@ -27,6 +27,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Commands:\n"
         "/report - Latest full report\n"
         "/top10 - Top ranked stocks\n"
+        "/growth - Growth and AI stocks\n"
+        "/dividends - Dividend and high-income stocks\n"
         "/congress - Congressional trading intelligence\n"
         "/defense - Defense rankings\n"
         "/watchlist - Tracked companies\n"
@@ -209,6 +211,67 @@ async def realcongress(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)
 
+async def growth(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    scores = get_stock_scores()
+
+    growth_stocks = [
+        stock for stock in scores
+        if "Growth" in stock["category"] or "AI" in stock["category"]
+    ]
+
+    growth_stocks = sorted(
+        growth_stocks,
+        key=lambda x: x["final_score"],
+        reverse=True
+    )
+
+    text = "🚀 GROWTH & AI STOCKS\n\n"
+
+    for i, stock in enumerate(growth_stocks[:10], start=1):
+        text += (
+            f"{i}. {stock['ticker']}\n"
+            f"Category: {stock['category']}\n"
+            f"Final Score: {stock['final_score']}\n\n"
+        )
+
+    text += (
+        "Note: Growth stocks can have higher upside but also higher volatility. "
+        "This is research, not financial advice."
+    )
+
+    await update.message.reply_text(text)
+
+
+async def dividends(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    scores = get_stock_scores()
+
+    dividend_stocks = [
+        stock for stock in scores
+        if "Dividend" in stock["category"] or "High Dividend" in stock["category"]
+    ]
+
+    dividend_stocks = sorted(
+        dividend_stocks,
+        key=lambda x: x["final_score"],
+        reverse=True
+    )
+
+    text = "💰 DIVIDEND & HIGH-INCOME STOCKS\n\n"
+
+    for i, stock in enumerate(dividend_stocks[:10], start=1):
+        text += (
+            f"{i}. {stock['ticker']}\n"
+            f"Category: {stock['category']}\n"
+            f"Final Score: {stock['final_score']}\n\n"
+        )
+
+    text += (
+        "Note: Dividend stocks may provide income, but yield and safety should be reviewed separately. "
+        "This is research, not financial advice."
+    )
+
+    await update.message.reply_text(text)    
+
 
 async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -271,6 +334,8 @@ def main():
     app.add_handler(CommandHandler("insiders", insiders))
     app.add_handler(CommandHandler("conviction", conviction))
     app.add_handler(CommandHandler("realcongress", realcongress))
+    app.add_handler(CommandHandler("growth", growth))
+    app.add_handler(CommandHandler("dividends", dividends))
 
     print("Smart Money AI bot is running...")
     app.run_polling()
