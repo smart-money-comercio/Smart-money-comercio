@@ -18,6 +18,8 @@ from src.scoring.risk_engine import get_risk_profile
 from src.market.market_data import get_market_data, format_number, format_percent
 from src.sec.sec_data import get_sec_filings
 from src.sec.sec_summary import summarize_sec_filing
+from src.market.earnings_data import get_earnings_data, summarize_earnings
+from src.reports.scorecard import build_scorecard
 
 load_dotenv()
 
@@ -31,6 +33,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/report - Latest full report\n"
         "/market SYMBOL - Real market data\n"
         "/quote SYMBOL - Fast market quote\n"
+        "/earnings SYMBOL - Earnings and profitability summary\n"
         "/top10 - Top ranked stocks\n"
         "/growth - Growth and AI stocks\n"
         "/dividends - Dividend and high-income stocks\n"
@@ -40,6 +43,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/defense - Defense rankings\n"
         "/watchlist - Tracked companies\n"
         "/ticker SYMBOL - Stock summary\n"
+        "/scorecard SYMBOL - Full Smart Money research scorecard\n"
         "/smartmoney - Smart money signals\n"
         "/conviction - Highest signal-overlap ideas\n"
         "/insiders - Insider buying intelligence\n"
@@ -263,6 +267,101 @@ Report Date:
 """
 
     await update.message.reply_text(message)
+
+async def earnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /earnings PLTR")
+        return
+
+    symbol = context.args[0].upper()
+
+    await update.message.reply_text(
+        f"📊 Pulling earnings data for {symbol}..."
+    )
+
+    data = get_earnings_data(symbol)
+
+    if not data["found"]:
+        await update.message.reply_text(
+            f"Earnings data not found for {symbol}.\n"
+            f"Error: {data.get('error', 'Unknown error')}"
+        )
+        return
+
+    try:
+        ai_summary = summarize_earnings(data)
+    except Exception as error:
+        ai_summary = f"AI summary unavailable: {error}"
+
+    message = f"""
+📊 EARNINGS SNAPSHOT: {data['ticker']}
+
+Company:
+{data['company_name']}
+
+Period:
+{data['period_type']} - {data['latest_period']}
+
+Sector:
+{data['sector']}
+
+Revenue:
+{format_number(data['revenue'])}
+
+Revenue Growth:
+{format_percent(data['revenue_growth'])}
+
+Gross Profit:
+{format_number(data['gross_profit'])}
+
+Operating Income:
+{format_number(data['operating_income'])}
+
+Net Income:
+{format_number(data['net_income'])}
+
+EPS:
+{data['diluted_eps'] if data['diluted_eps'] else 'N/A'}
+
+Gross Margin:
+{format_percent(data['gross_margin'])}
+
+Operating Margin:
+{format_percent(data['operating_margin'])}
+
+Net Margin:
+{format_percent(data['net_margin'])}
+
+P/E Ratio:
+{data['pe_ratio'] if data['pe_ratio'] else 'N/A'}
+
+Forward P/E:
+{data['forward_pe'] if data['forward_pe'] else 'N/A'}
+
+Dividend Yield:
+{format_percent(data['dividend_yield'])}
+
+🧠 AI EARNINGS SUMMARY
+
+{ai_summary}
+"""
+
+    await update.message.reply_text(message)
+
+async def scorecard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /scorecard PLTR")
+        return
+
+    symbol = context.args[0].upper()
+
+    await update.message.reply_text(
+        f"🧾 Building Smart Money scorecard for {symbol}..."
+    )
+
+    result = build_scorecard(symbol)
+
+    await update.message.reply_text(result["message"])
 
 async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = sorted(
@@ -699,6 +798,8 @@ def main():
     app.add_handler(CommandHandler("quote", quote))
     app.add_handler(CommandHandler("sec", sec))
     app.add_handler(CommandHandler("filing", filing))
+    app.add_handler(CommandHandler("earnings", earnings))
+    app.add_handler(CommandHandler("scorecard", scorecard))
 
     print("Smart Money AI bot is running...")
     app.run_polling()
