@@ -228,11 +228,16 @@ async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
         insider_score = stock.get("insider_score", 0)
         defense_score = stock.get("defense_score", 0)
 
+        risk_profile = get_risk_profile(stock)
+
         overlap_count = 0
+
         if congress_score > 0:
             overlap_count += 1
+
         if insider_score > 0:
             overlap_count += 1
+
         if defense_score >= 85:
             overlap_count += 1
 
@@ -243,11 +248,14 @@ async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Congress Score: {congress_score}\n"
             f"Insider Score: {insider_score}\n"
             f"Final Score: {stock['final_score']}\n"
-            f"Signal Overlap: {overlap_count}/3\n\n"
+            f"Signal Overlap: {overlap_count}/3\n"
+            f"Risk Level: {risk_profile['risk_level']}\n"
+            f"Risk Score: {risk_profile['risk_score']}/100\n\n"
         )
 
     text += (
         "Note: High conviction means multiple research signals overlap. "
+        "Risk level is shown to prevent confusing high conviction with low risk. "
         "This is not financial advice."
     )
 
