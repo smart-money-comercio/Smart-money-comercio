@@ -15,6 +15,7 @@ from src.reports.daily_report import build_daily_report
 from src.scoring.scoring_engine import get_stock_scores
 from src.scoring.stock_lookup import get_stock
 from src.scoring.risk_engine import get_risk_profile
+from src.market.market_data import get_market_data, format_number, format_percent
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🚀 Smart Money AI is online.\n\n"
         "Commands:\n"
         "/report - Latest full report\n"
+        "/market SYMBOL - Real market data\n"
         "/top10 - Top ranked stocks\n"
         "/growth - Growth and AI stocks\n"
         "/dividends - Dividend and high-income stocks\n"
@@ -339,7 +341,64 @@ async def dividends(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "This is research, not financial advice."
     )
 
-    await update.message.reply_text(text)    
+    await update.message.reply_text(text)   
+
+async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /market PLTR")
+        return
+
+    symbol = context.args[0].upper()
+    data = get_market_data(symbol)
+
+    if not data["found"]:
+        await update.message.reply_text(
+            f"Market data not found for {symbol}.\n"
+            f"Error: {data.get('error', 'Unknown error')}"
+        )
+        return
+
+    message = f"""
+📊 MARKET DATA: {data['ticker']}
+
+Company:
+{data['company_name']}
+
+Sector:
+{data['sector']}
+
+Industry:
+{data['industry']}
+
+Price:
+${data['price']:.2f}
+
+Market Cap:
+{format_number(data['market_cap'])}
+
+P/E Ratio:
+{data['pe_ratio'] if data['pe_ratio'] else 'N/A'}
+
+Forward P/E:
+{data['forward_pe'] if data['forward_pe'] else 'N/A'}
+
+Dividend Yield:
+{format_percent(data['dividend_yield'])}
+
+Beta:
+{data['beta'] if data['beta'] else 'N/A'}
+
+52-Week High:
+${data['week_52_high']:.2f}
+
+52-Week Low:
+${data['week_52_low']:.2f}
+
+Note:
+Market data is pulled from a public market-data source and should be verified before making investment decisions.
+"""
+
+    await update.message.reply_text(message) 
 
 async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -453,6 +512,7 @@ def main():
     app.add_handler(CommandHandler("dividends", dividends))
     app.add_handler(CommandHandler("portfolio", portfolio))
     app.add_handler(CommandHandler("risk", risk))
+    app.add_handler(CommandHandler("market", market))
 
     print("Smart Money AI bot is running...")
     app.run_polling()

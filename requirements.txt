@@ -2,3 +2,4 @@ requests
 python-dotenv
 openai
 python-telegram-bot
+yfinance
