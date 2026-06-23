@@ -16,6 +16,7 @@ from src.scoring.scoring_engine import get_stock_scores
 from src.scoring.stock_lookup import get_stock
 from src.scoring.risk_engine import get_risk_profile
 from src.market.market_data import get_market_data, format_number, format_percent
+from src.sec.sec_data import get_sec_filings
 
 load_dotenv()
 
@@ -33,6 +34,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/growth - Growth and AI stocks\n"
         "/dividends - Dividend and high-income stocks\n"
         "/congress - Congressional trading intelligence\n"
+        "/sec SYMBOL - Latest SEC filings\n"
         "/defense - Defense rankings\n"
         "/watchlist - Tracked companies\n"
         "/ticker SYMBOL - Stock summary\n"
@@ -163,6 +165,48 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Sector: {trade['sector']}\n"
             f"Amount: {trade['amount_range']}\n\n"
         )
+
+    await update.message.reply_text(text)
+
+async def sec(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /sec PLTR")
+        return
+
+    symbol = context.args[0].upper()
+
+    try:
+        data = get_sec_filings(symbol, limit=5)
+    except Exception as error:
+        await update.message.reply_text(
+            f"SEC data error for {symbol}:\n{error}"
+        )
+        return
+
+    if not data["found"]:
+        await update.message.reply_text(
+            f"SEC filings not found for {symbol}.\n"
+            f"Error: {data.get('error', 'Unknown error')}"
+        )
+        return
+
+    text = f"📄 SEC FILINGS: {data['ticker']}\n\n"
+    text += f"Company: {data['company_name']}\n"
+    text += f"CIK: {data['cik']}\n\n"
+
+    for filing in data["filings"]:
+        text += (
+            f"{filing['form']}\n"
+            f"Filed: {filing['filing_date']}\n"
+            f"Report Date: {filing['report_date']}\n"
+            f"Document: {filing['document']}\n"
+            f"{filing['url']}\n\n"
+        )
+
+    text += (
+        "Note: SEC filings are official regulatory documents. "
+        "Review the full filing before making investment decisions."
+    )
 
     await update.message.reply_text(text)
 
@@ -600,6 +644,7 @@ def main():
     app.add_handler(CommandHandler("risk", risk))
     app.add_handler(CommandHandler("market", market))
     app.add_handler(CommandHandler("quote", quote))
+    app.add_handler(CommandHandler("sec", sec))
 
     print("Smart Money AI bot is running...")
     app.run_polling()
