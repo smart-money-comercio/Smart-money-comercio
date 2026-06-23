@@ -28,6 +28,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Commands:\n"
         "/report - Latest full report\n"
         "/market SYMBOL - Real market data\n"
+        "/quote SYMBOL - Fast market quote\n"
         "/top10 - Top ranked stocks\n"
         "/growth - Growth and AI stocks\n"
         "/dividends - Dividend and high-income stocks\n"
@@ -439,6 +440,51 @@ This risk score is a research estimate based on category, volatility profile, an
 
     await update.message.reply_text(message)
 
+async def quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /quote PLTR")
+        return
+
+    symbol = context.args[0].upper()
+    data = get_market_data(symbol)
+
+    if not data["found"]:
+        await update.message.reply_text(
+            f"Quote not found for {symbol}.\n"
+            f"Error: {data.get('error', 'Unknown error')}"
+        )
+        return
+
+    message = f"""
+💹 QUOTE: {data['ticker']}
+
+Company:
+{data['company_name']}
+
+Price:
+${data['price']:.2f}
+
+Market Cap:
+{format_number(data['market_cap'])}
+
+P/E Ratio:
+{data['pe_ratio'] if data['pe_ratio'] else 'N/A'}
+
+Forward P/E:
+{data['forward_pe'] if data['forward_pe'] else 'N/A'}
+
+Dividend Yield:
+{format_percent(data['dividend_yield'])}
+
+Beta:
+{data['beta'] if data['beta'] else 'N/A'}
+
+52-Week Range:
+${data['week_52_low']:.2f} - ${data['week_52_high']:.2f}
+"""
+
+    await update.message.reply_text(message)
+
 async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not context.args:
@@ -553,6 +599,7 @@ def main():
     app.add_handler(CommandHandler("portfolio", portfolio))
     app.add_handler(CommandHandler("risk", risk))
     app.add_handler(CommandHandler("market", market))
+    app.add_handler(CommandHandler("quote", quote))
 
     print("Smart Money AI bot is running...")
     app.run_polling()
