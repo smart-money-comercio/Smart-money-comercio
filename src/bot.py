@@ -17,6 +17,7 @@ from src.scoring.stock_lookup import get_stock
 from src.scoring.risk_engine import get_risk_profile
 from src.market.market_data import get_market_data, format_number, format_percent
 from src.sec.sec_data import get_sec_filings
+from src.sec.sec_summary import summarize_sec_filing
 
 load_dotenv()
 
@@ -35,6 +36,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/dividends - Dividend and high-income stocks\n"
         "/congress - Congressional trading intelligence\n"
         "/sec SYMBOL - Latest SEC filings\n"
+        "/filing SYMBOL - Summary of latest SEC filing\n"
         "/defense - Defense rankings\n"
         "/watchlist - Tracked companies\n"
         "/ticker SYMBOL - Stock summary\n"
@@ -210,6 +212,57 @@ async def sec(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)
 
+async def filing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /filing PLTR or /filing PLTR 10-K")
+        return
+
+    symbol = context.args[0].upper()
+
+    form_filter = None
+    if len(context.args) > 1:
+        form_filter = context.args[1].upper()
+
+    await update.message.reply_text(
+        f"📄 Summarizing SEC filing for {symbol}..."
+    )
+
+    try:
+        result = summarize_sec_filing(symbol, form_filter)
+    except Exception as error:
+        await update.message.reply_text(
+            f"Filing summary error for {symbol}:\n{error}"
+        )
+        return
+
+    if not result["found"]:
+        await update.message.reply_text(
+            f"Could not summarize filing for {symbol}.\n"
+            f"Error: {result.get('error', 'Unknown error')}"
+        )
+        return
+
+    message = f"""
+📄 AI SEC FILING SUMMARY: {result['ticker']}
+
+Company:
+{result['company_name']}
+
+Form:
+{result['form']}
+
+Filed:
+{result['filing_date']}
+
+Report Date:
+{result['report_date']}
+
+🧠 SUMMARY
+
+{result['summary']}
+"""
+
+    await update.message.reply_text(message)
 
 async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = sorted(
@@ -645,6 +698,7 @@ def main():
     app.add_handler(CommandHandler("market", market))
     app.add_handler(CommandHandler("quote", quote))
     app.add_handler(CommandHandler("sec", sec))
+    app.add_handler(CommandHandler("filing", filing))
 
     print("Smart Money AI bot is running...")
     app.run_polling()
