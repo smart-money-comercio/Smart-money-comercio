@@ -21,6 +21,7 @@ from src.sec.sec_summary import summarize_sec_filing
 from src.market.earnings_data import get_earnings_data, summarize_earnings
 from src.reports.scorecard import build_scorecard
 from src.screeners.undervalued_screener import get_undervalued_ideas
+from src.commands.register_commands import register_commands
 
 load_dotenv()
 
@@ -829,29 +830,36 @@ def main():
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("report", report))
-    app.add_handler(CommandHandler("top10", top10))
-    app.add_handler(CommandHandler("defense", defense))
-    app.add_handler(CommandHandler("watchlist", watchlist))
-    app.add_handler(CommandHandler("ticker", ticker))
-    app.add_handler(CommandHandler("congress", congress))
-    app.add_handler(CommandHandler("smartmoney", smartmoney))
-    app.add_handler(CommandHandler("insiders", insiders))
-    app.add_handler(CommandHandler("conviction", conviction))
-    app.add_handler(CommandHandler("realcongress", realcongress))
-    app.add_handler(CommandHandler("growth", growth))
-    app.add_handler(CommandHandler("dividends", dividends))
-    app.add_handler(CommandHandler("portfolio", portfolio))
-    app.add_handler(CommandHandler("risk", risk))
-    app.add_handler(CommandHandler("market", market))
-    app.add_handler(CommandHandler("quote", quote))
-    app.add_handler(CommandHandler("sec", sec))
-    app.add_handler(CommandHandler("filing", filing))
-    app.add_handler(CommandHandler("earnings", earnings))
-    app.add_handler(CommandHandler("scorecard", scorecard))
-    app.add_handler(CommandHandler("undervalued", undervalued))
+    commands = {
+        "start": start,
+        "help": help_command,
+        "report": report,
+
+        "top10": top10,
+        "watchlist": watchlist,
+        "defense": defense,
+        "growth": growth,
+        "dividends": dividends,
+        "portfolio": portfolio,
+
+        "ticker": ticker,
+        "quote": quote,
+        "market": market,
+        "earnings": earnings,
+        "scorecard": scorecard,
+
+        "risk": risk,
+        "conviction": conviction,
+        "smartmoney": smartmoney,
+        "undervalued": undervalued,
+
+        "congress": congress,
+        "insiders": insiders,
+        "sec": sec,
+        "filing": filing,
+    }
+
+    register_commands(app, commands)
 
     print("Smart Money AI bot is running...")
     app.run_polling()
