@@ -453,7 +453,43 @@ async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     risk_profile = get_risk_profile(stock)
+    market_data = get_market_data(symbol)
     analysis = analyze_stock(stock)
+
+    if market_data["found"]:
+        market_section = f"""
+📊 MARKET DATA
+
+Company:
+{market_data['company_name']}
+
+Price:
+${market_data['price']:.2f}
+
+Market Cap:
+{format_number(market_data['market_cap'])}
+
+P/E Ratio:
+{market_data['pe_ratio'] if market_data['pe_ratio'] else 'N/A'}
+
+Forward P/E:
+{market_data['forward_pe'] if market_data['forward_pe'] else 'N/A'}
+
+Dividend Yield:
+{format_percent(market_data['dividend_yield'])}
+
+Beta:
+{market_data['beta'] if market_data['beta'] else 'N/A'}
+
+52-Week Range:
+${market_data['week_52_low']:.2f} - ${market_data['week_52_high']:.2f}
+"""
+    else:
+        market_section = """
+📊 MARKET DATA
+
+Market data unavailable.
+"""
 
     message = f"""
 📈 {stock['ticker']}
@@ -476,11 +512,15 @@ Insider Score:
 Final Score:
 {stock['final_score']}
 
-⚠️ Risk Level:
+⚠️ RISK PROFILE
+
+Risk Level:
 {risk_profile['risk_level']}
 
 Risk Score:
 {risk_profile['risk_score']}/100
+
+{market_section}
 
 🧠 AI ANALYSIS
 
