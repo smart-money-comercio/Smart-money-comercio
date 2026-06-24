@@ -15,6 +15,15 @@ from src.commands.portfolio_commands import (
     portfolio,
 )
 
+from src.commands.market_commands import (
+    ticker,
+    quote,
+    market,
+    earnings,
+    scorecard,
+    risk,
+)
+
 
 def register_commands(app, commands):
     app.add_handler(CommandHandler("start", start))
@@ -28,13 +37,13 @@ def register_commands(app, commands):
     app.add_handler(CommandHandler("dividends", dividends))
     app.add_handler(CommandHandler("portfolio", portfolio))
 
-    app.add_handler(CommandHandler("ticker", commands["ticker"]))
-    app.add_handler(CommandHandler("quote", commands["quote"]))
-    app.add_handler(CommandHandler("market", commands["market"]))
-    app.add_handler(CommandHandler("earnings", commands["earnings"]))
-    app.add_handler(CommandHandler("scorecard", commands["scorecard"]))
+    app.add_handler(CommandHandler("ticker", ticker))
+    app.add_handler(CommandHandler("quote", quote))
+    app.add_handler(CommandHandler("market", market))
+    app.add_handler(CommandHandler("earnings", earnings))
+    app.add_handler(CommandHandler("scorecard", scorecard))
+    app.add_handler(CommandHandler("risk", risk))
 
-    app.add_handler(CommandHandler("risk", commands["risk"]))
     app.add_handler(CommandHandler("conviction", commands["conviction"]))
     app.add_handler(CommandHandler("smartmoney", commands["smartmoney"]))
     app.add_handler(CommandHandler("undervalued", commands["undervalued"]))
