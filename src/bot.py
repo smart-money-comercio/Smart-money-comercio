@@ -6,13 +6,11 @@ sys.path.append(ROOT_DIR)
 
 from dotenv import load_dotenv
 from telegram.ext import ApplicationBuilder
-
 from src.commands.register_commands import register_commands
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
 
 def main():
     if not BOT_TOKEN:

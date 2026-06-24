@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from src.market.market_data import format_number, format_percent
+from src.utils.cache import get_cache, set_cache
 
 load_dotenv()
 
@@ -17,6 +18,7 @@ def get_statement_value(statement, row_names, column):
     for row_name in row_names:
         if row_name in statement.index:
             value = statement.loc[row_name, column]
+
             try:
                 return float(value)
             except Exception:
@@ -46,10 +48,16 @@ def calculate_margin(numerator, denominator):
 
 
 def get_earnings_data(ticker):
-    try:
-        symbol = ticker.upper()
-        stock = yf.Ticker(symbol)
+    symbol = ticker.upper()
+    cache_key = f"earnings:{symbol}"
 
+    cached = get_cache(cache_key)
+
+    if cached:
+        return cached
+
+    try:
+        stock = yf.Ticker(symbol)
         info = stock.info or {}
 
         quarterly_statement = stock.quarterly_income_stmt
@@ -65,7 +73,7 @@ def get_earnings_data(ticker):
             return {
                 "found": False,
                 "ticker": symbol,
-                "error": "No income statement data found"
+                "error": "No income statement data found",
             }
 
         columns = list(statement.columns)
@@ -74,7 +82,7 @@ def get_earnings_data(ticker):
             return {
                 "found": False,
                 "ticker": symbol,
-                "error": "No reporting periods found"
+                "error": "No reporting periods found",
             }
 
         latest_period = columns[0]
@@ -83,39 +91,40 @@ def get_earnings_data(ticker):
         revenue = get_statement_value(
             statement,
             ["Total Revenue", "Operating Revenue"],
-            latest_period
+            latest_period,
         )
 
         previous_revenue = None
+
         if previous_period is not None:
             previous_revenue = get_statement_value(
                 statement,
                 ["Total Revenue", "Operating Revenue"],
-                previous_period
+                previous_period,
             )
 
         gross_profit = get_statement_value(
             statement,
             ["Gross Profit"],
-            latest_period
+            latest_period,
         )
 
         operating_income = get_statement_value(
             statement,
             ["Operating Income"],
-            latest_period
+            latest_period,
         )
 
         net_income = get_statement_value(
             statement,
             ["Net Income", "Net Income Common Stockholders"],
-            latest_period
+            latest_period,
         )
 
         diluted_eps = get_statement_value(
             statement,
             ["Diluted EPS", "Basic EPS"],
-            latest_period
+            latest_period,
         )
 
         revenue_growth = calculate_growth(revenue, previous_revenue)
@@ -123,7 +132,7 @@ def get_earnings_data(ticker):
         operating_margin = calculate_margin(operating_income, revenue)
         net_margin = calculate_margin(net_income, revenue)
 
-        return {
+        result = {
             "found": True,
             "ticker": symbol,
             "company_name": info.get("shortName") or info.get("longName") or symbol,
@@ -147,11 +156,15 @@ def get_earnings_data(ticker):
             "industry": info.get("industry") or "N/A",
         }
 
+        set_cache(cache_key, result, ttl_seconds=3600)
+
+        return result
+
     except Exception as error:
         return {
             "found": False,
-            "ticker": ticker.upper(),
-            "error": str(error)
+            "ticker": symbol,
+            "error": str(error),
         }
 
 
@@ -197,7 +210,7 @@ End with: "This is research, not financial advice."
 
     response = client.responses.create(
         model="gpt-5",
-        input=prompt
+        input=prompt,
     )
 
     return response.output_text
