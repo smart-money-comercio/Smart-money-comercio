@@ -1,4 +1,8 @@
-import os
+from pathlib import Path
+
+target = Path(r"C:\Users\josej\smart-money-comercio\src\bot.py")
+
+content = '''import os
 import sys
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -33,3 +37,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''
+
+target.write_text(content, encoding="utf-8")
+
+print("bot.py repaired successfully.")
+print("First 20 lines now:")
+print("\\n".join(target.read_text(encoding="utf-8").splitlines()[:20]))
