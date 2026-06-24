@@ -32,7 +32,6 @@ def format_percent(value):
     try:
         value = float(value)
 
-        # Yahoo Finance often returns dividend yield as 0.015 for 1.5%
         if value <= 1:
             value = value * 100
 
@@ -84,7 +83,6 @@ def get_market_data(ticker):
             "industry": info.get("industry") or "N/A",
         }
 
-        # Cache market data for 15 minutes
         set_cache(cache_key, result, ttl_seconds=900)
 
         return result
