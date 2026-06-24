@@ -24,8 +24,22 @@ from src.commands.market_commands import (
     risk,
 )
 
+from src.commands.intelligence_commands import (
+    congress,
+    insiders,
+    smartmoney,
+    conviction,
+)
 
-def register_commands(app, commands):
+from src.commands.screener_commands import undervalued
+
+from src.commands.sec_commands import (
+    sec,
+    filing,
+)
+
+
+def register_commands(app):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("report", report))
@@ -44,11 +58,11 @@ def register_commands(app, commands):
     app.add_handler(CommandHandler("scorecard", scorecard))
     app.add_handler(CommandHandler("risk", risk))
 
-    app.add_handler(CommandHandler("conviction", commands["conviction"]))
-    app.add_handler(CommandHandler("smartmoney", commands["smartmoney"]))
-    app.add_handler(CommandHandler("undervalued", commands["undervalued"]))
+    app.add_handler(CommandHandler("conviction", conviction))
+    app.add_handler(CommandHandler("smartmoney", smartmoney))
+    app.add_handler(CommandHandler("undervalued", undervalued))
 
-    app.add_handler(CommandHandler("congress", commands["congress"]))
-    app.add_handler(CommandHandler("insiders", commands["insiders"]))
-    app.add_handler(CommandHandler("sec", commands["sec"]))
-    app.add_handler(CommandHandler("filing", commands["filing"]))
+    app.add_handler(CommandHandler("congress", congress))
+    app.add_handler(CommandHandler("insiders", insiders))
+    app.add_handler(CommandHandler("sec", sec))
+    app.add_handler(CommandHandler("filing", filing))
