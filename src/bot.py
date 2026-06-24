@@ -27,142 +27,6 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🚀 Smart Money AI is online.\n\n"
-        "Commands:\n"
-        "/report - Latest full report\n"
-        "/market SYMBOL - Real market data\n"
-        "/quote SYMBOL - Fast market quote\n"
-        "/earnings SYMBOL - Earnings and profitability summary\n"
-        "/undervalued - Screen for undervalued Smart Money ideas\n"
-        "/top10 - Top ranked stocks\n"
-        "/growth - Growth and AI stocks\n"
-        "/dividends - Dividend and high-income stocks\n"
-        "/congress - Congressional trading intelligence\n"
-        "/sec SYMBOL - Latest SEC filings\n"
-        "/filing SYMBOL - Summary of latest SEC filing\n"
-        "/defense - Defense rankings\n"
-        "/watchlist - Tracked companies\n"
-        "/ticker SYMBOL - Stock summary\n"
-        "/scorecard SYMBOL - Full Smart Money research scorecard\n"
-        "/smartmoney - Smart money signals\n"
-        "/conviction - Highest signal-overlap ideas\n"
-        "/insiders - Insider buying intelligence\n"
-        "/realcongress - Real congressional disclosures\n"
-        "/portfolio - Smart Money portfolio model\n"
-        "/risk SYMBOL - Risk profile\n"
-        "/help - Command list"
-    )
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await start(update, context)
-
-
-async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(build_daily_report())
-
-
-async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    scores = get_stock_scores()
-    text = "🔥 TOP 10 SMART MONEY PICKS\n\n"
-
-    for i, stock in enumerate(scores[:10], start=1):
-        text += f"{i}. {stock['ticker']} - {stock['final_score']} ({stock['category']})\n"
-
-    await update.message.reply_text(text)
-
-async def portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    scores = get_stock_scores()
-
-    growth = [
-        stock for stock in scores
-        if "Growth" in stock["category"] or "AI" in stock["category"]
-    ]
-
-    defense = [
-        stock for stock in scores
-        if (
-            "Defense" in stock["category"]
-            or "Cyber" in stock["category"]
-            or "Drones" in stock["category"]
-            or "Autonomous" in stock["category"]
-            or "Space" in stock["category"]
-            or "Missile" in stock["category"]
-        )
-    ]
-
-    etfs = [
-        stock for stock in scores
-        if "ETF" in stock["category"]
-    ]
-
-    dividends = [
-        stock for stock in scores
-        if "Dividend" in stock["category"] or "High Dividend" in stock["category"]
-    ]
-
-    growth = sorted(growth, key=lambda x: x["final_score"], reverse=True)
-    defense = sorted(defense, key=lambda x: x["final_score"], reverse=True)
-    etfs = sorted(etfs, key=lambda x: x["final_score"], reverse=True)
-    dividends = sorted(dividends, key=lambda x: x["final_score"], reverse=True)
-
-    text = "📊 SMART MONEY PORTFOLIO MODEL\n\n"
-
-    text += "🚀 Growth Allocation: 40%\n"
-    for stock in growth[:3]:
-        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
-
-    text += "\n🛡️ Defense / Cyber / AI Warfare Allocation: 20%\n"
-    for stock in defense[:3]:
-        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
-
-    text += "\n📈 ETF Allocation: 25%\n"
-    for stock in etfs[:3]:
-        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
-
-    text += "\n💰 Dividend / High-Income Allocation: 15%\n"
-    for stock in dividends[:3]:
-        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
-
-    text += (
-        "\nNote: This is a research model based on Smart Money AI scoring. "
-        "It is not financial advice. Review risk, valuation, dividend safety, and diversification before investing."
-    )
-
-    await update.message.reply_text(text)
-
-async def defense(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    scores = sorted(
-        get_stock_scores(),
-        key=lambda x: x["defense_score"],
-        reverse=True
-    )
-
-    text = "🛡️ DEFENSE INTELLIGENCE RANKINGS\n\n"
-
-    for i, stock in enumerate(scores[:10], start=1):
-        text += (
-            f"{i}. {stock['ticker']} - "
-            f"Defense Score: {stock['defense_score']} "
-            f"({stock['category']})\n"
-        )
-
-    await update.message.reply_text(text)
-
-
-async def watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    scores = get_stock_scores()
-    text = "📋 SMART MONEY WATCHLIST\n\n"
-
-    for stock in scores:
-        text += f"- {stock['ticker']} | {stock['category']}\n"
-
-    await update.message.reply_text(text)
-
-
 async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     trades = get_congress_trades()
     text = "🏛️ CONGRESSIONAL TRADING INTELLIGENCE\n\n"
@@ -482,67 +346,6 @@ async def realcongress(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)
 
-async def growth(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    scores = get_stock_scores()
-
-    growth_stocks = [
-        stock for stock in scores
-        if "Growth" in stock["category"] or "AI" in stock["category"]
-    ]
-
-    growth_stocks = sorted(
-        growth_stocks,
-        key=lambda x: x["final_score"],
-        reverse=True
-    )
-
-    text = "🚀 GROWTH & AI STOCKS\n\n"
-
-    for i, stock in enumerate(growth_stocks[:10], start=1):
-        text += (
-            f"{i}. {stock['ticker']}\n"
-            f"Category: {stock['category']}\n"
-            f"Final Score: {stock['final_score']}\n\n"
-        )
-
-    text += (
-        "Note: Growth stocks can have higher upside but also higher volatility. "
-        "This is research, not financial advice."
-    )
-
-    await update.message.reply_text(text)
-
-
-async def dividends(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    scores = get_stock_scores()
-
-    dividend_stocks = [
-        stock for stock in scores
-        if "Dividend" in stock["category"] or "High Dividend" in stock["category"]
-    ]
-
-    dividend_stocks = sorted(
-        dividend_stocks,
-        key=lambda x: x["final_score"],
-        reverse=True
-    )
-
-    text = "💰 DIVIDEND & HIGH-INCOME STOCKS\n\n"
-
-    for i, stock in enumerate(dividend_stocks[:10], start=1):
-        text += (
-            f"{i}. {stock['ticker']}\n"
-            f"Category: {stock['category']}\n"
-            f"Final Score: {stock['final_score']}\n\n"
-        )
-
-    text += (
-        "Note: Dividend stocks may provide income, but yield and safety should be reviewed separately. "
-        "This is research, not financial advice."
-    )
-
-    await update.message.reply_text(text)   
-
 async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("Usage: /market PLTR")
@@ -831,17 +634,6 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     commands = {
-        "start": start,
-        "help": help_command,
-        "report": report,
-
-        "top10": top10,
-        "watchlist": watchlist,
-        "defense": defense,
-        "growth": growth,
-        "dividends": dividends,
-        "portfolio": portfolio,
-
         "ticker": ticker,
         "quote": quote,
         "market": market,
@@ -862,7 +654,7 @@ def main():
     register_commands(app, commands)
 
     print("Smart Money AI bot is running...")
-    app.run_polling()
+    app.run_polling()         
 
 
 if __name__ == "__main__":

@@ -1,17 +1,32 @@
 from telegram.ext import CommandHandler
 
+from src.commands.basic_commands import (
+    start,
+    help_command,
+    report,
+    top10,
+    watchlist,
+    defense,
+)
+
+from src.commands.portfolio_commands import (
+    growth,
+    dividends,
+    portfolio,
+)
+
 
 def register_commands(app, commands):
-    app.add_handler(CommandHandler("start", commands["start"]))
-    app.add_handler(CommandHandler("help", commands["help"]))
-    app.add_handler(CommandHandler("report", commands["report"]))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("report", report))
 
-    app.add_handler(CommandHandler("top10", commands["top10"]))
-    app.add_handler(CommandHandler("watchlist", commands["watchlist"]))
-    app.add_handler(CommandHandler("defense", commands["defense"]))
-    app.add_handler(CommandHandler("growth", commands["growth"]))
-    app.add_handler(CommandHandler("dividends", commands["dividends"]))
-    app.add_handler(CommandHandler("portfolio", commands["portfolio"]))
+    app.add_handler(CommandHandler("top10", top10))
+    app.add_handler(CommandHandler("watchlist", watchlist))
+    app.add_handler(CommandHandler("defense", defense))
+    app.add_handler(CommandHandler("growth", growth))
+    app.add_handler(CommandHandler("dividends", dividends))
+    app.add_handler(CommandHandler("portfolio", portfolio))
 
     app.add_handler(CommandHandler("ticker", commands["ticker"]))
     app.add_handler(CommandHandler("quote", commands["quote"]))
