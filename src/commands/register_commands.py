@@ -38,10 +38,13 @@ from src.commands.sec_commands import (
     filing,
 )
 
+from src.commands.health_commands import health
+
 
 def register_commands(app):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("report", report))
 
     app.add_handler(CommandHandler("top10", top10))
