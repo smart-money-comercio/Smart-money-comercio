@@ -9,7 +9,6 @@ from src.commands.basic_commands import (
     help_command,
     report,
     top10,
-    watchlist,
     defense,
 )
 
@@ -18,6 +17,8 @@ from src.commands.portfolio_commands import (
     dividends,
     portfolio,
 )
+
+from src.commands.watchlist_commands import watchlist_command
 
 from src.commands.market_commands import (
     ticker,
@@ -66,7 +67,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("diagnostics", diagnostics_command))
 
     app.add_handler(CommandHandler("top10", top10))
-    app.add_handler(CommandHandler("watchlist", watchlist))
+    app.add_handler(CommandHandler("watchlist", watchlist_command))
     app.add_handler(CommandHandler("defense", defense))
     app.add_handler(CommandHandler("growth", growth))
     app.add_handler(CommandHandler("dividends", dividends))
