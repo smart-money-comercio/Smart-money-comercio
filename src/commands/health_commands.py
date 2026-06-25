@@ -79,7 +79,7 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def system_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    command_count = 26
+    command_count = 27
 
     lines = [
         "🧠 Smart Money AI System Status",

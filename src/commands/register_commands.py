@@ -1,5 +1,7 @@
 from telegram.ext import CommandHandler
 
+from src.commands.admin_commands import clearcache
+
 from src.commands.basic_commands import (
     start,
     help_command,
@@ -54,6 +56,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("system", system_status))
     app.add_handler(CommandHandler("version", version))
+    app.add_handler(CommandHandler("clearcache", clearcache))
     app.add_handler(CommandHandler("report", report))
 
     app.add_handler(CommandHandler("top10", top10))
