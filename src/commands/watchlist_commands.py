@@ -352,6 +352,108 @@ def build_watchlist_report(symbols: list[str], quote_results: dict[str, dict]) -
         lines.append("")
 
     lines.append("Commands:")
+    lines.append("/watchlist movers")
+    lines.append("/watchlist add SYMBOL")
+    lines.append("/watchlist remove SYMBOL")
+    lines.append("/watchlist list")
+
+    return "\n".join(lines)
+
+
+def build_watchlist_movers(symbols: list[str], quote_results: dict[str, dict]) -> str:
+    if not symbols:
+        return (
+            "📊 Watchlist Movers\n\n"
+            "Your watchlist is empty.\n\n"
+            "Add symbols with:\n"
+            "/watchlist add AAPL MSFT NVDA"
+        )
+
+    gainers = []
+    losers = []
+    flat_or_unknown = []
+    failed_symbols = []
+
+    for symbol in symbols:
+        quote = quote_results.get(symbol)
+
+        if not quote:
+            failed_symbols.append((symbol, "No quote result"))
+            continue
+
+        if not quote.get("ok"):
+            failed_symbols.append((symbol, quote.get("error", "Unknown error")))
+            continue
+
+        change_percent = quote.get("change_percent")
+
+        if not isinstance(change_percent, (int, float)):
+            flat_or_unknown.append(quote)
+            continue
+
+        if change_percent > 0:
+            gainers.append(quote)
+        elif change_percent < 0:
+            losers.append(quote)
+        else:
+            flat_or_unknown.append(quote)
+
+    gainers.sort(key=lambda item: item.get("change_percent", 0), reverse=True)
+    losers.sort(key=lambda item: item.get("change_percent", 0))
+
+    lines = [
+        "📊 Smart Money AI Watchlist Movers",
+        "",
+    ]
+
+    if gainers:
+        lines.append("🟢 Top Gainers")
+        for quote in gainers:
+            lines.append(
+                f"{quote['symbol']}: "
+                f"{format_price(quote.get('price'))} "
+                f"({format_percent(quote.get('change_percent'))}) "
+                f"{format_change(quote.get('change'))}"
+            )
+        lines.append("")
+    else:
+        lines.append("🟢 Top Gainers")
+        lines.append("None")
+        lines.append("")
+
+    if losers:
+        lines.append("🔴 Top Losers")
+        for quote in losers:
+            lines.append(
+                f"{quote['symbol']}: "
+                f"{format_price(quote.get('price'))} "
+                f"({format_percent(quote.get('change_percent'))}) "
+                f"{format_change(quote.get('change'))}"
+            )
+        lines.append("")
+    else:
+        lines.append("🔴 Top Losers")
+        lines.append("None")
+        lines.append("")
+
+    if flat_or_unknown:
+        lines.append("⚪ Flat / No Signal")
+        for quote in flat_or_unknown:
+            lines.append(
+                f"{quote['symbol']}: "
+                f"{format_price(quote.get('price'))} "
+                f"({format_percent(quote.get('change_percent'))})"
+            )
+        lines.append("")
+
+    if failed_symbols:
+        lines.append("Symbols without mover data:")
+        for symbol, error in failed_symbols:
+            lines.append(f"- {symbol}: {error}")
+        lines.append("")
+
+    lines.append("Commands:")
+    lines.append("/watchlist report")
     lines.append("/watchlist add SYMBOL")
     lines.append("/watchlist remove SYMBOL")
     lines.append("/watchlist list")
@@ -383,6 +485,21 @@ def split_long_message(message: str) -> list[str]:
     return chunks
 
 
+async def send_split_message(update: Update, message: str, loading_message=None) -> None:
+    if not update.message:
+        return
+
+    chunks = split_long_message(message)
+
+    if loading_message:
+        await loading_message.edit_text(chunks[0])
+    else:
+        await update.message.reply_text(chunks[0])
+
+    for chunk in chunks[1:]:
+        await update.message.reply_text(chunk)
+
+
 async def watchlist_report(update: Update) -> None:
     if not update.message:
         return
@@ -405,16 +522,43 @@ async def watchlist_report(update: Update) -> None:
     try:
         quote_results = await asyncio.to_thread(fetch_quotes_for_symbols, symbols)
         report = build_watchlist_report(symbols, quote_results)
-        chunks = split_long_message(report)
-
-        await loading_message.edit_text(chunks[0])
-
-        for chunk in chunks[1:]:
-            await update.message.reply_text(chunk)
+        await send_split_message(update, report, loading_message)
 
     except Exception as error:
         await loading_message.edit_text(
             "Unable to build watchlist report right now.\n\n"
+            "The bot is online, but the market quote request failed.\n\n"
+            f"Error:\n{type(error).__name__}"
+        )
+
+
+async def watchlist_movers(update: Update) -> None:
+    if not update.message:
+        return
+
+    symbols = load_watchlist()
+
+    if not symbols:
+        await update.message.reply_text(
+            "📊 Watchlist Movers\n\n"
+            "Your watchlist is empty.\n\n"
+            "Add symbols with:\n"
+            "/watchlist add AAPL MSFT NVDA"
+        )
+        return
+
+    loading_message = await update.message.reply_text(
+        f"📊 Finding watchlist movers for {len(symbols)} symbol(s)..."
+    )
+
+    try:
+        quote_results = await asyncio.to_thread(fetch_quotes_for_symbols, symbols)
+        movers = build_watchlist_movers(symbols, quote_results)
+        await send_split_message(update, movers, loading_message)
+
+    except Exception as error:
+        await loading_message.edit_text(
+            "Unable to build watchlist movers right now.\n\n"
             "The bot is online, but the market quote request failed.\n\n"
             f"Error:\n{type(error).__name__}"
         )
@@ -443,6 +587,7 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"{format_watchlist(symbols)}\n\n"
             "Commands:\n"
             "/watchlist report\n"
+            "/watchlist movers\n"
             "/watchlist add AAPL\n"
             "/watchlist add AAPL MSFT NVDA\n"
             "/watchlist remove AAPL\n"
@@ -465,6 +610,10 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if action in ["report", "summary", "prices"]:
         await watchlist_report(update)
+        return
+
+    if action in ["movers", "move", "leaders", "leaderboard"]:
+        await watchlist_movers(update)
         return
 
     if action == "add":
@@ -582,6 +731,7 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "/watchlist\n"
         "/watchlist list\n"
         "/watchlist report\n"
+        "/watchlist movers\n"
         "/watchlist add AAPL\n"
         "/watchlist remove AAPL\n"
         "/watchlist clear\n"
