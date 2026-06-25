@@ -8,7 +8,9 @@ from dotenv import load_dotenv
 from telegram.ext import ApplicationBuilder
 
 from src.commands.register_commands import register_commands
+from src.jobs.daily_report_scheduler import schedule_daily_report
 from src.utils.error_handler import error_handler
+
 
 load_dotenv()
 
@@ -24,6 +26,8 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     register_commands(app)
+
+    schedule_daily_report(app)
 
     app.add_error_handler(error_handler)
 

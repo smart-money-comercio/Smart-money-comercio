@@ -4,6 +4,8 @@ from src.commands.admin_commands import admin_command
 
 from src.commands.admin_commands import clearcache, admin_command, status_command, ping_command, diagnostics_command
 
+from src.commands.daily_report_send_commands import senddaily_command, testdaily_command
+
 from src.commands.basic_commands import (
     start,
     help_command,
@@ -88,3 +90,6 @@ def register_commands(app):
     app.add_handler(CommandHandler("insiders", insiders))
     app.add_handler(CommandHandler("sec", sec))
     app.add_handler(CommandHandler("filing", filing))
+
+    app.add_handler(CommandHandler("senddaily", senddaily_command))
+    app.add_handler(CommandHandler("testdaily", testdaily_command))

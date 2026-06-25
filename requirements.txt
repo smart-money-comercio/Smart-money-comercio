@@ -3,3 +3,4 @@ python-dotenv
 openai
 python-telegram-bot
 yfinance
+python-telegram-bot[job-queue]

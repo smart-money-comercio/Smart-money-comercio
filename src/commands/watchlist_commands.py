@@ -26,6 +26,7 @@ YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
 TELEGRAM_MESSAGE_LIMIT = 3900
 QUOTE_TIMEOUT_SECONDS = 5
 MAX_WORKERS = 8
+DEFAULT_ALERT_THRESHOLD_PERCENT = 2.0
 
 
 def clean_symbol(symbol: str) -> str:
@@ -151,6 +152,26 @@ def calculate_change(price, previous_close) -> tuple[float | None, float | None]
     change_percent = (change / previous_close) * 100
 
     return change, change_percent
+
+
+def parse_alert_threshold(raw_args: list[str]) -> tuple[float | None, str | None]:
+    if not raw_args:
+        return DEFAULT_ALERT_THRESHOLD_PERCENT, None
+
+    raw_threshold = raw_args[0].replace("%", "").strip()
+
+    try:
+        threshold = float(raw_threshold)
+    except ValueError:
+        return None, "Alert threshold must be a number."
+
+    if threshold <= 0:
+        return None, "Alert threshold must be greater than 0."
+
+    if threshold > 25:
+        return None, "Alert threshold is too high. Use a value between 0.1 and 25."
+
+    return threshold, None
 
 
 def fetch_chart_quote(symbol: str) -> dict:
@@ -353,6 +374,7 @@ def build_watchlist_report(symbols: list[str], quote_results: dict[str, dict]) -
 
     lines.append("Commands:")
     lines.append("/watchlist movers")
+    lines.append("/watchlist alerts")
     lines.append("/watchlist add SYMBOL")
     lines.append("/watchlist remove SYMBOL")
     lines.append("/watchlist list")
@@ -454,9 +476,113 @@ def build_watchlist_movers(symbols: list[str], quote_results: dict[str, dict]) -
 
     lines.append("Commands:")
     lines.append("/watchlist report")
+    lines.append("/watchlist alerts")
     lines.append("/watchlist add SYMBOL")
     lines.append("/watchlist remove SYMBOL")
     lines.append("/watchlist list")
+
+    return "\n".join(lines)
+
+
+def build_watchlist_alerts(
+    symbols: list[str],
+    quote_results: dict[str, dict],
+    threshold_percent: float,
+) -> str:
+    if not symbols:
+        return (
+            "🚨 Watchlist Alerts\n\n"
+            "Your watchlist is empty.\n\n"
+            "Add symbols with:\n"
+            "/watchlist add AAPL MSFT NVDA"
+        )
+
+    upside_alerts = []
+    downside_alerts = []
+    quiet_symbols = []
+    failed_symbols = []
+
+    for symbol in symbols:
+        quote = quote_results.get(symbol)
+
+        if not quote:
+            failed_symbols.append((symbol, "No quote result"))
+            continue
+
+        if not quote.get("ok"):
+            failed_symbols.append((symbol, quote.get("error", "Unknown error")))
+            continue
+
+        change_percent = quote.get("change_percent")
+
+        if not isinstance(change_percent, (int, float)):
+            quiet_symbols.append(quote)
+            continue
+
+        if change_percent >= threshold_percent:
+            upside_alerts.append(quote)
+        elif change_percent <= -threshold_percent:
+            downside_alerts.append(quote)
+        else:
+            quiet_symbols.append(quote)
+
+    upside_alerts.sort(key=lambda item: item.get("change_percent", 0), reverse=True)
+    downside_alerts.sort(key=lambda item: item.get("change_percent", 0))
+
+    lines = [
+        "🚨 Smart Money AI Watchlist Alerts",
+        f"Threshold: +/- {threshold_percent:.2f}%",
+        "",
+    ]
+
+    if upside_alerts:
+        lines.append("🟢 Upside Alerts")
+        for quote in upside_alerts:
+            lines.append(
+                f"{quote['symbol']}: "
+                f"{format_price(quote.get('price'))} "
+                f"({format_percent(quote.get('change_percent'))}) "
+                f"{format_change(quote.get('change'))} "
+                f"| Volume: {format_large_number(quote.get('volume'))}"
+            )
+        lines.append("")
+    else:
+        lines.append("🟢 Upside Alerts")
+        lines.append("None")
+        lines.append("")
+
+    if downside_alerts:
+        lines.append("🔴 Downside Alerts")
+        for quote in downside_alerts:
+            lines.append(
+                f"{quote['symbol']}: "
+                f"{format_price(quote.get('price'))} "
+                f"({format_percent(quote.get('change_percent'))}) "
+                f"{format_change(quote.get('change'))} "
+                f"| Volume: {format_large_number(quote.get('volume'))}"
+            )
+        lines.append("")
+    else:
+        lines.append("🔴 Downside Alerts")
+        lines.append("None")
+        lines.append("")
+
+    if quiet_symbols:
+        lines.append("⚪ No Alert")
+        lines.append(f"{len(quiet_symbols)} symbol(s) inside threshold.")
+        lines.append("")
+
+    if failed_symbols:
+        lines.append("Symbols without alert data:")
+        for symbol, error in failed_symbols:
+            lines.append(f"- {symbol}: {error}")
+        lines.append("")
+
+    lines.append("Commands:")
+    lines.append("/watchlist alerts")
+    lines.append("/watchlist alerts 1")
+    lines.append("/watchlist movers")
+    lines.append("/watchlist report")
 
     return "\n".join(lines)
 
@@ -564,6 +690,50 @@ async def watchlist_movers(update: Update) -> None:
         )
 
 
+async def watchlist_alerts(update: Update, raw_args: list[str]) -> None:
+    if not update.message:
+        return
+
+    threshold_percent, threshold_error = parse_alert_threshold(raw_args)
+
+    if threshold_error:
+        await update.message.reply_text(
+            f"{threshold_error}\n\n"
+            "Usage:\n"
+            "/watchlist alerts\n"
+            "/watchlist alerts 1\n"
+            "/watchlist alerts 2.5"
+        )
+        return
+
+    symbols = load_watchlist()
+
+    if not symbols:
+        await update.message.reply_text(
+            "🚨 Watchlist Alerts\n\n"
+            "Your watchlist is empty.\n\n"
+            "Add symbols with:\n"
+            "/watchlist add AAPL MSFT NVDA"
+        )
+        return
+
+    loading_message = await update.message.reply_text(
+        f"🚨 Checking watchlist alerts for {len(symbols)} symbol(s)..."
+    )
+
+    try:
+        quote_results = await asyncio.to_thread(fetch_quotes_for_symbols, symbols)
+        alerts = build_watchlist_alerts(symbols, quote_results, threshold_percent)
+        await send_split_message(update, alerts, loading_message)
+
+    except Exception as error:
+        await loading_message.edit_text(
+            "Unable to build watchlist alerts right now.\n\n"
+            "The bot is online, but the market quote request failed.\n\n"
+            f"Error:\n{type(error).__name__}"
+        )
+
+
 async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
@@ -588,6 +758,8 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "Commands:\n"
             "/watchlist report\n"
             "/watchlist movers\n"
+            "/watchlist alerts\n"
+            "/watchlist alerts 1\n"
             "/watchlist add AAPL\n"
             "/watchlist add AAPL MSFT NVDA\n"
             "/watchlist remove AAPL\n"
@@ -614,6 +786,10 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if action in ["movers", "move", "leaders", "leaderboard"]:
         await watchlist_movers(update)
+        return
+
+    if action in ["alerts", "alert", "signals", "signal"]:
+        await watchlist_alerts(update, args[1:])
         return
 
     if action == "add":
@@ -732,6 +908,8 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "/watchlist list\n"
         "/watchlist report\n"
         "/watchlist movers\n"
+        "/watchlist alerts\n"
+        "/watchlist alerts 1\n"
         "/watchlist add AAPL\n"
         "/watchlist remove AAPL\n"
         "/watchlist clear\n"
