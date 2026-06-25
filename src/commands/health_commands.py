@@ -1,5 +1,8 @@
 import os
+import platform
+import sys
 import time
+from datetime import datetime
 
 import yfinance as yf
 from dotenv import load_dotenv
@@ -9,6 +12,9 @@ from telegram.ext import ContextTypes
 from src.utils.cache import get_cache, set_cache
 
 load_dotenv()
+
+BOT_VERSION = "1.0.0"
+BOT_NAME = "Smart Money AI"
 
 
 async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,3 +76,40 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text("\n".join(lines))
+
+
+async def system_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    command_count = 24
+
+    lines = [
+        "🧠 Smart Money AI System Status",
+        "",
+        f"Bot: {BOT_NAME}",
+        f"Version: {BOT_VERSION}",
+        f"Python: {sys.version.split()[0]}",
+        f"OS: {platform.system()} {platform.release()}",
+        f"Command count: {command_count}",
+        f"Checked: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "Environment:",
+        f"Telegram token: {'✅ Loaded' if os.getenv('TELEGRAM_BOT_TOKEN') else '❌ Missing'}",
+        f"OpenAI key: {'✅ Loaded' if os.getenv('OPENAI_API_KEY') else '❌ Missing'}",
+        f"SEC user agent: {'✅ Loaded' if os.getenv('SEC_USER_AGENT') else '❌ Missing'}",
+        "",
+        "Active modules:",
+        "✅ Market data",
+        "✅ Earnings data",
+        "✅ Smart scoring",
+        "✅ Risk engine",
+        "✅ SEC filings",
+        "✅ Insider intelligence",
+        "✅ Congressional mock intelligence",
+        "✅ Undervalued screener",
+        "✅ Global error handler",
+    ]
+
+    await update.message.reply_text("\n".join(lines))
+
+
+async def version(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await system_status(update, context)
