@@ -44,10 +44,13 @@ from src.commands.health_commands import (
     version,
 )
 
+from src.commands.menu_commands import commands_menu
+
 
 def register_commands(app):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("commands", commands_menu))
     app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("system", system_status))
     app.add_handler(CommandHandler("version", version))
