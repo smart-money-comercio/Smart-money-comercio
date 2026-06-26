@@ -1,3 +1,42 @@
+# Environment secrets
 .env
+.env.local
+.env.production
+
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Local runtime data
+data/*.tmp
+data/*.log
+
+# Keep persistent app data if needed, but do not commit local temp files
+# If you do NOT want to commit watchlist.json, uncomment this:
+# data/watchlist.json
+
+# Deployment artifacts
+*.zip
+smart-money-upload/

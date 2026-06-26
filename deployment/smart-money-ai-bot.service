@@ -1,0 +1,21 @@
+[Unit]
+Description=Smart Money AI Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smartmoney
+Group=smartmoney
+WorkingDirectory=/opt/smart-money-comercio
+EnvironmentFile=/opt/smart-money-comercio/.env
+ExecStart=/opt/smart-money-comercio/.venv/bin/python /opt/smart-money-comercio/src/bot.py
+
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
