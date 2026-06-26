@@ -13,8 +13,16 @@ echo "======================================"
 
 cd "$APP_DIR"
 
-echo "Pulling latest code from GitHub..."
-git pull
+echo "Adding Git safe.directory exception..."
+git config --global --add safe.directory "$APP_DIR" || true
+
+if [ -d ".git" ]; then
+    echo "Pulling latest code from GitHub..."
+    git pull origin main
+else
+    echo "No Git repository found. Skipping git pull."
+    echo "This project folder must be cloned from GitHub for automatic updates."
+fi
 
 echo "Installing/updating requirements..."
 "$PIP_BIN" install --upgrade pip
