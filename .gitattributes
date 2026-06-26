@@ -1,0 +1,17 @@
+# Normalize text files
+* text=auto
+
+# Keep Linux shell scripts with LF endings
+*.sh text eol=lf
+
+# Keep systemd service files with LF endings
+*.service text eol=lf
+
+# Python files
+*.py text
+
+# Markdown files
+*.md text
+
+# Env examples
+*.example text
