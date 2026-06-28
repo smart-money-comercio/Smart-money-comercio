@@ -6,6 +6,10 @@ from src.commands.admin_commands import clearcache, admin_command, status_comman
 
 from src.commands.daily_report_send_commands import senddaily_command, testdaily_command
 
+from src.commands.help_commands import help_command, commands_menu
+
+from src.commands.securitycheck_commands import securitycheck_command
+
 from src.commands.basic_commands import (
     start,
     help_command,
@@ -79,6 +83,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("backup", backup_command))
     app.add_handler(CommandHandler("logs", logs_command))
     app.add_handler(CommandHandler("restart", restart_command))
+    app.add_handler(CommandHandler("securitycheck", securitycheck_command))
 
     app.add_handler(CommandHandler("top10", top10))
     app.add_handler(CommandHandler("watchlist", watchlist_command))

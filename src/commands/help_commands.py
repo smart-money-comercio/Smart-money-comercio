@@ -82,6 +82,7 @@ Maintenance
 /logs 80 - Show last 80 service log lines
 /restart - Restart production bot
 /clearcache - Clear loaded caches
+/securitycheck - Check SSH, firewall, backups, service, and sudoers
 /admin - Show current admin/chat info
 
 Production Notes
@@ -154,6 +155,7 @@ Admin
 /logs
 /restart
 /clearcache
+/securitycheck
 /admin
 """.strip()
 

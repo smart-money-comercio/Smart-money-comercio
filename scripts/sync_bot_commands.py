@@ -61,6 +61,7 @@ ADMIN_COMMANDS = PUBLIC_COMMANDS + [
     BotCommand("logs", "Show recent service logs"),
     BotCommand("restart", "Restart production bot"),
     BotCommand("clearcache", "Clear loaded caches"),
+    BotCommand("securitycheck", "Check server security status"),
     BotCommand("admin", "Show admin chat info"),
 ]
 
