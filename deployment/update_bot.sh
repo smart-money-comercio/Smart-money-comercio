@@ -6,6 +6,13 @@ APP_DIR="/opt/smart-money-comercio"
 SERVICE_NAME="smart-money-ai-bot"
 PYTHON_BIN="$APP_DIR/.venv/bin/python"
 PIP_BIN="$APP_DIR/.venv/bin/pip"
+BACKUP_SCRIPT="$APP_DIR/deployment/backup_server.sh"
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run this script with sudo."
+    echo "Example: sudo bash deployment/update_bot.sh"
+    exit 1
+fi
 
 echo "======================================"
 echo "Smart Money AI Bot Update"
@@ -15,6 +22,13 @@ cd "$APP_DIR"
 
 echo "Adding Git safe.directory exception..."
 git config --global --add safe.directory "$APP_DIR" || true
+
+if [ -f "$BACKUP_SCRIPT" ]; then
+    echo "Creating pre-update backup..."
+    bash "$BACKUP_SCRIPT"
+else
+    echo "Backup script not found. Skipping pre-update backup."
+fi
 
 if [ -d ".git" ]; then
     echo "Pulling latest code from GitHub..."
