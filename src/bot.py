@@ -9,6 +9,7 @@ from telegram.ext import ApplicationBuilder
 
 from src.commands.register_commands import register_commands
 from src.jobs.daily_report_scheduler import schedule_daily_report
+from src.jobs.watchlist_alert_scheduler import schedule_watchlist_alerts
 from src.jobs.startup_notification import schedule_startup_notification
 from src.utils.error_handler import error_handler
 
@@ -28,6 +29,7 @@ def main():
     register_commands(app)
     schedule_daily_report(app)
     schedule_startup_notification(app)
+    schedule_watchlist_alerts(app)
 
     app.add_error_handler(error_handler)
 
