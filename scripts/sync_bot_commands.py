@@ -28,6 +28,7 @@ PUBLIC_COMMANDS = [
     BotCommand("top10", "Show top ranked opportunities"),
     BotCommand("quote", "Get stock quote"),
     BotCommand("market", "Get market data"),
+    BotCommand("marketbrief", "On-demand market overview"),
     BotCommand("ticker", "Quick ticker lookup"),
     BotCommand("scorecard", "Show stock scorecard"),
     BotCommand("risk", "Show risk profile"),

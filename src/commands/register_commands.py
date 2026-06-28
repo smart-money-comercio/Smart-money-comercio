@@ -43,6 +43,8 @@ from src.commands.market_commands import (
     risk,
 )
 
+from src.commands.marketbrief_commands import marketbrief_command
+
 from src.commands.intelligence_commands import (
     congress,
     insiders,
@@ -95,6 +97,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("ticker", ticker))
     app.add_handler(CommandHandler("quote", quote))
     app.add_handler(CommandHandler("market", market))
+    app.add_handler(CommandHandler("marketbrief", marketbrief_command))
     app.add_handler(CommandHandler("earnings", earnings))
     app.add_handler(CommandHandler("scorecard", scorecard))
     app.add_handler(CommandHandler("risk", risk))

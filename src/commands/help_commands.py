@@ -19,6 +19,7 @@ Market Research
 /top10 - Show top ranked opportunities
 /quote SYMBOL - Get a stock quote
 /market SYMBOL - Get market data
+/marketbrief - On-demand market overview
 /ticker SYMBOL - Quick ticker lookup
 /scorecard SYMBOL - Show Smart Money scorecard
 /risk SYMBOL - Show risk profile
@@ -105,6 +106,7 @@ Market
 /top10
 /quote SYMBOL
 /market SYMBOL
+/marketbrief
 /ticker SYMBOL
 /scorecard SYMBOL
 /risk SYMBOL
