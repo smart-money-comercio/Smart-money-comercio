@@ -28,6 +28,8 @@ from src.commands.backup_commands import backup_command
 
 from src.commands.logs_commands import logs_command
 
+from src.commands.restart_commands import restart_command
+
 from src.commands.market_commands import (
     ticker,
     quote,
@@ -76,6 +78,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("deploycheck", deploycheck_command))
     app.add_handler(CommandHandler("backup", backup_command))
     app.add_handler(CommandHandler("logs", logs_command))
+    app.add_handler(CommandHandler("restart", restart_command))
 
     app.add_handler(CommandHandler("top10", top10))
     app.add_handler(CommandHandler("watchlist", watchlist_command))
