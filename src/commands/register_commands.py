@@ -24,6 +24,8 @@ from src.commands.watchlist_commands import watchlist_command
 
 from src.commands.deploycheck_commands import deploycheck_command
 
+from src.commands.backup_commands import backup_command
+
 from src.commands.market_commands import (
     ticker,
     quote,
@@ -70,6 +72,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("ping", ping_command))
     app.add_handler(CommandHandler("diagnostics", diagnostics_command))
     app.add_handler(CommandHandler("deploycheck", deploycheck_command))
+    app.add_handler(CommandHandler("backup", backup_command))
 
     app.add_handler(CommandHandler("top10", top10))
     app.add_handler(CommandHandler("watchlist", watchlist_command))
