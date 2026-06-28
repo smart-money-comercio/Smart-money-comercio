@@ -71,7 +71,7 @@ def get_git_status() -> str:
 
 def get_watchlist_status() -> str:
     try:
-        watchlist_file = get_watchlist_file_path()
+        watchlist_file = Path(get_watchlist_file_path())
         symbols = load_watchlist()
 
         if watchlist_file.exists():
