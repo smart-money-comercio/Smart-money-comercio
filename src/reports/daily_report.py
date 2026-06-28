@@ -1,250 +1,480 @@
 from datetime import datetime
+from typing import Any
+from zoneinfo import ZoneInfo
 
-from src.scoring.scoring_engine import get_stock_scores
 from src.agents.analyst_agent import generate_ai_summary
-
-try:
-    from src.utils.watchlist_store import load_watchlist
-    from src.commands.watchlist_commands import (
-        fetch_quotes_for_symbols,
-        format_change,
-        format_large_number,
-        format_percent,
-        format_price,
-    )
-except Exception:
-    load_watchlist = None
-    fetch_quotes_for_symbols = None
-    format_change = None
-    format_large_number = None
-    format_percent = None
-    format_price = None
+from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.scoring.scoring_engine import get_stock_scores
+from src.utils.watchlist_store import load_watchlist
 
 
-WATCHLIST_ALERT_THRESHOLD_PERCENT = 2.0
+REPORT_TIMEZONE = "America/Lima"
+MAX_TOP_OPPORTUNITIES = 10
+MAX_WATCHLIST_MOVERS = 8
 
 
-def safe_number(value, default=0):
-    if isinstance(value, (int, float)):
-        return value
-
+def safe_float(value: Any) -> float | None:
     try:
+        if value is None:
+            return None
         return float(value)
-    except Exception:
-        return default
+    except (TypeError, ValueError):
+        return None
 
 
-def safe_text(value, default="N/A"):
-    if value is None:
-        return default
+def get_value(data: dict, keys: list[str], default=None):
+    for key in keys:
+        value = data.get(key)
+        if value is not None:
+            return value
+    return default
 
-    text = str(value).strip()
-    return text if text else default
+
+def normalize_score_item(item: Any) -> dict:
+    if isinstance(item, dict):
+        symbol = (
+            item.get("symbol")
+            or item.get("ticker")
+            or item.get("name")
+            or "UNKNOWN"
+        )
+
+        score = get_value(
+            item,
+            ["score", "total_score", "smart_money_score", "rating_score"],
+            None,
+        )
+
+        rating = get_value(
+            item,
+            ["rating", "grade", "signal", "recommendation"],
+            "N/A",
+        )
+
+        reason = get_value(
+            item,
+            ["reason", "summary", "thesis", "note", "explanation"],
+            "",
+        )
+
+        return {
+            "symbol": str(symbol).upper(),
+            "score": safe_float(score),
+            "rating": str(rating),
+            "reason": str(reason),
+            "raw": item,
+        }
+
+    if isinstance(item, (list, tuple)) and item:
+        symbol = str(item[0]).upper()
+        score = safe_float(item[1]) if len(item) > 1 else None
+
+        return {
+            "symbol": symbol,
+            "score": score,
+            "rating": "N/A",
+            "reason": "",
+            "raw": item,
+        }
+
+    return {
+        "symbol": str(item).upper(),
+        "score": None,
+        "rating": "N/A",
+        "reason": "",
+        "raw": item,
+    }
 
 
-def build_score_lines(scores: list[dict], score_key: str, label: str, limit: int = 5) -> str:
-    if not scores:
-        return "No score data available."
+def normalize_scores(scores: Any) -> list[dict]:
+    if scores is None:
+        return []
 
-    sorted_scores = sorted(
-        scores,
-        key=lambda item: safe_number(item.get(score_key)),
+    if isinstance(scores, dict):
+        normalized = []
+
+        for symbol, value in scores.items():
+            if isinstance(value, dict):
+                item = dict(value)
+                item.setdefault("symbol", symbol)
+                normalized.append(normalize_score_item(item))
+            else:
+                normalized.append(
+                    {
+                        "symbol": str(symbol).upper(),
+                        "score": safe_float(value),
+                        "rating": "N/A",
+                        "reason": "",
+                        "raw": value,
+                    }
+                )
+
+        return sort_scores(normalized)
+
+    if isinstance(scores, list):
+        return sort_scores(normalize_score_item(item) for item in scores)
+
+    return []
+
+
+def sort_scores(scores: Any) -> list[dict]:
+    normalized = list(scores)
+
+    return sorted(
+        normalized,
+        key=lambda item: item["score"] if item["score"] is not None else -999,
         reverse=True,
     )
 
+
+def format_score(score: float | None) -> str:
+    if score is None:
+        return "N/A"
+
+    if score.is_integer():
+        return str(int(score))
+
+    return f"{score:.1f}"
+
+
+def classify_score(score: float | None) -> str:
+    if score is None:
+        return "Unrated"
+    if score >= 85:
+        return "High conviction"
+    if score >= 75:
+        return "Strong watch"
+    if score >= 65:
+        return "Moderate watch"
+    if score >= 50:
+        return "Neutral"
+    return "Weak"
+
+
+def format_opportunity_line(index: int, item: dict) -> str:
+    symbol = item["symbol"]
+    score = format_score(item["score"])
+    rating = item["rating"]
+
+    signal = classify_score(item["score"])
+
+    if rating and rating != "N/A":
+        return f"{index}. {symbol} — Score: {score} | {signal} | {rating}"
+
+    return f"{index}. {symbol} — Score: {score} | {signal}"
+
+
+def get_quote_value(quote: dict, keys: list[str]):
+    for key in keys:
+        value = quote.get(key)
+
+        if value is not None:
+            return value
+
+    return None
+
+
+def get_quote_price(quote: dict | None) -> float | None:
+    if not quote:
+        return None
+
+    return safe_float(
+        get_quote_value(
+            quote,
+            [
+                "price",
+                "regularMarketPrice",
+                "regular_market_price",
+                "current_price",
+                "last_price",
+            ],
+        )
+    )
+
+
+def get_quote_change_percent(quote: dict | None) -> float | None:
+    if not quote:
+        return None
+
+    return safe_float(
+        get_quote_value(
+            quote,
+            [
+                "change_percent",
+                "percent_change",
+                "regularMarketChangePercent",
+                "regular_market_change_percent",
+                "changePercent",
+            ],
+        )
+    )
+
+
+def format_price(price: float | None) -> str:
+    if price is None:
+        return "N/A"
+
+    return f"${price:,.2f}"
+
+
+def format_percent(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+
+    sign = "+" if value >= 0 else ""
+    return f"{sign}{value:.2f}%"
+
+
+def fetch_watchlist_quotes() -> tuple[list[str], dict]:
+    try:
+        symbols = load_watchlist()
+    except Exception:
+        return [], {}
+
+    if not symbols:
+        return [], {}
+
+    try:
+        quotes = fetch_quotes_for_symbols(symbols)
+    except Exception:
+        return symbols, {}
+
+    if not isinstance(quotes, dict):
+        return symbols, {}
+
+    return symbols, quotes
+
+
+def build_watchlist_snapshot(symbols: list[str], quotes: dict) -> str:
+    if not symbols:
+        return "Watchlist unavailable."
+
+    if not quotes:
+        return f"{len(symbols)} symbols loaded, but quote data is unavailable."
+
+    movers = []
+
+    for symbol in symbols:
+        quote = quotes.get(symbol) or quotes.get(symbol.upper())
+
+        if not isinstance(quote, dict):
+            continue
+
+        change_percent = get_quote_change_percent(quote)
+        price = get_quote_price(quote)
+
+        if change_percent is None:
+            continue
+
+        movers.append(
+            {
+                "symbol": symbol.upper(),
+                "price": price,
+                "change_percent": change_percent,
+            }
+        )
+
+    if not movers:
+        return f"{len(symbols)} symbols loaded, but no movement data available."
+
+    movers.sort(key=lambda item: abs(item["change_percent"]), reverse=True)
+
     lines = []
 
-    for index, stock in enumerate(sorted_scores[:limit], start=1):
-        ticker = safe_text(stock.get("ticker"))
-        score = safe_text(stock.get(score_key))
-        category = safe_text(stock.get("category"))
-
+    for item in movers[:MAX_WATCHLIST_MOVERS]:
         lines.append(
-            f"{index}. {ticker} - {label}: {score} ({category})"
+            f"• {item['symbol']}: {format_price(item['price'])} "
+            f"({format_percent(item['change_percent'])})"
         )
 
     return "\n".join(lines)
 
 
-def build_watchlist_daily_section() -> str:
-    if load_watchlist is None or fetch_quotes_for_symbols is None:
-        return (
-            "📋 WATCHLIST INTELLIGENCE\n"
-            "Watchlist module unavailable.\n"
+def build_market_tone_from_watchlist(quotes: dict) -> str:
+    if not quotes:
+        return "Data unavailable"
+
+    changes = []
+
+    for quote in quotes.values():
+        if not isinstance(quote, dict):
+            continue
+
+        change = get_quote_change_percent(quote)
+
+        if change is not None:
+            changes.append(change)
+
+    if not changes:
+        return "Data unavailable"
+
+    positive = sum(1 for item in changes if item > 0)
+    negative = sum(1 for item in changes if item < 0)
+    average_change = sum(changes) / len(changes)
+
+    if average_change >= 1.0 and positive > negative:
+        return "Risk-on / bullish"
+    if average_change <= -1.0 and negative > positive:
+        return "Risk-off / bearish"
+    if positive > negative:
+        return "Constructive / mildly bullish"
+    if negative > positive:
+        return "Defensive / mildly bearish"
+
+    return "Mixed / neutral"
+
+
+def build_risk_notes(top_scores: list[dict], watchlist_quotes: dict) -> str:
+    notes = []
+
+    high_conviction_count = sum(
+        1 for item in top_scores if item["score"] is not None and item["score"] >= 85
+    )
+
+    weak_count = sum(
+        1 for item in top_scores if item["score"] is not None and item["score"] < 50
+    )
+
+    if high_conviction_count:
+        notes.append(
+            f"{high_conviction_count} high-conviction name(s) are present in the current scoring output."
         )
 
-    try:
-        watchlist_symbols = load_watchlist()
+    if weak_count:
+        notes.append(
+            f"{weak_count} low-score name(s) appear in the ranking and should be treated cautiously."
+        )
 
-        if not watchlist_symbols:
-            return (
-                "📋 WATCHLIST INTELLIGENCE\n"
-                "No watchlist symbols saved.\n\n"
-                "Add symbols with:\n"
-                "/watchlist add AAPL MSFT NVDA\n"
+    if watchlist_quotes:
+        large_movers = []
+
+        for quote in watchlist_quotes.values():
+            if not isinstance(quote, dict):
+                continue
+
+            symbol = str(quote.get("symbol") or quote.get("ticker") or "").upper()
+            change = get_quote_change_percent(quote)
+
+            if symbol and change is not None and abs(change) >= 2:
+                large_movers.append(symbol)
+
+        if large_movers:
+            notes.append(
+                "Large watchlist moves detected: "
+                + ", ".join(sorted(set(large_movers))[:8])
+                + "."
             )
 
-        quote_results = fetch_quotes_for_symbols(watchlist_symbols)
+    if not notes:
+        return "No major report-level risk flags detected from current data."
 
-        gainers = []
-        losers = []
-        flat_or_unknown = []
-        alerts = []
-        failed = []
+    return "\n".join(f"• {note}" for note in notes)
 
-        for symbol in watchlist_symbols:
-            quote = quote_results.get(symbol)
 
-            if not quote:
-                failed.append((symbol, "No quote result"))
-                continue
-
-            if not quote.get("ok"):
-                failed.append((symbol, quote.get("error", "Unknown error")))
-                continue
-
-            change_percent = quote.get("change_percent")
-
-            if not isinstance(change_percent, (int, float)):
-                flat_or_unknown.append(quote)
-                continue
-
-            if abs(change_percent) >= WATCHLIST_ALERT_THRESHOLD_PERCENT:
-                alerts.append(quote)
-
-            if change_percent > 0:
-                gainers.append(quote)
-            elif change_percent < 0:
-                losers.append(quote)
-            else:
-                flat_or_unknown.append(quote)
-
-        gainers.sort(key=lambda item: item.get("change_percent", 0), reverse=True)
-        losers.sort(key=lambda item: item.get("change_percent", 0))
-        alerts.sort(key=lambda item: abs(item.get("change_percent", 0)), reverse=True)
-
-        total_with_data = len(gainers) + len(losers) + len(flat_or_unknown)
-
-        lines = [
-            "📋 WATCHLIST INTELLIGENCE",
-            f"Tracked symbols: {len(watchlist_symbols)}",
-            f"Symbols with data: {total_with_data}",
-            f"Gainers: {len(gainers)}",
-            f"Losers: {len(losers)}",
-            f"Flat / no signal: {len(flat_or_unknown)}",
-            f"Failed quotes: {len(failed)}",
-            "",
-        ]
-
-        lines.append("🟢 TOP WATCHLIST GAINERS")
-
-        if gainers:
-            for quote in gainers[:5]:
-                lines.append(
-                    f"{quote['symbol']} - "
-                    f"{format_price(quote.get('price'))} "
-                    f"({format_percent(quote.get('change_percent'))}) "
-                    f"{format_change(quote.get('change'))} "
-                    f"| Vol: {format_large_number(quote.get('volume'))}"
-                )
-        else:
-            lines.append("None")
-
-        lines.append("")
-        lines.append("🔴 TOP WATCHLIST LOSERS")
-
-        if losers:
-            for quote in losers[:5]:
-                lines.append(
-                    f"{quote['symbol']} - "
-                    f"{format_price(quote.get('price'))} "
-                    f"({format_percent(quote.get('change_percent'))}) "
-                    f"{format_change(quote.get('change'))} "
-                    f"| Vol: {format_large_number(quote.get('volume'))}"
-                )
-        else:
-            lines.append("None")
-
-        lines.append("")
-        lines.append(f"🚨 WATCHLIST ALERTS OVER +/- {WATCHLIST_ALERT_THRESHOLD_PERCENT:.1f}%")
-
-        if alerts:
-            for quote in alerts[:10]:
-                lines.append(
-                    f"{quote['symbol']} - "
-                    f"{format_price(quote.get('price'))} "
-                    f"({format_percent(quote.get('change_percent'))}) "
-                    f"{format_change(quote.get('change'))}"
-                )
-        else:
-            lines.append("None")
-
-        if failed:
-            lines.append("")
-            lines.append("Symbols without watchlist data:")
-
-            for symbol, error in failed[:10]:
-                lines.append(f"- {symbol}: {error}")
-
-        return "\n".join(lines)
-
-    except Exception as error:
-        return (
-            "📋 WATCHLIST INTELLIGENCE\n"
-            "Watchlist section could not be generated.\n"
-            f"Error: {type(error).__name__}\n"
+def build_action_checklist(market_tone: str) -> str:
+    if "Risk-on" in market_tone or "bullish" in market_tone.lower():
+        return "\n".join(
+            [
+                "• Review top-ranked names for continuation setups.",
+                "• Confirm volume, earnings dates, and sector strength before entering.",
+                "• Avoid chasing extended moves without a defined stop.",
+            ]
         )
 
+    if "Risk-off" in market_tone or "bearish" in market_tone.lower():
+        return "\n".join(
+            [
+                "• Prioritize capital protection and position sizing.",
+                "• Review stop-loss levels and avoid weak relative-strength names.",
+                "• Watch defensive sectors, bonds, gold, and volatility.",
+            ]
+        )
 
-def build_daily_report():
-    today = datetime.now().strftime("%B %d, %Y")
-
-    scores = get_stock_scores()
-    ai_summary = generate_ai_summary(scores)
-
-    top_picks = build_score_lines(
-        scores=scores,
-        score_key="final_score",
-        label="Score",
-        limit=5,
+    return "\n".join(
+        [
+            "• Wait for confirmation before adding new risk.",
+            "• Focus on the strongest names with clean setups.",
+            "• Keep position sizing disciplined until market tone improves.",
+        ]
     )
 
-    defense_picks = build_score_lines(
-        scores=scores,
-        score_key="defense_score",
-        label="Defense Score",
-        limit=5,
+
+def build_ai_summary(scores: Any) -> str:
+    try:
+        summary = generate_ai_summary(scores)
+    except Exception as exc:
+        return f"AI summary unavailable: {exc}"
+
+    if not summary:
+        return "AI summary unavailable."
+
+    return str(summary).strip()
+
+
+def build_daily_report() -> str:
+    now = datetime.now(ZoneInfo(REPORT_TIMEZONE))
+    today = now.strftime("%B %d, %Y")
+    timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        raw_scores = get_stock_scores()
+    except Exception as exc:
+        raw_scores = []
+        scoring_error = str(exc)
+    else:
+        scoring_error = ""
+
+    normalized_scores = normalize_scores(raw_scores)
+    top_scores = normalized_scores[:MAX_TOP_OPPORTUNITIES]
+
+    watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes()
+    market_tone = build_market_tone_from_watchlist(watchlist_quotes)
+
+    if top_scores:
+        top_opportunities = "\n".join(
+            format_opportunity_line(index, item)
+            for index, item in enumerate(top_scores, start=1)
+        )
+    elif scoring_error:
+        top_opportunities = f"Scoring unavailable: {scoring_error}"
+    else:
+        top_opportunities = "No scoring opportunities available."
+
+    watchlist_snapshot = build_watchlist_snapshot(
+        watchlist_symbols,
+        watchlist_quotes,
     )
 
-    watchlist_section = build_watchlist_daily_section()
+    risk_notes = build_risk_notes(top_scores, watchlist_quotes)
+    action_checklist = build_action_checklist(market_tone)
+    ai_summary = build_ai_summary(raw_scores)
 
-    report = f"""
-🚀 SMART MONEY AI
-Daily Report - {today}
+    return f"""
+📊 Smart Money AI Report
+Date: {today}
+Generated: {timestamp} {REPORT_TIMEZONE}
 
-🔥 TOP PICKS
-{top_picks}
+Market Snapshot
+Market tone: {market_tone}
+Watchlist symbols: {len(watchlist_symbols)}
 
-🛡️ DEFENSE INTELLIGENCE
-{defense_picks}
+Watchlist Movers
+{watchlist_snapshot}
 
-{watchlist_section}
+Top Opportunities
+{top_opportunities}
 
-📊 PORTFOLIO STRATEGY
-Growth: 40%
-Defense / AI Warfare: 20%
-ETFs: 25%
-Dividend: 15%
+Risk Notes
+{risk_notes}
 
-🧠 AI ANALYST SUMMARY
+AI Summary
 {ai_summary}
 
-COMMANDS
-/watchlist report
-/watchlist movers
-/watchlist alerts
-/watchlist add SYMBOL
+Action Checklist
+{action_checklist}
 
-Status: MVP scoring engine active
-"""
-    return report.strip()
+Notes
+This report is informational only and is not financial advice.
+Use /marketbrief for a quick market snapshot.
+Use /watchlist report for your full custom watchlist.
+""".strip()
