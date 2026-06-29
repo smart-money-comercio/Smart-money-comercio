@@ -10,6 +10,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.commands.admin_commands import get_current_chat_id, is_admin
+from src.reports.watchlist_report import build_watchlist_report as build_refined_watchlist_report
 from src.utils.watchlist_store import (
     add_symbols,
     clear_watchlist,
@@ -647,7 +648,7 @@ async def watchlist_report(update: Update) -> None:
 
     try:
         quote_results = await asyncio.to_thread(fetch_quotes_for_symbols, symbols)
-        report = build_watchlist_report(symbols, quote_results)
+        report = build_refined_watchlist_report(symbols, quote_results)
         await send_split_message(update, report, loading_message)
 
     except Exception as error:
