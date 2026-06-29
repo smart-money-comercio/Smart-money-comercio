@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 
 from src.commands.admin_commands import get_current_chat_id, is_admin
 from src.reports.watchlist_report import build_watchlist_report as build_refined_watchlist_report
+from src.reports.watchlist_movers_report import build_watchlist_movers_report as build_refined_watchlist_movers
 from src.utils.watchlist_store import (
     add_symbols,
     clear_watchlist,
@@ -680,7 +681,7 @@ async def watchlist_movers(update: Update) -> None:
 
     try:
         quote_results = await asyncio.to_thread(fetch_quotes_for_symbols, symbols)
-        movers = build_watchlist_movers(symbols, quote_results)
+        movers = build_refined_watchlist_movers(symbols, quote_results)
         await send_split_message(update, movers, loading_message)
 
     except Exception as error:
