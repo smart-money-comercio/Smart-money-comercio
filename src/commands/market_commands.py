@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from src.agents.analyst_agent import analyze_stock
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.reports.ticker_report import build_ticker_report
 from src.market.earnings_data import get_earnings_data, summarize_earnings
 from src.market.market_data import get_market_data, format_number, format_percent
 from src.reports.market_report import build_market_report
@@ -96,90 +97,43 @@ async def earnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage: /ticker PLTR")
+        await update.message.reply_text("Usage: /ticker SYMBOL\n\nExample: /ticker NVDA")
         return
 
-    symbol = context.args[0].upper()
+    symbol = context.args[0].upper().replace("$", "")
+
+    await update.message.reply_text(
+        f"Building Smart Money AI ticker snapshot for {symbol}..."
+    )
+
     stock = get_stock(symbol)
 
     if not stock:
         await update.message.reply_text(f"{symbol} not found in watchlist.")
         return
 
-    risk_profile = get_risk_profile(stock)
-    market_data = get_market_data(symbol)
-    analysis = analyze_stock(stock)
+    try:
+        risk_profile = get_risk_profile(stock)
+    except Exception:
+        risk_profile = None
 
-    if market_data["found"]:
-        market_section = f"""
-📊 MARKET DATA
+    try:
+        market_data = get_market_data(symbol)
+    except Exception:
+        market_data = {"found": False, "error": "Market data unavailable"}
 
-Company:
-{market_data['company_name']}
+    try:
+        analysis = analyze_stock(stock)
+    except Exception as error:
+        analysis = f"AI analysis unavailable: {error}"
 
-Price:
-${market_data['price']:.2f}
-
-Market Cap:
-{format_number(market_data['market_cap'])}
-
-P/E Ratio:
-{market_data['pe_ratio'] if market_data['pe_ratio'] else 'N/A'}
-
-Forward P/E:
-{market_data['forward_pe'] if market_data['forward_pe'] else 'N/A'}
-
-Dividend Yield:
-{format_percent(market_data['dividend_yield'])}
-
-Beta:
-{market_data['beta'] if market_data['beta'] else 'N/A'}
-
-52-Week Range:
-${market_data['week_52_low']:.2f} - ${market_data['week_52_high']:.2f}
-"""
-    else:
-        market_section = """
-📊 MARKET DATA
-
-Market data unavailable.
-"""
-
-    message = f"""
-📈 {stock['ticker']}
-
-Category:
-{stock['category']}
-
-Smart Score:
-{stock['smart_score']}
-
-Defense Score:
-{stock['defense_score']}
-
-Congress Score:
-{stock.get('congress_score', 0)}
-
-Insider Score:
-{stock.get('insider_score', 0)}
-
-Final Score:
-{stock['final_score']}
-
-⚠️ RISK PROFILE
-
-Risk Level:
-{risk_profile['risk_level']}
-
-Risk Score:
-{risk_profile['risk_score']}/100
-
-{market_section}
-
-🧠 AI ANALYSIS
-
-{analysis}
-"""
+    message = build_ticker_report(
+        symbol=symbol,
+        stock=stock,
+        risk_profile=risk_profile,
+        market_data=market_data,
+        analysis=analysis,
+    )
 
     await update.message.reply_text(message)
 
