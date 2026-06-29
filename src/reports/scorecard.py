@@ -1,12 +1,4 @@
-import asyncio
 from typing import Any
-
-from telegram import Update
-from telegram.ext import ContextTypes
-
-from src.commands.watchlist_commands import fetch_quotes_for_symbols
-from src.scoring.scoring_engine import get_stock_scores
-
 
 def safe_float(value: Any) -> float | None:
     try:
@@ -362,7 +354,7 @@ def format_bullets(items: list[str], max_items: int = 3) -> str:
     return "\n".join(f"• {clean_text(item)}" for item in items[:max_items])
 
 
-def build_scorecard_message(symbol: str, score_item: dict | None, quote: dict | None) -> str:
+def build_scorecard(symbol: str, score_item: dict | None = None, quote: dict | None = None) -> str:
     clean = clean_symbol(symbol)
 
     price = get_price(quote)
@@ -445,33 +437,3 @@ Use /quote {clean} for a quick price check.
 """.strip()
 
 
-async def scorecard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text(
-            "Usage: /scorecard SYMBOL\n\nExample: /scorecard NVDA"
-        )
-        return
-
-    symbol = clean_symbol(context.args[0])
-
-    await update.message.reply_text(f"Building Smart Money AI scorecard for {symbol}...")
-
-    try:
-        raw_scores = await asyncio.to_thread(get_stock_scores)
-        scores = normalize_scores(raw_scores)
-        score_item = find_score_for_symbol(scores, symbol)
-    except Exception:
-        score_item = None
-
-    try:
-        quotes = await asyncio.to_thread(fetch_quotes_for_symbols, [symbol])
-        quote = get_quote_for_symbol(quotes, symbol)
-    except Exception:
-        quote = None
-
-    message = build_scorecard_message(symbol, score_item, quote)
-    await update.message.reply_text(message)
-
-
-# Compatibility alias in case register_commands.py imports scorecard_command.
-scorecard_command = scorecard
