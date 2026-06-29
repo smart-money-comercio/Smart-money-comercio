@@ -1,13 +1,21 @@
+import asyncio
+
+from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.reports.scorecard import (
+    build_scorecard,
+    clean_symbol,
+    find_score_for_symbol,
+    get_quote_for_symbol,
+    normalize_scores,
+)
 from telegram import Update
 from telegram.ext import ContextTypes
-
 from src.agents.analyst_agent import analyze_stock
 from src.market.earnings_data import get_earnings_data, summarize_earnings
 from src.market.market_data import get_market_data, format_number, format_percent
-from src.reports.scorecard import build_scorecard
 from src.scoring.risk_engine import get_risk_profile
 from src.scoring.stock_lookup import get_stock
-
+from src.scoring.scoring_engine import get_stock_scores
 
 async def quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -284,21 +292,34 @@ Risk Score:
     await update.message.reply_text(message)
 
 
-async def scorecard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def scorecard(update, context):
     if not context.args:
-        await update.message.reply_text("Usage: /scorecard PLTR")
+        await update.message.reply_text(
+            "Usage: /scorecard SYMBOL\n\nExample: /scorecard NVDA"
+        )
         return
 
-    symbol = context.args[0].upper()
+    symbol = clean_symbol(context.args[0])
 
     await update.message.reply_text(
-        f"🧾 Building Smart Money scorecard for {symbol}..."
+        f"Building Smart Money AI scorecard for {symbol}..."
     )
 
-    result = build_scorecard(symbol)
+    try:
+        raw_scores = await asyncio.to_thread(get_stock_scores)
+        scores = normalize_scores(raw_scores)
+        score_item = find_score_for_symbol(scores, symbol)
+    except Exception:
+        score_item = None
 
-    await update.message.reply_text(result["message"])
+    try:
+        quotes = await asyncio.to_thread(fetch_quotes_for_symbols, [symbol])
+        quote_data = get_quote_for_symbol(quotes, symbol)
+    except Exception:
+        quote_data = None
 
+    message = build_scorecard(symbol, score_item, quote_data)
+    await update.message.reply_text(message)
 
 async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
