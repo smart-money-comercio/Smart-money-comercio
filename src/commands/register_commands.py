@@ -37,13 +37,15 @@ from src.commands.restart_commands import restart_command
 from src.commands.market_commands import (
     ticker,
     quote,
-    market,
+    market, 
     earnings,
     scorecard,
     risk,
 )
 
 from src.commands.marketbrief_commands import marketbrief_command
+
+from src.commands.top10_commands import top10
 
 from src.commands.intelligence_commands import (
     congress,

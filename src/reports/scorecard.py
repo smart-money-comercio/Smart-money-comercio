@@ -1,233 +1,477 @@
-import os
-from dotenv import load_dotenv
-from openai import OpenAI
+import asyncio
+from typing import Any
 
-from src.scoring.stock_lookup import get_stock
-from src.scoring.risk_engine import get_risk_profile
-from src.market.market_data import get_market_data, format_number, format_percent
-from src.market.earnings_data import get_earnings_data
-from src.sec.sec_data import get_sec_filings
+from telegram import Update
+from telegram.ext import ContextTypes
 
-load_dotenv()
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.scoring.scoring_engine import get_stock_scores
 
 
-def safe_value(value):
-    if value is None:
-        return "N/A"
-    return value
-
-
-def build_sec_summary(symbol):
+def safe_float(value: Any) -> float | None:
     try:
-        data = get_sec_filings(symbol, limit=3)
-
-        if not data["found"]:
-            return "SEC filings unavailable."
-
-        text = ""
-
-        for filing in data["filings"][:3]:
-            text += (
-                f"- {filing['form']} | Filed: {filing['filing_date']} | "
-                f"Report Date: {filing['report_date']}\n"
-            )
-
-        return text.strip()
-
-    except Exception as error:
-        return f"SEC filings unavailable: {error}"
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
-def generate_scorecard_takeaway(stock, risk_profile, market_data, earnings_data, sec_summary):
-    prompt = f"""
-You are the Senior Analyst for Smart Money AI.
-
-Create a clear investor-friendly scorecard takeaway using the data below.
-
-Ticker: {stock['ticker']}
-Category: {stock['category']}
-
-Smart Score: {stock['smart_score']}
-Defense Score: {stock['defense_score']}
-Congress Score: {stock.get('congress_score', 0)}
-Insider Score: {stock.get('insider_score', 0)}
-Final Score: {stock['final_score']}
-
-Risk Level: {risk_profile['risk_level']}
-Risk Score: {risk_profile['risk_score']}/100
-Risk Factors: {', '.join(risk_profile['risk_factors'])}
-
-Company: {market_data.get('company_name', 'N/A') if market_data.get('found') else 'N/A'}
-Price: {market_data.get('price', 'N/A') if market_data.get('found') else 'N/A'}
-Market Cap: {format_number(market_data.get('market_cap')) if market_data.get('found') else 'N/A'}
-P/E: {market_data.get('pe_ratio', 'N/A') if market_data.get('found') else 'N/A'}
-Forward P/E: {market_data.get('forward_pe', 'N/A') if market_data.get('found') else 'N/A'}
-Dividend Yield: {format_percent(market_data.get('dividend_yield')) if market_data.get('found') else 'N/A'}
-Beta: {market_data.get('beta', 'N/A') if market_data.get('found') else 'N/A'}
-
-Revenue: {format_number(earnings_data.get('revenue')) if earnings_data.get('found') else 'N/A'}
-Revenue Growth: {format_percent(earnings_data.get('revenue_growth')) if earnings_data.get('found') else 'N/A'}
-Net Income: {format_number(earnings_data.get('net_income')) if earnings_data.get('found') else 'N/A'}
-Gross Margin: {format_percent(earnings_data.get('gross_margin')) if earnings_data.get('found') else 'N/A'}
-Operating Margin: {format_percent(earnings_data.get('operating_margin')) if earnings_data.get('found') else 'N/A'}
-Net Margin: {format_percent(earnings_data.get('net_margin')) if earnings_data.get('found') else 'N/A'}
-
-Recent SEC Filings:
-{sec_summary}
-
-Return a concise scorecard with:
-
-1. Overall rating
-2. Bull case
-3. Risk case
-4. Valuation / earnings view
-5. Smart Money AI takeaway
-
-Maximum 200 words.
-End with: "This is research, not financial advice."
-"""
-
-    response = client.responses.create(
-        model="gpt-5",
-        input=prompt
-    )
-
-    return response.output_text
+def get_value(data: dict, keys: list[str], default=None):
+    for key in keys:
+        value = data.get(key)
+        if value is not None:
+            return value
+    return default
 
 
-def build_scorecard(symbol):
-    symbol = symbol.upper()
+def clean_symbol(raw_symbol: str) -> str:
+    return raw_symbol.strip().upper().replace("$", "")
 
-    stock = get_stock(symbol)
 
-    if not stock:
+def normalize_score_item(symbol_hint: str | None, item: Any) -> dict:
+    if isinstance(item, dict):
+        symbol = (
+            item.get("symbol")
+            or item.get("ticker")
+            or symbol_hint
+            or item.get("name")
+            or "UNKNOWN"
+        )
+
+        score = get_value(
+            item,
+            ["score", "total_score", "smart_money_score", "rating_score"],
+            None,
+        )
+
+        rating = get_value(
+            item,
+            ["rating", "grade", "signal", "recommendation"],
+            "",
+        )
+
+        reason = get_value(
+            item,
+            ["reason", "summary", "thesis", "note", "explanation"],
+            "",
+        )
+
+        sector = get_value(
+            item,
+            ["sector", "industry", "category"],
+            "",
+        )
+
+        strengths = get_value(
+            item,
+            ["strengths", "pros", "bull_case", "positive_factors"],
+            [],
+        )
+
+        weaknesses = get_value(
+            item,
+            ["weaknesses", "cons", "bear_case", "negative_factors"],
+            [],
+        )
+
+        risks = get_value(
+            item,
+            ["risks", "risk_notes", "risk", "warning"],
+            [],
+        )
+
         return {
-            "found": False,
-            "message": f"{symbol} not found in watchlist."
+            "symbol": str(symbol).upper(),
+            "score": safe_float(score),
+            "rating": str(rating).strip(),
+            "reason": str(reason).strip(),
+            "sector": str(sector).strip(),
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "risks": risks,
+            "raw": item,
         }
 
-    risk_profile = get_risk_profile(stock)
-    market_data = get_market_data(symbol)
-    earnings_data = get_earnings_data(symbol)
-    sec_summary = build_sec_summary(symbol)
+    if isinstance(item, (list, tuple)) and item:
+        symbol = str(symbol_hint or item[0]).upper()
+        score = safe_float(item[1]) if len(item) > 1 else None
 
-    if market_data.get("found"):
-        market_section = f"""
-Company:
-{market_data['company_name']}
-
-Price:
-${market_data['price']:.2f}
-
-Market Cap:
-{format_number(market_data['market_cap'])}
-
-P/E:
-{market_data['pe_ratio'] if market_data['pe_ratio'] else 'N/A'}
-
-Forward P/E:
-{market_data['forward_pe'] if market_data['forward_pe'] else 'N/A'}
-
-Dividend Yield:
-{format_percent(market_data['dividend_yield'])}
-
-Beta:
-{market_data['beta'] if market_data['beta'] else 'N/A'}
-
-52-Week Range:
-${market_data['week_52_low']:.2f} - ${market_data['week_52_high']:.2f}
-"""
-    else:
-        market_section = "Market data unavailable."
-
-    if earnings_data.get("found"):
-        earnings_section = f"""
-Period:
-{earnings_data['period_type']} - {earnings_data['latest_period']}
-
-Revenue:
-{format_number(earnings_data['revenue'])}
-
-Revenue Growth:
-{format_percent(earnings_data['revenue_growth'])}
-
-Net Income:
-{format_number(earnings_data['net_income'])}
-
-Gross Margin:
-{format_percent(earnings_data['gross_margin'])}
-
-Operating Margin:
-{format_percent(earnings_data['operating_margin'])}
-
-Net Margin:
-{format_percent(earnings_data['net_margin'])}
-"""
-    else:
-        earnings_section = "Earnings data unavailable."
-
-    try:
-        ai_takeaway = generate_scorecard_takeaway(
-            stock,
-            risk_profile,
-            market_data,
-            earnings_data,
-            sec_summary
-        )
-    except Exception as error:
-        ai_takeaway = f"AI takeaway unavailable: {error}"
-
-    message = f"""
-🧾 SMART MONEY SCORECARD: {stock['ticker']}
-
-Category:
-{stock['category']}
-
-SMART MONEY SCORES
-
-Smart Score:
-{stock['smart_score']}
-
-Defense Score:
-{stock['defense_score']}
-
-Congress Score:
-{stock.get('congress_score', 0)}
-
-Insider Score:
-{stock.get('insider_score', 0)}
-
-Final Score:
-{stock['final_score']}
-
-RISK PROFILE
-
-Risk Level:
-{risk_profile['risk_level']}
-
-Risk Score:
-{risk_profile['risk_score']}/100
-
-MARKET DATA
-
-{market_section}
-
-EARNINGS DATA
-
-{earnings_section}
-
-RECENT SEC FILINGS
-
-{sec_summary}
-
-AI SCORECARD TAKEAWAY
-
-{ai_takeaway}
-"""
+        return {
+            "symbol": symbol,
+            "score": score,
+            "rating": "",
+            "reason": "",
+            "sector": "",
+            "strengths": [],
+            "weaknesses": [],
+            "risks": [],
+            "raw": item,
+        }
 
     return {
-        "found": True,
-        "message": message.strip()
+        "symbol": str(symbol_hint or item).upper(),
+        "score": None,
+        "rating": "",
+        "reason": "",
+        "sector": "",
+        "strengths": [],
+        "weaknesses": [],
+        "risks": [],
+        "raw": item,
     }
+
+
+def normalize_scores(scores: Any) -> list[dict]:
+    if scores is None:
+        return []
+
+    normalized = []
+
+    if isinstance(scores, dict):
+        for symbol, value in scores.items():
+            normalized.append(normalize_score_item(str(symbol), value))
+
+    elif isinstance(scores, list):
+        normalized = [normalize_score_item(None, item) for item in scores]
+
+    return sorted(
+        normalized,
+        key=lambda item: item["score"] if item["score"] is not None else -999,
+        reverse=True,
+    )
+
+
+def find_score_for_symbol(scores: list[dict], symbol: str) -> dict | None:
+    clean = clean_symbol(symbol)
+
+    for item in scores:
+        if item["symbol"].upper() == clean:
+            return item
+
+    return None
+
+
+def format_score(score: float | None) -> str:
+    if score is None:
+        return "N/A"
+
+    if score.is_integer():
+        return str(int(score))
+
+    return f"{score:.1f}"
+
+
+def classify_signal(score: float | None) -> str:
+    if score is None:
+        return "Unrated"
+    if score >= 85:
+        return "High conviction"
+    if score >= 75:
+        return "Strong watch"
+    if score >= 65:
+        return "Moderate watch"
+    if score >= 50:
+        return "Neutral"
+    return "Weak"
+
+
+def classify_risk(score: float | None, change_percent: float | None) -> str:
+    if change_percent is not None and abs(change_percent) >= 5:
+        return "High short-term volatility"
+
+    if score is None:
+        return "Unknown"
+
+    if score >= 85:
+        return "Moderate — strong score, but confirm valuation and entry."
+    if score >= 75:
+        return "Moderate — attractive, but still needs confirmation."
+    if score >= 65:
+        return "Medium-high — wait for cleaner setup."
+    if score >= 50:
+        return "High — mixed profile."
+    return "Very high — weak score."
+
+
+def build_next_step(score: float | None) -> str:
+    if score is None:
+        return "Review manually before taking action."
+    if score >= 85:
+        return "Check chart trend, volume, news, valuation, and entry level."
+    if score >= 75:
+        return "Compare against sector peers and consider adding to active watchlist."
+    if score >= 65:
+        return "Monitor for confirmation, breakout, pullback, or catalyst."
+    if score >= 50:
+        return "Wait for stronger confirmation before acting."
+    return "Skip for now unless the thesis materially improves."
+
+
+def get_quote_for_symbol(quotes: dict, symbol: str) -> dict | None:
+    clean = clean_symbol(symbol)
+
+    if not isinstance(quotes, dict):
+        return None
+
+    quote = quotes.get(clean)
+
+    if isinstance(quote, dict):
+        return quote
+
+    for value in quotes.values():
+        if not isinstance(value, dict):
+            continue
+
+        quote_symbol = str(
+            value.get("symbol")
+            or value.get("ticker")
+            or ""
+        ).upper()
+
+        if quote_symbol == clean:
+            return value
+
+    return None
+
+
+def get_quote_value(quote: dict | None, keys: list[str]):
+    if not quote:
+        return None
+
+    for key in keys:
+        value = quote.get(key)
+
+        if value is not None:
+            return value
+
+    return None
+
+
+def get_price(quote: dict | None) -> float | None:
+    return safe_float(
+        get_quote_value(
+            quote,
+            [
+                "price",
+                "regularMarketPrice",
+                "regular_market_price",
+                "current_price",
+                "last_price",
+            ],
+        )
+    )
+
+
+def get_change_percent(quote: dict | None) -> float | None:
+    return safe_float(
+        get_quote_value(
+            quote,
+            [
+                "change_percent",
+                "percent_change",
+                "regularMarketChangePercent",
+                "regular_market_change_percent",
+                "changePercent",
+            ],
+        )
+    )
+
+
+def format_price(price: float | None) -> str:
+    if price is None:
+        return "N/A"
+
+    return f"${price:,.2f}"
+
+
+def format_percent(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+
+    sign = "+" if value >= 0 else ""
+    return f"{sign}{value:.2f}%"
+
+
+def normalize_bullet_items(value: Any, fallback: list[str]) -> list[str]:
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if cleaned:
+            return [cleaned]
+        return fallback
+
+    if isinstance(value, list):
+        cleaned_items = []
+
+        for item in value:
+            item_text = str(item).strip()
+            if item_text:
+                cleaned_items.append(item_text)
+
+        return cleaned_items or fallback
+
+    if isinstance(value, tuple):
+        return normalize_bullet_items(list(value), fallback)
+
+    return fallback
+
+
+def clean_text(text: str, max_length: int = 180) -> str:
+    if not text:
+        return ""
+
+    cleaned = " ".join(text.split())
+
+    if len(cleaned) <= max_length:
+        return cleaned
+
+    return cleaned[: max_length - 3].rstrip() + "..."
+
+
+def build_default_strengths(score: float | None, change_percent: float | None) -> list[str]:
+    strengths = []
+
+    if score is not None and score >= 75:
+        strengths.append("Score is above the strong-watch threshold.")
+
+    if change_percent is not None and change_percent > 0:
+        strengths.append("Ticker is positive on the current market session.")
+
+    if not strengths:
+        strengths.append("No clear strength details were provided by the scoring engine.")
+
+    return strengths
+
+
+def build_default_weaknesses(score: float | None, change_percent: float | None) -> list[str]:
+    weaknesses = []
+
+    if score is not None and score < 65:
+        weaknesses.append("Score is below the preferred opportunity range.")
+
+    if change_percent is not None and change_percent < 0:
+        weaknesses.append("Ticker is negative on the current market session.")
+
+    if not weaknesses:
+        weaknesses.append("No major weakness details were provided by the scoring engine.")
+
+    return weaknesses
+
+
+def format_bullets(items: list[str], max_items: int = 3) -> str:
+    return "\n".join(f"• {clean_text(item)}" for item in items[:max_items])
+
+
+def build_scorecard_message(symbol: str, score_item: dict | None, quote: dict | None) -> str:
+    clean = clean_symbol(symbol)
+
+    price = get_price(quote)
+    change_percent = get_change_percent(quote)
+
+    if score_item:
+        score = score_item["score"]
+        rating = score_item.get("rating") or ""
+        sector = score_item.get("sector") or ""
+        reason = clean_text(score_item.get("reason") or "No thesis provided by scoring engine.")
+
+        strengths = normalize_bullet_items(
+            score_item.get("strengths"),
+            build_default_strengths(score, change_percent),
+        )
+
+        weaknesses = normalize_bullet_items(
+            score_item.get("weaknesses"),
+            build_default_weaknesses(score, change_percent),
+        )
+
+        risk_items = normalize_bullet_items(
+            score_item.get("risks"),
+            [classify_risk(score, change_percent)],
+        )
+    else:
+        score = None
+        rating = ""
+        sector = ""
+        reason = "This symbol was not found in the current scoring engine output."
+        strengths = build_default_strengths(score, change_percent)
+        weaknesses = build_default_weaknesses(score, change_percent)
+        risk_items = [classify_risk(score, change_percent)]
+
+    signal = classify_signal(score)
+    next_step = build_next_step(score)
+
+    optional_lines = []
+
+    if rating:
+        optional_lines.append(f"Rating: {rating}")
+
+    if sector:
+        optional_lines.append(f"Sector: {sector}")
+
+    optional_block = ""
+    if optional_lines:
+        optional_block = "\n" + "\n".join(optional_lines)
+
+    return f"""
+🧾 Smart Money AI Scorecard: {clean}
+
+Market Data
+Price: {format_price(price)}
+Today: {format_percent(change_percent)}
+
+Score
+Smart Money Score: {format_score(score)}
+Signal: {signal}{optional_block}
+
+Thesis
+{reason}
+
+Strengths
+{format_bullets(strengths)}
+
+Weaknesses
+{format_bullets(weaknesses)}
+
+Risk Notes
+{format_bullets(risk_items)}
+
+Next Step
+{next_step}
+
+Notes
+This is informational only and is not financial advice.
+Use /risk {clean} for a deeper risk view.
+Use /quote {clean} for a quick price check.
+""".strip()
+
+
+async def scorecard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /scorecard SYMBOL\n\nExample: /scorecard NVDA"
+        )
+        return
+
+    symbol = clean_symbol(context.args[0])
+
+    await update.message.reply_text(f"Building Smart Money AI scorecard for {symbol}...")
+
+    try:
+        raw_scores = await asyncio.to_thread(get_stock_scores)
+        scores = normalize_scores(raw_scores)
+        score_item = find_score_for_symbol(scores, symbol)
+    except Exception:
+        score_item = None
+
+    try:
+        quotes = await asyncio.to_thread(fetch_quotes_for_symbols, [symbol])
+        quote = get_quote_for_symbol(quotes, symbol)
+    except Exception:
+        quote = None
+
+    message = build_scorecard_message(symbol, score_item, quote)
+    await update.message.reply_text(message)
+
+
+# Compatibility alias in case register_commands.py imports scorecard_command.
+scorecard_command = scorecard
