@@ -108,24 +108,34 @@ async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     stock = get_stock(symbol)
 
-    if not stock:
-        await update.message.reply_text(f"{symbol} not found in watchlist.")
-        return
-
-    try:
-        risk_profile = get_risk_profile(stock)
-    except Exception:
-        risk_profile = None
-
     try:
         market_data = get_market_data(symbol)
     except Exception:
         market_data = {"found": False, "error": "Market data unavailable"}
 
-    try:
-        analysis = analyze_stock(stock)
-    except Exception as error:
-        analysis = f"AI analysis unavailable: {error}"
+    if not stock and not market_data.get("found"):
+        await update.message.reply_text(
+            f"{symbol} was not found in the watchlist and market data is unavailable."
+        )
+        return
+
+    if stock:
+        try:
+            risk_profile = get_risk_profile(stock)
+        except Exception:
+            risk_profile = None
+
+        try:
+            analysis = analyze_stock(stock)
+        except Exception as error:
+            analysis = f"AI analysis unavailable: {error}"
+    else:
+        risk_profile = None
+        analysis = (
+            f"{symbol} is not currently in the Smart Money AI watchlist. "
+            f"Market data is available, but watchlist score, final score, and custom AI thesis are unavailable. "
+            f"Add {symbol} to the watchlist if you want full scoring."
+        )
 
     message = build_ticker_report(
         symbol=symbol,
