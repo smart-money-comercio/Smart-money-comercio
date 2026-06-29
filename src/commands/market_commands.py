@@ -7,6 +7,7 @@ from src.agents.analyst_agent import analyze_stock
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
 from src.market.earnings_data import get_earnings_data, summarize_earnings
 from src.market.market_data import get_market_data, format_number, format_percent
+from src.reports.market_report import build_market_report
 from src.reports.quote_report import build_quote_report
 from src.reports.risk_report import build_risk_report
 from src.reports.scorecard import (
@@ -41,10 +42,10 @@ async def quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage: /market PLTR")
+        await update.message.reply_text("Usage: /market SYMBOL\n\nExample: /market NVDA")
         return
 
-    symbol = context.args[0].upper()
+    symbol = context.args[0].upper().replace("$", "")
     data = get_market_data(symbol)
 
     if not data["found"]:
@@ -54,46 +55,7 @@ async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    message = f"""
-📊 MARKET DATA: {data['ticker']}
-
-Company:
-{data['company_name']}
-
-Sector:
-{data['sector']}
-
-Industry:
-{data['industry']}
-
-Price:
-${data['price']:.2f}
-
-Market Cap:
-{format_number(data['market_cap'])}
-
-P/E Ratio:
-{data['pe_ratio'] if data['pe_ratio'] else 'N/A'}
-
-Forward P/E:
-{data['forward_pe'] if data['forward_pe'] else 'N/A'}
-
-Dividend Yield:
-{format_percent(data['dividend_yield'])}
-
-Beta:
-{data['beta'] if data['beta'] else 'N/A'}
-
-52-Week High:
-${data['week_52_high']:.2f}
-
-52-Week Low:
-${data['week_52_low']:.2f}
-
-Note:
-Market data is pulled from a public market-data source and should be verified before making investment decisions.
-"""
-
+    message = build_market_report(symbol, data)
     await update.message.reply_text(message)
 
 
