@@ -22,6 +22,10 @@ def safe_float(value: Any) -> float | None:
         return None
 
 
+def clean_symbol(symbol: Any) -> str:
+    return str(symbol or "UNKNOWN").strip().upper().replace("$", "")
+
+
 def get_value(data: dict, keys: list[str], default=None):
     for key in keys:
         value = data.get(key)
@@ -30,25 +34,71 @@ def get_value(data: dict, keys: list[str], default=None):
     return default
 
 
+def clean_text(text: Any, max_length: int = 140) -> str:
+    if text is None:
+        return ""
+
+    cleaned = " ".join(str(text).split())
+
+    if len(cleaned) <= max_length:
+        return cleaned
+
+    return cleaned[: max_length - 3].rstrip() + "..."
+
+
+def get_first_text(value: Any, fallback: str) -> str:
+    if isinstance(value, list):
+        for item in value:
+            text = clean_text(item)
+            if text:
+                return text
+        return fallback
+
+    if isinstance(value, tuple):
+        return get_first_text(list(value), fallback)
+
+    if isinstance(value, str) and value.strip():
+        return clean_text(value)
+
+    return fallback
+
+
 def normalize_score_item(item: Any) -> dict:
     if isinstance(item, dict):
-        symbol = (
-            item.get("symbol")
-            or item.get("ticker")
-            or item.get("name")
-            or "UNKNOWN"
+        symbol = get_value(
+            item,
+            ["symbol", "ticker", "name"],
+            "UNKNOWN",
         )
 
         score = get_value(
             item,
-            ["score", "total_score", "smart_money_score", "rating_score"],
+            ["final_score", "score", "smart_money_score", "total_score", "rating_score"],
             None,
         )
 
         rating = get_value(
             item,
             ["rating", "grade", "signal", "recommendation"],
+            "Unrated",
+        )
+
+        risk_label = get_value(
+            item,
+            ["risk_label", "risk_level", "risk"],
             "N/A",
+        )
+
+        category = get_value(
+            item,
+            ["category", "sector", "industry"],
+            "N/A",
+        )
+
+        category_adjustment = get_value(
+            item,
+            ["category_adjustment", "adjustment"],
+            0,
         )
 
         reason = get_value(
@@ -57,31 +107,67 @@ def normalize_score_item(item: Any) -> dict:
             "",
         )
 
+        strengths = get_value(
+            item,
+            ["strengths", "pros", "bull_case", "positive_factors"],
+            [],
+        )
+
+        weaknesses = get_value(
+            item,
+            ["weaknesses", "cons", "bear_case", "negative_factors"],
+            [],
+        )
+
+        risks = get_value(
+            item,
+            ["risks", "risk_notes", "warnings"],
+            [],
+        )
+
         return {
-            "symbol": str(symbol).upper(),
+            "symbol": clean_symbol(symbol),
             "score": safe_float(score),
-            "rating": str(rating),
-            "reason": str(reason),
+            "rating": str(rating).strip() or "Unrated",
+            "risk_label": str(risk_label).strip() or "N/A",
+            "category": str(category).strip() or "N/A",
+            "category_adjustment": safe_float(category_adjustment) or 0,
+            "reason": clean_text(reason, 180),
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "risks": risks,
             "raw": item,
         }
 
     if isinstance(item, (list, tuple)) and item:
-        symbol = str(item[0]).upper()
+        symbol = clean_symbol(item[0])
         score = safe_float(item[1]) if len(item) > 1 else None
 
         return {
             "symbol": symbol,
             "score": score,
-            "rating": "N/A",
+            "rating": "Unrated",
+            "risk_label": "N/A",
+            "category": "N/A",
+            "category_adjustment": 0,
             "reason": "",
+            "strengths": [],
+            "weaknesses": [],
+            "risks": [],
             "raw": item,
         }
 
     return {
-        "symbol": str(item).upper(),
+        "symbol": clean_symbol(item),
         "score": None,
-        "rating": "N/A",
+        "rating": "Unrated",
+        "risk_label": "N/A",
+        "category": "N/A",
+        "category_adjustment": 0,
         "reason": "",
+        "strengths": [],
+        "weaknesses": [],
+        "risks": [],
         "raw": item,
     }
 
@@ -90,9 +176,9 @@ def normalize_scores(scores: Any) -> list[dict]:
     if scores is None:
         return []
 
-    if isinstance(scores, dict):
-        normalized = []
+    normalized = []
 
+    if isinstance(scores, dict):
         for symbol, value in scores.items():
             if isinstance(value, dict):
                 item = dict(value)
@@ -100,25 +186,16 @@ def normalize_scores(scores: Any) -> list[dict]:
                 normalized.append(normalize_score_item(item))
             else:
                 normalized.append(
-                    {
-                        "symbol": str(symbol).upper(),
-                        "score": safe_float(value),
-                        "rating": "N/A",
-                        "reason": "",
-                        "raw": value,
-                    }
+                    normalize_score_item(
+                        {
+                            "symbol": symbol,
+                            "score": value,
+                        }
+                    )
                 )
 
-        return sort_scores(normalized)
-
-    if isinstance(scores, list):
-        return sort_scores(normalize_score_item(item) for item in scores)
-
-    return []
-
-
-def sort_scores(scores: Any) -> list[dict]:
-    normalized = list(scores)
+    elif isinstance(scores, list):
+        normalized = [normalize_score_item(item) for item in scores]
 
     return sorted(
         normalized,
@@ -137,31 +214,91 @@ def format_score(score: float | None) -> str:
     return f"{score:.1f}"
 
 
+def format_adjustment(value: Any) -> str:
+    number = safe_float(value)
+
+    if number is None:
+        return "0"
+
+    if number > 0:
+        return f"+{number:.0f}"
+
+    return f"{number:.0f}"
+
+
 def classify_score(score: float | None) -> str:
     if score is None:
         return "Unrated"
-    if score >= 85:
+    if score >= 90:
+        return "Elite"
+    if score >= 82:
         return "High conviction"
     if score >= 75:
         return "Strong watch"
-    if score >= 65:
+    if score >= 68:
+        return "Good watch"
+    if score >= 60:
         return "Moderate watch"
     if score >= 50:
         return "Neutral"
     return "Weak"
 
 
+def build_score_summary(scores: list[dict]) -> str:
+    if not scores:
+        return "No scoring data available."
+
+    scored_values = [
+        item["score"]
+        for item in scores
+        if item["score"] is not None
+    ]
+
+    if not scored_values:
+        return "No scored symbols available."
+
+    elite = len([score for score in scored_values if score >= 90])
+    high_conviction = len([score for score in scored_values if score >= 82])
+    strong_watch = len([score for score in scored_values if score >= 75])
+    watchable = len([score for score in scored_values if score >= 68])
+
+    return f"""
+Total Scored Symbols: {len(scores)}
+Elite 90+: {elite}
+High Conviction 82+: {high_conviction}
+Strong Watch 75+: {strong_watch}
+Watchable 68+: {watchable}
+Highest Score: {format_score(max(scored_values))}
+Average Score: {format_score(sum(scored_values) / len(scored_values))}
+""".strip()
+
+
 def format_opportunity_line(index: int, item: dict) -> str:
     symbol = item["symbol"]
     score = format_score(item["score"])
-    rating = item["rating"]
-
     signal = classify_score(item["score"])
+    rating = item.get("rating") or "Unrated"
+    risk_label = item.get("risk_label") or "N/A"
+    category = item.get("category") or "N/A"
+    adjustment = format_adjustment(item.get("category_adjustment"))
 
-    if rating and rating != "N/A":
-        return f"{index}. {symbol} — Score: {score} | {signal} | {rating}"
+    top_strength = get_first_text(
+        item.get("strengths"),
+        "No major strength detail available.",
+    )
 
-    return f"{index}. {symbol} — Score: {score} | {signal}"
+    key_weakness = get_first_text(
+        item.get("weaknesses"),
+        "No major weakness detail available.",
+    )
+
+    return (
+        f"{index}. {symbol} — {score}/100 | {signal}\n"
+        f"   Rating: {rating} | Risk: {risk_label}\n"
+        f"   Category: {category} | Adjustment: {adjustment}\n"
+        f"   Strength: {clean_text(top_strength, 110)}\n"
+        f"   Watch: {clean_text(key_weakness, 110)}"
+    )
 
 
 def get_quote_value(quote: dict, keys: list[str]):
@@ -328,21 +465,48 @@ def build_risk_notes(top_scores: list[dict], watchlist_quotes: dict) -> str:
     notes = []
 
     high_conviction_count = sum(
-        1 for item in top_scores if item["score"] is not None and item["score"] >= 85
+        1
+        for item in top_scores
+        if item["score"] is not None and item["score"] >= 82
+    )
+
+    high_risk_count = sum(
+        1
+        for item in top_scores
+        if "high" in str(item.get("risk_label", "")).lower()
     )
 
     weak_count = sum(
-        1 for item in top_scores if item["score"] is not None and item["score"] < 50
+        1
+        for item in top_scores
+        if item["score"] is not None and item["score"] < 50
+    )
+
+    positive_adjustments = sum(
+        1
+        for item in top_scores
+        if safe_float(item.get("category_adjustment")) is not None
+        and safe_float(item.get("category_adjustment")) > 0
     )
 
     if high_conviction_count:
         notes.append(
-            f"{high_conviction_count} high-conviction name(s) are present in the current scoring output."
+            f"{high_conviction_count} high-conviction name(s) are present in the current top ranking."
+        )
+
+    if high_risk_count:
+        notes.append(
+            f"{high_risk_count} top-ranked name(s) carry elevated risk labels."
         )
 
     if weak_count:
         notes.append(
             f"{weak_count} low-score name(s) appear in the ranking and should be treated cautiously."
+        )
+
+    if positive_adjustments:
+        notes.append(
+            f"{positive_adjustments} top-ranked name(s) benefit from positive category adjustments."
         )
 
     if watchlist_quotes:
@@ -352,10 +516,10 @@ def build_risk_notes(top_scores: list[dict], watchlist_quotes: dict) -> str:
             if not isinstance(quote, dict):
                 continue
 
-            symbol = str(quote.get("symbol") or quote.get("ticker") or "").upper()
+            symbol = clean_symbol(quote.get("symbol") or quote.get("ticker"))
             change = get_quote_change_percent(quote)
 
-            if symbol and change is not None and abs(change) >= 2:
+            if symbol and symbol != "UNKNOWN" and change is not None and abs(change) >= 2:
                 large_movers.append(symbol)
 
         if large_movers:
@@ -430,8 +594,10 @@ def build_daily_report() -> str:
     watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes()
     market_tone = build_market_tone_from_watchlist(watchlist_quotes)
 
+    score_summary = build_score_summary(normalized_scores)
+
     if top_scores:
-        top_opportunities = "\n".join(
+        top_opportunities = "\n\n".join(
             format_opportunity_line(index, item)
             for index, item in enumerate(top_scores, start=1)
         )
@@ -450,16 +616,19 @@ def build_daily_report() -> str:
     ai_summary = build_ai_summary(raw_scores)
 
     return f"""
-📊 Smart Money AI Report
+📊 Smart Money AI Daily Report
 Date: {today}
 Generated: {timestamp} {REPORT_TIMEZONE}
 
 Market Snapshot
-Market tone: {market_tone}
-Watchlist symbols: {len(watchlist_symbols)}
+Market Tone: {market_tone}
+Watchlist Symbols: {len(watchlist_symbols)}
 
 Watchlist Movers
 {watchlist_snapshot}
+
+Smart Money Score Summary
+{score_summary}
 
 Top Opportunities
 {top_opportunities}
@@ -472,6 +641,12 @@ AI Summary
 
 Action Checklist
 {action_checklist}
+
+Next Commands
+/top10
+/scorecard SYMBOL
+/watchlist report
+/marketbrief
 
 Notes
 This report is informational only and is not financial advice.
