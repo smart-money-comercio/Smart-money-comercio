@@ -1,6 +1,14 @@
 import asyncio
 
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from src.agents.analyst_agent import analyze_stock
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.market.earnings_data import get_earnings_data, summarize_earnings
+from src.market.market_data import get_market_data, format_number, format_percent
+from src.reports.quote_report import build_quote_report
+from src.reports.risk_report import build_risk_report
 from src.reports.scorecard import (
     build_scorecard,
     clean_symbol,
@@ -8,21 +16,16 @@ from src.reports.scorecard import (
     get_quote_for_symbol,
     normalize_scores,
 )
-from telegram import Update
-from telegram.ext import ContextTypes
-from src.agents.analyst_agent import analyze_stock
-from src.market.earnings_data import get_earnings_data, summarize_earnings
-from src.market.market_data import get_market_data, format_number, format_percent
 from src.scoring.risk_engine import get_risk_profile
-from src.scoring.stock_lookup import get_stock
 from src.scoring.scoring_engine import get_stock_scores
+from src.scoring.stock_lookup import get_stock
 
 async def quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage: /quote PLTR")
+        await update.message.reply_text("Usage: /quote SYMBOL\n\nExample: /quote NVDA")
         return
 
-    symbol = context.args[0].upper()
+    symbol = context.args[0].upper().replace("$", "")
     data = get_market_data(symbol)
 
     if not data["found"]:
@@ -32,34 +35,7 @@ async def quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    message = f"""
-💹 QUOTE: {data['ticker']}
-
-Company:
-{data['company_name']}
-
-Price:
-${data['price']:.2f}
-
-Market Cap:
-{format_number(data['market_cap'])}
-
-P/E Ratio:
-{data['pe_ratio'] if data['pe_ratio'] else 'N/A'}
-
-Forward P/E:
-{data['forward_pe'] if data['forward_pe'] else 'N/A'}
-
-Dividend Yield:
-{format_percent(data['dividend_yield'])}
-
-Beta:
-{data['beta'] if data['beta'] else 'N/A'}
-
-52-Week Range:
-${data['week_52_low']:.2f} - ${data['week_52_high']:.2f}
-"""
-
+    message = build_quote_report(symbol, data)
     await update.message.reply_text(message)
 
 
@@ -323,39 +299,38 @@ async def scorecard(update, context):
 
 async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage: /risk PLTR")
+        await update.message.reply_text("Usage: /risk SYMBOL\n\nExample: /risk NVDA")
         return
 
-    symbol = context.args[0].upper()
-    stock = get_stock(symbol)
+    symbol = context.args[0].upper().replace("$", "")
 
-    if not stock:
-        await update.message.reply_text(f"{symbol} not found in watchlist.")
-        return
-
-    risk_profile = get_risk_profile(stock)
-
-    factors = "\n".join(
-        [f"- {factor}" for factor in risk_profile["risk_factors"]]
+    await update.message.reply_text(
+        f"Building Smart Money AI risk report for {symbol}..."
     )
 
-    message = f"""
-⚠️ RISK PROFILE: {risk_profile['ticker']}
+    stock = get_stock(symbol)
+    market_data = get_market_data(symbol)
 
-Risk Level:
-{risk_profile['risk_level']}
+    if stock:
+        try:
+            risk_profile = get_risk_profile(stock)
+        except Exception:
+            risk_profile = None
+    else:
+        risk_profile = None
 
-Risk Score:
-{risk_profile['risk_score']}/100
+    if not stock and not market_data.get("found"):
+        await update.message.reply_text(
+            f"Risk data not found for {symbol}.\n"
+            f"Error: {market_data.get('error', 'Unknown error')}"
+        )
+        return
 
-Category:
-{stock['category']}
-
-Key Risk Factors:
-{factors}
-
-Note:
-This risk score is a research estimate based on category, volatility profile, and concentration risk. It is not financial advice.
-"""
+    message = build_risk_report(
+        symbol=symbol,
+        stock=stock,
+        risk_profile=risk_profile,
+        market_data=market_data,
+    )
 
     await update.message.reply_text(message)
