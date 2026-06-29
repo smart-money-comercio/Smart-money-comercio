@@ -9,6 +9,7 @@ from src.market.earnings_data import get_earnings_data, summarize_earnings
 from src.market.market_data import get_market_data, format_number, format_percent
 from src.reports.market_report import build_market_report
 from src.reports.quote_report import build_quote_report
+from src.reports.earnings_report import build_earnings_report
 from src.reports.risk_report import build_risk_report
 from src.reports.scorecard import (
     build_scorecard,
@@ -61,13 +62,13 @@ async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def earnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage: /earnings PLTR")
+        await update.message.reply_text("Usage: /earnings SYMBOL\n\nExample: /earnings NVDA")
         return
 
-    symbol = context.args[0].upper()
+    symbol = context.args[0].upper().replace("$", "")
 
     await update.message.reply_text(
-        f"📊 Pulling earnings data for {symbol}..."
+        f"Building Smart Money AI earnings snapshot for {symbol}..."
     )
 
     data = get_earnings_data(symbol)
@@ -84,58 +85,11 @@ async def earnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as error:
         ai_summary = f"AI summary unavailable: {error}"
 
-    message = f"""
-📊 EARNINGS SNAPSHOT: {data['ticker']}
-
-Company:
-{data['company_name']}
-
-Period:
-{data['period_type']} - {data['latest_period']}
-
-Sector:
-{data['sector']}
-
-Revenue:
-{format_number(data['revenue'])}
-
-Revenue Growth:
-{format_percent(data['revenue_growth'])}
-
-Gross Profit:
-{format_number(data['gross_profit'])}
-
-Operating Income:
-{format_number(data['operating_income'])}
-
-Net Income:
-{format_number(data['net_income'])}
-
-EPS:
-{data['diluted_eps'] if data['diluted_eps'] else 'N/A'}
-
-Gross Margin:
-{format_percent(data['gross_margin'])}
-
-Operating Margin:
-{format_percent(data['operating_margin'])}
-
-Net Margin:
-{format_percent(data['net_margin'])}
-
-P/E Ratio:
-{data['pe_ratio'] if data['pe_ratio'] else 'N/A'}
-
-Forward P/E:
-{data['forward_pe'] if data['forward_pe'] else 'N/A'}
-
-Dividend Yield:
-{format_percent(data['dividend_yield'])}
-
-🧠 AI EARNINGS SUMMARY
-
-{ai_summary}
-"""
+    message = build_earnings_report(
+        symbol=symbol,
+        data=data,
+        ai_summary=ai_summary,
+    )
 
     await update.message.reply_text(message)
 
