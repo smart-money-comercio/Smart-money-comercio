@@ -3,28 +3,100 @@ import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.congress.congress_scoring import get_congress_trades
+from src.congress.congress_scoring import get_congress_score, get_congress_trades
 from src.insiders.insider_data import get_insider_trades
 from src.insiders.insider_scoring import get_insider_score
+from src.reports.congress_report import build_congress_report
 from src.reports.insider_report import build_insider_report
 from src.scoring.risk_engine import get_risk_profile
 from src.scoring.scoring_engine import get_stock_scores
 
 
+TELEGRAM_MESSAGE_LIMIT = 3900
+
+
+def split_long_message(message: str) -> list[str]:
+    if len(message) <= TELEGRAM_MESSAGE_LIMIT:
+        return [message]
+
+    chunks = []
+    current_chunk = ""
+
+    for line in message.splitlines():
+        candidate = f"{current_chunk}\n{line}" if current_chunk else line
+
+        if len(candidate) > TELEGRAM_MESSAGE_LIMIT:
+            if current_chunk:
+                chunks.append(current_chunk)
+            current_chunk = line
+        else:
+            current_chunk = candidate
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+async def send_split_message(update: Update, message: str, loading_message=None) -> None:
+    chunks = split_long_message(message)
+
+    if loading_message:
+        await loading_message.edit_text(chunks[0])
+    else:
+        await update.message.reply_text(chunks[0])
+
+    for chunk in chunks[1:]:
+        await update.message.reply_text(chunk)
+
+
 async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    trades = get_congress_trades()
+    if not update.message:
+        return
 
-    text = "🏛️ CONGRESSIONAL TRADING INTELLIGENCE\n\n"
+    symbol = None
 
-    for trade in trades:
-        text += (
-            f"{trade['politician']}\n"
-            f"{trade['transaction']}: {trade['ticker']}\n"
-            f"Sector: {trade['sector']}\n"
-            f"Amount: {trade['amount_range']}\n\n"
+    if context.args:
+        symbol = context.args[0].upper().replace("$", "")
+
+    loading_message = await update.message.reply_text(
+        "🏛️ Building Congress intelligence report..."
+        if not symbol
+        else f"🏛️ Building Congress intelligence report for {symbol}..."
+    )
+
+    try:
+        trades = await asyncio.to_thread(get_congress_trades)
+
+        tickers = sorted(
+            {
+                str(trade.get("ticker", "")).upper().replace("$", "")
+                for trade in trades
+                if trade.get("ticker")
+            }
         )
 
-    await update.message.reply_text(text)
+        if symbol and symbol not in tickers:
+            tickers.append(symbol)
+
+        score_map = {}
+
+        for ticker in tickers:
+            score_map[ticker] = await asyncio.to_thread(get_congress_score, ticker)
+
+        message = build_congress_report(
+            trades=trades,
+            score_map=score_map,
+            symbol=symbol,
+        )
+
+        await send_split_message(update, message, loading_message)
+
+    except Exception as error:
+        await loading_message.edit_text(
+            "Unable to build Congress intelligence report right now.\n\n"
+            f"Error:\n{type(error).__name__}"
+        )
 
 
 async def insiders(update, context):
@@ -54,7 +126,7 @@ async def insiders(update, context):
             limit=5,
         )
 
-        await loading_message.edit_text(message)
+        await send_split_message(update, message, loading_message)
 
     except Exception as error:
         await loading_message.edit_text(
@@ -64,13 +136,16 @@ async def insiders(update, context):
 
 
 async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+
     scores = sorted(
-        get_stock_scores(),
+        await asyncio.to_thread(get_stock_scores),
         key=lambda x: (
             x.get("congress_score", 0)
             + x.get("insider_score", 0)
         ),
-        reverse=True
+        reverse=True,
     )
 
     text = "🧠 SMART MONEY SIGNALS\n\n"
@@ -86,7 +161,7 @@ async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text += (
         "🧠 Insight:\n"
-        "Smart Money signals combine congressional activity and insider buying. "
+        "Smart Money signals combine congressional activity and insider activity. "
         "These are research inputs, not standalone buy recommendations."
     )
 
@@ -94,14 +169,17 @@ async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+
     scores = sorted(
-        get_stock_scores(),
+        await asyncio.to_thread(get_stock_scores),
         key=lambda x: (
             x.get("congress_score", 0)
             + x.get("insider_score", 0)
             + x.get("defense_score", 0)
         ),
-        reverse=True
+        reverse=True,
     )
 
     text = "🔥 HIGH CONVICTION IDEAS\n\n"
