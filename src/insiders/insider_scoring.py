@@ -1,4 +1,4 @@
-from src.insiders.insider_data import INSIDER_TRADES
+from src.insiders.insider_data import get_insider_trades
 
 
 MIN_SCORE = 0
@@ -43,10 +43,6 @@ AMOUNT_WEIGHTS = [
     ("$100K", 5),
     ("$50K", 3),
 ]
-
-
-def get_insider_trades():
-    return INSIDER_TRADES
 
 
 def clamp_score(score):
@@ -118,9 +114,14 @@ def score_trade(trade):
 def get_matching_trades(ticker):
     clean_ticker = clean_text(ticker)
 
+    try:
+        trades = get_insider_trades()
+    except Exception:
+        trades = []
+
     return [
         trade
-        for trade in INSIDER_TRADES
+        for trade in trades
         if get_trade_ticker(trade) == clean_ticker
     ]
 
