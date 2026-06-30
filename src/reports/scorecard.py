@@ -10,6 +10,22 @@ def safe_float(value: Any) -> float | None:
         return None
 
 
+def clean_symbol(raw_symbol: Any) -> str:
+    return str(raw_symbol or "UNKNOWN").strip().upper().replace("$", "")
+
+
+def clean_text(value: Any, max_length: int = 180) -> str:
+    if value is None:
+        return ""
+
+    text = " ".join(str(value).split())
+
+    if len(text) <= max_length:
+        return text
+
+    return text[: max_length - 3].rstrip() + "..."
+
+
 def get_value(data: dict, keys: list[str], default=None):
     for key in keys:
         value = data.get(key)
@@ -18,41 +34,21 @@ def get_value(data: dict, keys: list[str], default=None):
     return default
 
 
-def clean_symbol(raw_symbol: str) -> str:
-    return str(raw_symbol).strip().upper().replace("$", "")
-
-
-def clean_text(text: Any, max_length: int = 180) -> str:
-    if text is None:
-        return ""
-
-    cleaned = " ".join(str(text).split())
-
-    if len(cleaned) <= max_length:
-        return cleaned
-
-    return cleaned[: max_length - 3].rstrip() + "..."
-
-
-def normalize_bullet_items(value: Any, fallback: list[str]) -> list[str]:
+def normalize_bullets(value: Any, fallback: list[str]) -> list[str]:
     if isinstance(value, str):
-        cleaned = clean_text(value)
-        if cleaned:
-            return [cleaned]
-        return fallback
+        text = clean_text(value)
+        return [text] if text else fallback
 
     if isinstance(value, list):
-        cleaned_items = []
-
+        items = []
         for item in value:
-            item_text = clean_text(item)
-            if item_text:
-                cleaned_items.append(item_text)
-
-        return cleaned_items or fallback
+            text = clean_text(item)
+            if text:
+                items.append(text)
+        return items or fallback
 
     if isinstance(value, tuple):
-        return normalize_bullet_items(list(value), fallback)
+        return normalize_bullets(list(value), fallback)
 
     return fallback
 
@@ -61,7 +57,7 @@ def normalize_score_item(symbol_hint: str | None, item: Any) -> dict:
     if isinstance(item, dict):
         symbol = get_value(
             item,
-            ["symbol", "ticker", "name"],
+            ["ticker", "symbol", "name"],
             symbol_hint or "UNKNOWN",
         )
 
@@ -71,75 +67,47 @@ def normalize_score_item(symbol_hint: str | None, item: Any) -> dict:
             None,
         )
 
-        rating = get_value(
-            item,
-            ["rating", "grade", "signal", "recommendation"],
-            "Unrated",
-        )
-
-        risk_label = get_value(
-            item,
-            ["risk_label", "risk_level", "risk"],
-            "N/A",
-        )
-
-        category = get_value(
-            item,
-            ["category", "sector", "industry"],
-            "N/A",
-        )
-
-        category_adjustment = get_value(
-            item,
-            ["category_adjustment", "adjustment"],
-            0,
-        )
-
-        reason = get_value(
-            item,
-            ["reason", "summary", "thesis", "note", "explanation"],
-            "",
-        )
-
-        strengths = get_value(
-            item,
-            ["strengths", "pros", "bull_case", "positive_factors"],
-            [],
-        )
-
-        weaknesses = get_value(
-            item,
-            ["weaknesses", "cons", "bear_case", "negative_factors"],
-            [],
-        )
-
-        risks = get_value(
-            item,
-            ["risks", "risk_notes", "warnings", "risk_factors"],
-            [],
-        )
-
         return {
             "symbol": clean_symbol(symbol),
             "score": safe_float(score),
-            "rating": str(rating).strip() or "Unrated",
-            "risk_label": str(risk_label).strip() or "N/A",
-            "category": str(category).strip() or "N/A",
-            "category_adjustment": safe_float(category_adjustment) or 0,
-            "reason": clean_text(reason, 240),
-            "strengths": strengths,
-            "weaknesses": weaknesses,
-            "risks": risks,
+            "rating": str(
+                get_value(item, ["rating", "grade", "signal"], "Unrated")
+            ).strip() or "Unrated",
+            "risk_label": str(
+                get_value(item, ["risk_label", "risk_level", "risk"], "N/A")
+            ).strip() or "N/A",
+            "category": str(
+                get_value(item, ["category", "sector", "industry"], "N/A")
+            ).strip() or "N/A",
+            "category_adjustment": safe_float(
+                get_value(item, ["category_adjustment", "adjustment"], 0)
+            ) or 0,
+            "reason": clean_text(
+                get_value(item, ["reason", "summary", "thesis", "note", "explanation"], ""),
+                240,
+            ),
+            "strengths": get_value(
+                item,
+                ["strengths", "pros", "bull_case", "positive_factors"],
+                [],
+            ),
+            "weaknesses": get_value(
+                item,
+                ["weaknesses", "cons", "bear_case", "negative_factors"],
+                [],
+            ),
+            "risks": get_value(
+                item,
+                ["risks", "risk_notes", "warnings", "risk_factors"],
+                [],
+            ),
             "raw": item,
         }
 
     if isinstance(item, (list, tuple)) and item:
-        symbol = clean_symbol(symbol_hint or item[0])
-        score = safe_float(item[1]) if len(item) > 1 else None
-
         return {
-            "symbol": symbol,
-            "score": score,
+            "symbol": clean_symbol(symbol_hint or item[0]),
+            "score": safe_float(item[1]) if len(item) > 1 else None,
             "rating": "Unrated",
             "risk_label": "N/A",
             "category": "N/A",
@@ -190,7 +158,7 @@ def find_score_for_symbol(scores: list[dict], symbol: str) -> dict | None:
     clean = clean_symbol(symbol)
 
     for item in scores:
-        if item["symbol"].upper() == clean:
+        if clean_symbol(item.get("symbol")) == clean:
             return item
 
     return None
@@ -202,10 +170,10 @@ def get_quote_for_symbol(quotes: dict, symbol: str) -> dict | None:
     if not isinstance(quotes, dict):
         return None
 
-    quote = quotes.get(clean)
+    direct = quotes.get(clean)
 
-    if isinstance(quote, dict):
-        return quote
+    if isinstance(direct, dict):
+        return direct
 
     for value in quotes.values():
         if not isinstance(value, dict):
@@ -224,12 +192,11 @@ def get_quote_for_symbol(quotes: dict, symbol: str) -> dict | None:
 
 
 def get_quote_value(quote: dict | None, keys: list[str]):
-    if not quote:
+    if not isinstance(quote, dict):
         return None
 
     for key in keys:
         value = quote.get(key)
-
         if value is not None:
             return value
 
@@ -293,7 +260,9 @@ def get_volume(quote: dict | None) -> float | None:
     )
 
 
-def format_score(score: float | None) -> str:
+def format_score(value: Any) -> str:
+    score = safe_float(value)
+
     if score is None:
         return "N/A"
 
@@ -315,45 +284,53 @@ def format_adjustment(value: Any) -> str:
     return f"{number:.0f}"
 
 
-def format_price(price: float | None) -> str:
-    if price is None:
+def format_price(value: Any) -> str:
+    number = safe_float(value)
+
+    if number is None:
         return "N/A"
 
-    return f"${price:,.2f}"
+    return f"${number:,.2f}"
 
 
-def format_change(value: float | None) -> str:
-    if value is None:
+def format_change(value: Any) -> str:
+    number = safe_float(value)
+
+    if number is None:
         return "N/A"
 
-    sign = "+" if value >= 0 else ""
-    return f"{sign}{value:,.2f}"
+    sign = "+" if number >= 0 else ""
+    return f"{sign}{number:,.2f}"
 
 
-def format_percent(value: float | None) -> str:
-    if value is None:
+def format_percent(value: Any) -> str:
+    number = safe_float(value)
+
+    if number is None:
         return "N/A"
 
-    sign = "+" if value >= 0 else ""
-    return f"{sign}{value:.2f}%"
+    sign = "+" if number >= 0 else ""
+    return f"{sign}{number:.2f}%"
 
 
-def format_volume(value: float | None) -> str:
-    if value is None:
+def format_volume(value: Any) -> str:
+    number = safe_float(value)
+
+    if number is None:
         return "N/A"
 
-    abs_value = abs(value)
+    abs_value = abs(number)
 
     if abs_value >= 1_000_000_000:
-        return f"{value / 1_000_000_000:.2f}B"
+        return f"{number / 1_000_000_000:.2f}B"
 
     if abs_value >= 1_000_000:
-        return f"{value / 1_000_000:.2f}M"
+        return f"{number / 1_000_000:.2f}M"
 
     if abs_value >= 1_000:
-        return f"{value / 1_000:.2f}K"
+        return f"{number / 1_000:.2f}K"
 
-    return f"{value:,.0f}"
+    return f"{number:,.0f}"
 
 
 def classify_signal(score: float | None) -> str:
@@ -392,14 +369,16 @@ def classify_price_action(change_percent: float | None) -> str:
     return "Flat today"
 
 
-def build_conviction_readout(score: float | None, risk_label: str) -> str:
-    risk = str(risk_label or "").lower()
-
+def build_conviction_readout(score: float | None, risk_label: str, symbol: str) -> str:
     if score is None:
-        return "Conviction is unavailable because the scoring engine did not return a score."
+        return (
+            f"{symbol} is not currently in the Smart Money scoring output. "
+            "Conviction is unavailable until the ticker is added to the scoring watchlist, "
+            "but market data can still be reviewed with /quote, /market, and /risk."
+        )
 
     if score >= 90:
-        return "Elite score. Strong opportunity profile, but still confirm valuation and entry."
+        return "Elite score. Strong opportunity profile, but confirm valuation and entry."
     if score >= 82:
         return "High-conviction score. Worth deeper review if market setup confirms."
     if score >= 75:
@@ -411,10 +390,29 @@ def build_conviction_readout(score: float | None, risk_label: str) -> str:
     if score >= 50:
         return "Neutral setup. Avoid forcing a trade without a stronger thesis."
 
-    if "high" in risk:
+    if "high" in str(risk_label).lower():
         return "Weak score with elevated risk. Skip unless thesis materially improves."
 
     return "Weak score. Better opportunities likely exist elsewhere."
+
+
+def build_fallback_thesis(symbol: str, quote: dict | None) -> str:
+    price = get_price(quote)
+    change_percent = get_change_percent(quote)
+
+    if quote:
+        return (
+            f"{symbol} is not currently in the Smart Money scoring output, "
+            f"so no proprietary thesis is available yet. Current market data shows "
+            f"price at {format_price(price)} with today’s move at {format_percent(change_percent)}. "
+            f"Add {symbol} to the scoring watchlist if you want a full Smart Money thesis."
+        )
+
+    return (
+        f"{symbol} is not currently in the Smart Money scoring output, "
+        "and quote data was unavailable. Add this ticker to the scoring watchlist "
+        "to generate a full Smart Money thesis."
+    )
 
 
 def build_default_strengths(score: float | None, change_percent: float | None) -> list[str]:
@@ -438,6 +436,9 @@ def build_default_strengths(score: float | None, change_percent: float | None) -
 def build_default_weaknesses(score: float | None, change_percent: float | None) -> list[str]:
     weaknesses = []
 
+    if score is None:
+        weaknesses.append("Ticker is not currently included in the Smart Money scoring output.")
+
     if score is not None and score < 68:
         weaknesses.append("Score is below the preferred opportunity range.")
 
@@ -453,9 +454,10 @@ def build_default_weaknesses(score: float | None, change_percent: float | None) 
 def build_default_risks(score: float | None, risk_label: str, change_percent: float | None) -> list[str]:
     risks = []
 
-    risk_text = str(risk_label or "").lower()
+    if score is None:
+        risks.append("No Smart Money score is available for this ticker yet.")
 
-    if "high" in risk_text:
+    if "high" in str(risk_label).lower():
         risks.append("Risk label suggests position sizing should be reduced.")
 
     if change_percent is not None and abs(change_percent) >= 5:
@@ -470,9 +472,9 @@ def build_default_risks(score: float | None, risk_label: str, change_percent: fl
     return risks
 
 
-def build_next_step(score: float | None) -> str:
+def build_next_step(score: float | None, symbol: str) -> str:
     if score is None:
-        return "Review manually before taking action."
+        return f"Use /quote {symbol}, /market {symbol}, and /risk {symbol}; add {symbol} to the Smart Money watchlist for full scoring."
     if score >= 90:
         return "Review for best entry only after confirming chart, volume, news, and valuation."
     if score >= 82:
@@ -507,23 +509,23 @@ def build_scorecard(symbol: str, score_item: dict | None = None, quote: dict | N
         risk_label = score_item.get("risk_label") or "N/A"
         category = score_item.get("category") or "N/A"
         category_adjustment = score_item.get("category_adjustment", 0)
-        reason = clean_text(
+        thesis = clean_text(
             score_item.get("reason")
             or "No thesis provided by scoring engine.",
             240,
         )
 
-        strengths = normalize_bullet_items(
+        strengths = normalize_bullets(
             score_item.get("strengths"),
             build_default_strengths(score, change_percent),
         )
 
-        weaknesses = normalize_bullet_items(
+        weaknesses = normalize_bullets(
             score_item.get("weaknesses"),
             build_default_weaknesses(score, change_percent),
         )
 
-        risk_items = normalize_bullet_items(
+        risk_items = normalize_bullets(
             score_item.get("risks"),
             build_default_risks(score, risk_label, change_percent),
         )
@@ -531,17 +533,17 @@ def build_scorecard(symbol: str, score_item: dict | None = None, quote: dict | N
         score = None
         rating = "Unrated"
         risk_label = "N/A"
-        category = "N/A"
+        category = "Not in scoring watchlist"
         category_adjustment = 0
-        reason = "This symbol was not found in the current Smart Money scoring output."
+        thesis = build_fallback_thesis(clean, quote)
         strengths = build_default_strengths(score, change_percent)
         weaknesses = build_default_weaknesses(score, change_percent)
         risk_items = build_default_risks(score, risk_label, change_percent)
 
     signal = classify_signal(score)
     price_action = classify_price_action(change_percent)
-    conviction = build_conviction_readout(score, risk_label)
-    next_step = build_next_step(score)
+    conviction = build_conviction_readout(score, risk_label, clean)
+    next_step = build_next_step(score, clean)
 
     return f"""
 🧾 Smart Money AI Scorecard: {clean}
@@ -564,7 +566,7 @@ Conviction Readout
 {conviction}
 
 Thesis
-{reason}
+{thesis}
 
 Strengths
 {format_bullets(strengths)}
