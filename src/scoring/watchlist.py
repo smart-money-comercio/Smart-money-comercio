@@ -1,15 +1,16 @@
 WATCHLIST = [
-    # Growth / AI
-    {"ticker": "NVDA", "category": "Growth / AI Infrastructure", "smart_score": 92, "defense_score": 70},
-    {"ticker": "MSFT", "category": "Growth / AI / Cloud / Government", "smart_score": 87, "defense_score": 72},
-    {"ticker": "META", "category": "Growth / AI Advertising", "smart_score": 86, "defense_score": 45},
-    {"ticker": "AMZN", "category": "Growth / Cloud / AI", "smart_score": 85, "defense_score": 50},
-    {"ticker": "GOOGL", "category": "Growth / AI / Cloud", "smart_score": 84, "defense_score": 48},
-    {"ticker": "AMD", "category": "Growth / AI Semiconductors", "smart_score": 84, "defense_score": 60},
-    {"ticker": "AVGO", "category": "Growth / AI Semiconductors / Networking", "smart_score": 86, "defense_score": 65},
-    {"ticker": "TSLA", "category": "Growth / Autonomous Systems", "smart_score": 78, "defense_score": 40},
-    {"ticker": "SHOP", "category": "Growth / E-Commerce Infrastructure", "smart_score": 76, "defense_score": 20},
-    {"ticker": "NFLX", "category": "Growth / Streaming / Media", "smart_score": 75, "defense_score": 15},
+   # Growth / AI
+{"ticker": "NVDA", "category": "Growth / AI Infrastructure", "smart_score": 92, "defense_score": 70},
+{"ticker": "MSFT", "category": "Growth / AI / Cloud / Government", "smart_score": 87, "defense_score": 72},
+{"ticker": "META", "category": "Growth / AI Advertising", "smart_score": 86, "defense_score": 45},
+{"ticker": "AMZN", "category": "Growth / Cloud / AI", "smart_score": 85, "defense_score": 50},
+{"ticker": "GOOGL", "category": "Growth / AI / Cloud", "smart_score": 84, "defense_score": 48},
+{"ticker": "AAPL", "category": "Growth / Consumer AI / Hardware", "smart_score": 82, "defense_score": 68},
+{"ticker": "AMD", "category": "Growth / AI Semiconductors", "smart_score": 84, "defense_score": 60},
+{"ticker": "AVGO", "category": "Growth / AI Semiconductors / Networking", "smart_score": 86, "defense_score": 65},
+{"ticker": "TSLA", "category": "Growth / Autonomous Systems", "smart_score": 78, "defense_score": 40},
+{"ticker": "SHOP", "category": "Growth / E-Commerce Infrastructure", "smart_score": 76, "defense_score": 20},
+{"ticker": "NFLX", "category": "Growth / Streaming / Media", "smart_score": 75, "defense_score": 15},
 
     # Defense / AI Warfare
     {"ticker": "PLTR", "category": "Defense AI", "smart_score": 88, "defense_score": 95},
