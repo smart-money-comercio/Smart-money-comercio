@@ -1,10 +1,14 @@
+import asyncio
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.congress.congress_scoring import get_congress_trades
-from src.insiders.insider_scoring import get_insider_trades
-from src.scoring.scoring_engine import get_stock_scores
+from src.insiders.insider_data import get_insider_trades
+from src.insiders.insider_scoring import get_insider_score
+from src.reports.insider_report import build_insider_report
 from src.scoring.risk_engine import get_risk_profile
+from src.scoring.scoring_engine import get_stock_scores
 
 
 async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -23,21 +27,40 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 
-async def insiders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    trades = get_insider_trades()
+async def insiders(update, context):
+    if not update.message:
+        return
 
-    text = "🏢 INSIDER BUYING INTELLIGENCE\n\n"
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /insiders SYMBOL\n\nExample: /insiders AAPL"
+        )
+        return
 
-    for trade in trades:
-        text += (
-            f"{trade['insider']}\n"
-            f"{trade['transaction']}: {trade['ticker']}\n"
-            f"Sector: {trade['sector']}\n"
-            f"Amount: {trade['amount_range']}\n"
-            f"Date: {trade['date']}\n\n"
+    symbol = context.args[0].upper().replace("$", "")
+
+    loading_message = await update.message.reply_text(
+        f"🧾 Building insider report for {symbol}..."
+    )
+
+    try:
+        insider_score = await asyncio.to_thread(get_insider_score, symbol)
+        trades = await asyncio.to_thread(get_insider_trades)
+
+        message = build_insider_report(
+            symbol=symbol,
+            insider_score=insider_score,
+            all_trades=trades,
+            limit=5,
         )
 
-    await update.message.reply_text(text)
+        await loading_message.edit_text(message)
+
+    except Exception as error:
+        await loading_message.edit_text(
+            "Unable to build insider report right now.\n\n"
+            f"Error:\n{type(error).__name__}"
+        )
 
 
 async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -92,10 +115,10 @@ async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         overlap_count = 0
 
-        if congress_score > 0:
+        if congress_score >= 65:
             overlap_count += 1
 
-        if insider_score > 0:
+        if insider_score >= 65:
             overlap_count += 1
 
         if defense_score >= 85:
