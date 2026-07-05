@@ -1,4 +1,4 @@
-from src.congress.congress_data import CONGRESS_TRADES
+from src.congress.congress_data import get_congress_trades
 
 
 MIN_SCORE = 0
@@ -20,27 +20,36 @@ SALE_KEYWORDS = [
     "disposition",
 ]
 
-
 AMOUNT_WEIGHTS = [
-    ("$5M", 24),
-    ("$1M", 20),
-    ("$500K", 15),
-    ("$250K", 11),
-    ("$100K", 8),
-    ("$50K", 5),
+    ("$50,000,000", 35),
+    ("$25,000,000", 32),
+    ("$15,000,000", 30),
+    ("$5,000,000", 26),
+    ("$1,000,000", 22),
+    ("$500,000", 16),
+    ("$250,000", 12),
+    ("$100,000", 9),
+    ("$50,000", 6),
+    ("$15,000", 3),
+    ("$5M", 26),
+    ("$1M", 22),
+    ("$500K", 16),
+    ("$250K", 12),
+    ("$100K", 9),
+    ("$50K", 6),
     ("$15K", 3),
 ]
-
 
 COMMITTEE_RELEVANCE_WEIGHTS = {
     "HIGH": 10,
     "MEDIUM": 5,
     "LOW": 1,
+    "UNKNOWN": 0,
 }
-
 
 SECTOR_RELEVANCE_WEIGHTS = {
     "AI": 6,
+    "ARTIFICIAL INTELLIGENCE": 6,
     "SEMICONDUCTOR": 6,
     "DEFENSE": 6,
     "CYBER": 6,
@@ -49,21 +58,18 @@ SECTOR_RELEVANCE_WEIGHTS = {
     "MISSILE": 4,
     "GOVERNMENT": 4,
     "ENERGY": 3,
-    "DIVIDEND": 2,
+    "HEALTHCARE": 3,
+    "PHARMA": 3,
+    "BANK": 3,
+    "FINANCIAL": 3,
 }
 
 
-POLITICIAN_WEIGHTS = {
-    "NANCY PELOSI": 8,
-    "RO KHANNA": 4,
-    "TOMMY TUBERVILLE": 4,
-    "JOSH GOTTHEIMER": 4,
-    "MODEL AGGREGATE": 0,
-}
-
-
-def get_congress_trades():
-    return CONGRESS_TRADES
+def get_congress_trades_safe():
+    try:
+        return get_congress_trades()
+    except Exception:
+        return []
 
 
 def clamp_score(score):
@@ -120,24 +126,16 @@ def get_sector_relevance_weight(sector):
     return min(score, 12)
 
 
-def get_politician_weight(politician):
-    name = clean_text(politician)
-
-    return POLITICIAN_WEIGHTS.get(name, 1)
-
-
 def score_trade(trade):
     transaction = trade.get("transaction", "")
     amount_range = trade.get("amount_range", "")
     committee_relevance = trade.get("committee_relevance", "")
     sector = trade.get("sector", "")
-    politician = trade.get("politician", "")
 
     trade_score = (
         get_amount_weight(amount_range)
         + get_committee_relevance_weight(committee_relevance)
         + get_sector_relevance_weight(sector)
-        + get_politician_weight(politician)
     )
 
     if is_purchase(transaction):
@@ -151,10 +149,11 @@ def score_trade(trade):
 
 def get_matching_trades(ticker):
     clean = clean_ticker(ticker)
+    trades = get_congress_trades_safe()
 
     return [
         trade
-        for trade in CONGRESS_TRADES
+        for trade in trades
         if clean_ticker(trade.get("ticker")) == clean
     ]
 
@@ -166,7 +165,6 @@ def get_congress_score(ticker):
         return NEUTRAL_SCORE
 
     raw_score = NEUTRAL_SCORE
-
     purchase_count = 0
     sale_count = 0
 
@@ -199,7 +197,7 @@ def get_congress_score(ticker):
 def get_top_congress_buys():
     return [
         trade
-        for trade in CONGRESS_TRADES
+        for trade in get_congress_trades_safe()
         if is_purchase(trade.get("transaction"))
     ]
 
@@ -207,6 +205,6 @@ def get_top_congress_buys():
 def get_top_congress_sells():
     return [
         trade
-        for trade in CONGRESS_TRADES
+        for trade in get_congress_trades_safe()
         if is_sale(trade.get("transaction"))
     ]
