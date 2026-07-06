@@ -16,6 +16,7 @@ HOUSE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/house-latest"
 SENATE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/senate-latest"
 
 CAPITOL_TRADES_URL = "https://www.capitoltrades.com/trades"
+CAPITOL_TRADES_READER_URL = "https://r.jina.ai/https://www.capitoltrades.com/trades"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = PROJECT_ROOT / "data"
@@ -82,7 +83,7 @@ class PageTextParser(HTMLParser):
 
         if text:
             self.text_items.append(text)
-            
+
 def get_provider() -> str:
     return os.getenv("CONGRESS_DATA_PROVIDER", "auto").strip().lower() or "auto"
 
@@ -794,34 +795,207 @@ def parse_capitol_trades_from_tokens(tokens: list[str]) -> list[dict]:
 
     return trades
 
-def fetch_capitol_trades_public() -> list[dict]:
-    try:
-        page = fetch_text(CAPITOL_TRADES_URL)
+def clean_markdown_text(value: str) -> str:
+    text = clean_text(value)
 
-    except Exception as error:
-        append_debug(
-            "capitoltrades",
-            {
-                "ok": False,
-                "provider": "capitoltrades",
-                "error_type": type(error).__name__,
-                "reason": str(error),
-            },
+    text = re.sub(r"^#+\s*", "", text)
+    text = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+
+    return clean_text(text)
+
+
+def is_capitol_ticker_token(value: str) -> bool:
+    text = clean_markdown_text(value)
+
+    if text == "N/A":
+        return False
+
+    return bool(re.match(r"^[A-Z][A-Z0-9./-]{0,10}:US$", text))
+
+
+def parse_party_chamber_state(value: str) -> dict:
+    text = clean_markdown_text(value)
+
+    match = re.match(
+        r"^(Democrat|Republican|Independent)\s+(House|Senate)\s+([A-Z]{2})$",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    if not match:
+        return {
+            "party": "Unknown",
+            "chamber": "Unknown",
+            "state": "Unknown",
+        }
+
+    return {
+        "party": match.group(1).title(),
+        "chamber": match.group(2).title(),
+        "state": match.group(3).upper(),
+    }
+
+
+def normalize_capitol_amount(value: str) -> str:
+    text = clean_markdown_text(value).replace("–", "-")
+
+    if not text:
+        return "Unknown"
+
+    parts = [part.strip() for part in text.split("-")]
+    normalized_parts = []
+
+    for part in parts:
+        if not part:
+            continue
+
+        if not part.startswith("$"):
+            part = f"${part}"
+
+        normalized_parts.append(part)
+
+    if len(normalized_parts) == 2:
+        return f"{normalized_parts[0]} - {normalized_parts[1]}"
+
+    if len(normalized_parts) == 1:
+        return normalized_parts[0]
+
+    return text
+
+
+def parse_capitol_trades_from_lines(lines: list[str]) -> list[dict]:
+    cleaned_lines = [
+        clean_markdown_text(line)
+        for line in lines
+        if clean_markdown_text(line)
+    ]
+
+    trades = []
+    seen = set()
+
+    for index, line in enumerate(cleaned_lines):
+        if not is_capitol_ticker_token(line):
+            continue
+
+        if index < 3 or index + 10 >= len(cleaned_lines):
+            continue
+
+        politician = cleaned_lines[index - 3]
+        party_line = cleaned_lines[index - 2]
+        issuer = cleaned_lines[index - 1]
+        ticker = cleaned_lines[index].replace(":US", "").replace("/", ".")
+
+        party_info = parse_party_chamber_state(party_line)
+
+        if party_info["chamber"] == "Unknown":
+            continue
+
+        published_time = cleaned_lines[index + 1]
+        published_date = cleaned_lines[index + 2]
+        traded_month_day = cleaned_lines[index + 3]
+        traded_year = cleaned_lines[index + 4]
+        owner = cleaned_lines[index + 7]
+        transaction_raw = cleaned_lines[index + 8]
+        amount_raw = cleaned_lines[index + 9]
+        price = cleaned_lines[index + 10]
+
+        transaction = normalize_transaction(transaction_raw)
+        amount = normalize_capitol_amount(amount_raw)
+
+        transaction_date = f"{traded_month_day} {traded_year}".strip()
+        disclosure_date = f"{published_date} {published_time}".strip()
+
+        dedupe_key = (
+            politician,
+            ticker,
+            transaction,
+            amount,
+            transaction_date,
+            owner,
         )
-        return []
 
-    parser = PageTextParser()
-    parser.feed(page)
+        if dedupe_key in seen:
+            continue
 
-    trades = parse_capitol_trades_from_tokens(parser.text_items)
+        seen.add(dedupe_key)
+
+        trades.append(
+            {
+                "politician": politician,
+                "chamber": party_info["chamber"],
+                "ticker": ticker,
+                "transaction": transaction,
+                "sector": issuer or "Capitol Trades Disclosure",
+                "amount_range": amount,
+                "disclosure_date": disclosure_date,
+                "transaction_date": transaction_date,
+                "owner": owner,
+                "committee_relevance": classify_committee_relevance(issuer),
+                "signal": "Actual Congress Disclosure",
+                "notes": (
+                    "Fetched from Capitol Trades public latest trades page through "
+                    f"Jina Reader. Party: {party_info['party']}. "
+                    f"State: {party_info['state']}. Price: {price}."
+                ),
+                "source": "Capitol Trades",
+                "source_url": CAPITOL_TRADES_URL,
+            }
+        )
+
+    return trades
+
+def fetch_capitol_trades_public() -> list[dict]:
+    debug_payload = {
+        "provider": "capitoltrades",
+        "reader_url": CAPITOL_TRADES_READER_URL,
+        "direct_url": CAPITOL_TRADES_URL,
+    }
+
+    page = ""
+
+    try:
+        page = fetch_text(CAPITOL_TRADES_READER_URL)
+        debug_payload["reader_fetch_ok"] = True
+
+    except Exception as reader_error:
+        debug_payload["reader_fetch_ok"] = False
+        debug_payload["reader_error_type"] = type(reader_error).__name__
+        debug_payload["reader_error"] = str(reader_error)
+
+        try:
+            page = fetch_text(CAPITOL_TRADES_URL)
+            debug_payload["direct_fetch_ok"] = True
+
+        except Exception as direct_error:
+            debug_payload["direct_fetch_ok"] = False
+            debug_payload["direct_error_type"] = type(direct_error).__name__
+            debug_payload["direct_error"] = str(direct_error)
+
+            append_debug(
+                "capitoltrades",
+                {
+                    **debug_payload,
+                    "ok": False,
+                    "normalized_trade_count": 0,
+                },
+            )
+            return []
+
+    lines = page.splitlines()
+    trades = parse_capitol_trades_from_lines(lines)
 
     append_debug(
         "capitoltrades",
         {
+            **debug_payload,
             "ok": bool(trades),
-            "provider": "capitoltrades",
             "normalized_trade_count": len(trades),
-            "sample_tokens": parser.text_items[:80],
+            "sample_lines": [
+                clean_markdown_text(line)
+                for line in lines[:120]
+                if clean_markdown_text(line)
+            ][:80],
             "sample_trades": trades[:3],
         },
     )
