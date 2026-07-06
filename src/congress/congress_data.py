@@ -4,6 +4,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -55,11 +56,39 @@ def clean_upper(value: Any) -> str:
     return clean_text(value).upper()
 
 
+INVALID_TICKER_TOKENS = {
+    "",
+    "--",
+    "N/A",
+    "NA",
+    "NONE",
+    "UNKNOWN",
+    "RECEIVED",
+    "EXCHANGED",
+    "EXCHANGE",
+    "CALLABLE",
+    "MATURES",
+    "RATE",
+    "COUPON",
+    "BOND",
+    "BONDS",
+    "NOTE",
+    "NOTES",
+    "TREASURY",
+    "T-BILL",
+}
+
+
 def clean_ticker(value: Any) -> str:
-    text = clean_upper(value).replace("$", "").replace(":US", "")
-    text = text.replace("/", ".")
-    if text in {"", "--", "N/A", "NONE", "UNKNOWN"}:
+    text = clean_upper(value)
+    text = text.replace("$", "").replace(":US", "").replace("/", ".")
+
+    if text in INVALID_TICKER_TOKENS:
         return ""
+
+    if not re.match(r"^[A-Z][A-Z0-9.-]{0,9}$", text):
+        return ""
+
     return text
 
 
@@ -173,6 +202,46 @@ def normalize_amount(value: Any) -> str:
 
     return text.replace("–", "-")
 
+def parse_date_value(value: Any) -> datetime:
+    text = clean_text(value)
+
+    if not text or text.upper() in {"UNKNOWN", "N/A", "--"}:
+        return datetime.min
+
+    formats = [
+        "%m/%d/%Y",
+        "%Y-%m-%d",
+        "%m-%d-%Y",
+        "%b %d, %Y",
+        "%B %d, %Y",
+    ]
+
+    for date_format in formats:
+        try:
+            return datetime.strptime(text, date_format)
+        except ValueError:
+            continue
+
+    return datetime.min
+
+def trade_sort_datetime(trade: dict) -> datetime:
+    transaction_date = parse_date_value(trade.get("transaction_date"))
+    disclosure_date = parse_date_value(trade.get("disclosure_date"))
+
+    if transaction_date != datetime.min:
+        return transaction_date
+
+    return disclosure_date
+
+
+def is_trade_recent_enough(trade: dict) -> bool:
+    min_year = int(os.getenv("CONGRESS_MIN_YEAR", "2020"))
+    trade_date = trade_sort_datetime(trade)
+
+    if trade_date == datetime.min:
+        return True
+
+    return trade_date.year >= min_year
 
 def classify_committee_relevance(sector: str) -> str:
     text = clean_upper(sector)
@@ -218,16 +287,45 @@ def extract_ticker_from_description(description: str) -> str:
 
 
 def sort_trades(trades: list[dict]) -> list[dict]:
-    trades.sort(
+    clean_trades = []
+
+    seen = set()
+
+    for trade in trades:
+        ticker = clean_ticker(trade.get("ticker"))
+
+        if not ticker:
+            continue
+
+        trade["ticker"] = ticker
+
+        if not is_trade_recent_enough(trade):
+            continue
+
+        dedupe_key = (
+            trade.get("politician"),
+            trade.get("ticker"),
+            trade.get("transaction"),
+            trade.get("amount_range"),
+            trade.get("transaction_date"),
+            trade.get("owner"),
+        )
+
+        if dedupe_key in seen:
+            continue
+
+        seen.add(dedupe_key)
+        clean_trades.append(trade)
+
+    clean_trades.sort(
         key=lambda trade: (
-            str(trade.get("disclosure_date", "")),
-            str(trade.get("transaction_date", "")),
+            trade_sort_datetime(trade),
             str(trade.get("ticker", "")),
         ),
         reverse=True,
     )
-    return trades
 
+    return clean_trades
 
 def normalize_fmp_trade(record: dict, source: str) -> dict | None:
     description = first_value(
