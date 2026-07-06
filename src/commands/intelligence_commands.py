@@ -1,9 +1,13 @@
 import asyncio
+import os
+import time
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.congress.congress_scoring import get_congress_score, get_congress_trades
+from src.congress.congress_data import get_congress_trades as get_live_congress_trades
+from src.congress.congress_scoring import get_congress_score
+from src.reports.congress_report import build_congress_report
 from src.insiders.insider_data import get_insider_trades
 from src.insiders.insider_scoring import get_insider_score
 from src.reports.congress_report import build_congress_report
@@ -49,15 +53,130 @@ async def send_split_message(update: Update, message: str, loading_message=None)
     for chunk in chunks[1:]:
         await update.message.reply_text(chunk)
 
+def get_admin_chat_ids() -> set[str]:
+    raw_value = (
+        os.getenv("TELEGRAM_ADMIN_CHAT_ID", "")
+        or os.getenv("TELEGRAM_ADMIN_CHAT_IDS", "")
+    )
+
+    return {
+        chat_id.strip()
+        for chat_id in raw_value.split(",")
+        if chat_id.strip()
+    }
+
+
+def is_admin_update(update: Update) -> bool:
+    if not update.effective_chat:
+        return False
+
+    admin_chat_ids = get_admin_chat_ids()
+
+    if not admin_chat_ids:
+        return False
+
+    return str(update.effective_chat.id) in admin_chat_ids
+
+
+def summarize_congress_refresh(trades: list[dict], elapsed_seconds: float) -> str:
+    tickers = sorted(
+        {
+            str(trade.get("ticker", "")).upper().replace("$", "")
+            for trade in trades
+            if trade.get("ticker")
+        }
+    )
+
+    sources = sorted(
+        {
+            str(trade.get("source", "Unknown"))
+            for trade in trades
+            if trade.get("source")
+        }
+    )
+
+    sample = trades[:5]
+
+    sample_lines = []
+
+    for trade in sample:
+        sample_lines.append(
+            f"• {trade.get('ticker', 'N/A')} | "
+            f"{trade.get('transaction', 'N/A')} | "
+            f"{trade.get('politician', 'Unknown')} | "
+            f"{trade.get('transaction_date', 'Unknown')}"
+        )
+
+    if not sample_lines:
+        sample_lines.append("No records loaded.")
+
+    return f"""
+✅ Congress Cache Refreshed
+
+Records Loaded: {len(trades)}
+Unique Tickers: {len(tickers)}
+Sources: {", ".join(sources) if sources else "Unknown"}
+Elapsed: {elapsed_seconds:.1f}s
+
+Sample Records
+{chr(10).join(sample_lines)}
+
+Next Commands
+/congress
+/congress NVDA
+/congress AAPL
+/top10
+/report
+""".strip()
 
 async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
     symbol = None
+    refresh_requested = False
 
     if context.args:
-        symbol = context.args[0].upper().replace("$", "")
+        first_arg = context.args[0].upper().replace("$", "")
+
+        if first_arg in {"REFRESH", "RELOAD", "UPDATE"}:
+            refresh_requested = True
+        else:
+            symbol = first_arg
+
+    if refresh_requested:
+        if not is_admin_update(update):
+            await update.message.reply_text("Unauthorized: admin only.")
+            return
+
+        loading_message = await update.message.reply_text(
+            "🔄 Refreshing Congress disclosure cache..."
+        )
+
+        try:
+            started_at = time.time()
+
+            trades = await asyncio.to_thread(
+                get_live_congress_trades,
+                True,
+            )
+
+            elapsed_seconds = time.time() - started_at
+
+            message = summarize_congress_refresh(
+                trades=trades,
+                elapsed_seconds=elapsed_seconds,
+            )
+
+            await send_split_message(update, message, loading_message)
+
+        except Exception as error:
+            await loading_message.edit_text(
+                "Unable to refresh Congress cache right now.\n\n"
+                f"Error:\n{type(error).__name__}"
+            )
+
+        return
 
     loading_message = await update.message.reply_text(
         "🏛️ Building Congress intelligence report..."
@@ -66,7 +185,7 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        trades = await asyncio.to_thread(get_congress_trades)
+        trades = await asyncio.to_thread(get_live_congress_trades)
 
         tickers = sorted(
             {
@@ -82,7 +201,10 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
         score_map = {}
 
         for ticker in tickers:
-            score_map[ticker] = await asyncio.to_thread(get_congress_score, ticker)
+            score_map[ticker] = await asyncio.to_thread(
+                get_congress_score,
+                ticker,
+            )
 
         message = build_congress_report(
             trades=trades,
@@ -97,7 +219,6 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Unable to build Congress intelligence report right now.\n\n"
             f"Error:\n{type(error).__name__}"
         )
-
 
 async def insiders(update, context):
     if not update.message:
