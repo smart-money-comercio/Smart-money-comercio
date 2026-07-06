@@ -1,11 +1,9 @@
-import html
 import json
 import os
 import re
 import time
 import urllib.parse
 import urllib.request
-from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -15,8 +13,12 @@ FMP_BASE_URL = "https://financialmodelingprep.com/stable"
 HOUSE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/house-latest"
 SENATE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/senate-latest"
 
-CAPITOL_TRADES_URL = "https://www.capitoltrades.com/trades"
-CAPITOL_TRADES_READER_URL = "https://r.jina.ai/https://www.capitoltrades.com/trades"
+HOUSE_STOCKWATCHER_URL = (
+    "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
+)
+SENATE_STOCKWATCHER_URL = (
+    "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = PROJECT_ROOT / "data"
@@ -26,63 +28,11 @@ DEBUG_FILE = CACHE_DIR / "congress_debug.json"
 CACHE_TTL_SECONDS = int(os.getenv("CONGRESS_CACHE_TTL_SECONDS", "43200"))
 MAX_PAGES = int(os.getenv("CONGRESS_MAX_PAGES", "3"))
 PAGE_LIMIT = int(os.getenv("CONGRESS_PAGE_LIMIT", "100"))
-REQUEST_TIMEOUT_SECONDS = int(os.getenv("CONGRESS_REQUEST_TIMEOUT_SECONDS", "12"))
+REQUEST_TIMEOUT_SECONDS = int(os.getenv("CONGRESS_REQUEST_TIMEOUT_SECONDS", "15"))
+STOCKWATCHER_MAX_RECORDS = int(os.getenv("STOCKWATCHER_MAX_RECORDS", "250"))
 
 _MEMORY_CACHE = None
 
-
-class LinkTextParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.in_link = False
-        self.current_href = ""
-        self.current_text = []
-        self.links = []
-
-    def handle_starttag(self, tag, attrs):
-        if tag.lower() != "a":
-            return
-
-        self.in_link = True
-        self.current_href = ""
-        self.current_text = []
-
-        for key, value in attrs:
-            if key.lower() == "href":
-                self.current_href = value or ""
-
-    def handle_data(self, data):
-        if self.in_link:
-            self.current_text.append(data)
-
-    def handle_endtag(self, tag):
-        if tag.lower() != "a" or not self.in_link:
-            return
-
-        text = clean_text(" ".join(self.current_text))
-
-        if text:
-            self.links.append(
-                {
-                    "href": self.current_href,
-                    "text": text,
-                }
-            )
-
-        self.in_link = False
-        self.current_href = ""
-        self.current_text = []
-
-class PageTextParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.text_items = []
-
-    def handle_data(self, data):
-        text = clean_text(html.unescape(data))
-
-        if text:
-            self.text_items.append(text)
 
 def get_provider() -> str:
     return os.getenv("CONGRESS_DATA_PROVIDER", "auto").strip().lower() or "auto"
@@ -95,7 +45,6 @@ def get_fmp_api_key() -> str:
 def clean_text(value: Any) -> str:
     if value is None:
         return ""
-
     return " ".join(str(value).strip().split())
 
 
@@ -103,13 +52,19 @@ def clean_upper(value: Any) -> str:
     return clean_text(value).upper()
 
 
+def clean_ticker(value: Any) -> str:
+    text = clean_upper(value).replace("$", "").replace(":US", "")
+    text = text.replace("/", ".")
+    if text in {"", "--", "N/A", "NONE", "UNKNOWN"}:
+        return ""
+    return text
+
+
 def first_value(record: dict, keys: list[str]) -> str:
     for key in keys:
         value = record.get(key)
-
         if value not in [None, ""]:
             return clean_text(value)
-
     return ""
 
 
@@ -134,30 +89,17 @@ def append_debug(provider: str, payload: dict) -> None:
     write_debug(existing)
 
 
-def fetch_text(url: str) -> str:
-    request = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 SmartMoneyAI/1.0",
-            "Accept": "text/html,application/json,*/*",
-        },
-    )
-
-    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-        return response.read().decode("utf-8", errors="replace")
-
-
 def fetch_json(url: str):
     request = urllib.request.Request(
         url,
         headers={
             "User-Agent": "SmartMoneyAI/1.0",
-            "Accept": "application/json",
+            "Accept": "application/json,text/plain,*/*",
         },
     )
 
     with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-        payload = response.read().decode("utf-8")
+        payload = response.read().decode("utf-8", errors="replace")
 
     return json.loads(payload)
 
@@ -168,7 +110,6 @@ def build_fmp_url(endpoint: str, page: int) -> str:
         "limit": PAGE_LIMIT,
         "apikey": get_fmp_api_key(),
     }
-
     return f"{endpoint}?{urllib.parse.urlencode(query)}"
 
 
@@ -188,52 +129,13 @@ def extract_records(payload):
     return []
 
 
-def extract_ticker(record: dict) -> str:
-    direct = first_value(
-        record,
-        [
-            "symbol",
-            "ticker",
-            "assetSymbol",
-            "asset_symbol",
-            "securityTicker",
-            "security_ticker",
-        ],
-    )
-
-    if direct:
-        return clean_upper(direct).replace("$", "")
-
-    description = first_value(
-        record,
-        [
-            "assetDescription",
-            "asset_description",
-            "asset",
-            "assetName",
-            "asset_name",
-            "description",
-            "security",
-            "securityName",
-            "securityDescription",
-        ],
-    )
-
-    match = re.search(r"\(([A-Z]{1,8})\)", description.upper())
-
-    if match:
-        return match.group(1)
-
-    return ""
-
-
 def normalize_transaction(value: Any) -> str:
     text = clean_upper(value)
 
-    if text in {"P", "BUY"} or "PURCHASE" in text or "BUY" in text:
+    if "PURCHASE" in text or text in {"P", "BUY"} or "BUY" in text:
         return "Purchase"
 
-    if text in {"S", "SELL"} or "SALE" in text or "SELL" in text:
+    if "SALE" in text or text in {"S", "SELL"} or "SELL" in text:
         return "Sale"
 
     if "EXCHANGE" in text:
@@ -242,104 +144,13 @@ def normalize_transaction(value: Any) -> str:
     return clean_text(value) or "Other"
 
 
-def normalize_chamber(source: str, record: dict) -> str:
-    return first_value(record, ["chamber", "body"]) or source
+def normalize_amount(value: Any) -> str:
+    text = clean_text(value)
 
+    if not text or text.upper() in {"--", "N/A", "NONE"}:
+        return "Unknown"
 
-def normalize_politician(record: dict) -> str:
-    direct = first_value(
-        record,
-        [
-            "politician",
-            "representative",
-            "senator",
-            "name",
-            "member",
-            "memberName",
-            "member_name",
-            "office",
-            "firstLast",
-            "first_last",
-        ],
-    )
-
-    if direct:
-        return direct
-
-    first_name = first_value(record, ["firstName", "first_name"])
-    last_name = first_value(record, ["lastName", "last_name"])
-    full_name = " ".join(part for part in [first_name, last_name] if part)
-
-    return full_name or "Unknown"
-
-
-def normalize_sector(record: dict) -> str:
-    return first_value(
-        record,
-        [
-            "sector",
-            "assetType",
-            "asset_type",
-            "assetDescription",
-            "asset_description",
-            "assetName",
-            "asset_name",
-            "description",
-            "security",
-            "securityDescription",
-        ],
-    ) or "Congress Disclosure"
-
-
-def normalize_amount(record: dict) -> str:
-    return first_value(
-        record,
-        [
-            "amount",
-            "amountRange",
-            "amount_range",
-            "transactionAmount",
-            "transaction_amount",
-            "value",
-            "valueRange",
-            "value_range",
-            "range",
-        ],
-    ) or "Unknown"
-
-
-def normalize_date(record: dict, keys: list[str]) -> str:
-    return first_value(record, keys) or "Unknown"
-
-
-def normalize_owner(record: dict) -> str:
-    return first_value(
-        record,
-        [
-            "owner",
-            "ownership",
-            "ownerType",
-            "owner_type",
-            "assetOwner",
-            "asset_owner",
-        ],
-    ) or "Unknown"
-
-
-def normalize_link(record: dict) -> str:
-    return first_value(
-        record,
-        [
-            "link",
-            "url",
-            "documentUrl",
-            "document_url",
-            "filingUrl",
-            "filing_url",
-            "sourceUrl",
-            "source_url",
-        ],
-    )
+    return text.replace("–", "-")
 
 
 def classify_committee_relevance(sector: str) -> str:
@@ -378,130 +189,130 @@ def classify_committee_relevance(sector: str) -> str:
     return "Unknown"
 
 
+def extract_ticker_from_description(description: str) -> str:
+    match = re.search(r"\(([A-Z]{1,8})\)", clean_upper(description))
+    if match:
+        return clean_ticker(match.group(1))
+    return ""
+
+
+def sort_trades(trades: list[dict]) -> list[dict]:
+    trades.sort(
+        key=lambda trade: (
+            str(trade.get("disclosure_date", "")),
+            str(trade.get("transaction_date", "")),
+            str(trade.get("ticker", "")),
+        ),
+        reverse=True,
+    )
+    return trades
+
+
 def normalize_fmp_trade(record: dict, source: str) -> dict | None:
-    ticker = extract_ticker(record)
+    description = first_value(
+        record,
+        [
+            "assetDescription",
+            "asset_description",
+            "asset",
+            "assetName",
+            "asset_name",
+            "description",
+            "security",
+            "securityName",
+            "securityDescription",
+        ],
+    )
 
-    if not ticker:
-        return None
-
-    transaction = normalize_transaction(
+    ticker = clean_ticker(
         first_value(
             record,
             [
-                "transaction",
-                "transactionType",
-                "transaction_type",
-                "type",
-                "action",
+                "symbol",
+                "ticker",
+                "assetSymbol",
+                "asset_symbol",
+                "securityTicker",
+                "security_ticker",
             ],
         )
     )
 
-    sector = normalize_sector(record)
+    if not ticker:
+        ticker = extract_ticker_from_description(description)
 
-    disclosure_date = normalize_date(
+    if not ticker:
+        return None
+
+    politician = first_value(
         record,
         [
-            "disclosureDate",
-            "disclosure_date",
-            "filingDate",
-            "filing_date",
-            "filedDate",
-            "filed_date",
-            "dateReceived",
-            "publicationDate",
+            "politician",
+            "representative",
+            "senator",
+            "name",
+            "member",
+            "memberName",
+            "member_name",
+            "office",
+            "firstLast",
+            "first_last",
         ],
-    )
+    ) or "Unknown"
 
-    transaction_date = normalize_date(
-        record,
-        [
-            "transactionDate",
-            "transaction_date",
-            "tradeDate",
-            "trade_date",
-            "date",
-        ],
-    )
+    sector = description or first_value(record, ["sector", "assetType", "asset_type"]) or "Congress Disclosure"
 
     return {
-        "politician": normalize_politician(record),
-        "chamber": normalize_chamber(source, record),
+        "politician": politician,
+        "chamber": first_value(record, ["chamber", "body"]) or source,
         "ticker": ticker,
-        "transaction": transaction,
+        "transaction": normalize_transaction(
+            first_value(record, ["transaction", "transactionType", "transaction_type", "type", "action"])
+        ),
         "sector": sector,
-        "amount_range": normalize_amount(record),
-        "disclosure_date": disclosure_date,
-        "transaction_date": transaction_date,
-        "owner": normalize_owner(record),
+        "amount_range": normalize_amount(
+            first_value(record, ["amount", "amountRange", "amount_range", "value", "valueRange", "value_range", "range"])
+        ),
+        "disclosure_date": first_value(
+            record,
+            ["disclosureDate", "disclosure_date", "filingDate", "filing_date", "filedDate", "dateReceived"],
+        ) or "Unknown",
+        "transaction_date": first_value(record, ["transactionDate", "transaction_date", "tradeDate", "date"]) or "Unknown",
+        "owner": first_value(record, ["owner", "ownership", "ownerType", "assetOwner"]) or "Unknown",
         "committee_relevance": classify_committee_relevance(sector),
         "signal": "Actual Congress Disclosure",
-        "notes": "Fetched from FMP House/Senate congressional disclosure endpoint.",
+        "notes": "Fetched from FMP congressional disclosure endpoint.",
         "source": source,
-        "source_url": normalize_link(record),
+        "source_url": first_value(record, ["link", "url", "documentUrl", "filingUrl", "sourceUrl"]),
     }
 
 
 def fetch_fmp_endpoint(endpoint: str, source: str) -> tuple[list[dict], list[dict]]:
-    api_key = get_fmp_api_key()
-
-    if not api_key:
-        return [], [
-            {
-                "source": source,
-                "reason": "FMP_API_KEY is missing or not loaded",
-            }
-        ]
+    if not get_fmp_api_key():
+        return [], [{"source": source, "reason": "FMP_API_KEY is missing"}]
 
     trades = []
     debug_pages = []
 
     for page in range(MAX_PAGES):
-        url = build_fmp_url(endpoint, page)
-
         try:
-            payload = fetch_json(url)
+            payload = fetch_json(build_fmp_url(endpoint, page))
 
         except HTTPError as error:
             debug_pages.append(
-                {
-                    "page": page,
-                    "source": source,
-                    "http_error": error.code,
-                    "reason": str(error),
-                }
+                {"page": page, "source": source, "http_error": error.code, "reason": str(error)}
             )
             break
 
         except (URLError, TimeoutError, json.JSONDecodeError) as error:
             debug_pages.append(
-                {
-                    "page": page,
-                    "source": source,
-                    "error_type": type(error).__name__,
-                    "reason": str(error),
-                }
+                {"page": page, "source": source, "error_type": type(error).__name__, "reason": str(error)}
             )
             break
 
         except Exception as error:
             debug_pages.append(
-                {
-                    "page": page,
-                    "source": source,
-                    "error_type": type(error).__name__,
-                    "reason": str(error),
-                }
-            )
-            break
-
-        if isinstance(payload, dict) and ("Error Message" in payload or "error" in payload):
-            debug_pages.append(
-                {
-                    "page": page,
-                    "source": source,
-                    "api_error": payload,
-                }
+                {"page": page, "source": source, "error_type": type(error).__name__, "reason": str(error)}
             )
             break
 
@@ -511,7 +322,6 @@ def fetch_fmp_endpoint(endpoint: str, source: str) -> tuple[list[dict], list[dic
             {
                 "page": page,
                 "source": source,
-                "payload_type": type(payload).__name__,
                 "record_count": len(records) if isinstance(records, list) else 0,
                 "sample_keys": list(records[0].keys()) if records and isinstance(records[0], dict) else [],
             }
@@ -524,24 +334,19 @@ def fetch_fmp_endpoint(endpoint: str, source: str) -> tuple[list[dict], list[dic
             if not isinstance(record, dict):
                 continue
 
-            normalized = normalize_fmp_trade(record, source)
+            trade = normalize_fmp_trade(record, source)
 
-            if normalized:
-                trades.append(normalized)
-
-        time.sleep(0.15)
+            if trade:
+                trades.append(trade)
 
     return trades, debug_pages
 
 
 def fetch_fmp_congress_trades() -> list[dict]:
-    trades = []
-
     house_trades, house_debug = fetch_fmp_endpoint(HOUSE_LATEST_ENDPOINT, "House")
     senate_trades, senate_debug = fetch_fmp_endpoint(SENATE_LATEST_ENDPOINT, "Senate")
 
-    trades.extend(house_trades)
-    trades.extend(senate_trades)
+    trades = house_trades + senate_trades
 
     append_debug(
         "fmp",
@@ -558,460 +363,164 @@ def fetch_fmp_congress_trades() -> list[dict]:
     return sort_trades(trades)
 
 
-def parse_capitol_trades_link(link: dict) -> dict | None:
-    text = html.unescape(clean_text(link.get("text", "")))
-    href = link.get("href") or ""
+def build_person_name(record: dict) -> str:
+    first_name = first_value(record, ["first_name", "firstName"])
+    last_name = first_value(record, ["last_name", "lastName"])
 
-    if not re.match(r"^(buy|sell|exchange)\b", text, flags=re.IGNORECASE):
-        return None
+    if first_name or last_name:
+        return clean_text(f"{first_name} {last_name}")
 
-    ticker_match = re.search(r"\b([A-Z][A-Z0-9./-]{0,8}):US\b", text)
+    return first_value(
+        record,
+        ["senator", "representative", "politician", "name", "office"],
+    ) or "Unknown"
 
-    if not ticker_match:
-        return None
 
-    ticker = ticker_match.group(1).replace("/", ".")
+def normalize_stockwatcher_trade(record: dict, chamber: str) -> dict | None:
+    ticker = clean_ticker(first_value(record, ["ticker", "symbol"]))
 
-    before_ticker = text[: ticker_match.start()].strip()
-    after_ticker = text[ticker_match.end():].strip()
-
-    first_space = before_ticker.find(" ")
-
-    if first_space == -1:
-        return None
-
-    transaction_raw = before_ticker[:first_space]
-    description = before_ticker[first_space + 1:].strip()
-
-    tail_match = re.search(
-        r"(?P<politician>.+?)\s+"
-        r"(?P<party>Democrat|Republican|Independent)\s+"
-        r"(?P<chamber>House|Senate)\s+"
-        r"(?P<state>[A-Z]{2})\s+"
-        r"(?P<amount>[0-9.,]+[KMB]?\s*[–-]\s*[0-9.,]+[KMB]?|[0-9.,]+[KMB]?)$",
-        after_ticker,
-        flags=re.IGNORECASE,
+    description = first_value(
+        record,
+        [
+            "asset_description",
+            "assetDescription",
+            "asset",
+            "asset_name",
+            "assetName",
+            "security",
+            "issuer",
+        ],
     )
 
-    if not tail_match:
+    if not ticker:
+        ticker = extract_ticker_from_description(description)
+
+    if not ticker:
         return None
 
-    transaction = normalize_transaction(transaction_raw)
-    amount = tail_match.group("amount").replace("–", "-")
-    chamber = tail_match.group("chamber")
-    politician = clean_text(tail_match.group("politician"))
-    party = tail_match.group("party")
-    state = tail_match.group("state")
-
-    source_url = ""
-
-    if href:
-        if href.startswith("http"):
-            source_url = href
-        else:
-            source_url = urllib.parse.urljoin(CAPITOL_TRADES_URL, href)
+    sector = description or first_value(record, ["asset_type", "assetType"]) or "Stock Watcher Disclosure"
 
     return {
-        "politician": politician,
+        "politician": build_person_name(record),
         "chamber": chamber,
         "ticker": ticker,
-        "transaction": transaction,
-        "sector": description or "Capitol Trades Disclosure",
-        "amount_range": amount,
-        "disclosure_date": "Latest",
-        "transaction_date": "Unknown",
-        "owner": "Unknown",
-        "committee_relevance": classify_committee_relevance(description),
+        "transaction": normalize_transaction(first_value(record, ["type", "transaction", "transaction_type"])),
+        "sector": sector,
+        "amount_range": normalize_amount(first_value(record, ["amount", "amount_range", "amountRange", "value"])),
+        "disclosure_date": first_value(
+            record,
+            [
+                "disclosure_date",
+                "disclosureDate",
+                "date_recieved",
+                "date_received",
+                "filing_date",
+                "filingDate",
+            ],
+        ) or "Unknown",
+        "transaction_date": first_value(
+            record,
+            [
+                "transaction_date",
+                "transactionDate",
+                "trade_date",
+                "tradeDate",
+            ],
+        ) or "Unknown",
+        "owner": first_value(record, ["owner", "ownership"]) or "Unknown",
+        "committee_relevance": classify_committee_relevance(sector),
         "signal": "Actual Congress Disclosure",
-        "notes": f"Fetched from Capitol Trades public latest trades page. Party: {party}. State: {state}.",
-        "source": "Capitol Trades",
-        "source_url": source_url,
-    }
-
-def is_capitol_ticker_token(value: str) -> bool:
-    text = clean_text(value)
-
-    if text == "N/A":
-        return False
-
-    return bool(re.match(r"^[A-Z][A-Z0-9./-]{0,8}:US$", text))
-
-
-def parse_party_chamber_state(value: str) -> dict:
-    text = clean_text(value)
-
-    match = re.match(
-        r"^(Democrat|Republican|Independent)\s+(House|Senate)\s+([A-Z]{2})$",
-        text,
-        flags=re.IGNORECASE,
-    )
-
-    if not match:
-        return {
-            "party": "Unknown",
-            "chamber": "Unknown",
-            "state": "Unknown",
-        }
-
-    return {
-        "party": match.group(1).title(),
-        "chamber": match.group(2).title(),
-        "state": match.group(3).upper(),
+        "notes": "Fetched from public Stock Watcher JSON dataset.",
+        "source": f"{chamber} Stock Watcher",
+        "source_url": first_value(record, ["ptr_link", "ptrLink", "url", "link"]) or (
+            HOUSE_STOCKWATCHER_URL if chamber == "House" else SENATE_STOCKWATCHER_URL
+        ),
     }
 
 
-def normalize_capitol_amount(value: str) -> str:
-    text = clean_text(value).replace("–", "-")
-
-    if not text:
-        return "Unknown"
-
-    parts = [part.strip() for part in text.split("-")]
-
-    normalized_parts = []
-
-    for part in parts:
-        if not part:
-            continue
-
-        if not part.startswith("$"):
-            part = f"${part}"
-
-        normalized_parts.append(part)
-
-    if len(normalized_parts) == 2:
-        return f"{normalized_parts[0]} - {normalized_parts[1]}"
-
-    if len(normalized_parts) == 1:
-        return normalized_parts[0]
-
-    return text
-
-
-def find_transaction_index(tokens: list[str], start_index: int, max_lookahead: int = 14) -> int | None:
-    transaction_words = {"buy", "sell", "exchange", "purchase", "sale"}
-
-    end_index = min(len(tokens), start_index + max_lookahead)
-
-    for index in range(start_index, end_index):
-        token = clean_text(tokens[index]).lower()
-
-        if token in transaction_words:
-            return index
-
-    return None
-
-
-def parse_capitol_trades_from_tokens(tokens: list[str]) -> list[dict]:
+def normalize_stockwatcher_payload(payload, chamber: str) -> list[dict]:
     trades = []
-    seen = set()
+    records = payload if isinstance(payload, list) else extract_records(payload)
 
-    for index, token in enumerate(tokens):
-        if not is_capitol_ticker_token(token):
+    for record in records:
+        if not isinstance(record, dict):
             continue
 
-        if index < 3:
-            continue
+        nested_transactions = record.get("transactions")
 
-        politician = clean_text(tokens[index - 3])
-        party_line = clean_text(tokens[index - 2])
-        issuer = clean_text(tokens[index - 1])
-        ticker = token.replace(":US", "").replace("/", ".")
-
-        party_info = parse_party_chamber_state(party_line)
-
-        if party_info["chamber"] == "Unknown":
-            continue
-
-        transaction_index = find_transaction_index(tokens, index + 1)
-
-        if transaction_index is None:
-            continue
-
-        transaction_raw = tokens[transaction_index]
-        transaction = normalize_transaction(transaction_raw)
-
-        owner = "Unknown"
-
-        if transaction_index - 1 > index:
-            owner_candidate = clean_text(tokens[transaction_index - 1])
-
-            if owner_candidate.lower() not in {"days", "day"} and not owner_candidate.isdigit():
-                owner = owner_candidate
-
-        amount = "Unknown"
-
-        if transaction_index + 1 < len(tokens):
-            amount = normalize_capitol_amount(tokens[transaction_index + 1])
-
-        published = "Unknown"
-
-        if index + 2 < len(tokens):
-            published = clean_text(tokens[index + 2])
-
-        transaction_date = "Unknown"
-
-        if index + 3 < len(tokens):
-            transaction_date = clean_text(tokens[index + 3])
-
-            if index + 4 < len(tokens) and re.match(r"^\d{4}$", clean_text(tokens[index + 4])):
-                transaction_date = f"{transaction_date} {clean_text(tokens[index + 4])}"
-
-        dedupe_key = (
-            politician,
-            ticker,
-            transaction,
-            amount,
-            transaction_date,
-            owner,
-        )
-
-        if dedupe_key in seen:
-            continue
-
-        seen.add(dedupe_key)
-
-        trades.append(
-            {
-                "politician": politician,
-                "chamber": party_info["chamber"],
-                "ticker": ticker,
-                "transaction": transaction,
-                "sector": issuer or "Capitol Trades Disclosure",
-                "amount_range": amount,
-                "disclosure_date": published,
-                "transaction_date": transaction_date,
-                "owner": owner,
-                "committee_relevance": classify_committee_relevance(issuer),
-                "signal": "Actual Congress Disclosure",
-                "notes": (
-                    "Fetched from Capitol Trades public latest trades page. "
-                    f"Party: {party_info['party']}. State: {party_info['state']}."
-                ),
-                "source": "Capitol Trades",
-                "source_url": CAPITOL_TRADES_URL,
+        if isinstance(nested_transactions, list):
+            base = {
+                key: value
+                for key, value in record.items()
+                if key != "transactions"
             }
-        )
+
+            for transaction in nested_transactions:
+                if not isinstance(transaction, dict):
+                    continue
+
+                merged = {**base, **transaction}
+                trade = normalize_stockwatcher_trade(merged, chamber)
+
+                if trade:
+                    trades.append(trade)
+
+        else:
+            trade = normalize_stockwatcher_trade(record, chamber)
+
+            if trade:
+                trades.append(trade)
 
     return trades
 
-def clean_markdown_text(value: str) -> str:
-    text = clean_text(value)
 
-    text = re.sub(r"^#+\s*", "", text)
-    text = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text)
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-
-    return clean_text(text)
-
-
-def is_capitol_ticker_token(value: str) -> bool:
-    text = clean_markdown_text(value)
-
-    if text == "N/A":
-        return False
-
-    return bool(re.match(r"^[A-Z][A-Z0-9./-]{0,10}:US$", text))
-
-
-def parse_party_chamber_state(value: str) -> dict:
-    text = clean_markdown_text(value)
-
-    match = re.match(
-        r"^(Democrat|Republican|Independent)\s+(House|Senate)\s+([A-Z]{2})$",
-        text,
-        flags=re.IGNORECASE,
-    )
-
-    if not match:
-        return {
-            "party": "Unknown",
-            "chamber": "Unknown",
-            "state": "Unknown",
-        }
-
-    return {
-        "party": match.group(1).title(),
-        "chamber": match.group(2).title(),
-        "state": match.group(3).upper(),
+def fetch_stockwatcher_congress_trades() -> list[dict]:
+    debug = {
+        "provider": "stockwatcher",
+        "house_url": HOUSE_STOCKWATCHER_URL,
+        "senate_url": SENATE_STOCKWATCHER_URL,
     }
-
-
-def normalize_capitol_amount(value: str) -> str:
-    text = clean_markdown_text(value).replace("–", "-")
-
-    if not text:
-        return "Unknown"
-
-    parts = [part.strip() for part in text.split("-")]
-    normalized_parts = []
-
-    for part in parts:
-        if not part:
-            continue
-
-        if not part.startswith("$"):
-            part = f"${part}"
-
-        normalized_parts.append(part)
-
-    if len(normalized_parts) == 2:
-        return f"{normalized_parts[0]} - {normalized_parts[1]}"
-
-    if len(normalized_parts) == 1:
-        return normalized_parts[0]
-
-    return text
-
-
-def parse_capitol_trades_from_lines(lines: list[str]) -> list[dict]:
-    cleaned_lines = [
-        clean_markdown_text(line)
-        for line in lines
-        if clean_markdown_text(line)
-    ]
 
     trades = []
-    seen = set()
-
-    for index, line in enumerate(cleaned_lines):
-        if not is_capitol_ticker_token(line):
-            continue
-
-        if index < 3 or index + 10 >= len(cleaned_lines):
-            continue
-
-        politician = cleaned_lines[index - 3]
-        party_line = cleaned_lines[index - 2]
-        issuer = cleaned_lines[index - 1]
-        ticker = cleaned_lines[index].replace(":US", "").replace("/", ".")
-
-        party_info = parse_party_chamber_state(party_line)
-
-        if party_info["chamber"] == "Unknown":
-            continue
-
-        published_time = cleaned_lines[index + 1]
-        published_date = cleaned_lines[index + 2]
-        traded_month_day = cleaned_lines[index + 3]
-        traded_year = cleaned_lines[index + 4]
-        owner = cleaned_lines[index + 7]
-        transaction_raw = cleaned_lines[index + 8]
-        amount_raw = cleaned_lines[index + 9]
-        price = cleaned_lines[index + 10]
-
-        transaction = normalize_transaction(transaction_raw)
-        amount = normalize_capitol_amount(amount_raw)
-
-        transaction_date = f"{traded_month_day} {traded_year}".strip()
-        disclosure_date = f"{published_date} {published_time}".strip()
-
-        dedupe_key = (
-            politician,
-            ticker,
-            transaction,
-            amount,
-            transaction_date,
-            owner,
-        )
-
-        if dedupe_key in seen:
-            continue
-
-        seen.add(dedupe_key)
-
-        trades.append(
-            {
-                "politician": politician,
-                "chamber": party_info["chamber"],
-                "ticker": ticker,
-                "transaction": transaction,
-                "sector": issuer or "Capitol Trades Disclosure",
-                "amount_range": amount,
-                "disclosure_date": disclosure_date,
-                "transaction_date": transaction_date,
-                "owner": owner,
-                "committee_relevance": classify_committee_relevance(issuer),
-                "signal": "Actual Congress Disclosure",
-                "notes": (
-                    "Fetched from Capitol Trades public latest trades page through "
-                    f"Jina Reader. Party: {party_info['party']}. "
-                    f"State: {party_info['state']}. Price: {price}."
-                ),
-                "source": "Capitol Trades",
-                "source_url": CAPITOL_TRADES_URL,
-            }
-        )
-
-    return trades
-
-def fetch_capitol_trades_public() -> list[dict]:
-    debug_payload = {
-        "provider": "capitoltrades",
-        "reader_url": CAPITOL_TRADES_READER_URL,
-        "direct_url": CAPITOL_TRADES_URL,
-    }
-
-    page = ""
 
     try:
-        page = fetch_text(CAPITOL_TRADES_READER_URL)
-        debug_payload["reader_fetch_ok"] = True
+        house_payload = fetch_json(HOUSE_STOCKWATCHER_URL)
+        house_trades = normalize_stockwatcher_payload(house_payload, "House")
+        trades.extend(house_trades)
+        debug["house_ok"] = True
+        debug["house_count"] = len(house_trades)
+        debug["house_payload_type"] = type(house_payload).__name__
+        if isinstance(house_payload, list) and house_payload:
+            debug["house_sample_keys"] = list(house_payload[0].keys())
+    except Exception as error:
+        debug["house_ok"] = False
+        debug["house_error_type"] = type(error).__name__
+        debug["house_error"] = str(error)
 
-    except Exception as reader_error:
-        debug_payload["reader_fetch_ok"] = False
-        debug_payload["reader_error_type"] = type(reader_error).__name__
-        debug_payload["reader_error"] = str(reader_error)
+    try:
+        senate_payload = fetch_json(SENATE_STOCKWATCHER_URL)
+        senate_trades = normalize_stockwatcher_payload(senate_payload, "Senate")
+        trades.extend(senate_trades)
+        debug["senate_ok"] = True
+        debug["senate_count"] = len(senate_trades)
+        debug["senate_payload_type"] = type(senate_payload).__name__
+        if isinstance(senate_payload, list) and senate_payload:
+            debug["senate_sample_keys"] = list(senate_payload[0].keys())
+    except Exception as error:
+        debug["senate_ok"] = False
+        debug["senate_error_type"] = type(error).__name__
+        debug["senate_error"] = str(error)
 
-        try:
-            page = fetch_text(CAPITOL_TRADES_URL)
-            debug_payload["direct_fetch_ok"] = True
+    trades = sort_trades(trades)
 
-        except Exception as direct_error:
-            debug_payload["direct_fetch_ok"] = False
-            debug_payload["direct_error_type"] = type(direct_error).__name__
-            debug_payload["direct_error"] = str(direct_error)
+    if STOCKWATCHER_MAX_RECORDS > 0:
+        trades = trades[:STOCKWATCHER_MAX_RECORDS]
 
-            append_debug(
-                "capitoltrades",
-                {
-                    **debug_payload,
-                    "ok": False,
-                    "normalized_trade_count": 0,
-                },
-            )
-            return []
+    debug["ok"] = bool(trades)
+    debug["normalized_trade_count"] = len(trades)
+    debug["sample_trades"] = trades[:3]
 
-    lines = page.splitlines()
-    trades = parse_capitol_trades_from_lines(lines)
-
-    append_debug(
-        "capitoltrades",
-        {
-            **debug_payload,
-            "ok": bool(trades),
-            "normalized_trade_count": len(trades),
-            "sample_lines": [
-                clean_markdown_text(line)
-                for line in lines[:120]
-                if clean_markdown_text(line)
-            ][:80],
-            "sample_trades": trades[:3],
-        },
-    )
-
-    return sort_trades(trades)
-
-
-def sort_trades(trades: list[dict]) -> list[dict]:
-    trades.sort(
-        key=lambda trade: (
-            str(trade.get("disclosure_date", "")),
-            str(trade.get("transaction_date", "")),
-            str(trade.get("ticker", "")),
-        ),
-        reverse=True,
-    )
+    append_debug("stockwatcher", debug)
 
     return trades
 
@@ -1019,33 +528,33 @@ def sort_trades(trades: list[dict]) -> list[dict]:
 def fetch_live_congress_trades() -> list[dict]:
     provider = get_provider()
 
-    provider_debug = {
-        "requested_provider": provider,
-        "timestamp": time.time(),
-    }
-
-    append_debug("provider", provider_debug)
-
-    trades = []
+    append_debug(
+        "provider",
+        {
+            "requested_provider": provider,
+            "timestamp": time.time(),
+            "order": "auto = fmp, then stockwatcher",
+        },
+    )
 
     if provider in {"auto", "fmp"}:
-        trades = fetch_fmp_congress_trades()
+        fmp_trades = fetch_fmp_congress_trades()
 
-        if trades:
-            save_cache(trades, source="FMP House/Senate congressional disclosure endpoints")
-            return trades
+        if fmp_trades:
+            save_cache(fmp_trades, source="FMP House/Senate congressional disclosure endpoints")
+            return fmp_trades
 
         if provider == "fmp":
             return load_stale_cache()
 
-    if provider in {"auto", "capitoltrades", "capitol_trades"}:
-        trades = fetch_capitol_trades_public()
+    if provider in {"auto", "stockwatcher", "stock_watcher"}:
+        stockwatcher_trades = fetch_stockwatcher_congress_trades()
 
-        if trades:
-            save_cache(trades, source="Capitol Trades public latest trades page")
-            return trades
+        if stockwatcher_trades:
+            save_cache(stockwatcher_trades, source="House/Senate Stock Watcher public JSON datasets")
+            return stockwatcher_trades
 
-        if provider in {"capitoltrades", "capitol_trades"}:
+        if provider in {"stockwatcher", "stock_watcher"}:
             return load_stale_cache()
 
     return load_stale_cache()
@@ -1120,5 +629,4 @@ def get_congress_trades(force_refresh: bool = False) -> list[dict]:
     return _MEMORY_CACHE
 
 
-# Compatibility only. Use get_congress_trades().
 CONGRESS_TRADES = []
