@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 from src.reports.smartmoney_report import build_smartmoney_report
 from src.congress.congress_data import get_congress_trades as get_live_congress_trades
+from src.reports.conviction_report import build_conviction_report
 from src.congress.congress_scoring import get_congress_score
 from src.reports.congress_report import build_congress_report
 from src.insiders.insider_data import get_insider_trades
@@ -399,52 +400,43 @@ async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
-    scores = sorted(
-        await asyncio.to_thread(get_stock_scores),
-        key=lambda x: (
-            x.get("congress_score", 0)
-            + x.get("insider_score", 0)
-            + x.get("defense_score", 0)
-        ),
-        reverse=True,
+    symbol = None
+
+    if context.args:
+        symbol = context.args[0].upper().replace("$", "")
+
+    loading_message = await update.message.reply_text(
+        "🔥 Building conviction report..."
+        if not symbol
+        else f"🔥 Building conviction report for {symbol}..."
     )
 
-    text = "🔥 HIGH CONVICTION IDEAS\n\n"
+    try:
+        stocks = await asyncio.to_thread(get_stock_scores)
 
-    for stock in scores[:5]:
-        congress_score = stock.get("congress_score", 0)
-        insider_score = stock.get("insider_score", 0)
-        defense_score = stock.get("defense_score", 0)
+        risk_profiles = {}
 
-        risk_profile = get_risk_profile(stock)
+        for stock in stocks:
+            ticker = str(stock.get("ticker", "")).upper().replace("$", "")
 
-        overlap_count = 0
+            if not ticker:
+                continue
 
-        if congress_score >= 65:
-            overlap_count += 1
+            risk_profiles[ticker] = get_risk_profile(stock)
 
-        if insider_score >= 65:
-            overlap_count += 1
-
-        if defense_score >= 85:
-            overlap_count += 1
-
-        text += (
-            f"{stock['ticker']}\n"
-            f"Category: {stock['category']}\n"
-            f"Defense Score: {defense_score}\n"
-            f"Congress Score: {congress_score}\n"
-            f"Insider Score: {insider_score}\n"
-            f"Final Score: {stock['final_score']}\n"
-            f"Signal Overlap: {overlap_count}/3\n"
-            f"Risk Level: {risk_profile['risk_level']}\n"
-            f"Risk Score: {risk_profile['risk_score']}/100\n\n"
+        message = build_conviction_report(
+            stocks=stocks,
+            risk_profiles=risk_profiles,
+            symbol=symbol,
+            limit=5,
         )
 
-    text += (
-        "Note: High conviction means multiple research signals overlap. "
-        "Risk level is shown to prevent confusing high conviction with low risk. "
-        "This is not financial advice."
-    )
+        await send_split_message(update, message, loading_message)
+
+    except Exception as error:
+        await loading_message.edit_text(
+            "Unable to build conviction report right now.\n\n"
+            f"Error:\n{type(error).__name__}"
+        )
 
     await update.message.reply_text(text)
