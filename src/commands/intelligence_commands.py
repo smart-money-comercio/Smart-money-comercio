@@ -220,17 +220,122 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Error:\n{type(error).__name__}"
         )
 
+def summarize_insider_refresh(trades: list[dict], elapsed_seconds: float) -> str:
+    tickers = sorted(
+        {
+            str(trade.get("ticker", "")).upper().replace("$", "")
+            for trade in trades
+            if trade.get("ticker")
+        }
+    )
+
+    sources = sorted(
+        {
+            str(trade.get("signal", "SEC Form 4"))
+            for trade in trades
+            if trade.get("signal")
+        }
+    )
+
+    purchases = [
+        trade for trade in trades
+        if "purchase" in str(trade.get("transaction", "")).lower()
+    ]
+
+    sales = [
+        trade for trade in trades
+        if "sale" in str(trade.get("transaction", "")).lower()
+    ]
+
+    sample_lines = []
+
+    for trade in trades[:5]:
+        sample_lines.append(
+            f"• {trade.get('ticker', 'N/A')} | "
+            f"{trade.get('transaction', 'N/A')} | "
+            f"{trade.get('insider_name', trade.get('insider', 'Unknown'))} | "
+            f"{trade.get('date', trade.get('filing_date', 'Unknown'))}"
+        )
+
+    if not sample_lines:
+        sample_lines.append("No Form 4 purchase/sale records loaded.")
+
+    return f"""
+✅ Insider Cache Refreshed
+
+Records Loaded: {len(trades)}
+Unique Tickers: {len(tickers)}
+Purchases: {len(purchases)}
+Sales: {len(sales)}
+Sources: {", ".join(sources) if sources else "SEC Form 4"}
+Elapsed: {elapsed_seconds:.1f}s
+
+Sample Records
+{chr(10).join(sample_lines)}
+
+Next Commands
+/insiders AAPL
+/insiders NVDA
+/insiders PLTR
+/top10
+/report
+""".strip()
+
 async def insiders(update, context):
     if not update.message:
         return
 
-    if not context.args:
-        await update.message.reply_text(
-            "Usage: /insiders SYMBOL\n\nExample: /insiders AAPL"
+    refresh_requested = False
+    symbol = None
+
+    if context.args:
+        first_arg = context.args[0].strip().upper().replace("$", "")
+
+        if first_arg in {"REFRESH", "RELOAD", "UPDATE"}:
+            refresh_requested = True
+        else:
+            symbol = first_arg
+
+    if refresh_requested:
+        if not is_admin_update(update):
+            await update.message.reply_text("Unauthorized: admin only.")
+            return
+
+        loading_message = await update.message.reply_text(
+            "🔄 Refreshing SEC Form 4 insider cache..."
         )
+
+        try:
+            started_at = time.time()
+
+            trades = await asyncio.to_thread(
+                lambda: get_insider_trades(force_refresh=True)
+            )
+
+            elapsed_seconds = time.time() - started_at
+
+            message = summarize_insider_refresh(
+                trades=trades,
+                elapsed_seconds=elapsed_seconds,
+            )
+
+            await send_split_message(update, message, loading_message)
+
+        except Exception as error:
+            await loading_message.edit_text(
+                "Unable to refresh insider cache right now.\n\n"
+                f"Error:\n{type(error).__name__}"
+            )
+
         return
 
-    symbol = context.args[0].upper().replace("$", "")
+    if not symbol:
+        await update.message.reply_text(
+            "Usage: /insiders SYMBOL\n\n"
+            "Example: /insiders AAPL\n"
+            "Admin: /insiders refresh"
+        )
+        return
 
     loading_message = await update.message.reply_text(
         f"🧾 Building insider report for {symbol}..."
