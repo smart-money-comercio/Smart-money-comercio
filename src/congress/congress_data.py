@@ -1,9 +1,11 @@
+import html
 import json
 import os
 import re
 import time
 import urllib.parse
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -12,6 +14,8 @@ from urllib.error import HTTPError, URLError
 FMP_BASE_URL = "https://financialmodelingprep.com/stable"
 HOUSE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/house-latest"
 SENATE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/senate-latest"
+
+CAPITOL_TRADES_URL = "https://www.capitoltrades.com/"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = PROJECT_ROOT / "data"
@@ -26,6 +30,53 @@ REQUEST_TIMEOUT_SECONDS = int(os.getenv("CONGRESS_REQUEST_TIMEOUT_SECONDS", "12"
 _MEMORY_CACHE = None
 
 
+class LinkTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.in_link = False
+        self.current_href = ""
+        self.current_text = []
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != "a":
+            return
+
+        self.in_link = True
+        self.current_href = ""
+        self.current_text = []
+
+        for key, value in attrs:
+            if key.lower() == "href":
+                self.current_href = value or ""
+
+    def handle_data(self, data):
+        if self.in_link:
+            self.current_text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag.lower() != "a" or not self.in_link:
+            return
+
+        text = clean_text(" ".join(self.current_text))
+
+        if text:
+            self.links.append(
+                {
+                    "href": self.current_href,
+                    "text": text,
+                }
+            )
+
+        self.in_link = False
+        self.current_href = ""
+        self.current_text = []
+
+
+def get_provider() -> str:
+    return os.getenv("CONGRESS_DATA_PROVIDER", "auto").strip().lower() or "auto"
+
+
 def get_fmp_api_key() -> str:
     return os.getenv("FMP_API_KEY", "").strip()
 
@@ -33,6 +84,7 @@ def get_fmp_api_key() -> str:
 def clean_text(value: Any) -> str:
     if value is None:
         return ""
+
     return " ".join(str(value).strip().split())
 
 
@@ -43,8 +95,10 @@ def clean_upper(value: Any) -> str:
 def first_value(record: dict, keys: list[str]) -> str:
     for key in keys:
         value = record.get(key)
+
         if value not in [None, ""]:
             return clean_text(value)
+
     return ""
 
 
@@ -56,16 +110,30 @@ def write_debug(payload: dict) -> None:
         pass
 
 
-def build_url(endpoint: str, page: int) -> str:
-    api_key = get_fmp_api_key()
+def append_debug(provider: str, payload: dict) -> None:
+    existing = {}
 
-    query = {
-        "page": page,
-        "limit": PAGE_LIMIT,
-        "apikey": api_key,
-    }
+    try:
+        if DEBUG_FILE.exists():
+            existing = json.loads(DEBUG_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        existing = {}
 
-    return f"{endpoint}?{urllib.parse.urlencode(query)}"
+    existing[provider] = payload
+    write_debug(existing)
+
+
+def fetch_text(url: str) -> str:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 SmartMoneyAI/1.0",
+            "Accept": "text/html,application/json,*/*",
+        },
+    )
+
+    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        return response.read().decode("utf-8", errors="replace")
 
 
 def fetch_json(url: str):
@@ -81,6 +149,16 @@ def fetch_json(url: str):
         payload = response.read().decode("utf-8")
 
     return json.loads(payload)
+
+
+def build_fmp_url(endpoint: str, page: int) -> str:
+    query = {
+        "page": page,
+        "limit": PAGE_LIMIT,
+        "apikey": get_fmp_api_key(),
+    }
+
+    return f"{endpoint}?{urllib.parse.urlencode(query)}"
 
 
 def extract_records(payload):
@@ -130,7 +208,7 @@ def extract_ticker(record: dict) -> str:
         ],
     )
 
-    match = re.search(r"\(([A-Z]{1,6})\)", description.upper())
+    match = re.search(r"\(([A-Z]{1,8})\)", description.upper())
 
     if match:
         return match.group(1)
@@ -154,8 +232,7 @@ def normalize_transaction(value: Any) -> str:
 
 
 def normalize_chamber(source: str, record: dict) -> str:
-    chamber = first_value(record, ["chamber", "body"])
-    return chamber or source
+    return first_value(record, ["chamber", "body"]) or source
 
 
 def normalize_politician(record: dict) -> str:
@@ -290,7 +367,7 @@ def classify_committee_relevance(sector: str) -> str:
     return "Unknown"
 
 
-def normalize_trade(record: dict, source: str) -> dict | None:
+def normalize_fmp_trade(record: dict, source: str) -> dict | None:
     ticker = extract_ticker(record)
 
     if not ticker:
@@ -348,34 +425,32 @@ def normalize_trade(record: dict, source: str) -> dict | None:
         "owner": normalize_owner(record),
         "committee_relevance": classify_committee_relevance(sector),
         "signal": "Actual Congress Disclosure",
-        "notes": "Fetched from live/cached congressional disclosure data.",
+        "notes": "Fetched from FMP House/Senate congressional disclosure endpoint.",
         "source": source,
         "source_url": normalize_link(record),
     }
 
 
-def fetch_endpoint(endpoint: str, source: str) -> list[dict]:
+def fetch_fmp_endpoint(endpoint: str, source: str) -> tuple[list[dict], list[dict]]:
     api_key = get_fmp_api_key()
 
     if not api_key:
-        write_debug(
+        return [], [
             {
-                "ok": False,
-                "reason": "FMP_API_KEY is missing or not loaded",
                 "source": source,
-                "endpoint": endpoint,
+                "reason": "FMP_API_KEY is missing or not loaded",
             }
-        )
-        return []
+        ]
 
     trades = []
     debug_pages = []
 
     for page in range(MAX_PAGES):
-        url = build_url(endpoint, page)
+        url = build_fmp_url(endpoint, page)
 
         try:
             payload = fetch_json(url)
+
         except HTTPError as error:
             debug_pages.append(
                 {
@@ -386,6 +461,7 @@ def fetch_endpoint(endpoint: str, source: str) -> list[dict]:
                 }
             )
             break
+
         except (URLError, TimeoutError, json.JSONDecodeError) as error:
             debug_pages.append(
                 {
@@ -396,6 +472,7 @@ def fetch_endpoint(endpoint: str, source: str) -> list[dict]:
                 }
             )
             break
+
         except Exception as error:
             debug_pages.append(
                 {
@@ -426,7 +503,6 @@ def fetch_endpoint(endpoint: str, source: str) -> list[dict]:
                 "payload_type": type(payload).__name__,
                 "record_count": len(records) if isinstance(records, list) else 0,
                 "sample_keys": list(records[0].keys()) if records and isinstance(records[0], dict) else [],
-                "sample_record": records[0] if records and isinstance(records[0], dict) else None,
             }
         )
 
@@ -437,36 +513,152 @@ def fetch_endpoint(endpoint: str, source: str) -> list[dict]:
             if not isinstance(record, dict):
                 continue
 
-            normalized = normalize_trade(record, source)
+            normalized = normalize_fmp_trade(record, source)
 
             if normalized:
                 trades.append(normalized)
 
         time.sleep(0.15)
 
-    write_debug(
-        {
-            "ok": bool(trades),
-            "source": source,
-            "endpoint": endpoint,
-            "fmp_key_loaded": bool(api_key),
-            "normalized_trade_count": len(trades),
-            "pages": debug_pages,
-        }
-    )
-
-    return trades
+    return trades, debug_pages
 
 
-def fetch_live_congress_trades() -> list[dict]:
+def fetch_fmp_congress_trades() -> list[dict]:
     trades = []
 
-    house_trades = fetch_endpoint(HOUSE_LATEST_ENDPOINT, "House")
-    senate_trades = fetch_endpoint(SENATE_LATEST_ENDPOINT, "Senate")
+    house_trades, house_debug = fetch_fmp_endpoint(HOUSE_LATEST_ENDPOINT, "House")
+    senate_trades, senate_debug = fetch_fmp_endpoint(SENATE_LATEST_ENDPOINT, "Senate")
 
     trades.extend(house_trades)
     trades.extend(senate_trades)
 
+    append_debug(
+        "fmp",
+        {
+            "ok": bool(trades),
+            "provider": "fmp",
+            "fmp_key_loaded": bool(get_fmp_api_key()),
+            "normalized_trade_count": len(trades),
+            "house_pages": house_debug,
+            "senate_pages": senate_debug,
+        },
+    )
+
+    return sort_trades(trades)
+
+
+def parse_capitol_trades_link(link: dict) -> dict | None:
+    text = html.unescape(clean_text(link.get("text", "")))
+    href = link.get("href") or ""
+
+    if not re.match(r"^(buy|sell|exchange)\b", text, flags=re.IGNORECASE):
+        return None
+
+    ticker_match = re.search(r"\b([A-Z][A-Z0-9./-]{0,8}):US\b", text)
+
+    if not ticker_match:
+        return None
+
+    ticker = ticker_match.group(1).replace("/", ".")
+
+    before_ticker = text[: ticker_match.start()].strip()
+    after_ticker = text[ticker_match.end():].strip()
+
+    first_space = before_ticker.find(" ")
+
+    if first_space == -1:
+        return None
+
+    transaction_raw = before_ticker[:first_space]
+    description = before_ticker[first_space + 1:].strip()
+
+    tail_match = re.search(
+        r"(?P<politician>.+?)\s+"
+        r"(?P<party>Democrat|Republican|Independent)\s+"
+        r"(?P<chamber>House|Senate)\s+"
+        r"(?P<state>[A-Z]{2})\s+"
+        r"(?P<amount>[0-9.,]+[KMB]?\s*[–-]\s*[0-9.,]+[KMB]?|[0-9.,]+[KMB]?)$",
+        after_ticker,
+        flags=re.IGNORECASE,
+    )
+
+    if not tail_match:
+        return None
+
+    transaction = normalize_transaction(transaction_raw)
+    amount = tail_match.group("amount").replace("–", "-")
+    chamber = tail_match.group("chamber")
+    politician = clean_text(tail_match.group("politician"))
+    party = tail_match.group("party")
+    state = tail_match.group("state")
+
+    source_url = ""
+
+    if href:
+        if href.startswith("http"):
+            source_url = href
+        else:
+            source_url = urllib.parse.urljoin(CAPITOL_TRADES_URL, href)
+
+    return {
+        "politician": politician,
+        "chamber": chamber,
+        "ticker": ticker,
+        "transaction": transaction,
+        "sector": description or "Capitol Trades Disclosure",
+        "amount_range": amount,
+        "disclosure_date": "Latest",
+        "transaction_date": "Unknown",
+        "owner": "Unknown",
+        "committee_relevance": classify_committee_relevance(description),
+        "signal": "Actual Congress Disclosure",
+        "notes": f"Fetched from Capitol Trades public latest trades page. Party: {party}. State: {state}.",
+        "source": "Capitol Trades",
+        "source_url": source_url,
+    }
+
+
+def fetch_capitol_trades_public() -> list[dict]:
+    try:
+        page = fetch_text(CAPITOL_TRADES_URL)
+    except Exception as error:
+        append_debug(
+            "capitoltrades",
+            {
+                "ok": False,
+                "provider": "capitoltrades",
+                "error_type": type(error).__name__,
+                "reason": str(error),
+            },
+        )
+        return []
+
+    parser = LinkTextParser()
+    parser.feed(page)
+
+    trades = []
+
+    for link in parser.links:
+        trade = parse_capitol_trades_link(link)
+
+        if trade:
+            trades.append(trade)
+
+    append_debug(
+        "capitoltrades",
+        {
+            "ok": bool(trades),
+            "provider": "capitoltrades",
+            "normalized_trade_count": len(trades),
+            "sample_links": parser.links[:8],
+            "sample_trades": trades[:3],
+        },
+    )
+
+    return sort_trades(trades)
+
+
+def sort_trades(trades: list[dict]) -> list[dict]:
     trades.sort(
         key=lambda trade: (
             str(trade.get("disclosure_date", "")),
@@ -476,9 +668,40 @@ def fetch_live_congress_trades() -> list[dict]:
         reverse=True,
     )
 
-    if trades:
-        save_cache(trades)
-        return trades
+    return trades
+
+
+def fetch_live_congress_trades() -> list[dict]:
+    provider = get_provider()
+
+    provider_debug = {
+        "requested_provider": provider,
+        "timestamp": time.time(),
+    }
+
+    append_debug("provider", provider_debug)
+
+    trades = []
+
+    if provider in {"auto", "fmp"}:
+        trades = fetch_fmp_congress_trades()
+
+        if trades:
+            save_cache(trades, source="FMP House/Senate congressional disclosure endpoints")
+            return trades
+
+        if provider == "fmp":
+            return load_stale_cache()
+
+    if provider in {"auto", "capitoltrades", "capitol_trades"}:
+        trades = fetch_capitol_trades_public()
+
+        if trades:
+            save_cache(trades, source="Capitol Trades public latest trades page")
+            return trades
+
+        if provider in {"capitoltrades", "capitol_trades"}:
+            return load_stale_cache()
 
     return load_stale_cache()
 
@@ -518,13 +741,14 @@ def load_stale_cache() -> list[dict]:
         return []
 
 
-def save_cache(trades: list[dict]) -> None:
+def save_cache(trades: list[dict], source: str) -> None:
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
         payload = {
             "fetched_at": time.time(),
-            "source": "Financial Modeling Prep House/Senate congressional disclosure endpoints",
+            "source": source,
+            "provider": get_provider(),
             "trades": trades,
         }
 
