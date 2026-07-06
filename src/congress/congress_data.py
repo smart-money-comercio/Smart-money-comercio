@@ -15,7 +15,7 @@ FMP_BASE_URL = "https://financialmodelingprep.com/stable"
 HOUSE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/house-latest"
 SENATE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/senate-latest"
 
-CAPITOL_TRADES_URL = "https://www.capitoltrades.com/"
+CAPITOL_TRADES_URL = "https://www.capitoltrades.com/trades"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = PROJECT_ROOT / "data"
@@ -72,6 +72,16 @@ class LinkTextParser(HTMLParser):
         self.current_href = ""
         self.current_text = []
 
+class PageTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.text_items = []
+
+    def handle_data(self, data):
+        text = clean_text(html.unescape(data))
+
+        if text:
+            self.text_items.append(text)
 
 def get_provider() -> str:
     return os.getenv("CONGRESS_DATA_PROVIDER", "auto").strip().lower() or "auto"
@@ -617,10 +627,177 @@ def parse_capitol_trades_link(link: dict) -> dict | None:
         "source_url": source_url,
     }
 
+def is_capitol_ticker_token(value: str) -> bool:
+    text = clean_text(value)
+
+    if text == "N/A":
+        return False
+
+    return bool(re.match(r"^[A-Z][A-Z0-9./-]{0,8}:US$", text))
+
+
+def parse_party_chamber_state(value: str) -> dict:
+    text = clean_text(value)
+
+    match = re.match(
+        r"^(Democrat|Republican|Independent)\s+(House|Senate)\s+([A-Z]{2})$",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    if not match:
+        return {
+            "party": "Unknown",
+            "chamber": "Unknown",
+            "state": "Unknown",
+        }
+
+    return {
+        "party": match.group(1).title(),
+        "chamber": match.group(2).title(),
+        "state": match.group(3).upper(),
+    }
+
+
+def normalize_capitol_amount(value: str) -> str:
+    text = clean_text(value).replace("–", "-")
+
+    if not text:
+        return "Unknown"
+
+    parts = [part.strip() for part in text.split("-")]
+
+    normalized_parts = []
+
+    for part in parts:
+        if not part:
+            continue
+
+        if not part.startswith("$"):
+            part = f"${part}"
+
+        normalized_parts.append(part)
+
+    if len(normalized_parts) == 2:
+        return f"{normalized_parts[0]} - {normalized_parts[1]}"
+
+    if len(normalized_parts) == 1:
+        return normalized_parts[0]
+
+    return text
+
+
+def find_transaction_index(tokens: list[str], start_index: int, max_lookahead: int = 14) -> int | None:
+    transaction_words = {"buy", "sell", "exchange", "purchase", "sale"}
+
+    end_index = min(len(tokens), start_index + max_lookahead)
+
+    for index in range(start_index, end_index):
+        token = clean_text(tokens[index]).lower()
+
+        if token in transaction_words:
+            return index
+
+    return None
+
+
+def parse_capitol_trades_from_tokens(tokens: list[str]) -> list[dict]:
+    trades = []
+    seen = set()
+
+    for index, token in enumerate(tokens):
+        if not is_capitol_ticker_token(token):
+            continue
+
+        if index < 3:
+            continue
+
+        politician = clean_text(tokens[index - 3])
+        party_line = clean_text(tokens[index - 2])
+        issuer = clean_text(tokens[index - 1])
+        ticker = token.replace(":US", "").replace("/", ".")
+
+        party_info = parse_party_chamber_state(party_line)
+
+        if party_info["chamber"] == "Unknown":
+            continue
+
+        transaction_index = find_transaction_index(tokens, index + 1)
+
+        if transaction_index is None:
+            continue
+
+        transaction_raw = tokens[transaction_index]
+        transaction = normalize_transaction(transaction_raw)
+
+        owner = "Unknown"
+
+        if transaction_index - 1 > index:
+            owner_candidate = clean_text(tokens[transaction_index - 1])
+
+            if owner_candidate.lower() not in {"days", "day"} and not owner_candidate.isdigit():
+                owner = owner_candidate
+
+        amount = "Unknown"
+
+        if transaction_index + 1 < len(tokens):
+            amount = normalize_capitol_amount(tokens[transaction_index + 1])
+
+        published = "Unknown"
+
+        if index + 2 < len(tokens):
+            published = clean_text(tokens[index + 2])
+
+        transaction_date = "Unknown"
+
+        if index + 3 < len(tokens):
+            transaction_date = clean_text(tokens[index + 3])
+
+            if index + 4 < len(tokens) and re.match(r"^\d{4}$", clean_text(tokens[index + 4])):
+                transaction_date = f"{transaction_date} {clean_text(tokens[index + 4])}"
+
+        dedupe_key = (
+            politician,
+            ticker,
+            transaction,
+            amount,
+            transaction_date,
+            owner,
+        )
+
+        if dedupe_key in seen:
+            continue
+
+        seen.add(dedupe_key)
+
+        trades.append(
+            {
+                "politician": politician,
+                "chamber": party_info["chamber"],
+                "ticker": ticker,
+                "transaction": transaction,
+                "sector": issuer or "Capitol Trades Disclosure",
+                "amount_range": amount,
+                "disclosure_date": published,
+                "transaction_date": transaction_date,
+                "owner": owner,
+                "committee_relevance": classify_committee_relevance(issuer),
+                "signal": "Actual Congress Disclosure",
+                "notes": (
+                    "Fetched from Capitol Trades public latest trades page. "
+                    f"Party: {party_info['party']}. State: {party_info['state']}."
+                ),
+                "source": "Capitol Trades",
+                "source_url": CAPITOL_TRADES_URL,
+            }
+        )
+
+    return trades
 
 def fetch_capitol_trades_public() -> list[dict]:
     try:
         page = fetch_text(CAPITOL_TRADES_URL)
+
     except Exception as error:
         append_debug(
             "capitoltrades",
@@ -633,16 +810,10 @@ def fetch_capitol_trades_public() -> list[dict]:
         )
         return []
 
-    parser = LinkTextParser()
+    parser = PageTextParser()
     parser.feed(page)
 
-    trades = []
-
-    for link in parser.links:
-        trade = parse_capitol_trades_link(link)
-
-        if trade:
-            trades.append(trade)
+    trades = parse_capitol_trades_from_tokens(parser.text_items)
 
     append_debug(
         "capitoltrades",
@@ -650,7 +821,7 @@ def fetch_capitol_trades_public() -> list[dict]:
             "ok": bool(trades),
             "provider": "capitoltrades",
             "normalized_trade_count": len(trades),
-            "sample_links": parser.links[:8],
+            "sample_tokens": parser.text_items[:80],
             "sample_trades": trades[:3],
         },
     )
