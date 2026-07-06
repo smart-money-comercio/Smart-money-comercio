@@ -5,6 +5,7 @@ import time
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from src.reports.smartmoney_report import build_smartmoney_report
 from src.congress.congress_data import get_congress_trades as get_live_congress_trades
 from src.congress.congress_scoring import get_congress_score
 from src.reports.congress_report import build_congress_report
@@ -365,33 +366,33 @@ async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
-    scores = sorted(
-        await asyncio.to_thread(get_stock_scores),
-        key=lambda x: (
-            x.get("congress_score", 0)
-            + x.get("insider_score", 0)
-        ),
-        reverse=True,
+    symbol = None
+
+    if context.args:
+        symbol = context.args[0].upper().replace("$", "")
+
+    loading_message = await update.message.reply_text(
+        "🧠 Building Smart Money AI overlap report..."
+        if not symbol
+        else f"🧠 Building Smart Money AI overlap report for {symbol}..."
     )
 
-    text = "🧠 SMART MONEY SIGNALS\n\n"
+    try:
+        stocks = await asyncio.to_thread(get_stock_scores)
 
-    for stock in scores[:5]:
-        text += (
-            f"{stock['ticker']}\n"
-            f"Category: {stock['category']}\n"
-            f"Congress Score: {stock.get('congress_score', 0)}\n"
-            f"Insider Score: {stock.get('insider_score', 0)}\n"
-            f"Final Score: {stock['final_score']}\n\n"
+        message = build_smartmoney_report(
+            stocks=stocks,
+            symbol=symbol,
+            limit=10,
         )
 
-    text += (
-        "🧠 Insight:\n"
-        "Smart Money signals combine congressional activity and insider activity. "
-        "These are research inputs, not standalone buy recommendations."
-    )
+        await send_split_message(update, message, loading_message)
 
-    await update.message.reply_text(text)
+    except Exception as error:
+        await loading_message.edit_text(
+            "Unable to build Smart Money AI signal report right now.\n\n"
+            f"Error:\n{type(error).__name__}"
+        )
 
 
 async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
