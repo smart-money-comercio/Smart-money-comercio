@@ -82,7 +82,7 @@ class PageTextParser(HTMLParser):
 
         if text:
             self.text_items.append(text)
-
+            
 def get_provider() -> str:
     return os.getenv("CONGRESS_DATA_PROVIDER", "auto").strip().lower() or "auto"
 
