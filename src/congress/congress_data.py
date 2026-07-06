@@ -13,12 +13,15 @@ FMP_BASE_URL = "https://financialmodelingprep.com/stable"
 HOUSE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/house-latest"
 SENATE_LATEST_ENDPOINT = f"{FMP_BASE_URL}/senate-latest"
 
-HOUSE_STOCKWATCHER_URL = (
-    "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
-)
-SENATE_STOCKWATCHER_URL = (
-    "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"
-)
+HOUSE_STOCKWATCHER_URLS = [
+    "https://housestockwatcher.com/api",
+    "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json",
+]
+
+SENATE_STOCKWATCHER_URLS = [
+    "https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json",
+    "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json",
+]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = PROJECT_ROOT / "data"
@@ -103,6 +106,24 @@ def fetch_json(url: str):
 
     return json.loads(payload)
 
+def fetch_first_json(urls: list[str], source_name: str):
+    errors = []
+
+    for url in urls:
+        try:
+            payload = fetch_json(url)
+            return payload, url, errors
+
+        except Exception as error:
+            errors.append(
+                {
+                    "url": url,
+                    "error_type": type(error).__name__,
+                    "error": str(error),
+                }
+            )
+
+    raise RuntimeError(f"All {source_name} URLs failed: {errors}")
 
 def build_fmp_url(endpoint: str, page: int) -> str:
     query = {
@@ -433,7 +454,7 @@ def normalize_stockwatcher_trade(record: dict, chamber: str) -> dict | None:
         "notes": "Fetched from public Stock Watcher JSON dataset.",
         "source": f"{chamber} Stock Watcher",
         "source_url": first_value(record, ["ptr_link", "ptrLink", "url", "link"]) or (
-            HOUSE_STOCKWATCHER_URL if chamber == "House" else SENATE_STOCKWATCHER_URL
+             HOUSE_STOCKWATCHER_URLS[0] if chamber == "House" else SENATE_STOCKWATCHER_URLS[0]
         ),
     }
 
@@ -477,35 +498,53 @@ def normalize_stockwatcher_payload(payload, chamber: str) -> list[dict]:
 def fetch_stockwatcher_congress_trades() -> list[dict]:
     debug = {
         "provider": "stockwatcher",
-        "house_url": HOUSE_STOCKWATCHER_URL,
-        "senate_url": SENATE_STOCKWATCHER_URL,
+        "house_urls": HOUSE_STOCKWATCHER_URLS,
+        "senate_urls": SENATE_STOCKWATCHER_URLS,
     }
 
     trades = []
 
     try:
-        house_payload = fetch_json(HOUSE_STOCKWATCHER_URL)
+        house_payload, house_url_used, house_errors = fetch_first_json(
+            HOUSE_STOCKWATCHER_URLS,
+            "House Stock Watcher",
+        )
+
         house_trades = normalize_stockwatcher_payload(house_payload, "House")
         trades.extend(house_trades)
+
         debug["house_ok"] = True
+        debug["house_url_used"] = house_url_used
+        debug["house_errors"] = house_errors
         debug["house_count"] = len(house_trades)
         debug["house_payload_type"] = type(house_payload).__name__
+
         if isinstance(house_payload, list) and house_payload:
             debug["house_sample_keys"] = list(house_payload[0].keys())
+
     except Exception as error:
         debug["house_ok"] = False
         debug["house_error_type"] = type(error).__name__
         debug["house_error"] = str(error)
 
     try:
-        senate_payload = fetch_json(SENATE_STOCKWATCHER_URL)
+        senate_payload, senate_url_used, senate_errors = fetch_first_json(
+            SENATE_STOCKWATCHER_URLS,
+            "Senate Stock Watcher",
+        )
+
         senate_trades = normalize_stockwatcher_payload(senate_payload, "Senate")
         trades.extend(senate_trades)
+
         debug["senate_ok"] = True
+        debug["senate_url_used"] = senate_url_used
+        debug["senate_errors"] = senate_errors
         debug["senate_count"] = len(senate_trades)
         debug["senate_payload_type"] = type(senate_payload).__name__
+
         if isinstance(senate_payload, list) and senate_payload:
             debug["senate_sample_keys"] = list(senate_payload[0].keys())
+
     except Exception as error:
         debug["senate_ok"] = False
         debug["senate_error_type"] = type(error).__name__
