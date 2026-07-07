@@ -1,12 +1,11 @@
-
 import asyncio
+
+from telegram import Update
+from telegram.ext import ContextTypes
+from telegram.error import BadRequest
 
 from src.reports.portfolio_report import build_portfolio_report
 from src.scoring.risk_engine import get_risk_profile
-from src.scoring.scoring_engine import get_stock_scores
-from telegram import Update
-from telegram.ext import ContextTypes
-
 from src.scoring.scoring_engine import get_stock_scores
 
 
@@ -105,6 +104,59 @@ async def edit_or_send_split_message(update: Update, loading_message, message: s
     for chunk in chunks[1:]:
         await update.message.reply_text(chunk)
 
+TELEGRAM_MESSAGE_LIMIT = 3000
+
+
+def split_long_message(message: str) -> list[str]:
+    chunks = []
+    current_chunk = ""
+
+    for line in message.splitlines():
+        # Hard-split any very long single line.
+        while len(line) > TELEGRAM_MESSAGE_LIMIT:
+            if current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = ""
+
+            chunks.append(line[:TELEGRAM_MESSAGE_LIMIT])
+            line = line[TELEGRAM_MESSAGE_LIMIT:]
+
+        candidate = f"{current_chunk}\n{line}" if current_chunk else line
+
+        if len(candidate) > TELEGRAM_MESSAGE_LIMIT:
+            if current_chunk:
+                chunks.append(current_chunk)
+
+            current_chunk = line
+        else:
+            current_chunk = candidate
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+async def send_portfolio_report(update: Update, loading_message, message: str) -> None:
+    chunks = split_long_message(message)
+
+    # Keep the edit very short to avoid Telegram edit_text limits.
+    try:
+        await loading_message.edit_text(
+            "✅ Portfolio role report ready. Sending below...",
+            parse_mode=None,
+        )
+    except BadRequest:
+        pass
+
+    for index, chunk in enumerate(chunks, start=1):
+        header = f"📦 Portfolio Report Part {index}/{len(chunks)}\n\n"
+
+        await update.message.reply_text(
+            header + chunk,
+            parse_mode=None,
+        )
+
 async def portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -117,7 +169,8 @@ async def portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     loading_message = await update.message.reply_text(
         "📦 Building portfolio role report..."
         if not symbol
-        else f"📦 Building portfolio role report for {symbol}..."
+        else f"📦 Building portfolio role report for {symbol}...",
+        parse_mode=None,
     )
 
     try:
@@ -137,15 +190,23 @@ async def portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
             stocks=stocks,
             risk_profiles=risk_profiles,
             symbol=symbol,
-            per_bucket_limit=4,
+            per_bucket_limit=2,
         )
 
-        await loading_message.edit_text(message)
+        await send_portfolio_report(update, loading_message, message)
 
     except Exception as error:
-        await loading_message.edit_text(
-            "Unable to build portfolio role report right now.\n\n"
-            f"Error:\n{type(error).__name__}"
-        )
+        try:
+            await loading_message.edit_text(
+                "Unable to build portfolio role report right now.\n\n"
+                f"Error:\n{type(error).__name__}",
+                parse_mode=None,
+            )
+        except BadRequest:
+            await update.message.reply_text(
+                "Unable to build portfolio role report right now.\n\n"
+                f"Error:\n{type(error).__name__}",
+                parse_mode=None,
+            )
 
     await update.message.reply_text(text)
