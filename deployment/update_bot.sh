@@ -7,6 +7,7 @@ SERVICE_NAME="smart-money-ai-bot"
 PYTHON_BIN="$APP_DIR/.venv/bin/python"
 PIP_BIN="$APP_DIR/.venv/bin/pip"
 BACKUP_SCRIPT="$APP_DIR/deployment/backup_server.sh"
+PREFLIGHT_SCRIPT="$APP_DIR/deployment/preflight_check.sh"
 
 if [ "$EUID" -ne 0 ]; then
     echo "Please run this script with sudo."
@@ -42,8 +43,15 @@ echo "Installing/updating requirements..."
 "$PIP_BIN" install --upgrade pip
 "$PIP_BIN" install -r requirements.txt
 
-echo "Checking Python syntax..."
-"$PYTHON_BIN" -m compileall src
+echo "Running deployment preflight checks..."
+if [ -f "$PREFLIGHT_SCRIPT" ]; then
+    chmod +x "$PREFLIGHT_SCRIPT"
+    bash "$PREFLIGHT_SCRIPT"
+else
+    echo "ERROR: Preflight script not found at $PREFLIGHT_SCRIPT"
+    echo "Deployment stopped before restart."
+    exit 1
+fi
 
 echo "Restarting service..."
 systemctl restart "$SERVICE_NAME"
