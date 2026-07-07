@@ -2,9 +2,11 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from src.reports.ai_summary import build_ai_summary as build_relevant_ai_summary
-from src.reports.action_checklist import build_action_checklist as build_relevant_action_checklist
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.reports.action_checklist import (
+    build_action_checklist as build_relevant_action_checklist,
+)
+from src.reports.ai_summary import build_ai_summary as build_relevant_ai_summary
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.watchlist_store import load_watchlist
 
@@ -12,7 +14,7 @@ from src.utils.watchlist_store import load_watchlist
 REPORT_TIMEZONE = "America/Lima"
 MAX_TOP_OPPORTUNITIES = 5
 MAX_WATCHLIST_MOVERS = 5
-MAX_AI_SUMMARY_CHARS = 900
+MAX_AI_SUMMARY_CHARS = 1400
 
 
 def safe_float(value: Any) -> float | None:
@@ -150,7 +152,8 @@ def normalize_score_item(item: Any) -> dict:
             ),
             "category_adjustment": safe_float(
                 get_value(item, ["category_adjustment", "adjustment"], 0)
-            ) or 0,
+            )
+            or 0,
             "strength": first_list_text(
                 get_value(item, ["strengths", "pros", "bull_case"], []),
                 "No strength detail available.",
@@ -425,22 +428,27 @@ def build_risk_notes(top_scores: list[dict], watchlist_quotes: dict) -> str:
     return "\n".join(f"• {note}" for note in notes)
 
 
-def build_action_checklist(scores: Any) -> str:
+def build_daily_ai_summary(raw_scores: Any) -> str:
     try:
-        return build_relevant_action_checklist(stocks=scores)
-    except Exception as exc:
-        return f"Action Checklist unavailable: {type(exc).__name__}"
-
-def build_ai_summary(scores: Any) -> str:
-    try:
-        summary = build_relevant_ai_summary(stocks=scores)
+        summary = build_relevant_ai_summary(stocks=raw_scores)
     except Exception as exc:
         return f"AI summary unavailable: {type(exc).__name__}"
 
     if not summary:
         return "AI summary unavailable."
 
-    return clean_text(summary, MAX_AI_SUMMARY_CHARS)
+    if len(summary) > MAX_AI_SUMMARY_CHARS:
+        return summary[: MAX_AI_SUMMARY_CHARS - 3].rstrip() + "..."
+
+    return summary
+
+
+def build_daily_action_checklist(raw_scores: Any) -> str:
+    try:
+        return build_relevant_action_checklist(stocks=raw_scores)
+    except Exception as exc:
+        return f"Action Checklist unavailable: {type(exc).__name__}"
+
 
 def build_daily_report() -> str:
     now = datetime.now(ZoneInfo(REPORT_TIMEZONE))
@@ -470,6 +478,9 @@ def build_daily_report() -> str:
     else:
         top_opportunities = "No scoring opportunities available."
 
+    ai_summary = build_daily_ai_summary(raw_scores)
+    action_checklist = build_daily_action_checklist(raw_scores)
+
     return f"""
 📊 Smart Money AI Daily Report
 Date: {today}
@@ -491,9 +502,9 @@ Top Opportunities
 Risk Notes
 {build_risk_notes(top_scores, watchlist_quotes)}
 
-{build_ai_summary(raw_scores)}
+{ai_summary}
 
-{build_action_checklist(raw_scores)}
+{action_checklist}
 
 Next Commands
 /top10
