@@ -71,6 +71,39 @@ async def dividends(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text)
 
+TELEGRAM_MESSAGE_LIMIT = 3900
+
+
+def split_long_message(message: str) -> list[str]:
+    if len(message) <= TELEGRAM_MESSAGE_LIMIT:
+        return [message]
+
+    chunks = []
+    current_chunk = ""
+
+    for line in message.splitlines():
+        candidate = f"{current_chunk}\n{line}" if current_chunk else line
+
+        if len(candidate) > TELEGRAM_MESSAGE_LIMIT:
+            if current_chunk:
+                chunks.append(current_chunk)
+            current_chunk = line
+        else:
+            current_chunk = candidate
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+async def edit_or_send_split_message(update: Update, loading_message, message: str) -> None:
+    chunks = split_long_message(message)
+
+    await edit_or_send_split_message(update, loading_message, message)
+
+    for chunk in chunks[1:]:
+        await update.message.reply_text(chunk)
 
 async def portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
