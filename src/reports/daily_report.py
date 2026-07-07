@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from src.reports.ai_summary import build_ai_summary
 from src.reports.ai_summary import build_ai_summary as build_relevant_ai_summary
+from src.reports.action_checklist import build_action_checklist as build_relevant_action_checklist
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.watchlist_store import load_watchlist
@@ -425,33 +425,11 @@ def build_risk_notes(top_scores: list[dict], watchlist_quotes: dict) -> str:
     return "\n".join(f"• {note}" for note in notes)
 
 
-def build_action_checklist(market_tone: str) -> str:
-    if "bullish" in market_tone.lower():
-        return "\n".join(
-            [
-                "• Review top-ranked names for clean continuation setups.",
-                "• Confirm volume, earnings dates, and sector strength.",
-                "• Avoid chasing extended moves without a defined stop.",
-            ]
-        )
-
-    if "bearish" in market_tone.lower():
-        return "\n".join(
-            [
-                "• Prioritize capital protection and position sizing.",
-                "• Review stop-loss levels.",
-                "• Avoid weak relative-strength names.",
-            ]
-        )
-
-    return "\n".join(
-        [
-            "• Wait for confirmation before adding new risk.",
-            "• Focus on the strongest names with clean setups.",
-            "• Keep position sizing disciplined.",
-        ]
-    )
-
+def build_action_checklist(scores: Any) -> str:
+    try:
+        return build_relevant_action_checklist(stocks=scores)
+    except Exception as exc:
+        return f"Action Checklist unavailable: {type(exc).__name__}"
 
 def build_ai_summary(scores: Any) -> str:
     try:
@@ -513,11 +491,9 @@ Top Opportunities
 Risk Notes
 {build_risk_notes(top_scores, watchlist_quotes)}
 
-AI Summary
 {build_ai_summary(raw_scores)}
 
-Action Checklist
-{build_action_checklist(market_tone)}
+{build_action_checklist(raw_scores)}
 
 Next Commands
 /top10
