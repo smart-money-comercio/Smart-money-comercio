@@ -1,3 +1,9 @@
+
+import asyncio
+
+from src.reports.portfolio_report import build_portfolio_report
+from src.scoring.risk_engine import get_risk_profile
+from src.scoring.scoring_engine import get_stock_scores
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -67,61 +73,46 @@ async def dividends(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    scores = get_stock_scores()
+    if not update.message:
+        return
 
-    growth = [
-        stock for stock in scores
-        if "Growth" in stock["category"] or "AI" in stock["category"]
-    ]
+    symbol = None
 
-    defense = [
-        stock for stock in scores
-        if (
-            "Defense" in stock["category"]
-            or "Cyber" in stock["category"]
-            or "Drones" in stock["category"]
-            or "Autonomous" in stock["category"]
-            or "Space" in stock["category"]
-            or "Missile" in stock["category"]
-        )
-    ]
+    if context.args:
+        symbol = context.args[0].upper().replace("$", "")
 
-    etfs = [
-        stock for stock in scores
-        if "ETF" in stock["category"]
-    ]
-
-    dividends_list = [
-        stock for stock in scores
-        if "Dividend" in stock["category"] or "High Dividend" in stock["category"]
-    ]
-
-    growth = sorted(growth, key=lambda x: x["final_score"], reverse=True)
-    defense = sorted(defense, key=lambda x: x["final_score"], reverse=True)
-    etfs = sorted(etfs, key=lambda x: x["final_score"], reverse=True)
-    dividends_list = sorted(dividends_list, key=lambda x: x["final_score"], reverse=True)
-
-    text = "📊 SMART MONEY PORTFOLIO MODEL\n\n"
-
-    text += "🚀 Growth Allocation: 40%\n"
-    for stock in growth[:3]:
-        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
-
-    text += "\n🛡️ Defense / Cyber / AI Warfare Allocation: 20%\n"
-    for stock in defense[:3]:
-        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
-
-    text += "\n📈 ETF Allocation: 25%\n"
-    for stock in etfs[:3]:
-        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
-
-    text += "\n💰 Dividend / High-Income Allocation: 15%\n"
-    for stock in dividends_list[:3]:
-        text += f"- {stock['ticker']} | Score: {stock['final_score']} | {stock['category']}\n"
-
-    text += (
-        "\nNote: This is a research model based on Smart Money AI scoring. "
-        "It is not financial advice. Review risk, valuation, dividend safety, and diversification before investing."
+    loading_message = await update.message.reply_text(
+        "📦 Building portfolio role report..."
+        if not symbol
+        else f"📦 Building portfolio role report for {symbol}..."
     )
+
+    try:
+        stocks = await asyncio.to_thread(get_stock_scores)
+
+        risk_profiles = {}
+
+        for stock in stocks:
+            ticker = str(stock.get("ticker", "")).upper().replace("$", "")
+
+            if not ticker:
+                continue
+
+            risk_profiles[ticker] = get_risk_profile(stock)
+
+        message = build_portfolio_report(
+            stocks=stocks,
+            risk_profiles=risk_profiles,
+            symbol=symbol,
+            per_bucket_limit=4,
+        )
+
+        await loading_message.edit_text(message)
+
+    except Exception as error:
+        await loading_message.edit_text(
+            "Unable to build portfolio role report right now.\n\n"
+            f"Error:\n{type(error).__name__}"
+        )
 
     await update.message.reply_text(text)
