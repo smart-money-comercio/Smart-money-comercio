@@ -2,7 +2,8 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from src.agents.analyst_agent import generate_ai_summary
+from src.reports.ai_summary import build_ai_summary
+from src.reports.ai_summary import build_ai_summary as build_relevant_ai_summary
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.watchlist_store import load_watchlist
@@ -454,7 +455,7 @@ def build_action_checklist(market_tone: str) -> str:
 
 def build_ai_summary(scores: Any) -> str:
     try:
-        summary = generate_ai_summary(scores)
+        summary = build_relevant_ai_summary(stocks=scores)
     except Exception as exc:
         return f"AI summary unavailable: {type(exc).__name__}"
 
@@ -462,7 +463,6 @@ def build_ai_summary(scores: Any) -> str:
         return "AI summary unavailable."
 
     return clean_text(summary, MAX_AI_SUMMARY_CHARS)
-
 
 def build_daily_report() -> str:
     now = datetime.now(ZoneInfo(REPORT_TIMEZONE))
