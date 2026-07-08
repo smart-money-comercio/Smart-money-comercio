@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 from src.reports.daily_report import build_daily_report
 from src.scoring.scoring_engine import get_stock_scores
+from src.utils.telegram_messages import edit_or_reply_long_message
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -48,7 +49,13 @@ async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, stock in enumerate(scores[:10], start=1):
         text += f"{i}. {stock['ticker']} - {stock['final_score']} ({stock['category']})\n"
 
-    await update.message.reply_text(text)
+    await edit_or_reply_long_message(
+    update=update,
+    loading_message=loading_message,
+    text=report,
+    title="📊 Daily Report",
+    parse_mode=None,
+        )
 
 
 async def watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
