@@ -4,7 +4,11 @@ from src.commands.admin_commands import admin_command
 
 from src.commands.admin_commands import clearcache, admin_command, status_command, ping_command, diagnostics_command
 
-from src.commands.daily_report_send_commands import senddaily_command, testdaily_command
+from src.commands.daily_report_send_commands import (
+    dailycheck_command,
+    senddaily_command,
+    testdaily_command,
+)
 
 from src.commands.help_commands import help_command, commands_menu
 
@@ -55,6 +59,7 @@ from src.commands.intelligence_commands import (
 )
 
 from src.commands.screener_commands import undervalued
+
 
 from src.commands.sec_commands import (
     sec,
@@ -115,3 +120,4 @@ def register_commands(app):
 
     app.add_handler(CommandHandler("senddaily", senddaily_command))
     app.add_handler(CommandHandler("testdaily", testdaily_command))
+    app.add_handler(CommandHandler("dailycheck", dailycheck_command))
