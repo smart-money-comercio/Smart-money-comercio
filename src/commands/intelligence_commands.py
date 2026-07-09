@@ -12,7 +12,6 @@ from src.congress.congress_scoring import get_congress_score
 from src.reports.congress_report import build_congress_report
 from src.insiders.insider_data import get_insider_trades
 from src.insiders.insider_scoring import get_insider_score
-from src.reports.congress_report import build_congress_report
 from src.reports.insider_report import build_insider_report
 from src.scoring.risk_engine import get_risk_profile
 from src.scoring.scoring_engine import get_stock_scores
@@ -438,5 +437,3 @@ async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Unable to build conviction report right now.\n\n"
             f"Error:\n{type(error).__name__}"
         )
-
-    await update.message.reply_text(text)
