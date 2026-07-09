@@ -8,7 +8,8 @@ from zoneinfo import ZoneInfo
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.commands.admin_commands import is_admin
+from src.commands.admin_commands import get_current_chat_id, is_admin
+from src.utils.telegram_messages import edit_or_reply_long_message
 from src.utils.watchlist_store import get_watchlist_file_path, load_watchlist
 
 
@@ -321,10 +322,13 @@ Recommended Tests:
 /testdaily
 """.strip()
 
-        await loading_message.edit_text(
-            message,
-            parse_mode=None,
-        )
+        await edit_or_reply_long_message(
+    update=update,
+    loading_message=loading_message,
+    text=message,
+    title="🧪 Deploy Check",
+    parse_mode=None,
+)
 
     except Exception as error:
         await loading_message.edit_text(
