@@ -23,6 +23,7 @@ required_files=(
   "src/reports/daily_report.py"
   "src/reports/ai_summary.py"
   "src/reports/action_checklist.py"
+  "src/commands/analyst_commands.py"
 )
 
 for file in "${required_files[@]}"; do
@@ -55,6 +56,8 @@ modules = [
     "src.reports.action_checklist",
     "src.scoring.scoring_engine",
     "src.utils.watchlist_store",
+    "src.commands.analyst_commands",
+    "src.agents.analyst_agent",
 ]
 
 failed = []
@@ -76,6 +79,9 @@ function_checks = [
     ("src.reports.daily_report", "build_daily_report"),
     ("src.reports.ai_summary", "build_ai_summary"),
     ("src.reports.action_checklist", "build_action_checklist"),
+    ("src.commands.analyst_commands", "analyst_command"),
+    ("src.agents.analyst_agent", "run_analyst_agent"),
+    ("src.agents.analyst_agent", "analyze_ticker"),
 ]
 
 print("\nChecking daily report runtime build...")
@@ -118,7 +124,7 @@ try:
 except Exception as exc:
     print(f"ERROR: build_daily_report() failed: {type(exc).__name__}: {exc}")
     sys.exit(1)
-    
+
 for module_name, function_name in function_checks:
     module = importlib.import_module(module_name)
 

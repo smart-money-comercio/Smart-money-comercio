@@ -30,6 +30,8 @@ from src.commands.portfolio_commands import (
 
 from src.commands.watchlist_commands import watchlist_command
 
+from src.commands.analyst_commands import analyst_command
+
 from src.commands.deploycheck_commands import deploycheck_command
 
 from src.commands.backup_commands import backup_command
@@ -103,6 +105,7 @@ def register_commands(app):
 
     app.add_handler(CommandHandler("ticker", ticker))
     app.add_handler(CommandHandler("quote", quote))
+    app.add_handler(CommandHandler("analyst", analyst_command))
     app.add_handler(CommandHandler("market", market))
     app.add_handler(CommandHandler("marketbrief", marketbrief_command))
     app.add_handler(CommandHandler("earnings", earnings))

@@ -31,6 +31,7 @@ PUBLIC_COMMANDS = [
     BotCommand("marketbrief", "On-demand market overview"),
     BotCommand("ticker", "Quick ticker lookup"),
     BotCommand("scorecard", "Show stock scorecard"),
+    BotCommand("analyst", "Smart Money AI analyst read"),
     BotCommand("risk", "Show risk profile"),
     BotCommand("earnings", "Show earnings data"),
     BotCommand("watchlist", "Manage watchlist"),
