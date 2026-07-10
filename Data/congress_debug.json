@@ -1,0 +1,108 @@
+{
+  "provider": {
+    "requested_provider": "auto",
+    "timestamp": 1783643530.909657,
+    "order": "auto = fmp, then stockwatcher"
+  },
+  "fmp": {
+    "ok": false,
+    "provider": "fmp",
+    "fmp_key_loaded": false,
+    "normalized_trade_count": 0,
+    "house_pages": [
+      {
+        "source": "House",
+        "reason": "FMP_API_KEY is missing"
+      }
+    ],
+    "senate_pages": [
+      {
+        "source": "Senate",
+        "reason": "FMP_API_KEY is missing"
+      }
+    ]
+  },
+  "stockwatcher": {
+    "provider": "stockwatcher",
+    "house_urls": [
+      "https://housestockwatcher.com/api",
+      "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
+    ],
+    "senate_urls": [
+      "https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json",
+      "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"
+    ],
+    "house_ok": false,
+    "house_error_type": "RuntimeError",
+    "house_error": "All House Stock Watcher URLs failed: [{'url': 'https://housestockwatcher.com/api', 'error_type': 'URLError', 'error': '<urlopen error [Errno 11001] getaddrinfo failed>'}, {'url': 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json', 'error_type': 'HTTPError', 'error': 'HTTP Error 403: Forbidden'}]",
+    "senate_ok": true,
+    "senate_url_used": "https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json",
+    "senate_errors": [],
+    "senate_count": 6779,
+    "senate_payload_type": "list",
+    "senate_sample_keys": [
+      "transaction_date",
+      "owner",
+      "ticker",
+      "asset_description",
+      "asset_type",
+      "type",
+      "amount",
+      "comment",
+      "senator",
+      "ptr_link"
+    ],
+    "ok": true,
+    "normalized_trade_count": 250,
+    "sample_trades": [
+      {
+        "politician": "Richard Blumenthal",
+        "chamber": "Senate",
+        "ticker": "N.A",
+        "transaction": "N/A",
+        "sector": "This filing was disclosed via scanned PDF. Use link in ptr_link column to view the PDF.",
+        "amount_range": "Unknown",
+        "disclosure_date": "Unknown",
+        "transaction_date": "12/02/2020",
+        "owner": "N/A",
+        "committee_relevance": "Unknown",
+        "signal": "Actual Congress Disclosure",
+        "notes": "Fetched from public Stock Watcher JSON dataset.",
+        "source": "Senate Stock Watcher",
+        "source_url": "https://efdsearch.senate.gov/search/view/paper/2a123633-1454-49ff-8c3b-c4028372a119/"
+      },
+      {
+        "politician": "Pat Roberts",
+        "chamber": "Senate",
+        "ticker": "COST",
+        "transaction": "Purchase",
+        "sector": "Costco Wholesale Corporation",
+        "amount_range": "$15,001 - $50,000",
+        "disclosure_date": "Unknown",
+        "transaction_date": "11/24/2020",
+        "owner": "Spouse",
+        "committee_relevance": "Unknown",
+        "signal": "Actual Congress Disclosure",
+        "notes": "Fetched from public Stock Watcher JSON dataset.",
+        "source": "Senate Stock Watcher",
+        "source_url": "https://efdsearch.senate.gov/search/view/ptr/b7e581e7-f154-4dc7-890d-1c827c88ba7a/"
+      },
+      {
+        "politician": "Thomas R Carper",
+        "chamber": "Senate",
+        "ticker": "XAR",
+        "transaction": "Purchase",
+        "sector": "SPDR S&amp;P Aerospace &amp; Defense ETF",
+        "amount_range": "$1,001 - $15,000",
+        "disclosure_date": "Unknown",
+        "transaction_date": "11/20/2020",
+        "owner": "Spouse",
+        "committee_relevance": "High",
+        "signal": "Actual Congress Disclosure",
+        "notes": "Fetched from public Stock Watcher JSON dataset.",
+        "source": "Senate Stock Watcher",
+        "source_url": "https://efdsearch.senate.gov/search/view/ptr/35aec3a8-60a7-4f06-bae3-3b202949e5e5/"
+      }
+    ]
+  }
+}

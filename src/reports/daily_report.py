@@ -2,6 +2,15 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.utils.score_display import (
+    get_action_label,
+    get_category,
+    get_portfolio_fit,
+    get_risk_label,
+    get_signal_strength,
+    get_smart_money_label,
+    get_ticker,
+)
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
 from src.reports.action_checklist import (
     build_action_checklist as build_relevant_action_checklist,
@@ -9,6 +18,7 @@ from src.reports.action_checklist import (
 from src.reports.ai_summary import build_ai_summary as build_relevant_ai_summary
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.watchlist_store import load_watchlist
+
 
 
 REPORT_TIMEZONE = "America/Lima"
@@ -242,14 +252,27 @@ def build_score_summary(scores: list[dict]) -> str:
 
 
 def format_opportunity(index: int, item: dict) -> str:
-    score = item["score"]
-    signal = classify_score(score)
+    ticker = get_ticker(item)
+    label = get_smart_money_label(item)
+    signal = get_signal_strength(item)
+    fit = get_portfolio_fit(item)
+    action = get_action_label(item)
+    risk = get_risk_label(item)
+    category = get_category(item)
+
+    strength = clean_text(
+        item.get("strength")
+        or first_list_text(item.get("strengths", []), "No strength detail available."),
+        100,
+    )
 
     return (
-        f"{index}. {item['symbol']} — {format_score(score)}/100 | {signal}\n"
-        f"   Rating: {item['rating']} | Risk: {item['risk_label']}\n"
-        f"   Category: {item['category']} | Adj: {format_adjustment(item['category_adjustment'])}\n"
-        f"   Strength: {clean_text(item['strength'], 100)}"
+        f"{index}. {ticker} — {label}\n"
+        f"   Signal: {signal} | Risk: {risk}\n"
+        f"   Fit: {fit}\n"
+        f"   Action: {action}\n"
+        f"   Theme: {category}\n"
+        f"   Why it matters: {strength}"
     )
 
 
