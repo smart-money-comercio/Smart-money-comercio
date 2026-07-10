@@ -7,6 +7,7 @@ from src.utils.score_display import (
     get_signal_strength,
     get_smart_money_label,
     get_ticker,
+    get_volume_label,
 )
 
 
@@ -51,6 +52,7 @@ def build_top10_report(stocks: list[dict], limit: int = 10) -> str:
         label = get_smart_money_label(stock)
         signal = get_signal_strength(stock)
         fit = get_portfolio_fit(stock)
+        volume = get_volume_label(stock)
         action = get_action_label(stock)
         category = get_category(stock)
         thesis = first_text(
@@ -64,6 +66,7 @@ def build_top10_report(stocks: list[dict], limit: int = 10) -> str:
             f"   Fit: {fit}\n"
             f"   Action: {action}\n"
             f"   Theme: {category}\n"
+            f"   Volume: {volume}\n"
             f"   Why it matters: {thesis}"
         )
 

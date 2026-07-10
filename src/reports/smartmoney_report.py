@@ -1,5 +1,14 @@
 from typing import Any
 
+from src.utils.score_display import (
+    get_action_label,
+    get_portfolio_fit,
+    get_risk_label,
+    get_signal_strength,
+    get_smart_money_label,
+    get_volume_label,
+)
+
 
 SMART_CONGRESS_THRESHOLD = 65
 SMART_INSIDER_THRESHOLD = 65
@@ -63,15 +72,15 @@ def get_overlap_label(stock: dict) -> str:
     count = get_overlap_count(stock)
 
     if count >= 4:
-        return "Elite overlap"
+        return "Elite Overlap"
     if count == 3:
-        return "Strong overlap"
+        return "Strong Overlap"
     if count == 2:
-        return "Moderate overlap"
+        return "Building Overlap"
     if count == 1:
-        return "Single signal"
+        return "Early Signal"
 
-    return "Limited signal"
+    return "Limited Signal"
 
 
 def get_signal_icons(stock: dict) -> str:
@@ -87,6 +96,21 @@ def get_signal_icons(stock: dict) -> str:
     return " | ".join(parts)
 
 
+def get_volume_rank_value(stock: dict) -> int:
+    volume_label = get_volume_label(stock)
+
+    if volume_label == "Unusual Demand":
+        return 4
+    if volume_label == "Active Interest":
+        return 3
+    if volume_label == "Normal Volume":
+        return 2
+    if volume_label == "Quiet Volume":
+        return 1
+
+    return 0
+
+
 def smartmoney_rank_key(stock: dict) -> tuple:
     congress_score = get_stock_score(stock, "congress_score")
     insider_score = get_stock_score(stock, "insider_score")
@@ -95,6 +119,7 @@ def smartmoney_rank_key(stock: dict) -> tuple:
 
     return (
         get_overlap_count(stock),
+        get_volume_rank_value(stock),
         final_score,
         congress_score + insider_score,
         defense_score,
@@ -110,65 +135,98 @@ def filter_symbol(stocks: list[dict], symbol: str | None) -> list[dict]:
     return [
         stock
         for stock in stocks
-        if clean_symbol(stock.get("ticker")) == clean
+        if clean_symbol(stock.get("ticker") or stock.get("symbol")) == clean
     ]
 
 
 def build_thesis_line(stock: dict) -> str:
-    reason = clean_text(stock.get("reason") or stock.get("thesis") or "", 160)
+    reason = clean_text(stock.get("reason") or stock.get("thesis") or "", 180)
 
     if reason:
         return reason
 
     category = clean_text(stock.get("category") or "Unknown category", 100)
     overlap = get_overlap_label(stock)
+    smart_label = get_smart_money_label(stock)
+    volume_label = get_volume_label(stock)
 
-    return f"{overlap} across Smart Money AI signals in {category}."
+    return (
+        f"{smart_label} setup with {overlap.lower()} across Smart Money AI signals "
+        f"in {category}. Volume confirmation: {volume_label}."
+    )
 
 
 def build_strengths_line(stock: dict) -> str:
     strengths = stock.get("strengths")
 
     if isinstance(strengths, list) and strengths:
-        return "; ".join(clean_text(item, 70) for item in strengths[:3])
+        return "; ".join(
+            clean_text(item, 80)
+            for item in strengths[:3]
+            if clean_text(item, 80)
+        )
 
-    return "Signal strength depends on overlap between Congress, insider, core score, and stability inputs."
+    volume_label = get_volume_label(stock)
+
+    if volume_label in {"Unusual Demand", "Active Interest"}:
+        return f"Market volume is confirming attention: {volume_label}."
+
+    return (
+        "Strength depends on overlap between Congress activity, insider activity, "
+        "core quality, stability, and volume confirmation."
+    )
 
 
 def build_risk_line(stock: dict) -> str:
     risks = stock.get("risks")
 
     if isinstance(risks, list) and risks:
-        return "; ".join(clean_text(item, 70) for item in risks[:3])
+        return "; ".join(
+            clean_text(item, 80)
+            for item in risks[:3]
+            if clean_text(item, 80)
+        )
 
     weaknesses = stock.get("weaknesses")
 
     if isinstance(weaknesses, list) and weaknesses:
-        return "; ".join(clean_text(item, 70) for item in weaknesses[:3])
+        return "; ".join(
+            clean_text(item, 80)
+            for item in weaknesses[:3]
+            if clean_text(item, 80)
+        )
 
-    risk_label = clean_text(stock.get("risk_label") or stock.get("risk_level") or "Risk needs review", 80)
+    risk_label = get_risk_label(stock)
+    volume_label = get_volume_label(stock)
+
+    if volume_label == "Quiet Volume":
+        return f"{risk_label}. Volume is quiet, so confirmation is weaker."
 
     return risk_label
 
 
 def build_stock_block(index: int, stock: dict) -> str:
-    ticker = clean_symbol(stock.get("ticker")) or "UNKNOWN"
+    ticker = clean_symbol(stock.get("ticker") or stock.get("symbol")) or "UNKNOWN"
     category = clean_text(stock.get("category") or "Unknown", 90)
 
-    final_score = get_stock_score(stock, "final_score", "score", "smart_money_score")
-    congress_score = get_stock_score(stock, "congress_score")
-    insider_score = get_stock_score(stock, "insider_score")
-    defense_score = get_stock_score(stock, "defense_score")
-    rating = clean_text(stock.get("rating") or get_overlap_label(stock), 70)
-    risk_label = clean_text(stock.get("risk_label") or stock.get("risk_level") or "N/A", 70)
+    smart_label = get_smart_money_label(stock)
+    signal_strength = get_signal_strength(stock)
+    portfolio_fit = get_portfolio_fit(stock)
+    action_label = get_action_label(stock)
+    risk_label = get_risk_label(stock)
+    volume_label = get_volume_label(stock)
+    overlap_label = get_overlap_label(stock)
 
     return f"""
-{index}. {ticker} — {get_overlap_label(stock)}
+{index}. {ticker} — {smart_label}
+Signal Strength: {signal_strength}
+Smart Money Overlap: {overlap_label}
+Volume: {volume_label}
+Portfolio Fit: {portfolio_fit}
+Action: {action_label}
 Category: {category}
-Final Score: {final_score:.0f}/100 | Rating: {rating}
-Congress: {congress_score:.0f}/100 | Insider: {insider_score:.0f}/100 | Stability: {defense_score:.0f}/100
+Risk Profile: {risk_label}
 Signals: {get_signal_icons(stock)}
-Risk: {risk_label}
 Thesis: {build_thesis_line(stock)}
 Strengths: {build_strengths_line(stock)}
 Risk Notes: {build_risk_line(stock)}
@@ -181,16 +239,40 @@ def build_summary(stocks: list[dict]) -> str:
 
     elite = [stock for stock in stocks if get_overlap_count(stock) >= 4]
     strong = [stock for stock in stocks if get_overlap_count(stock) == 3]
-    moderate = [stock for stock in stocks if get_overlap_count(stock) == 2]
-    limited = [stock for stock in stocks if get_overlap_count(stock) <= 1]
+    building = [stock for stock in stocks if get_overlap_count(stock) == 2]
+    early = [stock for stock in stocks if get_overlap_count(stock) <= 1]
+
+    unusual_volume = [
+        stock for stock in stocks
+        if get_volume_label(stock) == "Unusual Demand"
+    ]
+
+    active_volume = [
+        stock for stock in stocks
+        if get_volume_label(stock) == "Active Interest"
+    ]
 
     return "\n".join(
         [
             f"Total Reviewed: {len(stocks)}",
             f"Elite Overlap: {len(elite)}",
             f"Strong Overlap: {len(strong)}",
-            f"Moderate Overlap: {len(moderate)}",
-            f"Limited / Single Signal: {len(limited)}",
+            f"Building Overlap: {len(building)}",
+            f"Early / Limited Signal: {len(early)}",
+            f"Unusual Volume: {len(unusual_volume)}",
+            f"Active Volume: {len(active_volume)}",
+        ]
+    )
+
+
+def build_signal_rules() -> str:
+    return "\n".join(
+        [
+            "Congress ✅ = supportive congressional trading activity",
+            "Insiders ✅ = supportive insider activity",
+            "Core ✅ = strong Smart Money rating",
+            "Stability ✅ = stronger downside-quality profile",
+            "Volume = market attention based on refreshed cached volume",
         ]
     )
 
@@ -210,12 +292,13 @@ def build_smartmoney_report(
 No scoring record found for {clean}.
 
 Try:
+/analyst {clean}
 /scorecard {clean}
 /ticker {clean}
 /top10
 /report
 
-Note
+Note:
 This is informational only and is not financial advice.
 """.strip()
 
@@ -243,27 +326,26 @@ This is informational only and is not financial advice.
     return f"""
 {title}
 
-Summary
+Summary:
 {build_summary(filtered_stocks)}
 
-Signal Rules
-Congress ✅ = score >= {SMART_CONGRESS_THRESHOLD}
-Insiders ✅ = score >= {SMART_INSIDER_THRESHOLD}
-Core ✅ = final score >= {SMART_FINAL_SCORE_THRESHOLD}
-Stability ✅ = stability score >= {SMART_STABILITY_THRESHOLD}
+Signal Guide:
+{build_signal_rules()}
 
-Ranked Signals
+Ranked Signals:
 {blocks}
 
-Next Commands
+Next Commands:
+/volume refresh
 /congress refresh
 /insiders refresh
+/analyst SYMBOL
 /scorecard SYMBOL
 /ticker SYMBOL
 /top10
 /report
 
-Note
+Note:
 Smart Money overlap means multiple research inputs are aligned.
 It is not a standalone buy recommendation or financial advice.
 """.strip()

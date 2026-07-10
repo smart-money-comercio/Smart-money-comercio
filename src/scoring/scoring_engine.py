@@ -601,18 +601,8 @@ def fetch_volume_signal_from_yahoo(
     ticker: str,
     force_live: bool = False,
     bypass_cache: bool = False,
-    ) -> dict:
+) -> dict:
     symbol = clean_symbol(ticker)
-
-    if not ENABLE_LIVE_VOLUME and not force_live:
-        volume_data = classify_volume_signal(None)
-        volume_data.update(
-            {
-                "ticker": symbol,
-                "cached_at": time.time(),
-            }
-        )
-        return volume_data
 
     if not symbol or symbol == "UNKNOWN":
         return classify_volume_signal(None)
@@ -621,11 +611,23 @@ def fetch_volume_signal_from_yahoo(
     cached = cache.get(symbol)
     now = time.time()
 
+    # Normal reports should use refreshed cached volume when available.
     if not bypass_cache and isinstance(cached, dict):
         cached_at = safe_float(cached.get("cached_at"), 0)
 
-    if now - cached_at <= VOLUME_CACHE_SECONDS:
-        return cached
+        if now - cached_at <= VOLUME_CACHE_SECONDS:
+            return cached
+
+    # Keep normal commands fast and safe. Only /volume and /volume refresh force live lookup.
+    if not ENABLE_LIVE_VOLUME and not force_live:
+        volume_data = classify_volume_signal(None)
+        volume_data.update(
+            {
+                "ticker": symbol,
+                "cached_at": now,
+            }
+        )
+        return volume_data
 
     url = (
         "https://query1.finance.yahoo.com/v8/finance/chart/"
@@ -681,17 +683,6 @@ def fetch_volume_signal_from_yahoo(
                         "volume_ratio": round(volume_ratio, 2) if volume_ratio is not None else None,
                     }
                 )
-
-    except (
-        TimeoutError,
-        socket.timeout,
-        OSError,
-        urllib.error.URLError,
-        urllib.error.HTTPError,
-        json.JSONDecodeError,
-        ValueError,
-    ):
-        volume_data = classify_volume_signal(None)
 
     except Exception:
         volume_data = classify_volume_signal(None)
