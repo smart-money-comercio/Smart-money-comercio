@@ -597,7 +597,11 @@ def classify_volume_signal(volume_ratio: float | None) -> dict:
     }
 
 
-def fetch_volume_signal_from_yahoo(ticker: str, force_live: bool = False) -> dict:
+def fetch_volume_signal_from_yahoo(
+    ticker: str,
+    force_live: bool = False,
+    bypass_cache: bool = False,
+    ) -> dict:
     symbol = clean_symbol(ticker)
 
     if not ENABLE_LIVE_VOLUME and not force_live:
@@ -617,11 +621,11 @@ def fetch_volume_signal_from_yahoo(ticker: str, force_live: bool = False) -> dic
     cached = cache.get(symbol)
     now = time.time()
 
-    if isinstance(cached, dict):
+    if not bypass_cache and isinstance(cached, dict):
         cached_at = safe_float(cached.get("cached_at"), 0)
 
-        if now - cached_at <= VOLUME_CACHE_SECONDS:
-            return cached
+    if now - cached_at <= VOLUME_CACHE_SECONDS:
+        return cached
 
     url = (
         "https://query1.finance.yahoo.com/v8/finance/chart/"
