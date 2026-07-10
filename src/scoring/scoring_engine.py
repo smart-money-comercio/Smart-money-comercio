@@ -1,3 +1,10 @@
+import json
+import socket
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
 from typing import Any
 
 from src.congress.congress_scoring import get_congress_score
@@ -8,6 +15,12 @@ from src.scoring.watchlist import WATCHLIST
 NEUTRAL_SCORE = 50.0
 MIN_SCORE = 0.0
 MAX_SCORE = 100.0
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+VOLUME_CACHE_SECONDS = 60 * 60 * 4
+VOLUME_CACHE_FILE = PROJECT_ROOT / "data" / "volume_signal_cache.json"
+VOLUME_REQUEST_TIMEOUT = 3
 
 
 CATEGORY_BONUS = {
@@ -352,13 +365,14 @@ def calculate_final_score(stock: dict, congress_score: float, insider_score: flo
     )
 
     final_score = (
-        base_score
-        + category_adjustment
-        + get_overlap_bonus(scoring_context)
-        + get_smart_money_confirmation_adjustment(scoring_context)
-        + get_data_confidence_adjustment(scoring_context)
-        + get_risk_adjustment(scoring_context)
-    )
+    base_score
+    + category_adjustment
+    + get_overlap_bonus(scoring_context)
+    + get_smart_money_confirmation_adjustment(scoring_context)
+    + get_data_confidence_adjustment(scoring_context)
+    + get_risk_adjustment(scoring_context)
+    + get_volume_adjustment(scoring_context)
+)
 
     return round(clamp_score(final_score), 1), category_adjustment
 
@@ -386,6 +400,11 @@ def build_strengths(stock: dict, congress_score: float, insider_score: float, ca
 
     if get_signal_overlap(stock) >= 3:
         strengths.append("Multiple confirmation signals are aligned.")
+
+    volume_label = str(stock.get("volume_label", ""))
+
+    if volume_label in {"Unusual Demand", "Active Interest"}:
+        strengths.append(f"Market volume confirms attention: {volume_label}.")    
 
     if not strengths:
         strengths.append("The idea remains on the broader watchlist, but confirmation is still developing.")
@@ -416,6 +435,11 @@ def build_weaknesses(stock: dict, congress_score: float, insider_score: float, c
 
     if get_signal_overlap(stock) <= 1:
         weaknesses.append("Signal confirmation is still thin.")
+
+    volume_label = str(stock.get("volume_label", ""))
+
+    if volume_label == "Quiet Volume":
+        weaknesses.append("Market volume is quiet, so confirmation is weaker.")
 
     if not weaknesses:
         weaknesses.append("No major score-level weakness detected.")
@@ -508,6 +532,181 @@ def get_live_insider_score(ticker: str) -> float:
     except Exception:
         return NEUTRAL_SCORE
 
+def read_volume_cache() -> dict:
+    try:
+        if not VOLUME_CACHE_FILE.exists():
+            return {}
+
+        with VOLUME_CACHE_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        if isinstance(data, dict):
+            return data
+
+        return {}
+
+    except Exception:
+        return {}
+
+
+def write_volume_cache(cache: dict) -> None:
+    try:
+        VOLUME_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+        with VOLUME_CACHE_FILE.open("w", encoding="utf-8") as file:
+            json.dump(cache, file, indent=2, sort_keys=True)
+
+    except Exception:
+        return
+
+
+def classify_volume_signal(volume_ratio: float | None) -> dict:
+    if volume_ratio is None:
+        return {
+            "volume_score": 50.0,
+            "volume_label": "Volume Unavailable",
+            "volume_note": "Volume data was unavailable, so it was treated as neutral.",
+        }
+
+    if volume_ratio >= 2.0:
+        return {
+            "volume_score": 78.0,
+            "volume_label": "Unusual Demand",
+            "volume_note": "Trading volume is running well above its recent average.",
+        }
+
+    if volume_ratio >= 1.25:
+        return {
+            "volume_score": 65.0,
+            "volume_label": "Active Interest",
+            "volume_note": "Trading volume is above normal and confirms market attention.",
+        }
+
+    if volume_ratio >= 0.75:
+        return {
+            "volume_score": 52.0,
+            "volume_label": "Normal Volume",
+            "volume_note": "Trading volume is close to its recent average.",
+        }
+
+    return {
+        "volume_score": 42.0,
+        "volume_label": "Quiet Volume",
+        "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    }
+
+
+def fetch_volume_signal_from_yahoo(ticker: str) -> dict:
+    symbol = clean_symbol(ticker)
+
+    if not symbol or symbol == "UNKNOWN":
+        return classify_volume_signal(None)
+
+    cache = read_volume_cache()
+    cached = cache.get(symbol)
+    now = time.time()
+
+    if isinstance(cached, dict):
+        cached_at = safe_float(cached.get("cached_at"), 0)
+
+        if now - cached_at <= VOLUME_CACHE_SECONDS:
+            return cached
+
+    url = (
+        "https://query1.finance.yahoo.com/v8/finance/chart/"
+        f"{symbol}?range=3mo&interval=1d"
+    )
+
+    try:
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 SmartMoneyAI/1.0",
+                "Accept": "application/json",
+            },
+        )
+
+        response = urllib.request.urlopen(
+            request,
+            timeout=VOLUME_REQUEST_TIMEOUT,
+        )
+
+        try:
+            payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            response.close()
+
+        result = payload.get("chart", {}).get("result", [])
+
+        if not result:
+            volume_data = classify_volume_signal(None)
+        else:
+            quote = result[0].get("indicators", {}).get("quote", [{}])[0]
+            volumes = quote.get("volume") or []
+
+            clean_volumes = [
+                safe_float(volume, 0)
+                for volume in volumes
+                if safe_float(volume, 0) > 0
+            ]
+
+            if len(clean_volumes) < 10:
+                volume_data = classify_volume_signal(None)
+            else:
+                latest_volume = clean_volumes[-1]
+                recent_values = clean_volumes[-21:-1]
+                recent_average = sum(recent_values) / max(1, len(recent_values))
+                volume_ratio = latest_volume / recent_average if recent_average > 0 else None
+
+                volume_data = classify_volume_signal(volume_ratio)
+                volume_data.update(
+                    {
+                        "latest_volume": round(latest_volume),
+                        "average_volume": round(recent_average),
+                        "volume_ratio": round(volume_ratio, 2) if volume_ratio is not None else None,
+                    }
+                )
+
+    except (
+        TimeoutError,
+        socket.timeout,
+        OSError,
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        json.JSONDecodeError,
+        ValueError,
+    ):
+        volume_data = classify_volume_signal(None)
+
+    except Exception:
+        volume_data = classify_volume_signal(None)
+
+    volume_data.update(
+        {
+            "ticker": symbol,
+            "cached_at": now,
+        }
+    )
+
+    cache[symbol] = volume_data
+    write_volume_cache(cache)
+
+    return volume_data
+
+
+def get_volume_adjustment(stock: dict) -> float:
+    volume_score = score_or_default(stock.get("volume_score"), 50)
+
+    if volume_score >= 75:
+        return 2.0
+
+    if volume_score >= 65:
+        return 1.0
+
+    if volume_score < 45:
+        return -1.0
+
+    return 0.0
 
 def enrich_stock(stock: dict) -> dict:
     enriched = dict(stock)
@@ -520,18 +719,27 @@ def enrich_stock(stock: dict) -> dict:
 
     congress_score = get_live_congress_score(ticker)
     insider_score = get_live_insider_score(ticker)
+    volume_data = fetch_volume_signal_from_yahoo(ticker)
 
     enriched.update(
-        {
-            "ticker": ticker,
-            "symbol": ticker,
-            "category": category,
-            "smart_score": smart_score,
-            "defense_score": defense_score,
-            "congress_score": round(congress_score, 1),
-            "insider_score": round(insider_score, 1),
-        }
-    )
+    {
+        "ticker": ticker,
+        "symbol": ticker,
+        "category": category,
+        "smart_score": smart_score,
+        "defense_score": defense_score,
+        "congress_score": round(congress_score, 1),
+        "insider_score": round(insider_score, 1),
+
+        # Volume confirmation.
+        "volume_score": score_or_default(volume_data.get("volume_score"), NEUTRAL_SCORE),
+        "volume_label": volume_data.get("volume_label", "Volume Unavailable"),
+        "volume_note": volume_data.get("volume_note", ""),
+        "volume_ratio": volume_data.get("volume_ratio"),
+        "latest_volume": volume_data.get("latest_volume"),
+        "average_volume": volume_data.get("average_volume"),
+    }
+)
 
     final_score, category_adjustment = calculate_final_score(
         enriched,
@@ -568,6 +776,7 @@ def enrich_stock(stock: dict) -> dict:
             "overlap_bonus": get_overlap_bonus(enriched),
             "smart_money_adjustment": get_smart_money_confirmation_adjustment(enriched),
             "data_confidence_adjustment": get_data_confidence_adjustment(enriched),
+            "volume_adjustment": get_volume_adjustment(enriched),
         }
     )
 
@@ -632,9 +841,11 @@ def get_smart_money_score(ticker: str) -> float:
 def score_ticker(ticker: str) -> dict:
     symbol = clean_symbol(ticker)
 
-    for stock in get_stock_scores():
-        if clean_symbol(stock.get("ticker")) == symbol:
-            return stock
+    for stock in WATCHLIST:
+        current_symbol = clean_symbol(stock.get("ticker") or stock.get("symbol"))
+
+        if current_symbol == symbol:
+            return enrich_stock(dict(stock))
 
     fallback = {
         "ticker": symbol,

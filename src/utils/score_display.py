@@ -14,6 +14,8 @@ def get_smart_money_label(stock: dict) -> str:
         "Monitor Only",
     )
 
+def get_volume_label(stock: dict) -> str:
+    return clean_text(stock.get("volume_label"), "Volume Neutral")
 
 def get_signal_strength(stock: dict) -> str:
     return clean_text(stock.get("signal_strength"), "Developing")
@@ -59,5 +61,6 @@ def format_stock_label_block(stock: dict) -> str:
         f"Signal Strength: {get_signal_strength(stock)}\n"
         f"Portfolio Fit: {get_portfolio_fit(stock)}\n"
         f"Action: {get_action_label(stock)}\n"
-        f"Risk Profile: {get_risk_label(stock)}"
+        f"Risk Profile: {get_risk_label(stock)}\n"
+        f"Volume Signal: {get_volume_label(stock)}"
     )
