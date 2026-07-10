@@ -170,6 +170,53 @@ def get_quote_for_symbol(symbol: str) -> dict:
         "status": "Quote data not required for label-based scorecard.",
     }
 
+def normalize_scores(scores: Any) -> list[dict]:
+    """
+    Backward-compatible helper used by market_commands.py.
+
+    Accepts:
+    - list[dict]
+    - dict[ticker, dict]
+    - dict[ticker, score]
+    - None
+
+    Returns a clean list of stock dictionaries.
+    """
+    if not scores:
+        return []
+
+    if isinstance(scores, list):
+        return [
+            stock
+            for stock in scores
+            if isinstance(stock, dict)
+        ]
+
+    if isinstance(scores, dict):
+        normalized = []
+
+        for symbol, value in scores.items():
+            ticker = clean_symbol(symbol)
+
+            if isinstance(value, dict):
+                stock = dict(value)
+                stock.setdefault("ticker", ticker)
+                stock.setdefault("symbol", ticker)
+                normalized.append(stock)
+            else:
+                normalized.append(
+                    {
+                        "ticker": ticker,
+                        "symbol": ticker,
+                        "final_score": safe_float(value, 0),
+                        "score": safe_float(value, 0),
+                        "smart_money_score": safe_float(value, 0),
+                    }
+                )
+
+        return normalized
+
+    return []
 
 def load_stock(symbol: str, stocks: Any = None) -> tuple[dict, bool]:
     wanted = clean_symbol(symbol)
