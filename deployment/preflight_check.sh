@@ -24,6 +24,8 @@ required_files=(
   "src/reports/ai_summary.py"
   "src/reports/action_checklist.py"
   "src/commands/volume_commands.py"
+  "src/reports/global_market_report.py"
+  "src/commands/global_commands.py"
   "src/commands/analyst_commands.py"
 )
 
@@ -57,6 +59,8 @@ modules = [
     "src.reports.ai_summary",
     "src.reports.action_checklist",
     "src.scoring.scoring_engine",
+    "src.reports.global_market_report",
+    "src.commands.global_commands
     "src.utils.watchlist_store",
     "src.commands.analyst_commands",
     "src.agents.analyst_agent",
@@ -83,6 +87,8 @@ function_checks = [
     ("src.reports.action_checklist", "build_action_checklist"),
     ("src.commands.volume_commands", "volume"),
     ("src.commands.analyst_commands", "analyst_command"),
+    ("src.reports.global_market_report", "build_global_market_report")
+    ("src.commands.global_commands", "global_market")
     ("src.agents.analyst_agent", "run_analyst_agent"),
     ("src.agents.analyst_agent", "analyze_ticker"),
 ]
