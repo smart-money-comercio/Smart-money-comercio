@@ -1,5 +1,15 @@
 from typing import Any
 
+from src.utils.score_display import (
+    format_stock_label_block,
+    get_action_label,
+    get_portfolio_fit,
+    get_risk_label as get_display_risk_label,
+    get_score_story,
+    get_signal_strength,
+    get_smart_money_label,
+)
+
 
 DEFAULT_MAX_ITEMS = 5
 
@@ -76,20 +86,6 @@ def get_category(stock: dict) -> str:
     )
 
 
-def get_rating(stock: dict) -> str:
-    return clean_text(
-        get_value(stock, ["rating", "grade", "signal"], "Unrated"),
-        80,
-    )
-
-
-def get_risk_label(stock: dict) -> str:
-    return clean_text(
-        get_value(stock, ["risk_label", "risk_level", "risk"], "N/A"),
-        80,
-    )
-
-
 def get_strength(stock: dict) -> str:
     strengths = get_value(stock, ["strengths", "pros", "bull_case"], [])
 
@@ -107,7 +103,7 @@ def get_strength(stock: dict) -> str:
     if reason:
         return clean_text(reason, 140)
 
-    return "No clear strength detail available."
+    return "No clear strength detail available yet."
 
 
 def get_weakness(stock: dict) -> str:
@@ -147,7 +143,7 @@ def get_signal_phrase(stock: dict) -> str:
     signals = []
 
     if get_final_score(stock) >= 75:
-        signals.append("score strength")
+        signals.append("core quality")
 
     if get_congress_score_value(stock) >= 65:
         signals.append("Congress activity")
@@ -168,31 +164,21 @@ def get_signal_phrase(stock: dict) -> str:
 
 
 def get_risk_tone(stock: dict) -> str:
-    text = f"{get_risk_label(stock)} {get_category(stock)}".upper()
+    text = f"{get_display_risk_label(stock)} {get_category(stock)}".upper()
 
-    if any(word in text for word in ["HIGH", "SPECULATIVE", "VOLATILE", "EARLY STAGE", "AGGRESSIVE"]):
+    if any(
+        word in text
+        for word in ["HIGH", "SPECULATIVE", "VOLATILE", "EARLY STAGE", "AGGRESSIVE"]
+    ):
         return "higher-risk"
 
-    if any(word in text for word in ["LOW", "DEFENSIVE", "CORE", "STABLE", "QUALITY"]):
+    if any(
+        word in text
+        for word in ["LOW", "DEFENSIVE", "CONTROLLED", "CORE", "STABLE", "QUALITY"]
+    ):
         return "controlled-risk"
 
     return "balanced-risk"
-
-
-def classify_score(score: float) -> str:
-    if score >= 90:
-        return "Elite"
-    if score >= 82:
-        return "High conviction"
-    if score >= 75:
-        return "Strong watch"
-    if score >= 68:
-        return "Good watch"
-    if score >= 60:
-        return "Moderate watch"
-    if score >= 50:
-        return "Neutral"
-    return "Weak"
 
 
 def rank_stocks(stocks: list[dict]) -> list[dict]:
@@ -239,13 +225,13 @@ def normalize_stocks(scores: Any) -> list[dict]:
 
     return []
 
+
 def get_setup_type(stock: dict) -> str:
     category = get_category(stock).upper()
-    score = get_final_score(stock)
-    stability = get_stability_score(stock)
+    risk_tone = get_risk_tone(stock)
+    label = get_smart_money_label(stock)
     congress = get_congress_score_value(stock)
     insider = get_insider_score_value(stock)
-    risk_tone = get_risk_tone(stock)
 
     if "DIVIDEND" in category or "INCOME" in category:
         return "income and stability setup"
@@ -261,33 +247,33 @@ def get_setup_type(stock: dict) -> str:
             return "aggressive AI growth setup"
         return "AI growth setup"
 
-    if score >= 82 and stability >= 75:
+    if "HIGH CONVICTION" in label.upper() or "PRIME" in label.upper():
         return "quality compounder setup"
 
     if congress >= 65 and insider >= 65:
         return "smart-money confirmation setup"
 
-    if score >= 75:
+    if "STRONG WATCH" in label.upper():
         return "strong watchlist setup"
 
     return "early watchlist setup"
 
 
 def get_conviction_level(stock: dict) -> str:
-    score = get_final_score(stock)
-    overlap = get_signal_overlap(stock)
+    label = get_smart_money_label(stock)
+    signal = get_signal_strength(stock)
     risk_tone = get_risk_tone(stock)
 
-    if score >= 85 and overlap >= 3 and risk_tone != "higher-risk":
+    if label in {"Prime Opportunity", "High Conviction"} and signal in {"Confirmed", "Strong"} and risk_tone != "higher-risk":
         return "High conviction"
 
-    if score >= 80 and overlap >= 2:
+    if label in {"High Conviction", "Strong Watch"} and signal in {"Strong", "Improving"}:
         return "Positive watch"
 
-    if score >= 75 and overlap >= 2:
+    if signal in {"Improving", "Early"}:
         return "Developing conviction"
 
-    if score >= 70:
+    if label in {"Developing Watch", "Early Watch"}:
         return "Watchlist candidate"
 
     return "Low conviction"
@@ -295,8 +281,8 @@ def get_conviction_level(stock: dict) -> str:
 
 def get_position_style(stock: dict) -> str:
     risk_tone = get_risk_tone(stock)
-    score = get_final_score(stock)
-    overlap = get_signal_overlap(stock)
+    signal = get_signal_strength(stock)
+    label = get_smart_money_label(stock)
     category = get_category(stock).upper()
 
     if risk_tone == "higher-risk":
@@ -305,10 +291,10 @@ def get_position_style(stock: dict) -> str:
     if "DIVIDEND" in category or "INCOME" in category:
         return "better suited for an income or defensive sleeve than an aggressive growth sleeve"
 
-    if score >= 82 and overlap >= 3:
+    if label in {"Prime Opportunity", "High Conviction"} and signal in {"Confirmed", "Strong"}:
         return "suitable for deeper review as a core or high-conviction watchlist candidate"
 
-    if overlap <= 1:
+    if signal in {"Thin", "Early"}:
         return "best kept on watch until more signals confirm the thesis"
 
     return "appropriate for watchlist review with position size tied to risk tolerance"
@@ -317,17 +303,21 @@ def get_position_style(stock: dict) -> str:
 def build_core_thesis(stock: dict) -> str:
     symbol = clean_symbol(get_value(stock, ["ticker", "symbol", "name"], "UNKNOWN"))
     setup_type = get_setup_type(stock)
-    score = get_final_score(stock)
-    overlap = get_signal_overlap(stock)
+    label = get_smart_money_label(stock)
+    signal_strength = get_signal_strength(stock)
+    portfolio_fit = get_portfolio_fit(stock)
+    action_label = get_action_label(stock)
     signal_phrase = get_signal_phrase(stock)
     risk_tone = get_risk_tone(stock)
     strength = get_strength(stock)
 
     return (
         f"{symbol} currently screens as a {setup_type}. "
-        f"The main reason it stands out is its {score:.0f}/100 score with "
-        f"{overlap}/4 confirmation signals, led by {signal_phrase}. "
-        f"The thesis is strongest when viewed as a {risk_tone} idea where the key positive is: {strength}"
+        f"The Smart Money view is {label}, with {signal_strength.lower()} confirmation "
+        f"and a {portfolio_fit.lower()} profile. "
+        f"The setup is led by {signal_phrase}. "
+        f"The thesis is strongest when viewed as a {risk_tone} idea where the key positive is: {strength} "
+        f"The current action label is: {action_label}."
     )
 
 
@@ -336,12 +326,12 @@ def build_confirmation_logic(stock: dict) -> str:
     congress = get_congress_score_value(stock)
     insider = get_insider_score_value(stock)
     stability = get_stability_score(stock)
-    score = get_final_score(stock)
+    label = get_smart_money_label(stock)
 
     confirmations = []
 
-    if score >= 75:
-        confirmations.append("the core score is strong enough to justify continued review")
+    if label in {"Prime Opportunity", "High Conviction", "Strong Watch"}:
+        confirmations.append("the Smart Money rating is strong enough to justify continued review")
 
     if congress >= 65:
         confirmations.append("Congress activity is supportive")
@@ -350,12 +340,12 @@ def build_confirmation_logic(stock: dict) -> str:
         confirmations.append("insider activity adds confirmation")
 
     if stability >= 75:
-        confirmations.append("the stability score helps reduce setup risk")
+        confirmations.append("the stability profile helps reduce setup risk")
 
     if not confirmations:
         return (
             f"{symbol} does not yet have strong confirmation. "
-            "The setup needs better score strength, smart-money activity, or risk support before conviction improves."
+            "The setup needs better quality, smart-money activity, or risk support before conviction improves."
         )
 
     if len(confirmations) == 1:
@@ -368,29 +358,30 @@ def build_break_thesis_logic(stock: dict) -> str:
     symbol = clean_symbol(get_value(stock, ["ticker", "symbol", "name"], "UNKNOWN"))
     risk_tone = get_risk_tone(stock)
     weakness = get_weakness(stock)
-    overlap = get_signal_overlap(stock)
-    score = get_final_score(stock)
+    signal_strength = get_signal_strength(stock)
+    label = get_smart_money_label(stock)
 
     if risk_tone == "higher-risk":
         return (
-            f"The thesis weakens if volatility expands, the stock loses momentum, or the risk profile stops matching the expected upside. "
+            "The thesis weakens if volatility expands, the stock loses momentum, "
+            "or the risk profile stops matching the expected upside. "
             f"Main risk to review: {weakness}"
         )
 
-    if overlap <= 1:
+    if signal_strength in {"Thin", "Early"}:
         return (
-            f"The thesis weakens if {symbol} cannot add more confirmation from smart-money activity, price action, or stability. "
-            f"Main risk to review: {weakness}"
+            f"The thesis weakens if {symbol} cannot add more confirmation from smart-money activity, "
+            f"price action, or stability. Main risk to review: {weakness}"
         )
 
-    if score < 75:
+    if label in {"Neutral", "Weak Signal"}:
         return (
-            f"The thesis weakens if the score remains below strong-watch territory. "
+            "The thesis weakens if the rating remains below watchlist quality. "
             f"Main risk to review: {weakness}"
         )
 
     return (
-        f"The thesis weakens if the current signal overlap fades or if the risk profile deteriorates. "
+        "The thesis weakens if current signal confirmation fades or if the risk profile deteriorates. "
         f"Main risk to review: {weakness}"
     )
 
@@ -398,26 +389,23 @@ def build_break_thesis_logic(stock: dict) -> str:
 def build_next_step_logic(stock: dict) -> str:
     symbol = clean_symbol(get_value(stock, ["ticker", "symbol", "name"], "UNKNOWN"))
     risk_tone = get_risk_tone(stock)
-    overlap = get_signal_overlap(stock)
+    signal_strength = get_signal_strength(stock)
 
     if risk_tone == "higher-risk":
         return f"Next step: run /risk {symbol} and /scorecard {symbol} before treating this as anything more than a speculative watch."
 
-    if overlap >= 3:
+    if signal_strength in {"Confirmed", "Strong"}:
         return f"Next step: run /scorecard {symbol}, then compare it against /portfolio {symbol} to decide its best role."
 
-    if overlap >= 2:
+    if signal_strength == "Improving":
         return f"Next step: run /smartmoney {symbol} and /conviction {symbol} to confirm whether the signal stack is improving."
 
     return f"Next step: keep {symbol} on watch and rerun /analyst {symbol} after fresh Congress, insider, or market data updates."
 
+
 def build_single_stock_analysis(stock: dict) -> str:
     symbol = clean_symbol(get_value(stock, ["ticker", "symbol", "name"], "UNKNOWN"))
-    final_score = get_final_score(stock)
     category = get_category(stock)
-    rating = get_rating(stock)
-    risk_label = get_risk_label(stock)
-    signal_overlap = get_signal_overlap(stock)
     conviction = get_conviction_level(stock)
     setup_type = get_setup_type(stock)
     position_style = get_position_style(stock)
@@ -425,13 +413,12 @@ def build_single_stock_analysis(stock: dict) -> str:
     return f"""
 {symbol} Analyst Read
 
-Score: {final_score:.0f}/100 — {classify_score(final_score)}
+Smart Money View:
+{format_stock_label_block(stock)}
+
 Conviction: {conviction}
 Setup Type: {setup_type}
-Rating: {rating}
 Category: {category}
-Risk: {risk_label}
-Signal Overlap: {signal_overlap}/4
 
 Thesis:
 {build_core_thesis(stock)}
@@ -446,7 +433,7 @@ What Could Break The Thesis:
 {build_break_thesis_logic(stock)}
 
 Analyst Take:
-Favor {symbol} only if the thesis, risk profile, and signal overlap still line up. A high score alone is not enough; the best ideas need confirmation, role fit, and risk control.
+Favor {symbol} only if the thesis, risk profile, and signal confirmation still line up. A strong label alone is not enough; the best ideas need confirmation, role fit, and risk control.
 
 {build_next_step_logic(stock)}
 """.strip()
@@ -462,20 +449,18 @@ def build_ranked_analyst_summary(stocks: list[dict], limit: int = DEFAULT_MAX_IT
 
     for index, stock in enumerate(ranked, start=1):
         symbol = clean_symbol(get_value(stock, ["ticker", "symbol", "name"], "UNKNOWN"))
-        final_score = get_final_score(stock)
         category = get_category(stock)
-        overlap = get_signal_overlap(stock)
-        risk_tone = get_risk_tone(stock)
-        signal_phrase = get_signal_phrase(stock)
 
         lines.append(
-    f"{index}. {symbol} — {final_score:.0f}/100 | "
-    f"{classify_score(final_score)} | {get_conviction_level(stock)} | {risk_tone}\n"
-    f"   Setup: {get_setup_type(stock)}\n"
-    f"   Category: {category}\n"
-    f"   Confirmation: {overlap}/4 signals — {signal_phrase}\n"
-    f"   Role: {get_position_style(stock)}"
-)
+            f"{index}. {symbol} — {get_smart_money_label(stock)}\n"
+            f"   Signal: {get_signal_strength(stock)}\n"
+            f"   Fit: {get_portfolio_fit(stock)}\n"
+            f"   Action: {get_action_label(stock)}\n"
+            f"   Setup: {get_setup_type(stock)}\n"
+            f"   Category: {category}"
+        )
+
+    return "\n\n".join(lines)
 
 
 def build_market_analyst_take(stocks: list[dict]) -> str:
@@ -485,35 +470,40 @@ def build_market_analyst_take(stocks: list[dict]) -> str:
     ranked = rank_stocks(stocks)
     top = ranked[0]
 
-    strong_count = len(
-        [
-            stock for stock in stocks
-            if get_final_score(stock) >= 80
-        ]
-    )
-
-    overlap_count = len(
-        [
-            stock for stock in stocks
-            if get_signal_overlap(stock) >= 3
-        ]
-    )
-
-    high_risk_count = len(
-        [
-            stock for stock in stocks
-            if get_risk_tone(stock) == "higher-risk"
-        ]
-    )
-
     top_symbol = clean_symbol(get_value(top, ["ticker", "symbol", "name"], "UNKNOWN"))
-    top_score = get_final_score(top)
+    top_label = get_smart_money_label(top)
+    top_signal = get_signal_strength(top)
+    top_fit = get_portfolio_fit(top)
+
+    strong_names = [
+        clean_symbol(get_value(stock, ["ticker", "symbol", "name"], "UNKNOWN"))
+        for stock in ranked
+        if get_smart_money_label(stock) in {"Prime Opportunity", "High Conviction", "Strong Watch"}
+    ]
+
+    confirmed_names = [
+        clean_symbol(get_value(stock, ["ticker", "symbol", "name"], "UNKNOWN"))
+        for stock in ranked
+        if get_signal_strength(stock) in {"Confirmed", "Strong"}
+    ]
+
+    higher_risk_names = [
+        clean_symbol(get_value(stock, ["ticker", "symbol", "name"], "UNKNOWN"))
+        for stock in ranked
+        if get_risk_tone(stock) == "higher-risk"
+    ]
+
+    strong_text = ", ".join(strong_names[:4]) if strong_names else "none yet"
+    confirmed_text = ", ".join(confirmed_names[:4]) if confirmed_names else "none yet"
+    risk_text = ", ".join(higher_risk_names[:4]) if higher_risk_names else "limited"
 
     return (
-        f"{top_symbol} leads the analyst board with a {top_score:.0f}/100 score. "
-        f"Across the list, {strong_count} names score 80+ and {overlap_count} names show 3+ overlapping signals. "
-        f"Risk remains important: {high_risk_count} ranked names carry higher-risk characteristics. "
-        "The best setups are the names where score strength, smart-money confirmation, and risk control agree."
+        f"{top_symbol} leads the analyst board as a {top_label} idea with {top_signal.lower()} confirmation "
+        f"and a {top_fit.lower()} profile. "
+        f"The strongest watchlist names right now are: {strong_text}. "
+        f"The cleanest confirmation appears in: {confirmed_text}. "
+        f"Higher-risk names to size carefully: {risk_text}. "
+        "The best setups are the names where Smart Money rating, signal confirmation, portfolio fit, and risk control agree."
     )
 
 
@@ -546,7 +536,7 @@ Top Analyst Ideas:
 {build_ranked_analyst_summary(stocks, limit=limit)}
 
 Bottom Line:
-Focus on names with strong scores, multiple confirmation signals, and a risk profile that matches the intended portfolio role.
+Focus on names with strong Smart Money ratings, improving or confirmed signals, and a risk profile that matches the intended portfolio role.
 """.strip()
 
 
@@ -585,8 +575,9 @@ Analyst data for {symbol} was requested, but only a ticker symbol was provided.
 Use analyze_ticker(scores, "{symbol}") when full scoring data is available.
 
 Analyst Take:
-A ticker alone is not enough for a full Smart Money AI read. The agent needs score, category, signal, and risk data to produce a complete analysis.
+A ticker alone is not enough for a full Smart Money AI read. The agent needs rating, category, signal, and risk data to produce a complete analysis.
 """.strip()
+
 
 def analyze_ticker(scores: Any, ticker: str) -> str:
     """
