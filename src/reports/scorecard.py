@@ -132,7 +132,7 @@ def get_signal_icons(stock: dict) -> str:
 def find_stock(symbol: str, stocks: list[dict]) -> dict | None:
     wanted = clean_symbol(symbol)
 
-    for stock in stocks:
+    for stock in stocks or []:
         current = clean_symbol(stock.get("ticker") or stock.get("symbol"))
 
         if current == wanted:
@@ -141,13 +141,41 @@ def find_stock(symbol: str, stocks: list[dict]) -> dict | None:
     return None
 
 
-def load_stock(symbol: str, stocks: list[dict] | None = None) -> tuple[dict, bool]:
-    """
-    Returns:
-    - stock dictionary
-    - True if the ticker came from the curated Smart Money list
-    """
+def find_score_for_symbol(stocks: Any, symbol: Any = None) -> dict | None:
+    if isinstance(stocks, str) and isinstance(symbol, list):
+        stocks, symbol = symbol, stocks
+
     wanted = clean_symbol(symbol)
+
+    for stock in stocks or []:
+        if not isinstance(stock, dict):
+            continue
+
+        current = clean_symbol(stock.get("ticker") or stock.get("symbol"))
+
+        if current == wanted:
+            return stock
+
+    return None
+
+
+def get_quote_for_symbol(symbol: str) -> dict:
+    ticker = clean_symbol(symbol)
+
+    return {
+        "ticker": ticker,
+        "symbol": ticker,
+        "price": None,
+        "change_percent": None,
+        "status": "Quote data not required for label-based scorecard.",
+    }
+
+
+def load_stock(symbol: str, stocks: Any = None) -> tuple[dict, bool]:
+    wanted = clean_symbol(symbol)
+
+    if isinstance(stocks, dict):
+        return stocks, True
 
     if stocks is None:
         try:
@@ -254,12 +282,12 @@ def build_break_thesis(stock: dict) -> str:
 
     if volume == "Quiet Volume":
         return (
-            f"The thesis weakens if volume remains quiet while price action fades. "
+            "The thesis weakens if volume remains quiet while price action fades. "
             f"Main concern: {weakness}"
         )
 
     return (
-        f"The thesis weakens if signal confirmation fades, risk increases, or the market stops supporting the setup. "
+        "The thesis weakens if signal confirmation fades, risk increases, or the market stops supporting the setup. "
         f"Main concern: {weakness}"
     )
 
@@ -299,11 +327,11 @@ def build_next_steps(stock: dict) -> str:
 
 def build_scorecard(
     ticker_or_stock: Any,
-    stocks: list[dict] | None = None,
+    stocks: Any = None,
+    quote: dict | None = None,
 ) -> str:
     if isinstance(ticker_or_stock, dict):
         stock = ticker_or_stock
-        symbol = get_ticker(stock)
         curated = True
     else:
         symbol = clean_symbol(ticker_or_stock)
@@ -375,51 +403,18 @@ Note:
 This is research only, not financial advice.
 """.strip()
 
-def find_score_for_symbol(
-    stocks: list[dict],
-    symbol: str,
-) -> dict | None:
-    """
-    Backward-compatible helper used by market_commands.py.
-    Finds a stock record in an existing scoring list.
-    """
-    wanted = clean_symbol(symbol)
 
-    for stock in stocks or []:
-        current = clean_symbol(stock.get("ticker") or stock.get("symbol"))
-
-        if current == wanted:
-            return stock
-
-    return None
-
-def get_quote_for_symbol(symbol: str) -> dict:
-    """
-    Backward-compatible helper used by market_commands.py.
-
-    The new label-based scorecard does not require quote data,
-    but older command code still imports this function.
-    Return a safe lightweight quote object so imports and callers do not fail.
-    """
-    ticker = clean_symbol(symbol)
-
-    return {
-        "ticker": ticker,
-        "symbol": ticker,
-        "price": None,
-        "change_percent": None,
-        "status": "Quote data not required for label-based scorecard.",
-    }
-
-def build_scorecard(
+def build_scorecard_report(
     ticker_or_stock: Any,
-    stocks: list[dict] | None = None,
+    stocks: Any = None,
     quote: dict | None = None,
 ) -> str:
-    
+    return build_scorecard(ticker_or_stock, stocks, quote)
+
 
 def get_scorecard_report(
     ticker_or_stock: Any,
-    stocks: list[dict] | None = None,
+    stocks: Any = None,
+    quote: dict | None = None,
 ) -> str:
-    return build_scorecard(ticker_or_stock, stocks)
+    return build_scorecard(ticker_or_stock, stocks, quote)
