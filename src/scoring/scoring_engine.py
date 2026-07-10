@@ -21,6 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 VOLUME_CACHE_SECONDS = 60 * 60 * 4
 VOLUME_CACHE_FILE = PROJECT_ROOT / "data" / "volume_signal_cache.json"
 VOLUME_REQUEST_TIMEOUT = 3
+ENABLE_LIVE_VOLUME = False
 
 
 CATEGORY_BONUS = {
@@ -598,6 +599,16 @@ def classify_volume_signal(volume_ratio: float | None) -> dict:
 
 def fetch_volume_signal_from_yahoo(ticker: str) -> dict:
     symbol = clean_symbol(ticker)
+
+    if not ENABLE_LIVE_VOLUME:
+        volume_data = classify_volume_signal(None)
+        volume_data.update(
+            {
+                "ticker": symbol,
+                "cached_at": time.time(),
+            }
+        )
+        return volume_data
 
     if not symbol or symbol == "UNKNOWN":
         return classify_volume_signal(None)

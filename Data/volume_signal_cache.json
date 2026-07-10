@@ -1,0 +1,182 @@
+{
+  "AAPL": {
+    "average_volume": 66587030,
+    "cached_at": 1783650367.433539,
+    "latest_volume": 44882363,
+    "ticker": "AAPL",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.67,
+    "volume_score": 42.0
+  },
+  "AMD": {
+    "average_volume": 31204570,
+    "cached_at": 1783650354.097825,
+    "latest_volume": 26670194,
+    "ticker": "AMD",
+    "volume_label": "Normal Volume",
+    "volume_note": "Trading volume is close to its recent average.",
+    "volume_ratio": 0.85,
+    "volume_score": 52.0
+  },
+  "AMZN": {
+    "average_volume": 62712605,
+    "cached_at": 1783650327.8401878,
+    "latest_volume": 36896259,
+    "ticker": "AMZN",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.59,
+    "volume_score": 42.0
+  },
+  "AVAV": {
+    "average_volume": 2260740,
+    "cached_at": 1783650530.8600988,
+    "latest_volume": 2286747,
+    "ticker": "AVAV",
+    "volume_label": "Normal Volume",
+    "volume_note": "Trading volume is close to its recent average.",
+    "volume_ratio": 1.01,
+    "volume_score": 52.0
+  },
+  "AVGO": {
+    "average_volume": 30913275,
+    "cached_at": 1783650257.8118892,
+    "latest_volume": 27437098,
+    "ticker": "AVGO",
+    "volume_label": "Normal Volume",
+    "volume_note": "Trading volume is close to its recent average.",
+    "volume_ratio": 0.89,
+    "volume_score": 52.0
+  },
+  "GD": {
+    "average_volume": 1446550,
+    "cached_at": 1783650473.8887548,
+    "latest_volume": 561155,
+    "ticker": "GD",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.39,
+    "volume_score": 42.0
+  },
+  "GOOGL": {
+    "average_volume": 36499415,
+    "cached_at": 1783650340.944381,
+    "latest_volume": 24092965,
+    "ticker": "GOOGL",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.66,
+    "volume_score": 42.0
+  },
+  "HII": {
+    "average_volume": 504945,
+    "cached_at": 1783650517.139305,
+    "latest_volume": 319927,
+    "ticker": "HII",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.63,
+    "volume_score": 42.0
+  },
+  "LMT": {
+    "average_volume": 1397100,
+    "cached_at": 1783650433.5738902,
+    "latest_volume": 983560,
+    "ticker": "LMT",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.7,
+    "volume_score": 42.0
+  },
+  "META": {
+    "average_volume": 18640560,
+    "cached_at": 1783650314.6916547,
+    "latest_volume": 25282764,
+    "ticker": "META",
+    "volume_label": "Active Interest",
+    "volume_note": "Trading volume is above normal and confirms market attention.",
+    "volume_ratio": 1.36,
+    "volume_score": 65.0
+  },
+  "MSFT": {
+    "average_volume": 48698410,
+    "cached_at": 1783650244.4801095,
+    "latest_volume": 30353251,
+    "ticker": "MSFT",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.62,
+    "volume_score": 42.0
+  },
+  "NFLX": {
+    "average_volume": 49383405,
+    "cached_at": 1783650407.1658797,
+    "latest_volume": 35066302,
+    "ticker": "NFLX",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.71,
+    "volume_score": 42.0
+  },
+  "NOC": {
+    "average_volume": 1075105,
+    "cached_at": 1783650446.951206,
+    "latest_volume": 791768,
+    "ticker": "NOC",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.74,
+    "volume_score": 42.0
+  },
+  "NVDA": {
+    "average_volume": 149946210,
+    "cached_at": 1783650230.750821,
+    "latest_volume": 130728739,
+    "ticker": "NVDA",
+    "volume_label": "Normal Volume",
+    "volume_note": "Trading volume is close to its recent average.",
+    "volume_ratio": 0.87,
+    "volume_score": 52.0
+  },
+  "PLTR": {
+    "average_volume": 44806370,
+    "cached_at": 1783650420.2332299,
+    "latest_volume": 34989694,
+    "ticker": "PLTR",
+    "volume_label": "Normal Volume",
+    "volume_note": "Trading volume is close to its recent average.",
+    "volume_ratio": 0.78,
+    "volume_score": 52.0
+  },
+  "RTX": {
+    "average_volume": 5389465,
+    "cached_at": 1783650460.8675377,
+    "latest_volume": 2595817,
+    "ticker": "RTX",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.48,
+    "volume_score": 42.0
+  },
+  "SHOP": {
+    "average_volume": 8781810,
+    "cached_at": 1783650393.9572024,
+    "latest_volume": 5871811,
+    "ticker": "SHOP",
+    "volume_label": "Quiet Volume",
+    "volume_note": "Trading volume is below normal, so confirmation is weaker.",
+    "volume_ratio": 0.67,
+    "volume_score": 42.0
+  },
+  "TSLA": {
+    "average_volume": 48338165,
+    "cached_at": 1783650380.2125754,
+    "latest_volume": 36519720,
+    "ticker": "TSLA",
+    "volume_label": "Normal Volume",
+    "volume_note": "Trading volume is close to its recent average.",
+    "volume_ratio": 0.76,
+    "volume_score": 52.0
+  }
+}
