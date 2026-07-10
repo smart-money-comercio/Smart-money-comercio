@@ -87,8 +87,8 @@ function_checks = [
     ("src.reports.action_checklist", "build_action_checklist"),
     ("src.commands.volume_commands", "volume"),
     ("src.commands.analyst_commands", "analyst_command"),
-    ("src.reports.global_market_report", "build_global_market_report")
-    ("src.commands.global_commands", "global_market")
+    ("src.reports.global_market_report", "build_global_market_report"),
+    ("src.commands.global_commands", "global_market"),
     ("src.agents.analyst_agent", "run_analyst_agent"),
     ("src.agents.analyst_agent", "analyze_ticker"),
 ]
