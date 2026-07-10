@@ -60,7 +60,7 @@ modules = [
     "src.reports.action_checklist",
     "src.scoring.scoring_engine",
     "src.reports.global_market_report",
-    "src.commands.global_commands
+    "src.commands.global_commands",
     "src.utils.watchlist_store",
     "src.commands.analyst_commands",
     "src.agents.analyst_agent",
