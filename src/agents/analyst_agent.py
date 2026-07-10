@@ -582,8 +582,43 @@ A ticker alone is not enough for a full Smart Money AI read. The agent needs rat
 def analyze_ticker(scores: Any, ticker: str) -> str:
     """
     Compatibility helper for ticker-based callers.
+
+    First checks the curated Smart Money scoring list.
+    If the ticker is not found, it builds a fallback analyst read so
+    /analyst can work with tickers outside the internal watchlist.
     """
-    return build_analyst_summary(scores=scores, symbol=ticker, limit=5)
+    symbol = clean_symbol(ticker)
+
+    result = build_analyst_summary(scores=scores, symbol=symbol, limit=5)
+
+    if not result.startswith("No analyst data found"):
+        return result
+
+    try:
+        from src.scoring.scoring_engine import score_ticker
+
+        fallback_stock = score_ticker(symbol)
+        fallback_report = build_single_stock_analysis(fallback_stock)
+
+        return f"""
+{fallback_report}
+
+Coverage Note:
+{symbol} is not currently part of the curated Smart Money watchlist, so this is a fallback analyst read. For stronger analysis, add {symbol} to the scoring watchlist with a category, smart score, and stability profile.
+""".strip()
+
+    except Exception as error:
+        return f"""
+{symbol} Analyst Read
+
+No curated Smart Money analyst data was found for {symbol}, and the fallback analyst read could not be built.
+
+Error:
+{type(error).__name__}
+
+Next Step:
+Add {symbol} to the Smart Money scoring watchlist or run /ticker {symbol} for a market-data style read.
+""".strip()
 
 
 def run_analyst_agent(scores: Any, symbol: str | None = None) -> str:
