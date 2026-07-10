@@ -375,6 +375,23 @@ Note:
 This is research only, not financial advice.
 """.strip()
 
+def find_score_for_symbol(
+    stocks: list[dict],
+    symbol: str,
+) -> dict | None:
+    """
+    Backward-compatible helper used by market_commands.py.
+    Finds a stock record in an existing scoring list.
+    """
+    wanted = clean_symbol(symbol)
+
+    for stock in stocks or []:
+        current = clean_symbol(stock.get("ticker") or stock.get("symbol"))
+
+        if current == wanted:
+            return stock
+
+    return None
 
 def build_scorecard_report(
     ticker_or_stock: Any,
