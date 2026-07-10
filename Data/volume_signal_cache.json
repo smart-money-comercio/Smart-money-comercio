@@ -79,6 +79,16 @@
     "volume_ratio": 0.63,
     "volume_score": 42.0
   },
+  "INTC": {
+    "average_volume": 130486605,
+    "cached_at": 1783652438.5194254,
+    "latest_volume": 98791391,
+    "ticker": "INTC",
+    "volume_label": "Normal Volume",
+    "volume_note": "Trading volume is close to its recent average.",
+    "volume_ratio": 0.76,
+    "volume_score": 52.0
+  },
   "LMT": {
     "average_volume": 1397100,
     "cached_at": 1783650433.5738902,

@@ -23,6 +23,7 @@ required_files=(
   "src/reports/daily_report.py"
   "src/reports/ai_summary.py"
   "src/reports/action_checklist.py"
+  "src/commands/volume_commands.py"
   "src/commands/analyst_commands.py"
 )
 
@@ -47,6 +48,7 @@ modules = [
     "src.bot",
     "src.commands.register_commands",
     "src.commands.daily_report_send_commands",
+    "src.commands.volume_commands",
     "src.commands.market_commands",
     "src.commands.watchlist_commands",
     "src.commands.intelligence_commands",
@@ -79,6 +81,7 @@ function_checks = [
     ("src.reports.daily_report", "build_daily_report"),
     ("src.reports.ai_summary", "build_ai_summary"),
     ("src.reports.action_checklist", "build_action_checklist"),
+    ("src.commands.volume_commands", "volume"),
     ("src.commands.analyst_commands", "analyst_command"),
     ("src.agents.analyst_agent", "run_analyst_agent"),
     ("src.agents.analyst_agent", "analyze_ticker"),

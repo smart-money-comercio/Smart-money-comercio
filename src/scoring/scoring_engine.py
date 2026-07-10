@@ -597,10 +597,10 @@ def classify_volume_signal(volume_ratio: float | None) -> dict:
     }
 
 
-def fetch_volume_signal_from_yahoo(ticker: str) -> dict:
+def fetch_volume_signal_from_yahoo(ticker: str, force_live: bool = False) -> dict:
     symbol = clean_symbol(ticker)
 
-    if not ENABLE_LIVE_VOLUME:
+    if not ENABLE_LIVE_VOLUME and not force_live:
         volume_data = classify_volume_signal(None)
         volume_data.update(
             {

@@ -37,6 +37,7 @@ PUBLIC_COMMANDS = [
     BotCommand("watchlist", "Manage watchlist"),
     BotCommand("defense", "Defense sector opportunities"),
     BotCommand("growth", "Growth stock opportunities"),
+    BotCommand("volume", "Check live volume signal"),
     BotCommand("dividends", "Dividend opportunities"),
     BotCommand("portfolio", "Portfolio summary"),
     BotCommand("congress", "Congressional trading signals"),
