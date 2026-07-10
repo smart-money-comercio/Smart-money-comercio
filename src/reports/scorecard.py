@@ -393,12 +393,30 @@ def find_score_for_symbol(
 
     return None
 
-def build_scorecard_report(
+def get_quote_for_symbol(symbol: str) -> dict:
+    """
+    Backward-compatible helper used by market_commands.py.
+
+    The new label-based scorecard does not require quote data,
+    but older command code still imports this function.
+    Return a safe lightweight quote object so imports and callers do not fail.
+    """
+    ticker = clean_symbol(symbol)
+
+    return {
+        "ticker": ticker,
+        "symbol": ticker,
+        "price": None,
+        "change_percent": None,
+        "status": "Quote data not required for label-based scorecard.",
+    }
+
+def build_scorecard(
     ticker_or_stock: Any,
     stocks: list[dict] | None = None,
+    quote: dict | None = None,
 ) -> str:
-    return build_scorecard(ticker_or_stock, stocks)
-
+    
 
 def get_scorecard_report(
     ticker_or_stock: Any,
