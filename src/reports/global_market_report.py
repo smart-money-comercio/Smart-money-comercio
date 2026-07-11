@@ -429,41 +429,208 @@ def format_headlines(headlines: list[dict]) -> str:
 
     return "\n".join(lines)
 
-
-def build_global_market_report() -> str:
+def build_global_risk_snapshot() -> str:
+    """
+    Compact global risk section for the daily Smart Money report.
+    Uses the same data logic as /global but keeps output short.
+    """
     try:
         stocks = get_stock_scores()
     except Exception:
         stocks = []
 
-    snapshot = load_market_snapshot()
-    headlines = load_headlines()
+    try:
+        snapshot = load_market_snapshot()
+    except Exception:
+        snapshot = []
 
-    return f"""
-🌍 Global Market Risk Monitor
+    try:
+        headlines = load_headlines()
+    except Exception:
+        headlines = []
 
-Market Snapshot:
-{format_market_snapshot(snapshot)}
+    if not snapshot:
+        return """
+🌍 Global Risk Snapshot
+
+Market Regime:
+Unavailable
 
 Portfolio Impact:
-{build_portfolio_impact(snapshot, stocks)}
+- Global market data could not be loaded right now.
 
-Headline Watch:
-{format_headlines(headlines)}
+Headline Themes:
+- Headlines unavailable.
 
-How To Use This:
-- If volatility and the dollar rise together, reduce confidence in high-beta growth setups.
-- If oil spikes, watch inflation-sensitive names and energy exposure.
-- If gold rises while equities fall, risk appetite may be weakening.
-- If Nasdaq leads and volatility cools, AI and growth setups may have better support.
-
-Next Commands:
-/top10
-/smartmoney
-/portfolio
-/volume refresh
-/report
-
-Note:
-This is research only, not financial advice.
+Use /global for the full macro risk report.
 """.strip()
+
+    regime = classify_market_regime(snapshot)
+
+    nasdaq = get_move(snapshot, "^IXIC")
+    vix = get_move(snapshot, "^VIX")
+    tlt = get_move(snapshot, "TLT")
+    dollar = get_move(snapshot, "UUP")
+    oil = get_move(snapshot, "USO")
+    gold = get_move(snapshot, "GLD")
+    china = get_move(snapshot, "FXI")
+    eem = get_move(snapshot, "EEM")
+
+    impact_notes = []
+
+    if nasdaq < -0.75 or (tlt < -0.75 and dollar > 0.5):
+        impact_notes.append("Growth, AI, and semiconductor names may face pressure from rates or dollar strength.")
+
+    if vix > 5:
+        impact_notes.append("Volatility is rising; speculative names need tighter risk control.")
+
+    if oil > 2:
+        impact_notes.append("Oil strength may support energy exposure but can raise inflation pressure.")
+
+    if gold > 1:
+        impact_notes.append("Gold strength suggests investors may be seeking safety or inflation protection.")
+
+    if china < -1 or eem < -1:
+        impact_notes.append("China or emerging-market weakness may pressure global risk appetite.")
+
+    if not impact_notes:
+        impact_notes.append("No single global pressure point is dominating; stay selective.")
+
+    headline_themes = []
+
+    for item in headlines[:5]:
+        impact = item.get("impact", "Market")
+
+        if impact not in headline_themes:
+            headline_themes.append(impact)
+
+    if not headline_themes:
+        headline_themes = ["No major headline theme available"]
+
+    impact_text = "\n".join(f"- {note}" for note in impact_notes[:3])
+    headline_text = ", ".join(headline_themes[:5])
+
+    return f"""
+    
+🌍 Global Risk Snapshot
+
+Market Regime:
+{regime}
+
+Portfolio Impact:
+{impact_text}
+
+Headline Themes:
+{headline_text}
+
+Use /global for the full macro risk report.
+""".strip()
+
+def build_global_risk_snapshot() -> str:
+    """
+    Compact global risk section for the daily Smart Money report.
+    Uses the same data logic as /global but keeps output short.
+    """
+    try:
+        stocks = get_stock_scores()
+    except Exception:
+        stocks = []
+
+    try:
+        snapshot = load_market_snapshot()
+    except Exception:
+        snapshot = []
+
+    try:
+        headlines = load_headlines()
+    except Exception:
+        headlines = []
+
+    if not snapshot:
+        return """
+🌍 Global Risk Snapshot
+
+Market Regime:
+Unavailable
+
+Portfolio Impact:
+- Global market data could not be loaded right now.
+
+Headline Themes:
+- Headlines unavailable.
+
+Use /global for the full macro risk report.
+""".strip()
+
+    regime = classify_market_regime(snapshot)
+
+    nasdaq = get_move(snapshot, "^IXIC")
+    vix = get_move(snapshot, "^VIX")
+    tlt = get_move(snapshot, "TLT")
+    dollar = get_move(snapshot, "UUP")
+    oil = get_move(snapshot, "USO")
+    gold = get_move(snapshot, "GLD")
+    china = get_move(snapshot, "FXI")
+    eem = get_move(snapshot, "EEM")
+
+    impact_notes = []
+
+    if nasdaq < -0.75 or (tlt < -0.75 and dollar > 0.5):
+        impact_notes.append(
+            "Growth, AI, and semiconductor names may face pressure from rates or dollar strength."
+        )
+
+    if vix > 5:
+        impact_notes.append(
+            "Volatility is rising; speculative names need tighter risk control."
+        )
+
+    if oil > 2:
+        impact_notes.append(
+            "Oil strength may support energy exposure but can raise inflation pressure."
+        )
+
+    if gold > 1:
+        impact_notes.append(
+            "Gold strength suggests investors may be seeking safety or inflation protection."
+        )
+
+    if china < -1 or eem < -1:
+        impact_notes.append(
+            "China or emerging-market weakness may pressure global risk appetite."
+        )
+
+    if not impact_notes:
+        impact_notes.append(
+            "No single global pressure point is dominating; stay selective."
+        )
+
+    headline_themes = []
+
+    for item in headlines[:5]:
+        impact = item.get("impact", "Market")
+
+        if impact not in headline_themes:
+            headline_themes.append(impact)
+
+    if not headline_themes:
+        headline_themes = ["No major headline theme available"]
+
+    impact_text = "\n".join(f"- {note}" for note in impact_notes[:3])
+    headline_text = ", ".join(headline_themes[:5])
+
+    return f"""
+🌍 Global Risk Snapshot
+
+Market Regime:
+{regime}
+
+Portfolio Impact:
+{impact_text}
+
+Headline Themes:
+{headline_text}
+
+Use /global for the full macro risk report.
+""".strip()
+

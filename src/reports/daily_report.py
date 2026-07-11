@@ -2,6 +2,13 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.reports.action_checklist import (
+    build_action_checklist as build_relevant_action_checklist,
+)
+from src.reports.ai_summary import build_ai_summary as build_relevant_ai_summary
+from src.reports.global_market_report import build_global_risk_snapshot
+from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
     get_action_label,
     get_category,
@@ -10,15 +17,9 @@ from src.utils.score_display import (
     get_signal_strength,
     get_smart_money_label,
     get_ticker,
+    get_volume_label,
 )
-from src.commands.watchlist_commands import fetch_quotes_for_symbols
-from src.reports.action_checklist import (
-    build_action_checklist as build_relevant_action_checklist,
-)
-from src.reports.ai_summary import build_ai_summary as build_relevant_ai_summary
-from src.scoring.scoring_engine import get_stock_scores
 from src.utils.watchlist_store import load_watchlist
-
 
 
 REPORT_TIMEZONE = "America/Lima"
@@ -77,30 +78,6 @@ def first_list_text(value: Any, fallback: str) -> str:
     return fallback
 
 
-def format_score(value: Any) -> str:
-    score = safe_float(value)
-
-    if score is None:
-        return "N/A"
-
-    if score.is_integer():
-        return str(int(score))
-
-    return f"{score:.1f}"
-
-
-def format_adjustment(value: Any) -> str:
-    number = safe_float(value)
-
-    if number is None:
-        return "0"
-
-    if number > 0:
-        return f"+{number:.0f}"
-
-    return f"{number:.0f}"
-
-
 def format_price(value: Any) -> str:
     number = safe_float(value)
 
@@ -120,24 +97,6 @@ def format_percent(value: Any) -> str:
     return f"{sign}{number:.2f}%"
 
 
-def classify_score(score: float | None) -> str:
-    if score is None:
-        return "Unrated"
-    if score >= 90:
-        return "Elite"
-    if score >= 82:
-        return "High conviction"
-    if score >= 75:
-        return "Strong watch"
-    if score >= 68:
-        return "Good watch"
-    if score >= 60:
-        return "Moderate watch"
-    if score >= 50:
-        return "Neutral"
-    return "Weak"
-
-
 def normalize_score_item(item: Any) -> dict:
     if isinstance(item, dict):
         score = get_value(
@@ -146,36 +105,50 @@ def normalize_score_item(item: Any) -> dict:
             None,
         )
 
-        return {
-            "symbol": clean_symbol(
-                get_value(item, ["ticker", "symbol", "name"], "UNKNOWN")
-            ),
-            "score": safe_float(score),
-            "rating": str(
-                get_value(item, ["rating", "grade", "signal"], "Unrated")
-            ),
-            "risk_label": str(
-                get_value(item, ["risk_label", "risk_level", "risk"], "N/A")
-            ),
-            "category": str(
-                get_value(item, ["category", "sector", "industry"], "N/A")
-            ),
-            "category_adjustment": safe_float(
-                get_value(item, ["category_adjustment", "adjustment"], 0)
-            )
-            or 0,
-            "strength": first_list_text(
-                get_value(item, ["strengths", "pros", "bull_case"], []),
-                "No strength detail available.",
-            ),
-            "weakness": first_list_text(
-                get_value(item, ["weaknesses", "cons", "bear_case"], []),
-                "No weakness detail available.",
-            ),
-        }
+        normalized = dict(item)
+
+        normalized.update(
+            {
+                "ticker": clean_symbol(
+                    get_value(item, ["ticker", "symbol", "name"], "UNKNOWN")
+                ),
+                "symbol": clean_symbol(
+                    get_value(item, ["ticker", "symbol", "name"], "UNKNOWN")
+                ),
+                "score": safe_float(score),
+                "rating": str(
+                    get_value(
+                        item,
+                        ["smart_money_label", "rating", "grade", "signal"],
+                        "Unrated",
+                    )
+                ),
+                "risk_label": str(
+                    get_value(item, ["risk_label", "risk_level", "risk"], "N/A")
+                ),
+                "category": str(
+                    get_value(item, ["category", "sector", "industry"], "N/A")
+                ),
+                "category_adjustment": safe_float(
+                    get_value(item, ["category_adjustment", "adjustment"], 0)
+                )
+                or 0,
+                "strength": first_list_text(
+                    get_value(item, ["strengths", "pros", "bull_case"], []),
+                    "No strength detail available.",
+                ),
+                "weakness": first_list_text(
+                    get_value(item, ["weaknesses", "cons", "bear_case"], []),
+                    "No weakness detail available.",
+                ),
+            }
+        )
+
+        return normalized
 
     if isinstance(item, (list, tuple)) and item:
         return {
+            "ticker": clean_symbol(item[0]),
             "symbol": clean_symbol(item[0]),
             "score": safe_float(item[1]) if len(item) > 1 else None,
             "rating": "Unrated",
@@ -187,6 +160,7 @@ def normalize_score_item(item: Any) -> dict:
         }
 
     return {
+        "ticker": clean_symbol(item),
         "symbol": clean_symbol(item),
         "score": None,
         "rating": "Unrated",
@@ -208,12 +182,14 @@ def normalize_scores(scores: Any) -> list[dict]:
         for symbol, value in scores.items():
             if isinstance(value, dict):
                 item = dict(value)
+                item.setdefault("ticker", symbol)
                 item.setdefault("symbol", symbol)
                 normalized.append(normalize_score_item(item))
             else:
                 normalized.append(
                     normalize_score_item(
                         {
+                            "ticker": symbol,
                             "symbol": symbol,
                             "score": value,
                         }
@@ -231,24 +207,29 @@ def normalize_scores(scores: Any) -> list[dict]:
 
 
 def build_score_summary(scores: list[dict]) -> str:
-    values = [
-        item["score"]
-        for item in scores
-        if item["score"] is not None
-    ]
-
-    if not values:
+    if not scores:
         return "No scored symbols available."
 
-    return "\n".join(
-        [
-            f"Total Scored Symbols: {len(scores)}",
-            f"High Conviction 82+: {len([score for score in values if score >= 82])}",
-            f"Strong Watch 75+: {len([score for score in values if score >= 75])}",
-            f"Highest Score: {format_score(max(values))}",
-            f"Average Score: {format_score(sum(values) / len(values))}",
-        ]
+    labels = {}
+
+    for item in scores:
+        label = get_smart_money_label(item)
+        labels[label] = labels.get(label, 0) + 1
+
+    label_lines = "\n".join(
+        f"• {label}: {count}"
+        for label, count in sorted(labels.items())
     )
+
+    top_names = ", ".join(get_ticker(item) for item in scores[:5])
+
+    return f"""
+Total Reviewed: {len(scores)}
+Top Watchlist Names: {top_names if top_names else "N/A"}
+
+Smart Money Ratings:
+{label_lines if label_lines else "• No ratings available"}
+""".strip()
 
 
 def format_opportunity(index: int, item: dict) -> str:
@@ -258,6 +239,7 @@ def format_opportunity(index: int, item: dict) -> str:
     fit = get_portfolio_fit(item)
     action = get_action_label(item)
     risk = get_risk_label(item)
+    volume = get_volume_label(item)
     category = get_category(item)
 
     strength = clean_text(
@@ -269,6 +251,7 @@ def format_opportunity(index: int, item: dict) -> str:
     return (
         f"{index}. {ticker} — {label}\n"
         f"   Signal: {signal} | Risk: {risk}\n"
+        f"   Volume: {volume}\n"
         f"   Fit: {fit}\n"
         f"   Action: {action}\n"
         f"   Theme: {category}\n"
@@ -408,23 +391,23 @@ def build_risk_notes(top_scores: list[dict], watchlist_quotes: dict) -> str:
         [
             item
             for item in top_scores
-            if item["score"] is not None and item["score"] >= 82
+            if get_smart_money_label(item) in {"Prime Opportunity", "High Conviction"}
         ]
     )
 
-    high_risk = len(
+    elevated_risk = len(
         [
             item
             for item in top_scores
-            if "high" in str(item.get("risk_label", "")).lower()
+            if get_risk_label(item) in {"High Risk", "Speculative", "Elevated"}
         ]
     )
 
     if high_conviction:
-        notes.append(f"{high_conviction} high-conviction name(s) in the top ranking.")
+        notes.append(f"{high_conviction} top idea(s) carry high-conviction Smart Money ratings.")
 
-    if high_risk:
-        notes.append(f"{high_risk} top-ranked name(s) carry elevated risk labels.")
+    if elevated_risk:
+        notes.append(f"{elevated_risk} top idea(s) carry elevated or speculative risk labels.")
 
     large_movers = []
 
@@ -473,6 +456,26 @@ def build_daily_action_checklist(raw_scores: Any) -> str:
         return f"Action Checklist unavailable: {type(exc).__name__}"
 
 
+def safe_global_risk_snapshot() -> str:
+    try:
+        return build_global_risk_snapshot()
+    except Exception as error:
+        return f"""
+🌍 Global Risk Snapshot
+
+Market Regime:
+Unavailable
+
+Portfolio Impact:
+- Global risk snapshot could not be built right now.
+
+Reason:
+{type(error).__name__}
+
+Use /global for the full macro risk report.
+""".strip()
+
+
 def build_daily_report() -> str:
     now = datetime.now(ZoneInfo(REPORT_TIMEZONE))
     today = now.strftime("%B %d, %Y")
@@ -490,6 +493,7 @@ def build_daily_report() -> str:
 
     watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes()
     market_tone = build_market_tone_from_watchlist(watchlist_quotes)
+    global_risk_snapshot = safe_global_risk_snapshot()
 
     if top_scores:
         top_opportunities = "\n\n".join(
@@ -516,7 +520,9 @@ Watchlist Symbols: {len(watchlist_symbols)}
 Watchlist Movers
 {build_watchlist_snapshot(watchlist_symbols, watchlist_quotes)}
 
-Smart Money Score Summary
+{global_risk_snapshot}
+
+Smart Money Rating Summary
 {build_score_summary(scores)}
 
 Top Opportunities
@@ -525,12 +531,16 @@ Top Opportunities
 Risk Notes
 {build_risk_notes(top_scores, watchlist_quotes)}
 
+AI Summary
 {ai_summary}
 
+Action Checklist
 {action_checklist}
 
 Next Commands
+/global
 /top10
+/smartmoney
 /scorecard SYMBOL
 /watchlist report
 /marketbrief
