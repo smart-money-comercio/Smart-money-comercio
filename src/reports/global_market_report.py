@@ -1,7 +1,6 @@
 import html
 import json
 import re
-import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -80,13 +79,6 @@ def format_percent(value: Any) -> str:
         return "N/A"
 
 
-def format_price(value: Any) -> str:
-    try:
-        return f"{float(value):,.2f}"
-    except (TypeError, ValueError):
-        return "N/A"
-
-
 def get_asset_move(symbol: str) -> dict:
     encoded_symbol = urllib.parse.quote(symbol, safe="")
     url = (
@@ -144,18 +136,13 @@ def load_market_snapshot() -> list[dict]:
 
     for asset in MARKET_ASSETS:
         move = get_asset_move(asset["symbol"])
-        snapshot.append(
-            {
-                **asset,
-                **move,
-            }
-        )
+        snapshot.append({**asset, **move})
 
     return snapshot
 
 
 def get_move(snapshot: list[dict], symbol: str) -> float:
-    for item in snapshot:
+    for item in snapshot or []:
         if item.get("symbol") == symbol and item.get("available"):
             return safe_float(item.get("change_percent"), 0)
 
@@ -229,7 +216,6 @@ def fetch_rss_headlines(feed: dict, limit: int = 3) -> list[dict]:
             raw = response.read().decode("utf-8", errors="ignore")
 
         root = ET.fromstring(raw)
-
         items = []
 
         for item in root.findall(".//item")[:limit]:
@@ -400,11 +386,9 @@ Potential Portfolio Impact:
 def format_market_snapshot(snapshot: list[dict]) -> str:
     lines = []
 
-    for item in snapshot:
+    for item in snapshot or []:
         if not item.get("available"):
-            lines.append(
-                f"- {item['name']} ({item['symbol']}): Unavailable"
-            )
+            lines.append(f"- {item['name']} ({item['symbol']}): Unavailable")
             continue
 
         lines.append(
@@ -413,7 +397,7 @@ def format_market_snapshot(snapshot: list[dict]) -> str:
             f"{classify_asset_signal(item)}"
         )
 
-    return "\n".join(lines)
+    return "\n".join(lines) if lines else "Market snapshot unavailable."
 
 
 def format_headlines(headlines: list[dict]) -> str:
@@ -423,119 +407,12 @@ def format_headlines(headlines: list[dict]) -> str:
     lines = []
 
     for item in headlines:
-        lines.append(
-            f"- [{item['impact']}] {item['title']}"
-        )
+        lines.append(f"- [{item['impact']}] {item['title']}")
 
     return "\n".join(lines)
 
-def build_global_risk_snapshot() -> str:
-    """
-    Compact global risk section for the daily Smart Money report.
-    Uses the same data logic as /global but keeps output short.
-    """
-    try:
-        stocks = get_stock_scores()
-    except Exception:
-        stocks = []
-
-    try:
-        snapshot = load_market_snapshot()
-    except Exception:
-        snapshot = []
-
-    try:
-        headlines = load_headlines()
-    except Exception:
-        headlines = []
-
-    if not snapshot:
-        return """
-🌍 Global Risk Snapshot
-
-Market Regime:
-Unavailable
-
-Portfolio Impact:
-- Global market data could not be loaded right now.
-
-Headline Themes:
-- Headlines unavailable.
-
-Use /global for the full macro risk report.
-""".strip()
-
-    regime = classify_market_regime(snapshot)
-
-    nasdaq = get_move(snapshot, "^IXIC")
-    vix = get_move(snapshot, "^VIX")
-    tlt = get_move(snapshot, "TLT")
-    dollar = get_move(snapshot, "UUP")
-    oil = get_move(snapshot, "USO")
-    gold = get_move(snapshot, "GLD")
-    china = get_move(snapshot, "FXI")
-    eem = get_move(snapshot, "EEM")
-
-    impact_notes = []
-
-    if nasdaq < -0.75 or (tlt < -0.75 and dollar > 0.5):
-        impact_notes.append("Growth, AI, and semiconductor names may face pressure from rates or dollar strength.")
-
-    if vix > 5:
-        impact_notes.append("Volatility is rising; speculative names need tighter risk control.")
-
-    if oil > 2:
-        impact_notes.append("Oil strength may support energy exposure but can raise inflation pressure.")
-
-    if gold > 1:
-        impact_notes.append("Gold strength suggests investors may be seeking safety or inflation protection.")
-
-    if china < -1 or eem < -1:
-        impact_notes.append("China or emerging-market weakness may pressure global risk appetite.")
-
-    if not impact_notes:
-        impact_notes.append("No single global pressure point is dominating; stay selective.")
-
-    headline_themes = []
-
-    for item in headlines[:5]:
-        impact = item.get("impact", "Market")
-
-        if impact not in headline_themes:
-            headline_themes.append(impact)
-
-    if not headline_themes:
-        headline_themes = ["No major headline theme available"]
-
-    impact_text = "\n".join(f"- {note}" for note in impact_notes[:3])
-    headline_text = ", ".join(headline_themes[:5])
-
-    return f"""
-    
-🌍 Global Risk Snapshot
-
-Market Regime:
-{regime}
-
-Portfolio Impact:
-{impact_text}
-
-Headline Themes:
-{headline_text}
-
-Use /global for the full macro risk report.
-""".strip()
 
 def build_global_risk_snapshot() -> str:
-    """
-    Compact global risk section for the daily Smart Money report.
-    Uses the same data logic as /global but keeps output short.
-    """
-    try:
-        stocks = get_stock_scores()
-    except Exception:
-        stocks = []
-
     try:
         snapshot = load_market_snapshot()
     except Exception:
@@ -634,3 +511,48 @@ Headline Themes:
 Use /global for the full macro risk report.
 """.strip()
 
+
+def build_global_market_report() -> str:
+    try:
+        stocks = get_stock_scores()
+    except Exception:
+        stocks = []
+
+    try:
+        snapshot = load_market_snapshot()
+    except Exception:
+        snapshot = []
+
+    try:
+        headlines = load_headlines()
+    except Exception:
+        headlines = []
+
+    return f"""
+🌍 Global Market Risk Monitor
+
+Market Snapshot:
+{format_market_snapshot(snapshot)}
+
+Portfolio Impact:
+{build_portfolio_impact(snapshot, stocks)}
+
+Headline Watch:
+{format_headlines(headlines)}
+
+How To Use This:
+- If volatility and the dollar rise together, reduce confidence in high-beta growth setups.
+- If oil spikes, watch inflation-sensitive names and energy exposure.
+- If gold rises while equities fall, risk appetite may be weakening.
+- If Nasdaq leads and volatility cools, AI and growth setups may have better support.
+
+Next Commands:
+/top10
+/smartmoney
+/portfolio
+/volume refresh
+/report
+
+Note:
+This is research only, not financial advice.
+""".strip()
