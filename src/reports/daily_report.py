@@ -772,7 +772,7 @@ Top Opportunities
 Risk Notes
 {build_risk_notes(top_scores, movers, global_context)}
 
-Summary
+AI Summary
 {build_clean_ai_summary(top_scores, movers, market_tone, global_context)}
 
 Action Checklist
