@@ -593,7 +593,8 @@ def build_daily_report() -> str:
     action_checklist = build_daily_action_checklist(raw_scores)
 
     return f"""
-📊 Smart Money AI Daily Brief
+📊 Smart Money AI Daily Report
+Daily Brief
 Date: {today}
 Generated: {timestamp} {REPORT_TIMEZONE}
 
@@ -617,7 +618,7 @@ Top Opportunities
 Risk Notes
 {build_risk_notes(top_scores, movers)}
 
-AI Summary
+Summary
 {ai_summary}
 
 Action Checklist
