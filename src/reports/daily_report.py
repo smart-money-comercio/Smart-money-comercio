@@ -3,11 +3,12 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
-from src.reports.action_checklist import (
-    build_action_checklist as build_relevant_action_checklist,
+from src.reports.global_market_report import (
+    classify_market_regime,
+    get_move,
+    load_headlines,
+    load_market_snapshot,
 )
-from src.reports.ai_summary import build_ai_summary as build_relevant_ai_summary
-from src.reports.global_market_report import build_global_risk_snapshot
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
     get_action_label,
@@ -26,8 +27,7 @@ REPORT_TIMEZONE = "America/Lima"
 
 MAX_TOP_OPPORTUNITIES = 3
 MAX_WATCHLIST_MOVERS = 4
-MAX_AI_SUMMARY_CHARS = 650
-MAX_ACTION_CHARS = 500
+MAX_HEADLINE_THEMES = 4
 
 
 def safe_float(value: Any) -> float | None:
@@ -55,15 +55,6 @@ def clean_text(value: Any, max_length: int = 140) -> str:
     return text[: max_length - 3].rstrip() + "..."
 
 
-def truncate_text(value: Any, max_length: int) -> str:
-    text = str(value or "").strip()
-
-    if len(text) <= max_length:
-        return text
-
-    return text[: max_length - 3].rstrip() + "..."
-
-
 def get_value(data: dict, keys: list[str], default=None):
     for key in keys:
         value = data.get(key)
@@ -72,19 +63,19 @@ def get_value(data: dict, keys: list[str], default=None):
     return default
 
 
-def first_list_text(value: Any, fallback: str) -> str:
+def first_list_text(value: Any, fallback: str, max_length: int = 130) -> str:
     if isinstance(value, list):
         for item in value:
-            text = clean_text(item, 120)
+            text = clean_text(item, max_length)
             if text:
                 return text
         return fallback
 
     if isinstance(value, tuple):
-        return first_list_text(list(value), fallback)
+        return first_list_text(list(value), fallback, max_length)
 
     if isinstance(value, str) and value.strip():
-        return clean_text(value, 120)
+        return clean_text(value, max_length)
 
     return fallback
 
@@ -141,12 +132,12 @@ def normalize_score_item(item: Any) -> dict:
                     get_value(item, ["category", "sector", "industry"], "N/A")
                 ),
                 "strength": first_list_text(
-                    get_value(item, ["strengths", "pros", "bull_case", "reason"], []),
-                    "No strength detail available.",
+                    get_value(item, ["strengths", "pros", "bull_case", "reason", "thesis"], []),
+                    "The setup has a developing thesis but needs confirmation.",
                 ),
                 "weakness": first_list_text(
                     get_value(item, ["weaknesses", "cons", "bear_case", "risks"], []),
-                    "No weakness detail available.",
+                    "Main risk still needs review.",
                 ),
             }
         )
@@ -163,8 +154,8 @@ def normalize_score_item(item: Any) -> dict:
             "rating": "Unrated",
             "risk_label": "N/A",
             "category": "N/A",
-            "strength": "No strength detail available.",
-            "weakness": "No weakness detail available.",
+            "strength": "The setup has a developing thesis but needs confirmation.",
+            "weakness": "Main risk still needs review.",
         }
 
     ticker = clean_symbol(item)
@@ -176,8 +167,8 @@ def normalize_score_item(item: Any) -> dict:
         "rating": "Unrated",
         "risk_label": "N/A",
         "category": "N/A",
-        "strength": "No strength detail available.",
-        "weakness": "No weakness detail available.",
+        "strength": "The setup has a developing thesis but needs confirmation.",
+        "weakness": "Main risk still needs review.",
     }
 
 
@@ -339,8 +330,8 @@ def build_market_snapshot(symbols: list[str], movers: list[dict]) -> str:
 
     return f"""
 Tone: {build_market_tone(movers)}
-Breadth: {positive} up / {negative} down / {len(movers)} with live data
-Average Move: {format_percent(average)}
+Breadth: {positive} up / {negative} down / {len(movers)} live
+Avg Move: {format_percent(average)}
 Strongest: {strongest["symbol"]} {format_percent(strongest["change_percent"])}
 Weakest: {weakest["symbol"]} {format_percent(weakest["change_percent"])}
 """.strip()
@@ -357,6 +348,135 @@ def build_watchlist_snapshot(symbols: list[str], movers: list[dict]) -> str:
         f"• {item['symbol']}: {format_price(item['price'])} ({format_percent(item['change_percent'])})"
         for item in movers[:MAX_WATCHLIST_MOVERS]
     )
+
+
+def load_global_context() -> dict:
+    try:
+        snapshot = load_market_snapshot()
+    except Exception:
+        snapshot = []
+
+    try:
+        headlines = load_headlines()
+    except Exception:
+        headlines = []
+
+    regime = classify_market_regime(snapshot) if snapshot else "Unavailable"
+
+    headline_themes = []
+
+    for item in headlines[:8]:
+        impact = item.get("impact", "Market")
+        if impact not in headline_themes:
+            headline_themes.append(impact)
+
+    return {
+        "snapshot": snapshot,
+        "headlines": headlines,
+        "headline_themes": headline_themes[:MAX_HEADLINE_THEMES],
+        "regime": regime,
+        "nasdaq": get_move(snapshot, "^IXIC"),
+        "vix": get_move(snapshot, "^VIX"),
+        "tlt": get_move(snapshot, "TLT"),
+        "dollar": get_move(snapshot, "UUP"),
+        "oil": get_move(snapshot, "USO"),
+        "gold": get_move(snapshot, "GLD"),
+        "china": get_move(snapshot, "FXI"),
+        "eem": get_move(snapshot, "EEM"),
+    }
+
+
+def get_macro_pressure(context: dict) -> str:
+    pressures = []
+
+    if context["vix"] > 5:
+        pressures.append("volatility rising")
+
+    if context["nasdaq"] < -0.75:
+        pressures.append("growth pressure")
+
+    if context["tlt"] < -0.75 and context["dollar"] > 0.5:
+        pressures.append("rates/dollar pressure")
+
+    if context["oil"] > 2:
+        pressures.append("oil/inflation pressure")
+
+    if context["china"] < -1 or context["eem"] < -1:
+        pressures.append("global risk weakness")
+
+    if not pressures:
+        return "no major macro pressure"
+
+    return ", ".join(pressures[:3])
+
+
+def category_macro_note(category: str, context: dict) -> str:
+    category_upper = category.upper()
+
+    if "AI" in category_upper or "SEMICONDUCTOR" in category_upper or "TECH" in category_upper:
+        if context["nasdaq"] < -0.75 or (context["tlt"] < -0.75 and context["dollar"] > 0.5):
+            return "Macro check: growth and AI may face pressure from rates, dollar strength, or Nasdaq weakness."
+        return "Macro check: growth backdrop is acceptable if Nasdaq support holds."
+
+    if "DEFENSE" in category_upper or "DRONE" in category_upper or "WARFARE" in category_upper:
+        if "Defense / Geopolitical" in context.get("headline_themes", []):
+            return "Macro check: geopolitical headlines may support defense interest."
+        return "Macro check: defense exposure remains more event-driven than index-driven."
+
+    if "CYBER" in category_upper:
+        return "Macro check: cybersecurity can hold up better if enterprise security spending remains resilient."
+
+    if "ENERGY" in category_upper or "OIL" in category_upper or "POWER" in category_upper:
+        if context["oil"] > 2:
+            return "Macro check: oil strength may support energy exposure but can pressure inflation expectations."
+        return "Macro check: energy needs commodity confirmation."
+
+    if "DIVIDEND" in category_upper or "UTILITY" in category_upper or "INCOME" in category_upper:
+        if context["vix"] > 5:
+            return "Macro check: defensive income names may matter more if volatility keeps rising."
+        return "Macro check: income exposure remains useful as portfolio ballast."
+
+    return f"Macro check: current backdrop shows {get_macro_pressure(context)}."
+
+
+def build_global_portfolio_impact(context: dict, top_scores: list[dict]) -> str:
+    regime = context.get("regime", "Unavailable")
+    pressure = get_macro_pressure(context)
+
+    affected = []
+
+    for item in top_scores:
+        ticker = get_ticker(item)
+        category = get_category(item).upper()
+
+        if "AI" in category or "SEMICONDUCTOR" in category or "TECH" in category:
+            if context["nasdaq"] < -0.75 or (context["tlt"] < -0.75 and context["dollar"] > 0.5):
+                affected.append(f"{ticker}: watch rates/dollar pressure on growth.")
+        elif "ENERGY" in category or "OIL" in category or "POWER" in category:
+            if context["oil"] > 2:
+                affected.append(f"{ticker}: oil strength may help, but inflation risk rises.")
+        elif "DEFENSE" in category or "DRONE" in category or "WARFARE" in category:
+            if "Defense / Geopolitical" in context.get("headline_themes", []):
+                affected.append(f"{ticker}: geopolitical headlines may increase attention.")
+        elif "DIVIDEND" in category or "UTILITY" in category or "INCOME" in category:
+            if context["vix"] > 5:
+                affected.append(f"{ticker}: defensive role improves if volatility stays elevated.")
+
+    if not affected:
+        affected.append("No direct macro hit to top ideas; focus on confirmation, sizing, and price action.")
+
+    impact_lines = "\n".join(f"• {line}" for line in affected[:3])
+    themes = ", ".join(context.get("headline_themes", [])) or "No major headline theme available"
+
+    return f"""
+Regime: {regime}
+Pressure: {pressure}
+
+Portfolio Impact
+{impact_lines}
+
+Headline Themes: {themes}
+""".strip()
 
 
 def build_score_summary(scores: list[dict]) -> str:
@@ -396,40 +516,63 @@ def build_score_summary(scores: list[dict]) -> str:
     return f"""
 Reviewed: {len(scores)} names
 Top Watch: {top_names if top_names else "N/A"}
-{chr(10).join(lines[:5])}
+{chr(10).join(lines[:4])}
 """.strip()
 
 
-def format_opportunity(index: int, item: dict) -> str:
+def build_opportunity_why(item: dict, context: dict) -> str:
     ticker = get_ticker(item)
     label = get_smart_money_label(item)
     signal = get_signal_strength(item)
     fit = get_portfolio_fit(item)
     action = get_action_label(item)
-    risk = get_risk_label(item)
     volume = get_volume_label(item)
     category = get_category(item)
-
-    strength = clean_text(
-        item.get("strength")
-        or first_list_text(item.get("strengths", []), "No strength detail available."),
-        105,
+    strength = item.get("strength") or first_list_text(
+        item.get("strengths", []),
+        "The setup has a developing thesis but needs confirmation.",
+        130,
     )
+    weakness = item.get("weakness") or first_list_text(
+        item.get("weaknesses") or item.get("risks"),
+        "Risk still needs review.",
+        120,
+    )
+    macro_note = category_macro_note(category, context)
+
+    return (
+        f"{ticker} is showing a {label.lower()} profile with {signal.lower()} confirmation. "
+        f"It fits as {fit.lower()} and current action is {action}. "
+        f"Volume read: {volume}. Main support: {strength} "
+        f"Main watch-out: {weakness} {macro_note}"
+    )
+
+
+def format_opportunity(index: int, item: dict, context: dict) -> str:
+    ticker = get_ticker(item)
+    label = get_smart_money_label(item)
+    action = get_action_label(item)
+    risk = get_risk_label(item)
+    category = get_category(item)
+
+    why = clean_text(build_opportunity_why(item, context), 360)
 
     return (
         f"{index}. {ticker} — {label}\n"
-        f"   Signal: {signal} | Risk: {risk} | Volume: {volume}\n"
-        f"   Fit: {fit}\n"
-        f"   Action: {action}\n"
+        f"   Action: {action} | Risk: {risk}\n"
         f"   Theme: {category}\n"
-        f"   Why: {strength}"
+        f"   Why: {why}"
     )
 
 
-def build_top_opportunities(top_scores: list[dict], scoring_error: str = "") -> str:
+def build_top_opportunities(
+    top_scores: list[dict],
+    context: dict,
+    scoring_error: str = "",
+) -> str:
     if top_scores:
         return "\n\n".join(
-            format_opportunity(index, item)
+            format_opportunity(index, item, context)
             for index, item in enumerate(top_scores, start=1)
         )
 
@@ -439,14 +582,8 @@ def build_top_opportunities(top_scores: list[dict], scoring_error: str = "") -> 
     return "No scoring opportunities available."
 
 
-def build_risk_notes(top_scores: list[dict], movers: list[dict]) -> str:
+def build_risk_notes(top_scores: list[dict], movers: list[dict], context: dict) -> str:
     notes = []
-
-    high_conviction = [
-        get_ticker(item)
-        for item in top_scores
-        if get_smart_money_label(item) in {"Prime Opportunity", "High Conviction"}
-    ]
 
     elevated_risk = [
         get_ticker(item)
@@ -460,16 +597,15 @@ def build_risk_notes(top_scores: list[dict], movers: list[dict]) -> str:
         if abs(item["change_percent"]) >= 2
     ]
 
-    if high_conviction:
-        notes.append(
-            "Highest conviction focus: "
-            + ", ".join(high_conviction[:3])
-            + "."
-        )
+    if context["vix"] > 5:
+        notes.append("Volatility is rising; avoid chasing extended entries.")
+
+    if context["tlt"] < -0.75 and context["dollar"] > 0.5:
+        notes.append("Rates/dollar pressure can hurt long-duration growth names.")
 
     if elevated_risk:
         notes.append(
-            "Use tighter sizing on elevated-risk names: "
+            "Tighter sizing needed on elevated-risk names: "
             + ", ".join(elevated_risk[:3])
             + "."
         )
@@ -491,16 +627,21 @@ def build_executive_summary(
     top_scores: list[dict],
     movers: list[dict],
     market_tone: str,
+    context: dict,
 ) -> str:
     best = top_scores[0] if top_scores else None
     biggest_mover = movers[0] if movers else None
+    pressure = get_macro_pressure(context)
 
-    lines = [f"• Market tone: {market_tone}."]
+    lines = [
+        f"• Market tone: {market_tone}.",
+        f"• Global pressure: {pressure}.",
+    ]
 
     if best:
         lines.append(
-            f"• Best setup: {get_ticker(best)} — {get_smart_money_label(best)} "
-            f"with {get_signal_strength(best).lower()} confirmation."
+            f"• Best setup: {get_ticker(best)} — {get_smart_money_label(best)}; "
+            f"next step is {get_action_label(best).lower()}."
         )
 
     if biggest_mover:
@@ -509,57 +650,72 @@ def build_executive_summary(
             f"{format_percent(biggest_mover['change_percent'])}."
         )
 
-    if best:
-        lines.append(
-            f"• Action focus: {get_action_label(best)}; confirm with /scorecard {get_ticker(best)}."
-        )
-    else:
-        lines.append("• Action focus: wait for stronger confirmation.")
-
     return "\n".join(lines)
 
 
-def build_daily_ai_summary(raw_scores: Any) -> str:
-    try:
-        summary = build_relevant_ai_summary(stocks=raw_scores)
-    except Exception as exc:
-        return f"AI summary unavailable: {type(exc).__name__}"
+def build_clean_ai_summary(
+    top_scores: list[dict],
+    movers: list[dict],
+    market_tone: str,
+    context: dict,
+) -> str:
+    best = top_scores[0] if top_scores else None
+    second = top_scores[1] if len(top_scores) > 1 else None
+    pressure = get_macro_pressure(context)
 
-    if not summary:
-        return "AI summary unavailable."
+    if not best:
+        return (
+            f"The portfolio tone is {market_tone.lower()} with {pressure}. "
+            "There is no clear top setup yet, so the better move is to wait for confirmation."
+        )
 
-    return truncate_text(summary, MAX_AI_SUMMARY_CHARS)
+    summary = (
+        f"The portfolio read is {market_tone.lower()} with {pressure}. "
+        f"{get_ticker(best)} is the cleanest setup because it combines a "
+        f"{get_smart_money_label(best).lower()} profile, {get_signal_strength(best).lower()} confirmation, "
+        f"and a {get_portfolio_fit(best).lower()} role."
+    )
+
+    if second:
+        summary += (
+            f" {get_ticker(second)} is the secondary watch, but action should depend on volume, "
+            "risk level, and whether the broader market confirms."
+        )
+
+    if movers:
+        summary += (
+            f" The largest live move is {movers[0]['symbol']} at "
+            f"{format_percent(movers[0]['change_percent'])}, which should be checked before acting."
+        )
+
+    return summary
 
 
-def build_daily_action_checklist(raw_scores: Any) -> str:
-    try:
-        checklist = build_relevant_action_checklist(stocks=raw_scores)
-    except Exception as exc:
-        return f"Action Checklist unavailable: {type(exc).__name__}"
+def build_action_checklist(
+    top_scores: list[dict],
+    movers: list[dict],
+    context: dict,
+) -> str:
+    actions = []
 
-    return truncate_text(checklist, MAX_ACTION_CHARS)
+    best = top_scores[0] if top_scores else None
 
+    if best:
+        ticker = get_ticker(best)
+        actions.append(f"Run /scorecard {ticker} before making any decision.")
+        actions.append(f"Confirm live demand with /volume {ticker}.")
+    else:
+        actions.append("Wait for a cleaner Smart Money setup before acting.")
 
-def safe_global_risk_snapshot() -> str:
-    try:
-        snapshot = build_global_risk_snapshot()
-    except Exception as error:
-        return f"""
-🌍 Global Risk Snapshot
+    if movers:
+        actions.append(f"Review the biggest mover: /ticker {movers[0]['symbol']}.")
 
-Market Regime:
-Unavailable
+    if context["vix"] > 5 or context["tlt"] < -0.75:
+        actions.append("Keep position size conservative until volatility/rates cool.")
+    else:
+        actions.append("Use /top10 to compare the top three opportunities.")
 
-Portfolio Impact:
-- Global risk snapshot could not be built right now.
-
-Reason:
-{type(error).__name__}
-
-Use /global for the full macro risk report.
-""".strip()
-
-    return snapshot.replace("\nUse /global for the full macro risk report.", "").strip()
+    return "\n".join(f"• {action}" for action in actions[:4])
 
 
 def build_daily_report() -> str:
@@ -580,17 +736,14 @@ def build_daily_report() -> str:
     watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes()
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     market_tone = build_market_tone(movers)
+    global_context = load_global_context()
 
     executive_summary = build_executive_summary(
         top_scores=top_scores,
         movers=movers,
         market_tone=market_tone,
+        context=global_context,
     )
-
-    global_risk_snapshot = safe_global_risk_snapshot()
-    top_opportunities = build_top_opportunities(top_scores, scoring_error)
-    ai_summary = build_daily_ai_summary(raw_scores)
-    action_checklist = build_daily_action_checklist(raw_scores)
 
     return f"""
 📊 Smart Money AI Daily Report
@@ -607,27 +760,27 @@ Market Snapshot
 Watchlist Movers
 {build_watchlist_snapshot(watchlist_symbols, movers)}
 
-{global_risk_snapshot}
+Global Portfolio Impact
+{build_global_portfolio_impact(global_context, top_scores)}
 
 Smart Money Rating Summary
 {build_score_summary(scores)}
 
 Top Opportunities
-{top_opportunities}
+{build_top_opportunities(top_scores, global_context, scoring_error)}
 
 Risk Notes
-{build_risk_notes(top_scores, movers)}
+{build_risk_notes(top_scores, movers, global_context)}
 
 Summary
-{ai_summary}
+{build_clean_ai_summary(top_scores, movers, market_tone, global_context)}
 
 Action Checklist
-{action_checklist}
+{build_action_checklist(top_scores, movers, global_context)}
 
 Next Commands
 /global
 /top10
-/smartmoney
 /scorecard SYMBOL
 /watchlist movers
 
