@@ -1,6 +1,7 @@
 from typing import Any
 
 from src.scoring.scoring_engine import get_stock_scores, score_ticker
+from src.reports.portfolio_headline_impact import build_headline_impact_summary
 from src.utils.score_display import (
     get_action_label,
     get_category,
@@ -393,6 +394,7 @@ def build_scorecard(
     risk = get_risk_label(stock)
     volume = get_volume_label(stock)
     setup_type = get_setup_type(stock)
+    headline_impact = build_headline_impact_summary(stock)
 
     coverage_note = ""
 
@@ -423,6 +425,9 @@ Category:
 
 Signal Map:
 {get_signal_icons(stock)}
+
+Headline Impact:
+{headline_impact}
 
 Conviction Readout:
 {build_conviction_readout(stock)}

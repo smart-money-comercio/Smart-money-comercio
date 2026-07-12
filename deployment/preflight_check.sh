@@ -27,6 +27,7 @@ required_files=(
   "src/reports/global_market_report.py"
   "src/commands/global_commands.py"
   "src/reports/headlines_report.py"
+  "src/reports/portfolio_headline_impact.py"
   "src/commands/headlines_commands.py"
   "src/commands/analyst_commands.py"
   
@@ -64,6 +65,7 @@ modules = [
     "src.scoring.scoring_engine",
     "src.reports.global_market_report",
     "src.reports.headlines_report",
+    "src.reports.portfolio_headline_impact",
     "src.commands.headlines_commands",
     "src.commands.global_commands",
     "src.utils.watchlist_store",
@@ -95,6 +97,7 @@ function_checks = [
     ("src.reports.global_market_report", "build_global_market_report"),
     ("src.commands.global_commands", "global_market"),
     ("src.reports.headlines_report", "build_headlines_report"),
+    ("src.reports.portfolio_headline_impact", "build_headline_impact_summary"),
     ("src.commands.headlines_commands", "headlines"),
     ("src.agents.analyst_agent", "run_analyst_agent"),
     ("src.agents.analyst_agent", "analyze_ticker"),
