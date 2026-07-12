@@ -36,6 +36,8 @@ from src.commands.volume_commands import volume
 
 from src.commands.global_commands import global_market
 
+from src.commands.headlines_commands import headlines
+
 from src.commands.deploycheck_commands import deploycheck_command
 
 from src.commands.backup_commands import backup_command
@@ -107,6 +109,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("dividends", dividends))
     app.add_handler(CommandHandler("portfolio", portfolio))
     app.add_handler(CommandHandler("global", global_market))
+    app.add_handler(CommandHandler("headlines", headlines))
 
     app.add_handler(CommandHandler("ticker", ticker))
     app.add_handler(CommandHandler("quote", quote))

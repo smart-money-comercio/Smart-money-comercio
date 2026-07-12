@@ -41,6 +41,7 @@ PUBLIC_COMMANDS = [
     BotCommand("dividends", "Dividend opportunities"),
     BotCommand("portfolio", "Portfolio summary"),
     BotCommand("global", "Global market and headline risk"),
+    BotCommand("headlines", "Market headlines by impact"),
     BotCommand("congress", "Congressional trading signals"),
     BotCommand("insiders", "Insider trading signals"),
     BotCommand("smartmoney", "Smart money summary"),
