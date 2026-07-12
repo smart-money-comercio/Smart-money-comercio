@@ -78,7 +78,52 @@ def format_trade_line(trade: dict) -> str:
         f"  Insider: {insider} ({role})\n"
         f"  Shares: {shares} | Value: {value}"
     )
+def build_whale_purchase_section(details: dict) -> str:
+    breakdown = details.get("breakdown") or {}
+    top_whales = breakdown.get("top_whales") or []
 
+    label = breakdown.get("whale_label", "No Whale Buying")
+    count = breakdown.get("whale_purchases", 0)
+    buyers = breakdown.get("whale_buyers", 0)
+    total_value = format_money(breakdown.get("whale_purchase_value", 0))
+
+    if not top_whales:
+        return f"""
+Whale Status: {label}
+Whale Purchases: {count}
+Whale Buyers: {buyers}
+Whale Purchase Value: {total_value}
+
+Read:
+No large open-market insider purchase signal detected right now.
+""".strip()
+
+    lines = []
+
+    for trade in top_whales[:3]:
+        date = trade.get("date") or trade.get("filing_date") or "Unknown date"
+        insider = clean_text(trade.get("insider_name") or trade.get("insider"), 70)
+        role = clean_text(trade.get("role"), 70)
+        value = format_money(trade.get("value"))
+        label_text = trade.get("whale_label", "Whale Buy")
+
+        lines.append(
+            f"• {date} | {label_text} | {value}\n"
+            f"  Insider: {insider} ({role})"
+        )
+
+    return f"""
+Whale Status: {label}
+Whale Purchases: {count}
+Whale Buyers: {buyers}
+Whale Purchase Value: {total_value}
+
+Top Whale Buys:
+{chr(10).join(lines)}
+
+Read:
+Large open-market insider purchases can be a stronger conviction signal, especially when made by executives, directors, or multiple insiders.
+""".strip()
 
 def build_activity_summary(details: dict) -> str:
     breakdown = details.get("breakdown") or {}
@@ -163,8 +208,11 @@ def build_insider_report(
 Current Insider Read
 {build_activity_summary(details)}
 
+Big Whale Purchases
+{build_whale_purchase_section(details)}
+
 Why It Matters
-{clean_text(details.get("reason"), 500)}
+{clean_text(details.get("reason"), 650)}
 
 Recent SEC Form 4 Activity
 {chr(10).join(recent_lines)}

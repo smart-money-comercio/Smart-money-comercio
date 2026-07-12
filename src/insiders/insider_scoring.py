@@ -8,6 +8,10 @@ NEUTRAL_SCORE = 50.0
 MIN_SCORE = 0.0
 MAX_SCORE = 100.0
 
+WHALE_PURCHASE_MIN = 250_000
+MAJOR_WHALE_PURCHASE_MIN = 1_000_000
+MEGA_WHALE_PURCHASE_MIN = 5_000_000
+
 
 ROLE_WEIGHTS = {
     "CEO": 1.35,
@@ -56,7 +60,11 @@ def parse_date(value: Any):
 
 
 def days_old(trade: dict) -> int:
-    date = parse_date(trade.get("filing_date") or trade.get("date") or trade.get("transaction_date"))
+    date = parse_date(
+        trade.get("filing_date")
+        or trade.get("date")
+        or trade.get("transaction_date")
+    )
 
     if not date:
         return 365
@@ -113,11 +121,106 @@ def value_weight(trade: dict) -> float:
     return 0.50
 
 
-def transaction_points(trade: dict) -> float:
+def is_open_market_purchase(trade: dict) -> bool:
     code = str(trade.get("transaction_code") or "").upper()
     signal = str(trade.get("signal") or "").lower()
 
-    base = 0.0
+    return code == "P" or "purchase" in signal
+
+
+def classify_whale_purchase(value: float) -> str:
+    if value >= MEGA_WHALE_PURCHASE_MIN:
+        return "Mega Whale Buy"
+    if value >= MAJOR_WHALE_PURCHASE_MIN:
+        return "Major Whale Buy"
+    if value >= WHALE_PURCHASE_MIN:
+        return "Whale Buy"
+
+    return "Standard Buy"
+
+
+def get_whale_purchases(trades: list[dict]) -> list[dict]:
+    whales = []
+
+    for trade in trades or []:
+        if not is_open_market_purchase(trade):
+            continue
+
+        value = safe_float(trade.get("value"), 0)
+
+        if value < WHALE_PURCHASE_MIN:
+            continue
+
+        whale_trade = dict(trade)
+        whale_trade["whale_label"] = classify_whale_purchase(value)
+        whale_trade["whale_value"] = value
+        whales.append(whale_trade)
+
+    return sorted(
+        whales,
+        key=lambda trade: safe_float(trade.get("whale_value"), 0),
+        reverse=True,
+    )
+
+
+def build_whale_purchase_summary(trades: list[dict]) -> dict:
+    whales = get_whale_purchases(trades)
+
+    total_value = sum(
+        safe_float(trade.get("value"), 0)
+        for trade in whales
+    )
+
+    unique_buyers = {
+        str(trade.get("insider_name") or trade.get("insider") or "").upper()
+        for trade in whales
+        if trade.get("insider_name") or trade.get("insider")
+    }
+
+    mega_count = len(
+        [
+            trade
+            for trade in whales
+            if safe_float(trade.get("value"), 0) >= MEGA_WHALE_PURCHASE_MIN
+        ]
+    )
+
+    major_count = len(
+        [
+            trade
+            for trade in whales
+            if safe_float(trade.get("value"), 0) >= MAJOR_WHALE_PURCHASE_MIN
+        ]
+    )
+
+    cluster_whale = len(unique_buyers) >= 2 and total_value >= MAJOR_WHALE_PURCHASE_MIN
+
+    if mega_count:
+        label = "Mega Whale Buying"
+    elif major_count:
+        label = "Major Whale Buying"
+    elif cluster_whale:
+        label = "Cluster Whale Buying"
+    elif whales:
+        label = "Whale Buying"
+    else:
+        label = "No Whale Buying"
+
+    return {
+        "label": label,
+        "count": len(whales),
+        "mega_count": mega_count,
+        "major_count": major_count,
+        "cluster_whale": cluster_whale,
+        "unique_buyers": len(unique_buyers),
+        "total_value": round(total_value, 2),
+        "top_whales": whales[:3],
+    }
+
+
+def transaction_points(trade: dict) -> float:
+    code = str(trade.get("transaction_code") or "").upper()
+    signal = str(trade.get("signal") or "").lower()
 
     if code == "P" or "purchase" in signal:
         base = 12.0
@@ -139,24 +242,27 @@ def transaction_points(trade: dict) -> float:
 
 def get_signal_breakdown(trades: list[dict]) -> dict:
     purchases = [
-        trade for trade in trades
-        if str(trade.get("transaction_code") or "").upper() == "P"
-        or "purchase" in str(trade.get("signal") or "").lower()
+        trade
+        for trade in trades
+        if is_open_market_purchase(trade)
     ]
 
     sales = [
-        trade for trade in trades
+        trade
+        for trade in trades
         if str(trade.get("transaction_code") or "").upper() == "S"
         or str(trade.get("signal") or "").lower() == "sale"
     ]
 
     tax_sales = [
-        trade for trade in trades
+        trade
+        for trade in trades
         if str(trade.get("transaction_code") or "").upper() == "F"
     ]
 
     awards = [
-        trade for trade in trades
+        trade
+        for trade in trades
         if str(trade.get("transaction_code") or "").upper() in {"A", "M"}
     ]
 
@@ -176,16 +282,26 @@ def get_signal_breakdown(trades: list[dict]) -> dict:
         if trade.get("insider_name") or trade.get("insider")
     }
 
+    whale_summary = build_whale_purchase_summary(trades)
+
     return {
         "purchases": len(purchases),
         "sales": len(sales),
         "tax_sales": len(tax_sales),
         "awards": len(awards),
-        "total_purchase_value": total_purchase_value,
-        "total_sale_value": total_sale_value,
-        "total_tax_value": total_tax_value,
+        "total_purchase_value": round(total_purchase_value, 2),
+        "total_sale_value": round(total_sale_value, 2),
+        "total_tax_value": round(total_tax_value, 2),
         "unique_buyers": len(unique_buyers),
         "unique_sellers": len(unique_sellers),
+        "whale_label": whale_summary["label"],
+        "whale_purchases": whale_summary["count"],
+        "whale_buyers": whale_summary["unique_buyers"],
+        "whale_purchase_value": whale_summary["total_value"],
+        "major_whale_purchases": whale_summary["major_count"],
+        "mega_whale_purchases": whale_summary["mega_count"],
+        "cluster_whale_buying": whale_summary["cluster_whale"],
+        "top_whales": whale_summary["top_whales"],
     }
 
 
@@ -216,10 +332,12 @@ def build_insider_score_details(ticker: str, force_refresh: bool = False) -> dic
             "label": "Neutral / Mixed",
             "reason": "No ticker provided.",
             "trades": [],
-            "breakdown": {},
+            "breakdown": get_signal_breakdown([]),
         }
 
     trades = get_insider_trades_for_symbol(symbol, force_refresh=force_refresh)
+
+    breakdown = get_signal_breakdown(trades)
 
     if not trades:
         return {
@@ -228,21 +346,10 @@ def build_insider_score_details(ticker: str, force_refresh: bool = False) -> dic
             "label": "Neutral / Mixed",
             "reason": "No recent SEC Form 4 purchase or sale signal found.",
             "trades": [],
-            "breakdown": {
-                "purchases": 0,
-                "sales": 0,
-                "tax_sales": 0,
-                "awards": 0,
-                "total_purchase_value": 0,
-                "total_sale_value": 0,
-                "unique_buyers": 0,
-                "unique_sellers": 0,
-            },
+            "breakdown": breakdown,
         }
 
     raw_points = sum(transaction_points(trade) for trade in trades)
-    breakdown = get_signal_breakdown(trades)
-
     confirmation_bonus = 0.0
 
     if breakdown["unique_buyers"] >= 2:
@@ -253,6 +360,16 @@ def build_insider_score_details(ticker: str, force_refresh: bool = False) -> dic
 
     if breakdown["total_purchase_value"] >= 1_000_000:
         confirmation_bonus += 4.0
+
+    if breakdown.get("mega_whale_purchases", 0) >= 1:
+        confirmation_bonus += 9.0
+    elif breakdown.get("major_whale_purchases", 0) >= 1:
+        confirmation_bonus += 6.0
+    elif breakdown.get("whale_purchases", 0) >= 1:
+        confirmation_bonus += 3.0
+
+    if breakdown.get("cluster_whale_buying"):
+        confirmation_bonus += 5.0
 
     if breakdown["unique_sellers"] >= 3 and breakdown["total_sale_value"] > breakdown["total_purchase_value"]:
         confirmation_bonus -= 5.0
@@ -266,9 +383,18 @@ def build_insider_score_details(ticker: str, force_refresh: bool = False) -> dic
     reason_parts = []
 
     if breakdown["purchases"]:
-        reason_parts.append(
-            f"{breakdown['purchases']} purchase(s) from {breakdown['unique_buyers']} buyer(s)"
+        purchase_reason = (
+            f"{breakdown['purchases']} purchase(s) from "
+            f"{breakdown['unique_buyers']} buyer(s)"
         )
+
+        if breakdown.get("whale_purchases", 0):
+            purchase_reason += (
+                f", including {breakdown['whale_purchases']} whale purchase(s) "
+                f"totaling ${breakdown.get('whale_purchase_value', 0):,.0f}"
+            )
+
+        reason_parts.append(purchase_reason)
 
     if breakdown["sales"]:
         reason_parts.append(
@@ -284,7 +410,7 @@ def build_insider_score_details(ticker: str, force_refresh: bool = False) -> dic
     reason = (
         f"{label}: "
         + "; ".join(reason_parts)
-        + ". Open-market purchases carry the most weight; routine sales and tax withholding are discounted."
+        + ". Open-market purchases and whale buys carry the most weight; routine sales and tax withholding are discounted."
     )
 
     return {
@@ -300,14 +426,9 @@ def build_insider_score_details(ticker: str, force_refresh: bool = False) -> dic
 
 
 def get_insider_score(ticker: str) -> float:
-    """
-    Backward-compatible function used by scoring_engine.py.
-    Returns only the numeric score.
-    """
     details = build_insider_score_details(ticker)
     return clamp_score(details.get("score", NEUTRAL_SCORE))
 
 
-# Backward-compatible aliases
 score_insider_activity = get_insider_score
 get_insider_signal = build_insider_score_details

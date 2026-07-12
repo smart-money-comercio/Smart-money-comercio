@@ -1,7 +1,8 @@
+import gzip
 import json
 import os
+import re
 import time
-import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -18,20 +19,65 @@ CIK_CACHE_FILE = PROJECT_ROOT / "data" / "sec_company_tickers_cache.json"
 CACHE_TTL_SECONDS = int(os.getenv("INSIDER_CACHE_TTL_SECONDS", str(60 * 60 * 8)))
 CIK_CACHE_TTL_SECONDS = int(os.getenv("SEC_CIK_CACHE_TTL_SECONDS", str(60 * 60 * 24 * 7)))
 
-REQUEST_TIMEOUT = int(os.getenv("SEC_REQUEST_TIMEOUT", "8"))
-REQUEST_DELAY_SECONDS = float(os.getenv("SEC_REQUEST_DELAY_SECONDS", "0.12"))
+REQUEST_TIMEOUT = int(os.getenv("SEC_REQUEST_TIMEOUT", "10"))
+REQUEST_DELAY_SECONDS = float(os.getenv("SEC_REQUEST_DELAY_SECONDS", "0.15"))
 
 MAX_TICKERS = int(os.getenv("INSIDER_MAX_TICKERS", "80"))
-MAX_FILINGS_PER_TICKER = int(os.getenv("INSIDER_MAX_FILINGS_PER_TICKER", "8"))
+MAX_FILINGS_PER_TICKER = int(os.getenv("INSIDER_MAX_FILINGS_PER_TICKER", "12"))
 
 SEC_USER_AGENT = os.getenv(
     "SEC_USER_AGENT",
-    "SmartMoneyAI/1.0 admin@example.com",
+    "SmartMoneyAI/1.0 contact@example.com",
 )
 
 COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 ARCHIVES_BASE_URL = "https://www.sec.gov/Archives/edgar/data"
+
+
+STATIC_CIK_FALLBACKS = {
+    "NVDA": {"ticker": "NVDA", "cik": "0001045810", "company": "NVIDIA CORP"},
+    "PLTR": {"ticker": "PLTR", "cik": "0001321655", "company": "PALANTIR TECHNOLOGIES INC."},
+    "AAPL": {"ticker": "AAPL", "cik": "0000320193", "company": "Apple Inc."},
+    "MSFT": {"ticker": "MSFT", "cik": "0000789019", "company": "MICROSOFT CORP"},
+    "TSLA": {"ticker": "TSLA", "cik": "0001318605", "company": "Tesla, Inc."},
+    "AMZN": {"ticker": "AMZN", "cik": "0001018724", "company": "AMAZON COM INC"},
+    "GOOGL": {"ticker": "GOOGL", "cik": "0001652044", "company": "Alphabet Inc."},
+    "GOOG": {"ticker": "GOOG", "cik": "0001652044", "company": "Alphabet Inc."},
+    "META": {"ticker": "META", "cik": "0001326801", "company": "Meta Platforms, Inc."},
+    "AMD": {"ticker": "AMD", "cik": "0000002488", "company": "ADVANCED MICRO DEVICES INC"},
+    "INTC": {"ticker": "INTC", "cik": "0000050863", "company": "INTEL CORP"},
+    "MU": {"ticker": "MU", "cik": "0000723125", "company": "MICRON TECHNOLOGY INC"},
+    "DELL": {"ticker": "DELL", "cik": "0001571996", "company": "Dell Technologies Inc."},
+    "ANET": {"ticker": "ANET", "cik": "0001596532", "company": "Arista Networks, Inc."},
+    "NET": {"ticker": "NET", "cik": "0001477333", "company": "Cloudflare, Inc."},
+    "DDOG": {"ticker": "DDOG", "cik": "0001561550", "company": "Datadog, Inc."},
+    "OKTA": {"ticker": "OKTA", "cik": "0001660134", "company": "Okta, Inc."},
+    "MDB": {"ticker": "MDB", "cik": "0001441816", "company": "MongoDB, Inc."},
+    "CRWD": {"ticker": "CRWD", "cik": "0001535527", "company": "CrowdStrike Holdings, Inc."},
+    "LMT": {"ticker": "LMT", "cik": "0000936468", "company": "LOCKHEED MARTIN CORP"},
+    "LHX": {"ticker": "LHX", "cik": "0000202058", "company": "L3Harris Technologies, Inc."},
+    "LDOS": {"ticker": "LDOS", "cik": "0001336920", "company": "Leidos Holdings, Inc."},
+    "CACI": {"ticker": "CACI", "cik": "0000016058", "company": "CACI International Inc"},
+    "AXON": {"ticker": "AXON", "cik": "0001069183", "company": "Axon Enterprise, Inc."},
+    "TXT": {"ticker": "TXT", "cik": "0000217346", "company": "TEXTRON INC"},
+    "TDG": {"ticker": "TDG", "cik": "0001260221", "company": "TransDigm Group INC"},
+    "AVAV": {"ticker": "AVAV", "cik": "0001368622", "company": "AeroVironment, Inc."},
+    "KTOS": {"ticker": "KTOS", "cik": "0001069258", "company": "Kratos Defense & Security Solutions, Inc."},
+    "VST": {"ticker": "VST", "cik": "0001692819", "company": "Vistra Corp."},
+    "CEG": {"ticker": "CEG", "cik": "0001868275", "company": "Constellation Energy Corp"},
+    "ETN": {"ticker": "ETN", "cik": "0001551182", "company": "Eaton Corp plc"},
+    "PWR": {"ticker": "PWR", "cik": "0001050915", "company": "Quanta Services, Inc."},
+    "NEE": {"ticker": "NEE", "cik": "0000753308", "company": "NEXTERA ENERGY INC"},
+    "COST": {"ticker": "COST", "cik": "0000909832", "company": "COSTCO WHOLESALE CORP"},
+    "WMT": {"ticker": "WMT", "cik": "0000104169", "company": "Walmart Inc."},
+    "HD": {"ticker": "HD", "cik": "0000354950", "company": "HOME DEPOT, INC."},
+    "MCD": {"ticker": "MCD", "cik": "0000063908", "company": "MCDONALDS CORP"},
+    "JPM": {"ticker": "JPM", "cik": "0000019617", "company": "JPMORGAN CHASE & CO"},
+    "BLK": {"ticker": "BLK", "cik": "0001364742", "company": "BlackRock Inc."},
+    "CAT": {"ticker": "CAT", "cik": "0000018230", "company": "CATERPILLAR INC"},
+    "UNH": {"ticker": "UNH", "cik": "0000731766", "company": "UNITEDHEALTH GROUP INC"},
+}
 
 
 TRANSACTION_LABELS = {
@@ -50,7 +96,7 @@ def clean_symbol(value: Any) -> str:
     return str(value or "").strip().upper().replace("$", "")
 
 
-def clean_text(value: Any, max_length: int = 180) -> str:
+def clean_text(value: Any, max_length: int = 240) -> str:
     text = " ".join(str(value or "").split())
 
     if len(text) <= max_length:
@@ -63,21 +109,15 @@ def safe_float(value: Any, default: float | None = None) -> float | None:
     try:
         if value is None:
             return default
+
         text = str(value).replace(",", "").strip()
+
         if not text:
             return default
+
         return float(text)
     except (TypeError, ValueError):
         return default
-
-
-def safe_int(value: Any, default: int = 0) -> int:
-    number = safe_float(value, None)
-
-    if number is None:
-        return default
-
-    return int(number)
 
 
 def utc_now_ts() -> float:
@@ -111,32 +151,49 @@ def write_json_file(path: Path, data: Any) -> None:
         return
 
 
-def sec_request(url: str) -> Any:
+def decode_response(raw: bytes, encoding: str = "") -> str:
+    try:
+        if encoding and "gzip" in encoding.lower():
+            raw = gzip.decompress(raw)
+    except Exception:
+        pass
+
+    return raw.decode("utf-8", errors="ignore")
+
+
+def sec_request_text(url: str) -> str:
     request = urllib.request.Request(
         url,
         headers={
             "User-Agent": SEC_USER_AGENT,
-            "Accept-Encoding": "gzip, deflate",
-            "Host": urllib.parse.urlparse(url).netloc,
+            "Accept": "application/json, text/xml, application/xml, text/html, */*",
         },
     )
 
     with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
         raw = response.read()
+        encoding = response.headers.get("Content-Encoding", "")
 
     time.sleep(REQUEST_DELAY_SECONDS)
 
-    return raw
+    return decode_response(raw, encoding)
 
 
 def fetch_json(url: str) -> dict:
-    raw = sec_request(url)
-    return json.loads(raw.decode("utf-8", errors="ignore"))
+    text = sec_request_text(url).strip()
+
+    if not text:
+        raise ValueError(f"Empty response from SEC: {url}")
+
+    if not text.startswith("{") and not text.startswith("["):
+        preview = text[:220].replace("\n", " ")
+        raise ValueError(f"Non-JSON response from SEC: {preview}")
+
+    return json.loads(text)
 
 
 def fetch_text(url: str) -> str:
-    raw = sec_request(url)
-    return raw.decode("utf-8", errors="ignore")
+    return sec_request_text(url)
 
 
 def normalize_cik(value: Any) -> str:
@@ -148,6 +205,7 @@ def get_watchlist_symbols() -> list[str]:
 
     for item in WATCHLIST:
         symbol = clean_symbol(item.get("ticker") or item.get("symbol"))
+
         if symbol and symbol not in symbols:
             symbols.append(symbol)
 
@@ -164,9 +222,20 @@ def load_company_ticker_map(force_refresh: bool = False) -> dict:
         and utc_now_ts() - float(cached.get("cached_at", 0)) <= CIK_CACHE_TTL_SECONDS
         and isinstance(cached.get("tickers"), dict)
     ):
-        return cached["tickers"]
+        ticker_map = dict(cached["tickers"])
+        ticker_map.update(STATIC_CIK_FALLBACKS)
+        return ticker_map
 
-    data = fetch_json(COMPANY_TICKERS_URL)
+    try:
+        data = fetch_json(COMPANY_TICKERS_URL)
+    except Exception:
+        if isinstance(cached, dict) and isinstance(cached.get("tickers"), dict):
+            ticker_map = dict(cached["tickers"])
+            ticker_map.update(STATIC_CIK_FALLBACKS)
+            return ticker_map
+
+        return dict(STATIC_CIK_FALLBACKS)
+
     ticker_map = {}
 
     for item in data.values():
@@ -180,6 +249,8 @@ def load_company_ticker_map(force_refresh: bool = False) -> dict:
                 "cik": cik,
                 "company": title,
             }
+
+    ticker_map.update(STATIC_CIK_FALLBACKS)
 
     write_json_file(
         CIK_CACHE_FILE,
@@ -201,7 +272,7 @@ def get_cik_for_ticker(ticker: str, force_refresh: bool = False) -> dict | None:
 
     ticker_map = load_company_ticker_map(force_refresh=force_refresh)
 
-    return ticker_map.get(symbol)
+    return ticker_map.get(symbol) or STATIC_CIK_FALLBACKS.get(symbol)
 
 
 def get_recent_form4_filings(ticker: str, force_refresh: bool = False) -> list[dict]:
@@ -270,6 +341,44 @@ def build_filing_url(filing: dict) -> str:
         f"{accession_no_dashes}/"
         f"{primary_document}"
     )
+
+
+def build_complete_submission_url(filing: dict) -> str:
+    cik_no_zeros = str(int(filing["cik"]))
+    accession_no_dashes = str(filing["accession"]).replace("-", "")
+
+    return (
+        f"{ARCHIVES_BASE_URL}/"
+        f"{cik_no_zeros}/"
+        f"{accession_no_dashes}/"
+        f"{filing['accession']}.txt"
+    )
+
+
+def extract_ownership_xml(document_text: str) -> str:
+    text = str(document_text or "").strip()
+
+    if "<ownershipDocument" in text and "</ownershipDocument>" in text:
+        start = text.find("<ownershipDocument")
+        end = text.find("</ownershipDocument>") + len("</ownershipDocument>")
+        return text[start:end]
+
+    xml_blocks = re.findall(
+        r"<XML>\s*(.*?)\s*</XML>",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    for block in xml_blocks:
+        block = block.strip()
+
+        if "<ownershipDocument" in block:
+            return extract_ownership_xml(block)
+
+    if xml_blocks:
+        return xml_blocks[0].strip()
+
+    return text
 
 
 def xml_find_text(node: ET.Element, path: str, default: str = "") -> str:
@@ -352,73 +461,141 @@ def classify_transaction(code: str, acquired_disposed: str = "") -> tuple[str, s
     return label, "Neutral"
 
 
+def parse_transaction_node(
+    node: ET.Element,
+    filing: dict,
+    issuer_symbol: str,
+    issuer_name: str,
+    owner_info: dict,
+    derivative: bool = False,
+) -> dict | None:
+    transaction_date = xml_find_text(node, ".//transactionDate/value", "")
+    code = xml_find_text(node, ".//transactionCoding/transactionCode", "")
+    acquired_disposed = xml_find_text(
+        node,
+        ".//transactionAmounts/transactionAcquiredDisposedCode/value",
+        "",
+    )
+
+    shares = safe_float(
+        xml_find_text(node, ".//transactionAmounts/transactionShares/value", ""),
+        0,
+    ) or 0
+
+    price = safe_float(
+        xml_find_text(node, ".//transactionAmounts/transactionPricePerShare/value", ""),
+        None,
+    )
+
+    shares_owned = safe_float(
+        xml_find_text(node, ".//postTransactionAmounts/sharesOwnedFollowingTransaction/value", ""),
+        None,
+    )
+
+    ownership = xml_find_text(
+        node,
+        ".//ownershipNature/directOrIndirectOwnership/value",
+        "",
+    )
+
+    transaction_label, signal = classify_transaction(code, acquired_disposed)
+    value = shares * price if price is not None else None
+
+    if shares <= 0 and value is None:
+        return None
+
+    return {
+        "ticker": issuer_symbol or clean_symbol(filing.get("ticker")),
+        "company": issuer_name or filing.get("company", ""),
+        "cik": filing.get("cik"),
+        "form": filing.get("form", "4"),
+        "accession": filing.get("accession"),
+        "filing_date": filing.get("filing_date"),
+        "report_date": filing.get("report_date"),
+        "date": transaction_date or filing.get("report_date") or filing.get("filing_date"),
+        "transaction_date": transaction_date,
+        "transaction_code": code,
+        "transaction": transaction_label,
+        "signal": signal,
+        "acquired_disposed": acquired_disposed,
+        "shares": round(shares, 2),
+        "price": round(price, 4) if price is not None else None,
+        "value": round(value, 2) if value is not None else None,
+        "shares_owned_after": round(shares_owned, 2) if shares_owned is not None else None,
+        "ownership": ownership,
+        "insider_name": owner_info["insider_name"],
+        "insider": owner_info["insider_name"],
+        "role": owner_info["role"],
+        "source": "SEC Form 4",
+        "security_type": "Derivative" if derivative else "Non-Derivative",
+        "url": build_filing_url(filing),
+    }
+
+
 def parse_form4_xml(xml_text: str, filing: dict) -> list[dict]:
+    extracted_xml = extract_ownership_xml(xml_text)
+
     try:
-        root = ET.fromstring(xml_text)
+        root = ET.fromstring(extracted_xml)
     except ET.ParseError:
         return []
 
-    issuer_symbol = clean_symbol(xml_find_text(root, ".//issuerTradingSymbol", filing.get("ticker")))
+    issuer_symbol = clean_symbol(
+        xml_find_text(root, ".//issuerTradingSymbol", filing.get("ticker"))
+    )
     issuer_name = xml_find_text(root, ".//issuerName", filing.get("company", ""))
     owner_info = parse_owner_relationship(root)
 
     transactions = []
 
     for node in root.findall(".//nonDerivativeTransaction"):
-        transaction_date = xml_find_text(node, ".//transactionDate/value", "")
-        code = xml_find_text(node, ".//transactionCoding/transactionCode", "")
-        acquired_disposed = xml_find_text(node, ".//transactionAmounts/transactionAcquiredDisposedCode/value", "")
-        shares = safe_float(xml_find_text(node, ".//transactionAmounts/transactionShares/value", ""), 0) or 0
-        price = safe_float(xml_find_text(node, ".//transactionAmounts/transactionPricePerShare/value", ""), None)
-        shares_owned = safe_float(xml_find_text(node, ".//postTransactionAmounts/sharesOwnedFollowingTransaction/value", ""), None)
-        ownership = xml_find_text(node, ".//ownershipNature/directOrIndirectOwnership/value", "")
-
-        transaction_label, signal = classify_transaction(code, acquired_disposed)
-        value = shares * price if price is not None else None
-
-        if shares <= 0 and value is None:
-            continue
-
-        transactions.append(
-            {
-                "ticker": issuer_symbol or clean_symbol(filing.get("ticker")),
-                "company": issuer_name or filing.get("company", ""),
-                "cik": filing.get("cik"),
-                "form": filing.get("form", "4"),
-                "accession": filing.get("accession"),
-                "filing_date": filing.get("filing_date"),
-                "report_date": filing.get("report_date"),
-                "date": transaction_date or filing.get("report_date") or filing.get("filing_date"),
-                "transaction_date": transaction_date,
-                "transaction_code": code,
-                "transaction": transaction_label,
-                "signal": signal,
-                "acquired_disposed": acquired_disposed,
-                "shares": round(shares, 2),
-                "price": round(price, 4) if price is not None else None,
-                "value": round(value, 2) if value is not None else None,
-                "shares_owned_after": round(shares_owned, 2) if shares_owned is not None else None,
-                "ownership": ownership,
-                "insider_name": owner_info["insider_name"],
-                "insider": owner_info["insider_name"],
-                "role": owner_info["role"],
-                "source": "SEC Form 4",
-                "url": build_filing_url(filing),
-            }
+        trade = parse_transaction_node(
+            node=node,
+            filing=filing,
+            issuer_symbol=issuer_symbol,
+            issuer_name=issuer_name,
+            owner_info=owner_info,
+            derivative=False,
         )
+
+        if trade:
+            transactions.append(trade)
+
+    for node in root.findall(".//derivativeTransaction"):
+        trade = parse_transaction_node(
+            node=node,
+            filing=filing,
+            issuer_symbol=issuer_symbol,
+            issuer_name=issuer_name,
+            owner_info=owner_info,
+            derivative=True,
+        )
+
+        if trade:
+            transactions.append(trade)
 
     return transactions
 
 
 def fetch_form4_transactions_for_filing(filing: dict) -> list[dict]:
-    url = build_filing_url(filing)
+    primary_url = build_filing_url(filing)
 
     try:
-        xml_text = fetch_text(url)
+        document_text = fetch_text(primary_url)
+        trades = parse_form4_xml(document_text, filing)
+
+        if trades:
+            return trades
+    except Exception:
+        pass
+
+    complete_url = build_complete_submission_url(filing)
+
+    try:
+        document_text = fetch_text(complete_url)
+        return parse_form4_xml(document_text, filing)
     except Exception:
         return []
-
-    return parse_form4_xml(xml_text, filing)
 
 
 def dedupe_trades(trades: list[dict]) -> list[dict]:
@@ -434,6 +611,7 @@ def dedupe_trades(trades: list[dict]) -> list[dict]:
             trade.get("date"),
             trade.get("shares"),
             trade.get("price"),
+            trade.get("security_type"),
         )
 
         if key in seen:
@@ -476,7 +654,13 @@ def load_cached_trades() -> list[dict] | None:
 
 
 def write_trade_cache(trades: list[dict]) -> None:
-    tickers = sorted({clean_symbol(trade.get("ticker")) for trade in trades if trade.get("ticker")})
+    tickers = sorted(
+        {
+            clean_symbol(trade.get("ticker"))
+            for trade in trades
+            if trade.get("ticker")
+        }
+    )
 
     write_json_file(
         CACHE_FILE,
@@ -491,7 +675,10 @@ def write_trade_cache(trades: list[dict]) -> None:
     )
 
 
-def fetch_live_insider_trades(symbols: list[str] | None = None, force_refresh_ciks: bool = False) -> list[dict]:
+def fetch_live_insider_trades(
+    symbols: list[str] | None = None,
+    force_refresh_ciks: bool = False,
+) -> list[dict]:
     if symbols is None:
         symbols = get_watchlist_symbols()
 
@@ -503,7 +690,10 @@ def fetch_live_insider_trades(symbols: list[str] | None = None, force_refresh_ci
         if not ticker:
             continue
 
-        filings = get_recent_form4_filings(ticker, force_refresh=force_refresh_ciks)
+        filings = get_recent_form4_filings(
+            ticker,
+            force_refresh=force_refresh_ciks,
+        )
 
         for filing in filings:
             all_trades.extend(fetch_form4_transactions_for_filing(filing))
@@ -511,16 +701,11 @@ def fetch_live_insider_trades(symbols: list[str] | None = None, force_refresh_ci
     return sort_trades(dedupe_trades(all_trades))
 
 
-def get_insider_trades(force_refresh: bool = False, symbols: list[str] | None = None) -> list[dict]:
-    """
-    Main public function used by /insiders and scoring.
-
-    Default behavior:
-    - Use cache if fresh.
-    - Refresh from current SEC Form 4 filings when requested or cache is stale.
-    - Never raise to callers; returns [] if SEC is unavailable.
-    """
-    if not force_refresh:
+def get_insider_trades(
+    force_refresh: bool = False,
+    symbols: list[str] | None = None,
+) -> list[dict]:
+    if not force_refresh and symbols is None:
         cached = load_cached_trades()
 
         if cached is not None:
@@ -533,11 +718,16 @@ def get_insider_trades(force_refresh: bool = False, symbols: list[str] | None = 
         cached_trades = cached_payload.get("trades", []) if isinstance(cached_payload, dict) else []
         return cached_trades if isinstance(cached_trades, list) else []
 
-    write_trade_cache(trades)
+    if symbols is None or len(symbols) > 1:
+        write_trade_cache(trades)
+
     return trades
 
 
-def get_insider_trades_for_symbol(ticker: str, force_refresh: bool = False) -> list[dict]:
+def get_insider_trades_for_symbol(
+    ticker: str,
+    force_refresh: bool = False,
+) -> list[dict]:
     symbol = clean_symbol(ticker)
 
     if not symbol:
@@ -560,6 +750,24 @@ def get_insider_trades_for_symbol(ticker: str, force_refresh: bool = False) -> l
     return get_insider_trades(force_refresh=True, symbols=[symbol])
 
 
-# Backward-compatible aliases
+def debug_insider_fetch(ticker: str) -> dict:
+    symbol = clean_symbol(ticker)
+    cik_info = get_cik_for_ticker(symbol, force_refresh=True)
+    filings = get_recent_form4_filings(symbol, force_refresh=True)
+    trades = get_insider_trades_for_symbol(symbol, force_refresh=True)
+
+    return {
+        "ticker": symbol,
+        "cik_info": cik_info,
+        "filings_found": len(filings),
+        "sample_filings": filings[:2],
+        "trades_found": len(trades),
+        "sample_trades": trades[:2],
+    }
+
+
+def refresh_insider_trades():
+    return get_insider_trades(force_refresh=True)
+
+
 get_live_insider_trades = get_insider_trades
-refresh_insider_trades = lambda: get_insider_trades(force_refresh=True)
