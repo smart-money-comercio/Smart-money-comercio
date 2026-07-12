@@ -351,38 +351,26 @@ def build_watchlist_snapshot(symbols: list[str], movers: list[dict]) -> str:
 
 
 def load_global_context() -> dict:
-    try:
-        snapshot = load_market_snapshot()
-    except Exception:
-        snapshot = []
+    """
+    Fast daily-report macro context.
 
-    try:
-        headlines = load_headlines()
-    except Exception:
-        headlines = []
-
-    regime = classify_market_regime(snapshot) if snapshot else "Unavailable"
-
-    headline_themes = []
-
-    for item in headlines[:8]:
-        impact = item.get("impact", "Market")
-        if impact not in headline_themes:
-            headline_themes.append(impact)
-
+    Do not call live network data here.
+    Live macro/headline data belongs in /global and /headlines only.
+    This keeps /report, /testdaily, scheduled daily reports, and deployment preflight fast.
+    """
     return {
-        "snapshot": snapshot,
-        "headlines": headlines,
-        "headline_themes": headline_themes[:MAX_HEADLINE_THEMES],
-        "regime": regime,
-        "nasdaq": get_move(snapshot, "^IXIC"),
-        "vix": get_move(snapshot, "^VIX"),
-        "tlt": get_move(snapshot, "TLT"),
-        "dollar": get_move(snapshot, "UUP"),
-        "oil": get_move(snapshot, "USO"),
-        "gold": get_move(snapshot, "GLD"),
-        "china": get_move(snapshot, "FXI"),
-        "eem": get_move(snapshot, "EEM"),
+        "snapshot": [],
+        "headlines": [],
+        "headline_themes": [],
+        "regime": "Fast Daily Mode",
+        "nasdaq": 0.0,
+        "vix": 0.0,
+        "tlt": 0.0,
+        "dollar": 0.0,
+        "oil": 0.0,
+        "gold": 0.0,
+        "china": 0.0,
+        "eem": 0.0,
     }
 
 

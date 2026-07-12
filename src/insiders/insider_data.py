@@ -728,6 +728,13 @@ def get_insider_trades_for_symbol(
     ticker: str,
     force_refresh: bool = False,
 ) -> list[dict]:
+    """
+    Symbol-level insider lookup.
+
+    Important:
+    - force_refresh=True performs a live SEC lookup for /insiders refresh.
+    - force_refresh=False is cache-only so scoring, /report, and preflight do not hang.
+    """
     symbol = clean_symbol(ticker)
 
     if not symbol:
@@ -736,18 +743,20 @@ def get_insider_trades_for_symbol(
     if force_refresh:
         return get_insider_trades(force_refresh=True, symbols=[symbol])
 
-    trades = get_insider_trades(force_refresh=False)
+    cached = load_cached_trades()
 
-    filtered = [
+    if cached is None:
+        payload = read_json_file(CACHE_FILE, {})
+        cached = payload.get("trades", []) if isinstance(payload, dict) else []
+
+    if not isinstance(cached, list):
+        return []
+
+    return [
         trade
-        for trade in trades
+        for trade in cached
         if clean_symbol(trade.get("ticker")) == symbol
     ]
-
-    if filtered:
-        return filtered
-
-    return get_insider_trades(force_refresh=True, symbols=[symbol])
 
 
 def debug_insider_fetch(ticker: str) -> dict:

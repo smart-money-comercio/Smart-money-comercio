@@ -426,9 +426,17 @@ def build_insider_score_details(ticker: str, force_refresh: bool = False) -> dic
 
 
 def get_insider_score(ticker: str) -> float:
-    details = build_insider_score_details(ticker)
-    return clamp_score(details.get("score", NEUTRAL_SCORE))
+    """
+    Backward-compatible function used by scoring_engine.py.
 
+    This must remain fast/cache-only because it is called during:
+    - /report
+    - /top10
+    - /scorecard
+    - deployment preflight
+    """
+    details = build_insider_score_details(ticker, force_refresh=False)
+    return clamp_score(details.get("score", NEUTRAL_SCORE))
 
 score_insider_activity = get_insider_score
 get_insider_signal = build_insider_score_details
