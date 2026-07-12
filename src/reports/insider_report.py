@@ -1,24 +1,14 @@
 from typing import Any
 
-
-def safe_float(value: Any) -> float | None:
-    try:
-        if value is None:
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+from src.insiders.insider_scoring import build_insider_score_details
 
 
 def clean_symbol(value: Any) -> str:
-    return str(value or "UNKNOWN").strip().upper().replace("$", "")
+    return str(value or "").strip().upper().replace("$", "")
 
 
-def clean_text(value: Any, max_length: int = 160) -> str:
-    if value is None:
-        return ""
-
-    text = " ".join(str(value).split())
+def clean_text(value: Any, max_length: int = 180) -> str:
+    text = " ".join(str(value or "").split())
 
     if len(text) <= max_length:
         return text
@@ -26,211 +16,173 @@ def clean_text(value: Any, max_length: int = 160) -> str:
     return text[: max_length - 3].rstrip() + "..."
 
 
+def safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return default
+
+
 def format_money(value: Any) -> str:
-    number = safe_float(value)
+    number = safe_float(value, 0)
 
-    if number is None:
-        return "N/A"
-
-    if abs(number) >= 1_000_000_000:
-        return f"${number / 1_000_000_000:.2f}B"
-
-    if abs(number) >= 1_000_000:
+    if number >= 1_000_000:
         return f"${number / 1_000_000:.2f}M"
 
-    if abs(number) >= 1_000:
-        return f"${number / 1_000:.2f}K"
+    if number >= 1_000:
+        return f"${number / 1_000:.1f}K"
 
-    return f"${number:,.0f}"
+    if number > 0:
+        return f"${number:,.0f}"
+
+    return "N/A"
 
 
 def format_number(value: Any) -> str:
-    number = safe_float(value)
+    number = safe_float(value, 0)
 
-    if number is None:
-        return "N/A"
+    if number >= 1_000_000:
+        return f"{number / 1_000_000:.2f}M"
 
-    return f"{number:,.0f}"
+    if number >= 1_000:
+        return f"{number / 1_000:.1f}K"
 
+    if number > 0:
+        return f"{number:,.0f}"
 
-def classify_insider_score(score: int | float | None) -> str:
-    value = safe_float(score)
-
-    if value is None:
-        return "Unavailable"
-
-    if value >= 80:
-        return "Strong positive insider signal"
-    if value >= 65:
-        return "Positive insider signal"
-    if value >= 45:
-        return "Neutral / limited insider signal"
-    if value >= 25:
-        return "Weak insider signal"
-
-    return "Negative insider signal"
+    return "N/A"
 
 
-def classify_trade_signal(transaction: Any) -> str:
-    text = str(transaction or "").strip().lower()
-
-    if "purchase" in text or "buy" in text or "acquisition" in text:
-        return "🟢 Purchase"
-
-    if "sale" in text or "sell" in text or "sold" in text or "disposition" in text:
-        return "🔴 Sale"
-
-    return "⚪ Other"
-
-
-def sort_trades(trades: list[dict]) -> list[dict]:
-    return sorted(
-        trades,
-        key=lambda trade: (
-            str(trade.get("date") or ""),
-            safe_float(trade.get("amount_estimate")) or 0,
-        ),
-        reverse=True,
-    )
-
-
-def filter_trades_for_symbol(trades: list[dict], symbol: str) -> list[dict]:
-    clean = clean_symbol(symbol)
+def filter_symbol_trades(symbol: str, all_trades: list[dict]) -> list[dict]:
+    ticker = clean_symbol(symbol)
 
     return [
         trade
-        for trade in trades
-        if clean_symbol(trade.get("ticker")) == clean
+        for trade in all_trades or []
+        if clean_symbol(trade.get("ticker")) == ticker
     ]
 
 
-def build_trade_line(index: int, trade: dict) -> str:
-    transaction = trade.get("transaction") or "Unknown"
-    signal = classify_trade_signal(transaction)
-    insider = clean_text(trade.get("insider") or "Insider", 60)
-    insider_name = clean_text(trade.get("insider_name") or "", 70)
-    amount_range = clean_text(trade.get("amount_range") or "Unknown", 40)
-    amount_estimate = trade.get("amount_estimate")
-    shares = trade.get("shares")
-    price = trade.get("price")
-    filing_date = trade.get("filing_date") or trade.get("date") or "Unknown"
-    form = trade.get("form") or "4"
-
-    name_line = ""
-    if insider_name:
-        name_line = f" | Name: {insider_name}"
+def format_trade_line(trade: dict) -> str:
+    date = trade.get("date") or trade.get("filing_date") or "Unknown date"
+    transaction = clean_text(trade.get("transaction") or trade.get("signal"), 80)
+    insider = clean_text(trade.get("insider_name") or trade.get("insider"), 70)
+    role = clean_text(trade.get("role"), 70)
+    shares = format_number(trade.get("shares"))
+    value = format_money(trade.get("value"))
 
     return (
-        f"{index}. {signal} | Role: {insider}{name_line}\n"
-        f"   Amount: {amount_range} | Est: {format_money(amount_estimate)}\n"
-        f"   Shares: {format_number(shares)} | Price: {format_money(price)}\n"
-        f"   Form: {form} | Filing Date: {filing_date}"
+        f"• {date} | {transaction}\n"
+        f"  Insider: {insider} ({role})\n"
+        f"  Shares: {shares} | Value: {value}"
     )
 
 
-def build_trade_summary(trades: list[dict]) -> str:
-    if not trades:
-        return "No parsed Form 4 purchase/sale transactions found."
+def build_activity_summary(details: dict) -> str:
+    breakdown = details.get("breakdown") or {}
 
-    purchases = 0
-    sales = 0
-    total_purchase_amount = 0.0
-    total_sale_amount = 0.0
+    purchase_value = format_money(breakdown.get("total_purchase_value", 0))
+    sale_value = format_money(breakdown.get("total_sale_value", 0))
 
-    for trade in trades:
-        transaction = str(trade.get("transaction") or "").lower()
-        amount = safe_float(trade.get("amount_estimate")) or 0
-
-        if "purchase" in transaction:
-            purchases += 1
-            total_purchase_amount += amount
-
-        elif "sale" in transaction:
-            sales += 1
-            total_sale_amount += amount
-
-    net_amount = total_purchase_amount - total_sale_amount
-
-    return "\n".join(
-        [
-            f"Parsed Trades: {len(trades)}",
-            f"Purchases: {purchases} | Sales: {sales}",
-            f"Purchase Amount: {format_money(total_purchase_amount)}",
-            f"Sale Amount: {format_money(total_sale_amount)}",
-            f"Net Insider Amount: {format_money(net_amount)}",
-        ]
-    )
+    return f"""
+Signal: {details.get("label", "Neutral / Mixed")}
+Score: {details.get("score", 50)}
+Purchases: {breakdown.get("purchases", 0)} | Buyers: {breakdown.get("unique_buyers", 0)} | Value: {purchase_value}
+Sales: {breakdown.get("sales", 0)} | Sellers: {breakdown.get("unique_sellers", 0)} | Value: {sale_value}
+Tax/Withholding: {breakdown.get("tax_sales", 0)}
+Awards/Exercises: {breakdown.get("awards", 0)}
+""".strip()
 
 
-def build_insider_readout(score: int | float | None, trades: list[dict]) -> str:
-    label = classify_insider_score(score)
+def build_interpretation(details: dict) -> str:
+    score = safe_float(details.get("score"), 50)
+    breakdown = details.get("breakdown") or {}
 
-    if not trades:
+    if score >= 75:
         return (
-            f"{label}. No recent parsed Form 4 purchase/sale transactions were found "
-            "in the current insider cache for this ticker."
+            "Strong insider confirmation. Open-market buying, especially by executives or multiple insiders, "
+            "is a meaningful positive signal."
         )
 
-    purchases = [
-        trade for trade in trades
-        if "purchase" in str(trade.get("transaction") or "").lower()
-    ]
+    if score >= 65:
+        return (
+            "Positive insider signal. Insider activity supports further research, but still confirm trend, volume, valuation, and risk."
+        )
 
-    sales = [
-        trade for trade in trades
-        if "sale" in str(trade.get("transaction") or "").lower()
-    ]
+    if score >= 55:
+        return (
+            "Slightly positive insider read. The signal helps, but it is not strong enough by itself."
+        )
 
-    if len(purchases) > len(sales):
-        return f"{label}. Insider activity leans positive based on recent parsed purchases."
+    if score >= 45:
+        return (
+            "Neutral or mixed insider activity. No clear purchase/sale signal dominates."
+        )
 
-    if len(sales) > len(purchases):
-        return f"{label}. Insider activity leans cautious because sales outnumber purchases."
+    if breakdown.get("sales", 0) > 0:
+        return (
+            "Insider selling pressure is present. Check whether sales are routine, tax-related, or part of a broader reduction pattern."
+        )
 
-    return f"{label}. Insider activity is mixed or balanced."
+    return (
+        "Weak insider signal. There is not enough positive insider activity to support conviction right now."
+    )
 
 
 def build_insider_report(
     symbol: str,
-    insider_score: int | float | None,
-    all_trades: list[dict],
+    insider_score: float | None = None,
+    all_trades: list[dict] | None = None,
     limit: int = 5,
 ) -> str:
-    clean = clean_symbol(symbol)
-    trades = sort_trades(filter_trades_for_symbol(all_trades, clean))
+    ticker = clean_symbol(symbol)
 
-    if trades:
-        trade_lines = "\n\n".join(
-            build_trade_line(index, trade)
-            for index, trade in enumerate(trades[:limit], start=1)
-        )
-    else:
-        trade_lines = (
-            "No parsed Form 4 purchase/sale transactions found for this ticker.\n"
-            "The insider score may be neutral if no recent data is available."
-        )
+    details = build_insider_score_details(ticker)
+
+    trades = details.get("trades") or []
+
+    if not trades and all_trades:
+        trades = filter_symbol_trades(ticker, all_trades)
+
+    if insider_score is not None:
+        details["score"] = insider_score
+
+    recent_lines = [
+        format_trade_line(trade)
+        for trade in trades[:limit]
+    ]
+
+    if not recent_lines:
+        recent_lines = ["No recent SEC Form 4 purchase/sale activity found for this ticker."]
 
     return f"""
-🧾 Smart Money AI Insider Report: {clean}
+🧾 Insider Intelligence: {ticker}
 
-Insider Score
-Score: {insider_score if insider_score is not None else "N/A"}/100
-Readout: {build_insider_readout(insider_score, trades)}
+Current Insider Read
+{build_activity_summary(details)}
 
-Trade Summary
-{build_trade_summary(trades)}
+Why It Matters
+{clean_text(details.get("reason"), 500)}
 
-Recent Parsed Form 4 Trades
-{trade_lines}
+Recent SEC Form 4 Activity
+{chr(10).join(recent_lines)}
+
+Interpretation
+{build_interpretation(details)}
+
+What To Watch
+• Open-market purchases by CEOs, CFOs, directors, or multiple insiders matter most.
+• Routine sales, tax withholding, gifts, and stock awards should not be treated the same as open-market buys.
+• Use insider activity as confirmation, not as a standalone buy/sell signal.
 
 Next Commands
-/scorecard {clean}
-/ticker {clean}
-/top10
+/scorecard {ticker}
+/smartmoney {ticker}
+/risk {ticker}
 /report
 
-Notes
-This report uses parsed SEC Form 4 data from the insider data cache.
-Form 4 sales can occur for many reasons, including taxes, diversification, or planned selling.
-This is informational only and is not financial advice.
+Note
+This is research only, not financial advice.
 """.strip()

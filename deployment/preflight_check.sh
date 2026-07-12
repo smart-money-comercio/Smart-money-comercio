@@ -21,6 +21,9 @@ required_files=(
   "src/commands/daily_report_send_commands.py"
   "src/jobs/daily_report_scheduler.py"
   "src/reports/daily_report.py"
+  "src/insiders/insider_data.py"
+  "src/insiders/insider_scoring.py"
+  "src/reports/insider_report.py"
   "src/reports/ai_summary.py"
   "src/reports/action_checklist.py"
   "src/commands/volume_commands.py"
@@ -92,6 +95,11 @@ function_checks = [
     ("src.reports.daily_report", "build_daily_report"),
     ("src.reports.ai_summary", "build_ai_summary"),
     ("src.reports.action_checklist", "build_action_checklist"),
+    ("src.insiders.insider_data", "get_insider_trades"),
+    ("src.insiders.insider_data", "get_insider_trades_for_symbol"),
+    ("src.insiders.insider_scoring", "get_insider_score"),
+    ("src.insiders.insider_scoring", "build_insider_score_details"),
+    ("src.reports.insider_report", "build_insider_report"),
     ("src.commands.volume_commands", "volume"),
     ("src.commands.analyst_commands", "analyst_command"),
     ("src.reports.global_market_report", "build_global_market_report"),

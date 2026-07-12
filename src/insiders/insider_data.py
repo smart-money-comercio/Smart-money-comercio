@@ -4,489 +4,562 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from pathlib import Path
-from urllib.error import HTTPError, URLError
+from typing import Any
 
+from src.scoring.watchlist import WATCHLIST
 
-SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
-SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
-SEC_ARCHIVES_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{document}"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CACHE_DIR = PROJECT_ROOT / "data"
-CACHE_FILE = CACHE_DIR / "insider_trades_cache.json"
+CACHE_FILE = PROJECT_ROOT / "data" / "insider_trades_cache.json"
+CIK_CACHE_FILE = PROJECT_ROOT / "data" / "sec_company_tickers_cache.json"
 
-CACHE_TTL_SECONDS = int(os.getenv("INSIDER_CACHE_TTL_SECONDS", "43200"))
-SEC_SLEEP_SECONDS = float(os.getenv("SEC_SLEEP_SECONDS", "0.12"))
-SEC_TIMEOUT_SECONDS = int(os.getenv("SEC_TIMEOUT_SECONDS", "10"))
-MAX_FORM4_PER_TICKER = int(os.getenv("INSIDER_MAX_FORM4_PER_TICKER", "4"))
+CACHE_TTL_SECONDS = int(os.getenv("INSIDER_CACHE_TTL_SECONDS", str(60 * 60 * 8)))
+CIK_CACHE_TTL_SECONDS = int(os.getenv("SEC_CIK_CACHE_TTL_SECONDS", str(60 * 60 * 24 * 7)))
+
+REQUEST_TIMEOUT = int(os.getenv("SEC_REQUEST_TIMEOUT", "8"))
+REQUEST_DELAY_SECONDS = float(os.getenv("SEC_REQUEST_DELAY_SECONDS", "0.12"))
+
+MAX_TICKERS = int(os.getenv("INSIDER_MAX_TICKERS", "80"))
+MAX_FILINGS_PER_TICKER = int(os.getenv("INSIDER_MAX_FILINGS_PER_TICKER", "8"))
 
 SEC_USER_AGENT = os.getenv(
     "SEC_USER_AGENT",
-    "SmartMoneyAI/1.0 contact@example.com",
+    "SmartMoneyAI/1.0 admin@example.com",
 )
 
-
-FALLBACK_TICKERS = [
-    "NVDA",
-    "MSFT",
-    "AVGO",
-    "META",
-    "AMZN",
-    "GOOGL",
-    "AMD",
-    "AAPL",
-    "TSLA",
-    "SHOP",
-    "NFLX",
-    "PLTR",
-    "LMT",
-    "NOC",
-    "RTX",
-    "GD",
-    "HII",
-    "AVAV",
-    "KTOS",
-    "RKLB",
-    "ONDS",
-    "CRWD",
-    "PANW",
-    "FTNT",
-    "ZS",
-    "QQQ",
-    "VOO",
-    "ITA",
-    "CIBR",
-    "SCHD",
-    "VYM",
-    "JNJ",
-    "PG",
-    "KO",
-    "PEP",
-    "ABBV",
-    "O",
-    "VZ",
-    "T",
-    "MO",
-    "XOM",
-    "CVX",
-]
+COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
+ARCHIVES_BASE_URL = "https://www.sec.gov/Archives/edgar/data"
 
 
-_MEMORY_CACHE = None
+TRANSACTION_LABELS = {
+    "P": "Open Market Purchase",
+    "S": "Sale",
+    "A": "Award / Grant",
+    "M": "Option Exercise",
+    "F": "Tax Withholding / Disposition",
+    "G": "Gift",
+    "D": "Disposition",
+    "J": "Other",
+}
 
 
-def get_headers() -> dict:
-    return {
-        "User-Agent": SEC_USER_AGENT,
-        "Accept-Encoding": "gzip, deflate",
-        "Accept": "application/json,text/xml,application/xml,*/*",
-    }
+def clean_symbol(value: Any) -> str:
+    return str(value or "").strip().upper().replace("$", "")
 
 
-def sleep_for_sec_rate_limit() -> None:
-    if SEC_SLEEP_SECONDS > 0:
-        time.sleep(SEC_SLEEP_SECONDS)
+def clean_text(value: Any, max_length: int = 180) -> str:
+    text = " ".join(str(value or "").split())
+
+    if len(text) <= max_length:
+        return text
+
+    return text[: max_length - 3].rstrip() + "..."
 
 
-def fetch_url(url: str) -> bytes:
-    request = urllib.request.Request(url, headers=get_headers())
+def safe_float(value: Any, default: float | None = None) -> float | None:
+    try:
+        if value is None:
+            return default
+        text = str(value).replace(",", "").strip()
+        if not text:
+            return default
+        return float(text)
+    except (TypeError, ValueError):
+        return default
 
-    with urllib.request.urlopen(request, timeout=SEC_TIMEOUT_SECONDS) as response:
-        return response.read()
+
+def safe_int(value: Any, default: int = 0) -> int:
+    number = safe_float(value, None)
+
+    if number is None:
+        return default
+
+    return int(number)
+
+
+def utc_now_ts() -> float:
+    return time.time()
+
+
+def iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def read_json_file(path: Path, default: Any):
+    try:
+        if not path.exists():
+            return default
+
+        with path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+
+    except Exception:
+        return default
+
+
+def write_json_file(path: Path, data: Any) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with path.open("w", encoding="utf-8") as file:
+            json.dump(data, file, indent=2, sort_keys=True)
+
+    except Exception:
+        return
+
+
+def sec_request(url: str) -> Any:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": SEC_USER_AGENT,
+            "Accept-Encoding": "gzip, deflate",
+            "Host": urllib.parse.urlparse(url).netloc,
+        },
+    )
+
+    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
+        raw = response.read()
+
+    time.sleep(REQUEST_DELAY_SECONDS)
+
+    return raw
 
 
 def fetch_json(url: str) -> dict:
-    payload = fetch_url(url)
-    return json.loads(payload.decode("utf-8"))
+    raw = sec_request(url)
+    return json.loads(raw.decode("utf-8", errors="ignore"))
 
 
-def normalize_cik(cik) -> str:
-    return str(cik).strip().zfill(10)
+def fetch_text(url: str) -> str:
+    raw = sec_request(url)
+    return raw.decode("utf-8", errors="ignore")
 
 
-def clean_ticker(ticker: str) -> str:
-    return str(ticker or "").strip().upper().replace("$", "")
+def normalize_cik(value: Any) -> str:
+    return str(value or "").strip().zfill(10)
 
 
-def get_watchlist_tickers() -> list[str]:
-    try:
-        from src.scoring.watchlist import WATCHLIST
+def get_watchlist_symbols() -> list[str]:
+    symbols = []
 
-        tickers = [
-            clean_ticker(stock.get("ticker"))
-            for stock in WATCHLIST
-            if isinstance(stock, dict) and stock.get("ticker")
-        ]
+    for item in WATCHLIST:
+        symbol = clean_symbol(item.get("ticker") or item.get("symbol"))
+        if symbol and symbol not in symbols:
+            symbols.append(symbol)
 
-        unique_tickers = sorted(set(tickers))
-
-        if unique_tickers:
-            return unique_tickers
-
-    except Exception:
-        pass
-
-    return FALLBACK_TICKERS
+    return symbols[:MAX_TICKERS]
 
 
-def load_ticker_cik_map() -> dict[str, str]:
-    data = fetch_json(SEC_TICKERS_URL)
+def load_company_ticker_map(force_refresh: bool = False) -> dict:
+    cached = read_json_file(CIK_CACHE_FILE, {})
+
+    if (
+        not force_refresh
+        and isinstance(cached, dict)
+        and cached.get("cached_at")
+        and utc_now_ts() - float(cached.get("cached_at", 0)) <= CIK_CACHE_TTL_SECONDS
+        and isinstance(cached.get("tickers"), dict)
+    ):
+        return cached["tickers"]
+
+    data = fetch_json(COMPANY_TICKERS_URL)
     ticker_map = {}
 
     for item in data.values():
-        ticker = clean_ticker(item.get("ticker"))
-        cik = item.get("cik_str")
+        ticker = clean_symbol(item.get("ticker"))
+        cik = normalize_cik(item.get("cik_str"))
+        title = clean_text(item.get("title"), 160)
 
         if ticker and cik:
-            ticker_map[ticker] = normalize_cik(cik)
+            ticker_map[ticker] = {
+                "ticker": ticker,
+                "cik": cik,
+                "company": title,
+            }
+
+    write_json_file(
+        CIK_CACHE_FILE,
+        {
+            "cached_at": utc_now_ts(),
+            "cached_at_iso": iso_now(),
+            "tickers": ticker_map,
+        },
+    )
 
     return ticker_map
 
 
-def get_recent_form4_filings(cik: str) -> list[dict]:
-    url = SEC_SUBMISSIONS_URL.format(cik=cik)
-    data = fetch_json(url)
+def get_cik_for_ticker(ticker: str, force_refresh: bool = False) -> dict | None:
+    symbol = clean_symbol(ticker)
 
-    recent = data.get("filings", {}).get("recent", {})
+    if not symbol:
+        return None
 
-    forms = recent.get("form", [])
-    accession_numbers = recent.get("accessionNumber", [])
-    filing_dates = recent.get("filingDate", [])
-    primary_documents = recent.get("primaryDocument", [])
+    ticker_map = load_company_ticker_map(force_refresh=force_refresh)
+
+    return ticker_map.get(symbol)
+
+
+def get_recent_form4_filings(ticker: str, force_refresh: bool = False) -> list[dict]:
+    cik_info = get_cik_for_ticker(ticker, force_refresh=force_refresh)
+
+    if not cik_info:
+        return []
+
+    cik = cik_info["cik"]
+    url = SUBMISSIONS_URL.format(cik=cik)
+
+    try:
+        payload = fetch_json(url)
+    except Exception:
+        return []
+
+    recent = payload.get("filings", {}).get("recent", {})
+
+    forms = recent.get("form") or []
+    accession_numbers = recent.get("accessionNumber") or []
+    filing_dates = recent.get("filingDate") or []
+    report_dates = recent.get("reportDate") or []
+    primary_documents = recent.get("primaryDocument") or []
 
     filings = []
 
-    for index, form_type in enumerate(forms):
-        if form_type not in {"4", "4/A"}:
+    for index, form in enumerate(forms):
+        if str(form).upper() not in {"4", "4/A"}:
             continue
 
         accession = accession_numbers[index] if index < len(accession_numbers) else ""
         filing_date = filing_dates[index] if index < len(filing_dates) else ""
-        document = primary_documents[index] if index < len(primary_documents) else ""
+        report_date = report_dates[index] if index < len(report_dates) else ""
+        primary_document = primary_documents[index] if index < len(primary_documents) else ""
 
-        if not accession or not document:
+        if not accession or not primary_document:
             continue
 
         filings.append(
             {
-                "form": form_type,
+                "ticker": clean_symbol(ticker),
+                "cik": cik,
+                "company": cik_info.get("company", ""),
+                "form": str(form).upper(),
                 "accession": accession,
                 "filing_date": filing_date,
-                "document": document,
+                "report_date": report_date,
+                "primary_document": primary_document,
             }
         )
 
-        if len(filings) >= MAX_FORM4_PER_TICKER:
+        if len(filings) >= MAX_FILINGS_PER_TICKER:
             break
 
     return filings
 
 
-def build_filing_url(cik: str, filing: dict) -> str:
-    accession_no_dashes = filing["accession"].replace("-", "")
-    document = urllib.parse.quote(filing["document"], safe="/")
+def build_filing_url(filing: dict) -> str:
+    cik_no_zeros = str(int(filing["cik"]))
+    accession_no_dashes = str(filing["accession"]).replace("-", "")
+    primary_document = filing["primary_document"]
 
-    return SEC_ARCHIVES_URL.format(
-        cik=str(int(cik)),
-        accession=accession_no_dashes,
-        document=document,
+    return (
+        f"{ARCHIVES_BASE_URL}/"
+        f"{cik_no_zeros}/"
+        f"{accession_no_dashes}/"
+        f"{primary_document}"
     )
 
 
-def local_name(tag: str) -> str:
-    return tag.split("}", 1)[-1]
+def xml_find_text(node: ET.Element, path: str, default: str = "") -> str:
+    found = node.find(path)
+
+    if found is None or found.text is None:
+        return default
+
+    return clean_text(found.text, 240)
 
 
-def find_first_text(root, name: str) -> str:
-    for element in root.iter():
-        if local_name(element.tag) == name and element.text:
-            return element.text.strip()
+def parse_owner_relationship(root: ET.Element) -> dict:
+    owner = root.find(".//reportingOwner")
+    relationship = root.find(".//reportingOwnerRelationship")
 
-    return ""
+    owner_name = ""
+    role = "Insider"
+
+    if owner is not None:
+        owner_name = xml_find_text(owner, ".//rptOwnerName", "")
+
+    if relationship is not None:
+        is_director = xml_find_text(relationship, ".//isDirector", "0") == "1"
+        is_officer = xml_find_text(relationship, ".//isOfficer", "0") == "1"
+        is_ten_percent = xml_find_text(relationship, ".//isTenPercentOwner", "0") == "1"
+        officer_title = xml_find_text(relationship, ".//officerTitle", "")
+
+        role_parts = []
+
+        if officer_title:
+            role_parts.append(officer_title)
+        elif is_officer:
+            role_parts.append("Officer")
+
+        if is_director:
+            role_parts.append("Director")
+
+        if is_ten_percent:
+            role_parts.append("10% Owner")
+
+        if role_parts:
+            role = " / ".join(role_parts)
+
+    return {
+        "insider_name": owner_name or "Unknown Insider",
+        "role": role,
+    }
 
 
-def find_children_by_name(root, name: str) -> list:
-    return [
-        element
-        for element in root.iter()
-        if local_name(element.tag) == name
-    ]
+def classify_transaction(code: str, acquired_disposed: str = "") -> tuple[str, str]:
+    code = clean_text(code, 10).upper()
+    acquired_disposed = clean_text(acquired_disposed, 10).upper()
+
+    label = TRANSACTION_LABELS.get(code, f"Code {code or 'Unknown'}")
+
+    if code == "P":
+        return label, "Bullish Purchase"
+
+    if code == "S":
+        return label, "Sale"
+
+    if code == "F":
+        return label, "Tax / Withholding"
+
+    if code == "M":
+        return label, "Option Exercise"
+
+    if code == "A":
+        return label, "Award / Grant"
+
+    if code == "G":
+        return label, "Gift"
+
+    if acquired_disposed == "A":
+        return label, "Acquired"
+
+    if acquired_disposed == "D":
+        return label, "Disposed"
+
+    return label, "Neutral"
 
 
-def get_child_text(parent, child_name: str) -> str:
-    for child in parent.iter():
-        if local_name(child.tag) == child_name and child.text:
-            return child.text.strip()
-
-    return ""
-
-
-def parse_float(value: str):
+def parse_form4_xml(xml_text: str, filing: dict) -> list[dict]:
     try:
-        if value is None or value == "":
-            return None
-        return float(str(value).replace(",", ""))
-    except (TypeError, ValueError):
-        return None
-
-
-def amount_to_range(amount: float | None) -> str:
-    if amount is None:
-        return "Unknown"
-
-    if amount >= 10_000_000:
-        return "$10M+"
-    if amount >= 5_000_000:
-        return "$5M - $10M"
-    if amount >= 2_000_000:
-        return "$2M - $5M"
-    if amount >= 1_000_000:
-        return "$1M - $2M"
-    if amount >= 500_000:
-        return "$500K - $1M"
-    if amount >= 250_000:
-        return "$250K - $500K"
-    if amount >= 100_000:
-        return "$100K - $250K"
-    if amount >= 50_000:
-        return "$50K - $100K"
-
-    return "Under $50K"
-
-
-def transaction_label(code: str) -> str:
-    clean_code = str(code or "").strip().upper()
-
-    if clean_code == "P":
-        return "Purchase"
-
-    if clean_code == "S":
-        return "Sale"
-
-    return f"Other ({clean_code})" if clean_code else "Other"
-
-
-def get_reporting_owner_role(root) -> str:
-    relationship_nodes = find_children_by_name(root, "reportingOwnerRelationship")
-
-    if not relationship_nodes:
-        return "Insider"
-
-    relationship = relationship_nodes[0]
-
-    officer_title = get_child_text(relationship, "officerTitle")
-    is_director = get_child_text(relationship, "isDirector")
-    is_officer = get_child_text(relationship, "isOfficer")
-    is_ten_percent_owner = get_child_text(relationship, "isTenPercentOwner")
-
-    title_upper = officer_title.upper()
-
-    if "CEO" in title_upper or "CHIEF EXECUTIVE" in title_upper:
-        return "CEO"
-
-    if "CFO" in title_upper or "CHIEF FINANCIAL" in title_upper:
-        return "CFO"
-
-    if "COO" in title_upper or "CHIEF OPERATING" in title_upper:
-        return "COO"
-
-    if officer_title:
-        return officer_title
-
-    if is_director in {"1", "true", "True"}:
-        return "Director"
-
-    if is_ten_percent_owner in {"1", "true", "True"}:
-        return "10% Owner"
-
-    if is_officer in {"1", "true", "True"}:
-        return "Officer"
-
-    return "Insider"
-
-
-def parse_form4_transactions(xml_payload: bytes, fallback_ticker: str, filing: dict, source_url: str) -> list[dict]:
-    try:
-        root = ET.fromstring(xml_payload)
+        root = ET.fromstring(xml_text)
     except ET.ParseError:
         return []
 
-    ticker = clean_ticker(find_first_text(root, "issuerTradingSymbol") or fallback_ticker)
-    owner_name = find_first_text(root, "rptOwnerName")
-    insider_role = get_reporting_owner_role(root)
+    issuer_symbol = clean_symbol(xml_find_text(root, ".//issuerTradingSymbol", filing.get("ticker")))
+    issuer_name = xml_find_text(root, ".//issuerName", filing.get("company", ""))
+    owner_info = parse_owner_relationship(root)
 
     transactions = []
 
-    for transaction in find_children_by_name(root, "nonDerivativeTransaction"):
-        code = get_child_text(transaction, "transactionCode")
-        label = transaction_label(code)
+    for node in root.findall(".//nonDerivativeTransaction"):
+        transaction_date = xml_find_text(node, ".//transactionDate/value", "")
+        code = xml_find_text(node, ".//transactionCoding/transactionCode", "")
+        acquired_disposed = xml_find_text(node, ".//transactionAmounts/transactionAcquiredDisposedCode/value", "")
+        shares = safe_float(xml_find_text(node, ".//transactionAmounts/transactionShares/value", ""), 0) or 0
+        price = safe_float(xml_find_text(node, ".//transactionAmounts/transactionPricePerShare/value", ""), None)
+        shares_owned = safe_float(xml_find_text(node, ".//postTransactionAmounts/sharesOwnedFollowingTransaction/value", ""), None)
+        ownership = xml_find_text(node, ".//ownershipNature/directOrIndirectOwnership/value", "")
 
-        if label not in {"Purchase", "Sale"}:
+        transaction_label, signal = classify_transaction(code, acquired_disposed)
+        value = shares * price if price is not None else None
+
+        if shares <= 0 and value is None:
             continue
-
-        transaction_date = get_child_text(transaction, "transactionDate")
-        shares = parse_float(get_child_text(transaction, "transactionShares"))
-        price = parse_float(get_child_text(transaction, "transactionPricePerShare"))
-
-        amount = None
-        if shares is not None and price is not None:
-            amount = shares * price
 
         transactions.append(
             {
-                "insider": insider_role,
-                "insider_name": owner_name or "Unknown",
-                "ticker": ticker,
-                "transaction": label,
-                "transaction_code": code,
-                "amount_range": amount_to_range(amount),
-                "amount_estimate": round(amount, 2) if amount is not None else None,
-                "shares": shares,
-                "price": price,
-                "sector": "SEC Form 4",
-                "date": transaction_date or filing.get("filing_date") or "Unknown",
-                "filing_date": filing.get("filing_date", "Unknown"),
+                "ticker": issuer_symbol or clean_symbol(filing.get("ticker")),
+                "company": issuer_name or filing.get("company", ""),
+                "cik": filing.get("cik"),
                 "form": filing.get("form", "4"),
-                "accession": filing.get("accession", ""),
-                "source_url": source_url,
-                "signal": "Actual SEC Form 4",
-                "notes": "Parsed from SEC Form 4 non-derivative transaction data.",
+                "accession": filing.get("accession"),
+                "filing_date": filing.get("filing_date"),
+                "report_date": filing.get("report_date"),
+                "date": transaction_date or filing.get("report_date") or filing.get("filing_date"),
+                "transaction_date": transaction_date,
+                "transaction_code": code,
+                "transaction": transaction_label,
+                "signal": signal,
+                "acquired_disposed": acquired_disposed,
+                "shares": round(shares, 2),
+                "price": round(price, 4) if price is not None else None,
+                "value": round(value, 2) if value is not None else None,
+                "shares_owned_after": round(shares_owned, 2) if shares_owned is not None else None,
+                "ownership": ownership,
+                "insider_name": owner_info["insider_name"],
+                "insider": owner_info["insider_name"],
+                "role": owner_info["role"],
+                "source": "SEC Form 4",
+                "url": build_filing_url(filing),
             }
         )
 
     return transactions
 
 
-def fetch_form4_transactions_for_ticker(ticker: str, ticker_cik_map: dict[str, str]) -> list[dict]:
-    clean = clean_ticker(ticker)
-    cik = ticker_cik_map.get(clean)
-
-    if not cik:
-        return []
+def fetch_form4_transactions_for_filing(filing: dict) -> list[dict]:
+    url = build_filing_url(filing)
 
     try:
-        filings = get_recent_form4_filings(cik)
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
-        return []
+        xml_text = fetch_text(url)
     except Exception:
         return []
 
-    trades = []
+    return parse_form4_xml(xml_text, filing)
 
-    for filing in filings:
-        source_url = build_filing_url(cik, filing)
 
-        try:
-            sleep_for_sec_rate_limit()
-            xml_payload = fetch_url(source_url)
-            trades.extend(
-                parse_form4_transactions(
-                    xml_payload=xml_payload,
-                    fallback_ticker=clean,
-                    filing=filing,
-                    source_url=source_url,
-                )
-            )
-        except Exception:
+def dedupe_trades(trades: list[dict]) -> list[dict]:
+    seen = set()
+    deduped = []
+
+    for trade in trades:
+        key = (
+            clean_symbol(trade.get("ticker")),
+            trade.get("accession"),
+            trade.get("insider_name"),
+            trade.get("transaction_code"),
+            trade.get("date"),
+            trade.get("shares"),
+            trade.get("price"),
+        )
+
+        if key in seen:
             continue
 
-    return trades
+        seen.add(key)
+        deduped.append(trade)
+
+    return deduped
 
 
-def load_cache() -> list[dict] | None:
-    if not CACHE_FILE.exists():
+def sort_trades(trades: list[dict]) -> list[dict]:
+    return sorted(
+        trades,
+        key=lambda trade: (
+            str(trade.get("filing_date") or ""),
+            safe_float(trade.get("value"), 0) or 0,
+        ),
+        reverse=True,
+    )
+
+
+def load_cached_trades() -> list[dict] | None:
+    payload = read_json_file(CACHE_FILE, {})
+
+    if not isinstance(payload, dict):
         return None
 
-    try:
-        payload = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
-    except Exception:
+    cached_at = safe_float(payload.get("cached_at"), 0) or 0
+
+    if utc_now_ts() - cached_at > CACHE_TTL_SECONDS:
         return None
 
-    fetched_at = payload.get("fetched_at", 0)
-    trades = payload.get("trades", [])
+    trades = payload.get("trades")
 
-    if not isinstance(trades, list):
-        return None
-
-    age = time.time() - float(fetched_at or 0)
-
-    if age <= CACHE_TTL_SECONDS:
+    if isinstance(trades, list):
         return trades
 
     return None
 
 
-def load_stale_cache() -> list[dict]:
-    if not CACHE_FILE.exists():
-        return []
+def write_trade_cache(trades: list[dict]) -> None:
+    tickers = sorted({clean_symbol(trade.get("ticker")) for trade in trades if trade.get("ticker")})
 
-    try:
-        payload = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
-        trades = payload.get("trades", [])
-        return trades if isinstance(trades, list) else []
-    except Exception:
-        return []
-
-
-def save_cache(trades: list[dict]) -> None:
-    try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "fetched_at": time.time(),
-            "source": "SEC Form 4 via EDGAR submissions API",
+    write_json_file(
+        CACHE_FILE,
+        {
+            "cached_at": utc_now_ts(),
+            "cached_at_iso": iso_now(),
+            "source": "SEC Form 4",
+            "tickers": tickers,
+            "records": len(trades),
             "trades": trades,
-        }
-        CACHE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+        },
+    )
 
 
-def fetch_live_insider_trades(tickers: list[str] | None = None) -> list[dict]:
-    symbols = tickers or get_watchlist_tickers()
-    symbols = sorted(set(clean_ticker(symbol) for symbol in symbols if clean_ticker(symbol)))
+def fetch_live_insider_trades(symbols: list[str] | None = None, force_refresh_ciks: bool = False) -> list[dict]:
+    if symbols is None:
+        symbols = get_watchlist_symbols()
 
-    try:
-        ticker_cik_map = load_ticker_cik_map()
-    except Exception:
-        return load_stale_cache()
+    all_trades = []
 
-    trades = []
+    for symbol in symbols[:MAX_TICKERS]:
+        ticker = clean_symbol(symbol)
 
-    for symbol in symbols:
-        sleep_for_sec_rate_limit()
-        trades.extend(fetch_form4_transactions_for_ticker(symbol, ticker_cik_map))
+        if not ticker:
+            continue
 
-    if trades:
-        trades.sort(
-            key=lambda trade: (
-                str(trade.get("date", "")),
-                str(trade.get("ticker", "")),
-            ),
-            reverse=True,
-        )
-        save_cache(trades)
-        return trades
+        filings = get_recent_form4_filings(ticker, force_refresh=force_refresh_ciks)
 
-    return load_stale_cache()
+        for filing in filings:
+            all_trades.extend(fetch_form4_transactions_for_filing(filing))
+
+    return sort_trades(dedupe_trades(all_trades))
 
 
-def get_insider_trades(tickers: list[str] | None = None, force_refresh: bool = False) -> list[dict]:
-    global _MEMORY_CACHE
+def get_insider_trades(force_refresh: bool = False, symbols: list[str] | None = None) -> list[dict]:
+    """
+    Main public function used by /insiders and scoring.
 
-    if _MEMORY_CACHE is not None and not force_refresh:
-        return _MEMORY_CACHE
-
+    Default behavior:
+    - Use cache if fresh.
+    - Refresh from current SEC Form 4 filings when requested or cache is stale.
+    - Never raise to callers; returns [] if SEC is unavailable.
+    """
     if not force_refresh:
-        cached = load_cache()
+        cached = load_cached_trades()
 
         if cached is not None:
-            _MEMORY_CACHE = cached
-            return _MEMORY_CACHE
+            return cached
 
-    _MEMORY_CACHE = fetch_live_insider_trades(tickers)
-    return _MEMORY_CACHE
+    try:
+        trades = fetch_live_insider_trades(symbols=symbols)
+    except Exception:
+        cached_payload = read_json_file(CACHE_FILE, {})
+        cached_trades = cached_payload.get("trades", []) if isinstance(cached_payload, dict) else []
+        return cached_trades if isinstance(cached_trades, list) else []
+
+    write_trade_cache(trades)
+    return trades
 
 
-# Compatibility only. The scoring module should call get_insider_trades().
-INSIDER_TRADES = []
+def get_insider_trades_for_symbol(ticker: str, force_refresh: bool = False) -> list[dict]:
+    symbol = clean_symbol(ticker)
+
+    if not symbol:
+        return []
+
+    if force_refresh:
+        return get_insider_trades(force_refresh=True, symbols=[symbol])
+
+    trades = get_insider_trades(force_refresh=False)
+
+    filtered = [
+        trade
+        for trade in trades
+        if clean_symbol(trade.get("ticker")) == symbol
+    ]
+
+    if filtered:
+        return filtered
+
+    return get_insider_trades(force_refresh=True, symbols=[symbol])
+
+
+# Backward-compatible aliases
+get_live_insider_trades = get_insider_trades
+refresh_insider_trades = lambda: get_insider_trades(force_refresh=True)
