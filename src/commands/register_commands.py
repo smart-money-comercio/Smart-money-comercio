@@ -1,3 +1,5 @@
+from email.mime import application
+
 from telegram.ext import CommandHandler
 
 from src.commands.admin_commands import admin_command
@@ -31,6 +33,8 @@ from src.commands.portfolio_commands import (
 from src.commands.watchlist_commands import watchlist_command
 
 from src.commands.analyst_commands import analyst_command
+
+from src.commands.weekly_calendar_commands import weeklycalendar_command
 
 from src.commands.volume_commands import volume
 
@@ -108,6 +112,8 @@ def register_commands(app):
     app.add_handler(CommandHandler("growth", growth))
     app.add_handler(CommandHandler("dividends", dividends))
     app.add_handler(CommandHandler("portfolio", portfolio))
+    app.add_handler(CommandHandler("weeklycalendar", weeklycalendar_command))
+    app.add_handler(CommandHandler("weekahead", weeklycalendar_command))
     app.add_handler(CommandHandler("global", global_market))
     app.add_handler(CommandHandler("headlines", headlines))
 

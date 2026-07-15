@@ -4,6 +4,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.reports.morning_brief_intro import build_morning_brief_intro
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
     get_action_label,
@@ -653,6 +654,17 @@ def build_risk_notes(top_scores: list[dict], movers: list[dict], context: dict) 
 
     return "\n".join(f"• {note}" for note in notes[:4])
 
+def build_weekly_calendar_pointer() -> str:
+    return """
+Weekly Calendar:
+Full earnings and economic calendar moved to /weeklycalendar.
+
+Today’s focus:
+• Use /weeklycalendar for CPI, PPI, retail sales, jobless claims, housing, sentiment, and major earnings.
+• Use /headlines for current market-moving headlines.
+• Use /global for live macro risk and market regime.
+""".strip()
+
 
 def build_executive_summary(
     top_scores: list[dict],
@@ -769,8 +781,7 @@ def build_daily_report() -> str:
     market_tone = build_market_tone(movers)
     global_context = load_global_context()
 
-    morning_brief_intro = safe_morning_brief_intro()
-    earnings_calendar_section = safe_earnings_economic_calendar()
+    morning_brief_intro = build_morning_brief_intro()
 
     executive_summary = build_executive_summary(
         top_scores=top_scores,
@@ -793,7 +804,6 @@ Executive Summary
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
 
-{earnings_calendar_section}
 
 Watchlist Movers
 {build_watchlist_snapshot(watchlist_symbols, movers)}
