@@ -1,24 +1,28 @@
 {
   "provider": {
     "requested_provider": "auto",
-    "timestamp": 1783820980.1872087,
+    "timestamp": 1784124250.886983,
     "order": "auto = fmp, then stockwatcher"
   },
   "fmp": {
     "ok": false,
     "provider": "fmp",
-    "fmp_key_loaded": false,
+    "fmp_key_loaded": true,
     "normalized_trade_count": 0,
     "house_pages": [
       {
+        "page": 0,
         "source": "House",
-        "reason": "FMP_API_KEY is missing"
+        "http_error": 402,
+        "reason": "HTTP Error 402: Payment Required"
       }
     ],
     "senate_pages": [
       {
+        "page": 0,
         "source": "Senate",
-        "reason": "FMP_API_KEY is missing"
+        "http_error": 402,
+        "reason": "HTTP Error 402: Payment Required"
       }
     ]
   },
