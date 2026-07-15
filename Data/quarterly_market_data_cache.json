@@ -1,0 +1,174 @@
+{
+  "quarters": {
+    "Q2 2026": {
+      "cached_at": 1784136653.6502824,
+      "cached_at_iso": "2026-07-15T12:30:53.650288-05:00",
+      "end_date": "2026-06-30",
+      "groups": {
+        "Benchmarks": [
+          {
+            "end_price": 7499.36,
+            "error": "",
+            "group": "Benchmarks",
+            "label": "S&P 500",
+            "return_percent": 14.05,
+            "start_price": 6575.32,
+            "symbol": "^GSPC"
+          },
+          {
+            "end_price": 26213.72,
+            "error": "",
+            "group": "Benchmarks",
+            "label": "Nasdaq Composite",
+            "return_percent": 20.02,
+            "start_price": 21840.95,
+            "symbol": "^IXIC"
+          },
+          {
+            "end_price": 52319.2,
+            "error": "",
+            "group": "Benchmarks",
+            "label": "Dow Jones",
+            "return_percent": 12.36,
+            "start_price": 46565.74,
+            "symbol": "^DJI"
+          },
+          {
+            "end_price": 3024.37,
+            "error": "",
+            "group": "Benchmarks",
+            "label": "Russell 2000",
+            "return_percent": 20.38,
+            "start_price": 2512.37,
+            "symbol": "^RUT"
+          },
+          {
+            "end_price": 212.77,
+            "error": "",
+            "group": "Benchmarks",
+            "label": "Equal-Weight S&P 500",
+            "return_percent": 10.51,
+            "start_price": 192.54,
+            "symbol": "RSP"
+          }
+        ],
+        "Macro Assets": [
+          {
+            "end_price": 86.42,
+            "error": "",
+            "group": "Macro Assets",
+            "label": "Long Bonds",
+            "return_percent": 0.19,
+            "start_price": 86.26,
+            "symbol": "TLT"
+          },
+          {
+            "end_price": 368.38,
+            "error": "",
+            "group": "Macro Assets",
+            "label": "Gold",
+            "return_percent": -15.86,
+            "start_price": 437.82,
+            "symbol": "GLD"
+          },
+          {
+            "end_price": 106.44,
+            "error": "",
+            "group": "Macro Assets",
+            "label": "Oil",
+            "return_percent": -14.22,
+            "start_price": 124.09,
+            "symbol": "USO"
+          },
+          {
+            "end_price": 28.41,
+            "error": "",
+            "group": "Macro Assets",
+            "label": "U.S. Dollar",
+            "return_percent": 2.45,
+            "start_price": 27.73,
+            "symbol": "UUP"
+          }
+        ],
+        "Sectors and Themes": [
+          {
+            "end_price": 655.89,
+            "error": "",
+            "group": "Sectors and Themes",
+            "label": "Semiconductors",
+            "return_percent": 67.33,
+            "start_price": 391.97,
+            "symbol": "SMH"
+          },
+          {
+            "end_price": 190.52,
+            "error": "",
+            "group": "Sectors and Themes",
+            "label": "Technology",
+            "return_percent": 41.22,
+            "start_price": 134.91,
+            "symbol": "XLK"
+          },
+          {
+            "end_price": 53.61,
+            "error": "",
+            "group": "Sectors and Themes",
+            "label": "Financials",
+            "return_percent": 8.43,
+            "start_price": 49.44,
+            "symbol": "XLF"
+          },
+          {
+            "end_price": 53.11,
+            "error": "",
+            "group": "Sectors and Themes",
+            "label": "Energy",
+            "return_percent": -9.94,
+            "start_price": 58.97,
+            "symbol": "XLE"
+          },
+          {
+            "end_price": 45.34,
+            "error": "",
+            "group": "Sectors and Themes",
+            "label": "Utilities",
+            "return_percent": -1.67,
+            "start_price": 46.11,
+            "symbol": "XLU"
+          },
+          {
+            "end_price": 185.23,
+            "error": "",
+            "group": "Sectors and Themes",
+            "label": "Industrials",
+            "return_percent": 12.65,
+            "start_price": 164.43,
+            "symbol": "XLI"
+          },
+          {
+            "end_price": 117.28,
+            "error": "",
+            "group": "Sectors and Themes",
+            "label": "Consumer Discretionary",
+            "return_percent": 6.81,
+            "start_price": 109.8,
+            "symbol": "XLY"
+          },
+          {
+            "end_price": 83.07,
+            "error": "",
+            "group": "Sectors and Themes",
+            "label": "Consumer Staples",
+            "return_percent": 1.98,
+            "start_price": 81.46,
+            "symbol": "XLP"
+          }
+        ]
+      },
+      "quarter_label": "Q2 2026",
+      "start_date": "2026-04-01"
+    }
+  },
+  "updated_at": 1784136653.6506093,
+  "updated_at_iso": "2026-07-15T12:30:53.650613-05:00"
+}

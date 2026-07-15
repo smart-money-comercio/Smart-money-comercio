@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.reports.quarterly_market_data import build_quarterly_market_attribution_section
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
     get_action_label,
@@ -225,7 +226,6 @@ def build_watchlist_review(scores: list[dict]) -> str:
         return "Watchlist scoring was unavailable for this review."
 
     top = scores[:MAX_TOP_NAMES]
-
     lines = []
 
     for item in top:
@@ -376,6 +376,7 @@ def build_quarterly_market_review(quarter_label: str | None = None) -> str:
     themes = get_cached_theme_names(theme_payload)
 
     opening = build_quarter_opening(quarter_label, themes)
+    market_attribution = build_quarterly_market_attribution_section(quarter_label)
 
     scoring_note = ""
 
@@ -396,6 +397,8 @@ Executive Summary
 • Watchlist count: {len(watchlist_symbols)} symbols.
 • Top Smart Money candidates should be reviewed with scorecards before action.
 • The preferred approach is selective exposure, disciplined sizing, and using volatility to upgrade quality.
+
+{market_attribution}
 
 Main Market Themes
 {build_theme_review(themes)}
