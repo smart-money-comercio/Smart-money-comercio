@@ -1,0 +1,129 @@
+{
+  "cached_at": 1784126360.5542216,
+  "cached_at_iso": "2026-07-15T09:39:20.560111-05:00",
+  "headlines": [
+    "BMW's U.S. business is delivering when it matters most",
+    "Tech stocks live updates: Tech stocks rise as ASML raises forecast on strong demand for AI chips",
+    "Stock market today: Dow, S&P 500, Nasdaq extend gains as ASML buoys AI trade, earnings roll in",
+    "BlackRock crosses $15 trillion in assets under management as Larry Fink hails 'strong' market fundamentals",
+    "Stock Market Today: Dow Climbs On Cool Inflation Data; Aehr Catapults After Earnings Report (Live Coverage)",
+    "Daily \u2013 Vickers Top Buyers & Sellers for 07/15/2026",
+    "Microsoft CEO adds fuel to Palantir CEO\u2019s AI warning",
+    "Unusual Machines Stock Could Soar 125%, Analyst Says. Drone, Missile Plays Surge.",
+    "Heartland Value Fund\u2019s Views on Photronics (PLAB)",
+    "Will I3 Verticals (IIIV) Benefit From AI?",
+    "Nvidia Stock Nears Buy Point On These Positive Signs",
+    "Daily \u2013 Vickers Top Insider Picks for 07/15/2026",
+    "Finnish retail group Kesko\u2019s sales rise 7.9% in June",
+    "Here are the Compelling Reasons to Add Sonic Automotive (SAH)",
+    "Bank of Canada holds rates, says economy is growing again",
+    "Earnings live: BlackRock, Morgan Stanley stocks rise on strong earnings",
+    "Cogent Bioscience (COGT) Files New Drug Application For Bezuclastinib",
+    "Daily Spotlight: State of Global Demand for U.S. Debt",
+    "\u201cCompute Is the New Oil\u201d: Kalshi Just Launched a Way to Bet on the Future Price of AI Computing Power",
+    "Tango Therapeutics (TNGX) to Benefit From Vopimetostat + KRAS Inhibitors Combined Revenues"
+  ],
+  "market_moves": [
+    {
+      "label": "S&P 500",
+      "latest": 7561.45,
+      "move": 0.61,
+      "previous": 7515.34,
+      "symbol": "^GSPC"
+    },
+    {
+      "label": "Nasdaq",
+      "latest": 26173.26,
+      "move": 1.16,
+      "previous": 25873.18,
+      "symbol": "^IXIC"
+    },
+    {
+      "label": "Dow",
+      "latest": 52750.66,
+      "move": 0.48,
+      "previous": 52498.64,
+      "symbol": "^DJI"
+    },
+    {
+      "label": "Russell 2000",
+      "latest": 2977.57,
+      "move": 0.83,
+      "previous": 2953.17,
+      "symbol": "^RUT"
+    },
+    {
+      "label": "VIX",
+      "latest": 16.18,
+      "move": -5.71,
+      "previous": 17.16,
+      "symbol": "^VIX"
+    },
+    {
+      "label": "Oil",
+      "latest": 119.91,
+      "move": 1.8,
+      "previous": 117.79,
+      "symbol": "USO"
+    }
+  ],
+  "source": "Yahoo Finance RSS and market chart data",
+  "theme_summary": {
+    "ranked_themes": [
+      [
+        "AI / Chips",
+        13
+      ],
+      [
+        "Market",
+        9
+      ],
+      [
+        "Earnings Season",
+        6
+      ],
+      [
+        "Policy / Regulation",
+        6
+      ],
+      [
+        "Inflation / Fed",
+        2
+      ],
+      [
+        "Oil / Geopolitical Risk",
+        1
+      ]
+    ],
+    "theme_headlines": {
+      "AI / Chips": [
+        "Tech stocks live updates: Tech stocks rise as ASML raises forecast on strong demand for AI chips",
+        "Stock market today: Dow, S&P 500, Nasdaq extend gains as ASML buoys AI trade, earnings roll in",
+        "BlackRock crosses $15 trillion in assets under management as Larry Fink hails 'strong' market fundamentals"
+      ],
+      "Earnings Season": [
+        "Stock market today: Dow, S&P 500, Nasdaq extend gains as ASML buoys AI trade, earnings roll in",
+        "Stock Market Today: Dow Climbs On Cool Inflation Data; Aehr Catapults After Earnings Report (Live Coverage)",
+        "Earnings live: BlackRock, Morgan Stanley stocks rise on strong earnings"
+      ],
+      "Inflation / Fed": [
+        "Stock Market Today: Dow Climbs On Cool Inflation Data; Aehr Catapults After Earnings Report (Live Coverage)",
+        "Bank of Canada holds rates, says economy is growing again"
+      ],
+      "Market": [
+        "BMW's U.S. business is delivering when it matters most",
+        "Unusual Machines Stock Could Soar 125%, Analyst Says. Drone, Missile Plays Surge.",
+        "Heartland Value Fund\u2019s Views on Photronics (PLAB)"
+      ],
+      "Oil / Geopolitical Risk": [
+        "\u201cCompute Is the New Oil\u201d: Kalshi Just Launched a Way to Bet on the Future Price of AI Computing Power"
+      ],
+      "Policy / Regulation": [
+        "Tango Therapeutics (TNGX) to Benefit From Vopimetostat + KRAS Inhibitors Combined Revenues",
+        "Bank of America Securities Maintains Buy Rating for Beam Therapeutics (BEAM)",
+        "Palvella Therapeutics (PVLA) Submits Initial Module of NDA For QTORIN"
+      ]
+    },
+    "top_theme": "AI / Chips"
+  }
+}

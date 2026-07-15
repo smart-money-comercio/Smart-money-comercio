@@ -1,14 +1,9 @@
+import os
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
-from src.reports.global_market_report import (
-    classify_market_regime,
-    get_move,
-    load_headlines,
-    load_market_snapshot,
-)
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
     get_action_label,
@@ -27,7 +22,13 @@ REPORT_TIMEZONE = "America/Lima"
 
 MAX_TOP_OPPORTUNITIES = 3
 MAX_WATCHLIST_MOVERS = 4
-MAX_HEADLINE_THEMES = 4
+
+DAILY_REPORT_LIVE_QUOTES = os.getenv("DAILY_REPORT_LIVE_QUOTES", "0").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def safe_float(value: Any) -> float | None:
@@ -253,6 +254,9 @@ def fetch_watchlist_quotes() -> tuple[list[str], dict]:
     if not symbols:
         return [], {}
 
+    if not DAILY_REPORT_LIVE_QUOTES:
+        return symbols, {}
+
     try:
         quotes = fetch_quotes_for_symbols(symbols)
     except Exception:
@@ -294,7 +298,7 @@ def collect_watchlist_movers(symbols: list[str], quotes: dict) -> list[dict]:
 
 def build_market_tone(movers: list[dict]) -> str:
     if not movers:
-        return "Data unavailable"
+        return "Fast mode / quote-neutral"
 
     changes = [item["change_percent"] for item in movers]
     positive = len([change for change in changes if change > 0])
@@ -318,7 +322,12 @@ def build_market_snapshot(symbols: list[str], movers: list[dict]) -> str:
         return "Watchlist unavailable."
 
     if not movers:
-        return f"{len(symbols)} watchlist symbols loaded, but live quote movement is unavailable."
+        return f"""
+Tone: Fast mode / quote-neutral
+Watchlist: {len(symbols)} symbols loaded
+Live Quotes: Disabled for daily report speed
+Note: Use /global, /marketbrief, /watchlist movers, or /ticker SYMBOL for live market context.
+""".strip()
 
     changes = [item["change_percent"] for item in movers]
     positive = len([change for change in changes if change > 0])
@@ -342,12 +351,46 @@ def build_watchlist_snapshot(symbols: list[str], movers: list[dict]) -> str:
         return "Watchlist unavailable."
 
     if not movers:
-        return f"{len(symbols)} symbols loaded, but no live movement data available."
+        return f"{len(symbols)} symbols loaded. Live movement is disabled in /report fast mode."
 
     return "\n".join(
         f"• {item['symbol']}: {format_price(item['price'])} ({format_percent(item['change_percent'])})"
         for item in movers[:MAX_WATCHLIST_MOVERS]
     )
+
+
+def safe_morning_brief_intro() -> str:
+    try:
+        from src.reports.morning_brief_intro import build_morning_brief_intro
+
+        return build_morning_brief_intro()
+    except Exception as error:
+        return f"""
+Good morning.
+
+Morning brief intro is unavailable right now.
+
+Reason:
+{type(error).__name__}
+""".strip()
+
+
+def safe_earnings_economic_calendar() -> str:
+    try:
+        from src.reports.earnings_economic_calendar import (
+            build_earnings_economic_calendar_section,
+        )
+
+        return build_earnings_economic_calendar_section()
+    except Exception as error:
+        return f"""
+Earnings and Economic Calendar
+
+Calendar section unavailable right now.
+
+Reason:
+{type(error).__name__}
+""".strip()
 
 
 def load_global_context() -> dict:
@@ -454,7 +497,7 @@ def build_global_portfolio_impact(context: dict, top_scores: list[dict]) -> str:
         affected.append("No direct macro hit to top ideas; focus on confirmation, sizing, and price action.")
 
     impact_lines = "\n".join(f"• {line}" for line in affected[:3])
-    themes = ", ".join(context.get("headline_themes", [])) or "No major headline theme available"
+    themes = ", ".join(context.get("headline_themes", [])) or "Use /global and /headlines for live themes"
 
     return f"""
 Regime: {regime}
@@ -726,6 +769,9 @@ def build_daily_report() -> str:
     market_tone = build_market_tone(movers)
     global_context = load_global_context()
 
+    morning_brief_intro = safe_morning_brief_intro()
+    earnings_calendar_section = safe_earnings_economic_calendar()
+
     executive_summary = build_executive_summary(
         top_scores=top_scores,
         movers=movers,
@@ -739,11 +785,15 @@ Daily Brief
 Date: {today}
 Generated: {timestamp} {REPORT_TIMEZONE}
 
+{morning_brief_intro}
+
 Executive Summary
 {executive_summary}
 
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
+
+{earnings_calendar_section}
 
 Watchlist Movers
 {build_watchlist_snapshot(watchlist_symbols, movers)}
@@ -768,6 +818,7 @@ Action Checklist
 
 Next Commands
 /global
+/headlines
 /top10
 /scorecard SYMBOL
 /watchlist movers
