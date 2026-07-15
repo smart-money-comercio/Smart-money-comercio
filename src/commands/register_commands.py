@@ -40,6 +40,8 @@ from src.commands.volume_commands import volume
 
 from src.commands.global_commands import global_market
 
+from src.commands.quarterly_commands import quarterly_command
+
 from src.commands.headlines_commands import headlines
 
 from src.commands.deploycheck_commands import deploycheck_command
@@ -122,6 +124,8 @@ def register_commands(app):
     app.add_handler(CommandHandler("analyst", analyst_command))
     app.add_handler(CommandHandler("market", market))
     app.add_handler(CommandHandler("marketbrief", marketbrief_command))
+    app.add_handler(CommandHandler("quarterly", quarterly_command))
+    app.add_handler(CommandHandler("quarterlyreport", quarterly_command))
     app.add_handler(CommandHandler("earnings", earnings))
     app.add_handler(CommandHandler("volume", volume))
     app.add_handler(CommandHandler("scorecard", scorecard))
