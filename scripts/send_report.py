@@ -33,9 +33,13 @@ def get_chat_ids() -> list[str]:
     raw = get_env_value(
         "TELEGRAM_CHAT_ID",
         "TELEGRAM_CHANNEL_ID",
+        "TELEGRAM_CHANNEL_IDS",
         "TELEGRAM_REPORT_CHAT_ID",
+        "TELEGRAM_REPORT_CHAT_IDS",
         "DAILY_REPORT_CHAT_ID",
+        "DAILY_REPORT_CHAT_IDS",
         "TELEGRAM_DAILY_REPORT_CHAT_ID",
+        "TELEGRAM_DAILY_REPORT_CHAT_IDS",
     )
 
     if not raw:
@@ -78,13 +82,6 @@ def split_long_message(text: str, limit: int = TELEGRAM_MAX_MESSAGE_LENGTH) -> l
 
 
 def refresh_morning_brief_safely() -> None:
-    """
-    Refresh live Morning Brief cache before sending the scheduled report.
-
-    Important:
-    This belongs here, not inside build_daily_report().
-    /report and /deploycheck should remain cache-safe and fast.
-    """
     try:
         from src.reports.morning_brief_intro import refresh_morning_brief_cache
 
@@ -96,7 +93,6 @@ def refresh_morning_brief_safely() -> None:
 
 def send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-
     chunks = split_long_message(text)
 
     for index, chunk in enumerate(chunks, start=1):
@@ -134,8 +130,10 @@ def main() -> None:
     if not chat_ids:
         raise RuntimeError(
             "Missing Telegram chat/channel ID. Set one of: "
-            "TELEGRAM_CHAT_ID, TELEGRAM_CHANNEL_ID, TELEGRAM_REPORT_CHAT_ID, "
-            "DAILY_REPORT_CHAT_ID, TELEGRAM_DAILY_REPORT_CHAT_ID"
+            "TELEGRAM_CHAT_ID, TELEGRAM_CHANNEL_ID, TELEGRAM_CHANNEL_IDS, "
+            "TELEGRAM_REPORT_CHAT_ID, TELEGRAM_REPORT_CHAT_IDS, "
+            "DAILY_REPORT_CHAT_ID, DAILY_REPORT_CHAT_IDS, "
+            "TELEGRAM_DAILY_REPORT_CHAT_ID, TELEGRAM_DAILY_REPORT_CHAT_IDS"
         )
 
     refresh_morning_brief_safely()
