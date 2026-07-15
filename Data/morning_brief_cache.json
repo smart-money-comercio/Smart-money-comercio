@@ -1,69 +1,69 @@
 {
-  "cached_at": 1784126754.2952392,
-  "cached_at_iso": "2026-07-15T09:45:54.301448-05:00",
+  "cached_at": 1784138835.4603386,
+  "cached_at_iso": "2026-07-15T13:07:15.497895-05:00",
   "headlines": [
-    "BMW's U.S. business is delivering when it matters most",
-    "Does International Flavors and Fragrances (IFF) Discounted Valuation Unlocks Opportunity?",
-    "Europe's banks deploy SRT scalpel across private credit exposures",
-    "Should You Be Confident in MarketAxess Holdings (MKTX)?",
-    "Tech stocks live updates: Tech stocks rise as ASML raises forecast on strong demand for AI chips",
-    "Daily \u2013 Vickers Top Buyers & Sellers for 07/15/2026",
     "Microsoft CEO adds fuel to Palantir CEO\u2019s AI warning",
-    "Stock market today: Dow, S&P 500, Nasdaq extend gains as ASML buoys AI trade, earnings roll in",
-    "BlackRock crosses $15 trillion in assets under management as Larry Fink hails 'strong' market fundamentals",
-    "Is McDonald\u2019s (MCD) the Worst Blue Chip Stock to Buy Now?",
-    "RBC Capital Keeps Sector Perform Rating on PepsiCo (PEP)",
-    "Daily \u2013 Vickers Top Insider Picks for 07/15/2026",
-    "UK sets out plans to launch captive insurance regime in 2027",
-    "Here\u2019s Why Disney (DIS) is Among the 8 Worst Blue Chip Stocks to Buy Now",
-    "BMO Capital Starts Intuitive Surgical (ISRG) at Outperform",
-    "Pfizer (PFE) Announces FDA Approval of PADCEV plus Keytruda in MIBC",
-    "UBS Keeps Buy Rating on EQT Corporation (EQT)",
-    "Daily Spotlight: State of Global Demand for U.S. Debt",
-    "Finnish retail group Kesko\u2019s sales rise 7.9% in June",
-    "Morgan Stanley Keeps Equal Weight Rating on VICI Properties (VICI)"
+    "ECB picks 36 payment firms for digital euro pilot",
+    "Ask an Advisor: With $3.7 Million in Assets, Should We Purchase Long-Term Care Insurance?",
+    "NEAR Price May Rally 45% Amid Ongoing AI Crypto Resurge",
+    "China's exports ride AI boom as domestic economy struggles",
+    "Massive AI spending has unexpected effect on U.S. inflation",
+    "China Cuts Saudi Crude Orders as Hormuz Risks and Discounts Reshape Trade",
+    "Samsung Electronics denies report that it is exploring US listing",
+    "BP Flags Stronger Q2 Refining and Lower Output on Maintenance and Disruptions",
+    "Global investors turn most bullish since February, BofA survey shows",
+    "Graphic Packaging debuts uncoated recycled paperboard offering",
+    "Fed Chairman Kevin Warsh on tap to make his first appearance before Congress",
+    "China\u2019s Crude Oil Imports Crash to Decade Low as Hormuz Crisis Bites",
+    "I Have $2 Million Invested and Pay a 1% Advisory Fee. Is That Too High?",
+    "Visa is launching an AI Financial Assistant for banking apps: What cardholders should know",
+    "Here\u2019s the Schedule of Today\u2019s Bank Results",
+    "Foreign transaction fees explained: How much they can cost you and how to avoid them",
+    "Mortgage & refinance rates today, Tuesday, July 14, 2026: Rates mixed this morning",
+    "June CPI breakdown: Gas prices fell, but grocery bills kept climbing",
+    "What does it mean to be 'unbanked,' and what are the costs?"
   ],
   "market_moves": [
     {
       "label": "S&P 500",
-      "latest": 7556.76,
-      "move": 0.55,
-      "previous": 7515.34,
+      "latest": 7572.05,
+      "move": 0.38,
+      "previous": 7543.59,
       "symbol": "^GSPC"
     },
     {
       "label": "Nasdaq",
-      "latest": 26153.14,
-      "move": 1.08,
-      "previous": 25873.18,
+      "latest": 26271.19,
+      "move": 0.63,
+      "previous": 26107.01,
       "symbol": "^IXIC"
     },
     {
       "label": "Dow",
-      "latest": 52685.41,
-      "move": 0.36,
-      "previous": 52498.64,
+      "latest": 52681.12,
+      "move": 0.33,
+      "previous": 52508.27,
       "symbol": "^DJI"
     },
     {
       "label": "Russell 2000",
-      "latest": 2982.01,
-      "move": 0.98,
-      "previous": 2953.17,
+      "latest": 2980.42,
+      "move": 0.53,
+      "previous": 2964.76,
       "symbol": "^RUT"
     },
     {
       "label": "VIX",
-      "latest": 16.03,
-      "move": -6.59,
-      "previous": 17.16,
+      "latest": 15.78,
+      "move": -4.36,
+      "previous": 16.5,
       "symbol": "^VIX"
     },
     {
       "label": "Oil",
-      "latest": 119.8,
-      "move": 1.71,
-      "previous": 117.79,
+      "latest": 119.51,
+      "move": -0.55,
+      "previous": 120.17,
       "symbol": "USO"
     }
   ],
@@ -71,56 +71,60 @@
   "theme_summary": {
     "ranked_themes": [
       [
-        "AI / Chips",
-        14
-      ],
-      [
         "Market",
         12
       ],
       [
-        "Earnings Season",
-        4
+        "AI / Chips",
+        10
+      ],
+      [
+        "Inflation / Fed",
+        6
+      ],
+      [
+        "Oil / Geopolitical Risk",
+        2
       ],
       [
         "Policy / Regulation",
         1
       ],
       [
-        "Inflation / Fed",
-        1
-      ],
-      [
-        "Oil / Geopolitical Risk",
+        "Earnings Season",
         1
       ]
     ],
     "theme_headlines": {
       "AI / Chips": [
-        "Tech stocks live updates: Tech stocks rise as ASML raises forecast on strong demand for AI chips",
-        "Daily \u2013 Vickers Top Buyers & Sellers for 07/15/2026",
-        "Microsoft CEO adds fuel to Palantir CEO\u2019s AI warning"
+        "Microsoft CEO adds fuel to Palantir CEO\u2019s AI warning",
+        "NEAR Price May Rally 45% Amid Ongoing AI Crypto Resurge",
+        "China's exports ride AI boom as domestic economy struggles"
+      ],
+      "Consumer Stress": [
+        "June CPI breakdown: Gas prices fell, but grocery bills kept climbing"
       ],
       "Earnings Season": [
-        "Stock market today: Dow, S&P 500, Nasdaq extend gains as ASML buoys AI trade, earnings roll in",
-        "Morgan Stanley Keeps Equal Weight Rating on VICI Properties (VICI)",
-        "Stock Market Today: Dow Climbs On Cool Inflation Data; Aehr Catapults After Earnings Report (Live Coverage)"
+        "Here\u2019s the Schedule of Today\u2019s Bank Results"
       ],
       "Inflation / Fed": [
-        "Stock Market Today: Dow Climbs On Cool Inflation Data; Aehr Catapults After Earnings Report (Live Coverage)"
+        "Massive AI spending has unexpected effect on U.S. inflation",
+        "Fed Chairman Kevin Warsh on tap to make his first appearance before Congress",
+        "Mortgage & refinance rates today, Tuesday, July 14, 2026: Rates mixed this morning"
       ],
       "Market": [
-        "BMW's U.S. business is delivering when it matters most",
-        "Does International Flavors and Fragrances (IFF) Discounted Valuation Unlocks Opportunity?",
-        "Should You Be Confident in MarketAxess Holdings (MKTX)?"
+        "Ask an Advisor: With $3.7 Million in Assets, Should We Purchase Long-Term Care Insurance?",
+        "Samsung Electronics denies report that it is exploring US listing",
+        "Global investors turn most bullish since February, BofA survey shows"
       ],
       "Oil / Geopolitical Risk": [
-        "\u201cCompute Is the New Oil\u201d: Kalshi Just Launched a Way to Bet on the Future Price of AI Computing Power"
+        "China Cuts Saudi Crude Orders as Hormuz Risks and Discounts Reshape Trade",
+        "China\u2019s Crude Oil Imports Crash to Decade Low as Hormuz Crisis Bites"
       ],
       "Policy / Regulation": [
-        "Europe's banks deploy SRT scalpel across private credit exposures"
+        "ECB picks 36 payment firms for digital euro pilot"
       ]
     },
-    "top_theme": "AI / Chips"
+    "top_theme": "Market"
   }
 }
