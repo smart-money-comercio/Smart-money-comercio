@@ -21,9 +21,9 @@ from src.utils.watchlist_store import load_watchlist
 
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
-MAX_TOP_OPPORTUNITIES = 3
-MAX_WATCHLIST_MOVERS = 4
-MAX_MORNING_BRIEF_CHARS = 1350
+MAX_TOP_OPPORTUNITIES = 2
+MAX_WATCHLIST_MOVERS = 3
+MAX_MORNING_BRIEF_CHARS = 950
 
 # Default back to live movement.
 # Set DAILY_REPORT_LIVE_QUOTES=0 only if you need emergency fast mode.
@@ -616,12 +616,11 @@ def extract_market_move(payload: dict, symbol: str) -> float:
 def build_weekly_calendar_pointer() -> str:
     return """
 Week Ahead:
-Use /weeklycalendar for the full CPI, PPI, retail sales, jobless claims, housing, sentiment, and earnings calendar.
+Use /weeklycalendar for the full macro and earnings calendar.
 
-Today’s focus:
-• Macro: inflation, rates, consumer strength, and Fed expectations.
-• Earnings: bank results, AI/semi reads, guidance quality, and margins.
-• Portfolio: use the calendar to avoid chasing names before major catalysts.
+Focus:
+• Inflation, rates, banks, AI/semi earnings, and consumer strength.
+• Avoid chasing names directly before major catalysts.
 """.strip()
 
 
@@ -790,50 +789,44 @@ def build_global_portfolio_impact(context: dict, top_scores: list[dict]) -> str:
     examples = context.get("headline_examples", [])
     pressure = get_macro_pressure(context)
 
-    if themes:
-        theme_text = ", ".join(themes)
-    else:
-        theme_text = "No headline themes available. Refresh Morning Brief cache or run /headlines."
+    theme_text = ", ".join(themes[:4]) if themes else "Refresh cache or run /headlines."
 
     top_theme_notes = []
 
-    for item in top_scores[:3]:
+    for item in top_scores[:2]:
         ticker = get_ticker(item)
         category = get_category(item)
         top_theme_notes.append(f"• {ticker}: {category_macro_note(category, context)}")
 
     if not top_theme_notes:
-        top_theme_notes.append("• No direct macro hit to top ideas; focus on confirmation and sizing.")
+        top_theme_notes.append("• No direct macro hit to top ideas.")
 
     market_moves = (
-        f"S&P 500 {format_percent(context.get('sp500'))}, "
+        f"S&P {format_percent(context.get('sp500'))}, "
         f"Nasdaq {format_percent(context.get('nasdaq'))}, "
-        f"Russell 2000 {format_percent(context.get('russell'))}, "
+        f"Russell {format_percent(context.get('russell'))}, "
         f"VIX {format_percent(context.get('vix'))}, "
         f"Oil {format_percent(context.get('oil'))}, "
         f"TLT {format_percent(context.get('tlt'))}"
     )
 
     example_text = "\n".join(
-        f"• {clean_text(item, 170)}"
-        for item in examples[:4]
+        f"• {clean_text(item, 135)}"
+        for item in examples[:2]
     ) or "• No headline examples available."
 
     risk_label = "Elevated" if pressure != "no major macro pressure" else "Normal"
 
     return f"""
-Regime: {context.get("regime", "Morning Brief cache unavailable")}
 Macro Risk: {risk_label}
 Pressure: {pressure}
 Market Moves: {market_moves}
+Themes: {theme_text}
 
-Headline Themes:
-{theme_text}
-
-Portfolio Impact:
+Portfolio Read:
 {chr(10).join(top_theme_notes)}
 
-Headline Examples:
+Headlines:
 {example_text}
 """.strip()
 
@@ -844,10 +837,7 @@ def build_defense_ai_warfare_impact(
     scores: list[dict],
 ) -> str:
     if not has_defense_ai_warfare_pressure(context):
-        return """
-Defense / AI Warfare Impact:
-No elevated defense/AI warfare headline signal detected in the current Morning Brief cache.
-""".strip()
+        return ""
 
     defense_names = []
 
@@ -859,22 +849,21 @@ No elevated defense/AI warfare headline signal detected in the current Morning B
 
     if defense_names:
         watch_text = "\n".join(
-            f"• {get_ticker(item)}: {get_smart_money_label(item)} | "
-            f"{get_category(item)} | Action: {get_action_label(item)}"
-            for item in defense_names[:5]
+            f"• {get_ticker(item)}: {get_smart_money_label(item)} | Action: {get_action_label(item)}"
+            for item in defense_names[:4]
         )
     else:
-        watch_text = "• No direct defense/AI warfare names detected in the current scored watchlist."
+        watch_text = "• No direct defense/AI warfare watchlist names detected."
 
     return f"""
 Defense / AI Warfare Impact:
-Escalation around Iran, Hormuz, and regional shipping routes can increase investor attention on defense technology, missile defense, drones, counter-drone systems, cyber defense, ISR, naval security, and autonomous warfare.
+Iran/Hormuz escalation supports attention on DoD, drones, counter-drone, missile defense, cyber, ISR, naval security, and AI warfare.
 
-Watchlist Read:
+Watchlist:
 {watch_text}
 
-Portfolio Interpretation:
-This is not an automatic buy signal. It is a theme confirmation signal. Favor names with strong scores, confirmed volume, clear defense revenue exposure, and manageable valuation risk.
+Read:
+Theme confirmation only — confirm score, volume, valuation, and direct defense exposure before action.
 """.strip()
 
 
@@ -896,23 +885,18 @@ def build_score_summary(scores: list[dict]) -> str:
         "Strong Watch",
         "Developing Watch",
         "Early Watch",
-        "Neutral",
-        "Weak Signal",
     ]
 
-    lines = []
-
-    for label in priority_labels:
-        if counts.get(label):
-            lines.append(f"• {label}: {counts[label]}")
-
-    if not lines:
-        lines = [f"• {label}: {count}" for label, count in sorted(counts.items())]
+    label_text = ", ".join(
+        f"{label}: {counts[label]}"
+        for label in priority_labels
+        if counts.get(label)
+    )
 
     return f"""
 Reviewed: {len(scores)} names
 Top Watch: {top_names if top_names else "N/A"}
-{chr(10).join(lines[:4])}
+Signal Mix: {label_text if label_text else "Mixed"}
 """.strip()
 
 
@@ -950,12 +934,12 @@ def format_opportunity(index: int, item: dict, context: dict) -> str:
     action = get_action_label(item)
     risk = get_risk_label(item)
     category = get_category(item)
-    why = clean_text(build_opportunity_why(item, context), 300)
+    why = clean_text(build_opportunity_why(item, context), 220)
 
     return (
         f"{index}. {ticker} — {label}\n"
-        f"   Action: {action} | Risk: {risk} | Theme: {category}\n"
-        f"   Why: {why}"
+        f"   {action} | Risk: {risk} | Theme: {category}\n"
+        f"   {why}"
     )
 
 
@@ -1047,29 +1031,23 @@ def build_clean_ai_summary(
     context: dict,
 ) -> str:
     best = top_scores[0] if top_scores else None
-    second = top_scores[1] if len(top_scores) > 1 else None
     themes = context.get("headline_themes", [])
-    theme_text = ", ".join(themes[:3]) if themes else "earnings, rates, and portfolio confirmation"
+    theme_text = ", ".join(themes[:3]) if themes else "earnings, rates, and confirmation"
 
     if not best:
         return (
-            f"The portfolio tone is {market_tone.lower()} with {get_macro_pressure(context)}. "
-            f"The main themes are {theme_text}. No clean top setup stands out yet, so confirmation matters more than chasing."
+            f"Tone is {market_tone.lower()} with {get_macro_pressure(context)}. "
+            f"Main themes: {theme_text}. Wait for cleaner confirmation."
         )
 
     summary = (
-        f"The portfolio read is {market_tone.lower()} with {get_macro_pressure(context)}. "
-        f"The main themes are {theme_text}. "
-        f"{get_ticker(best)} is the cleanest setup with a "
-        f"{get_smart_money_label(best).lower()} profile and "
-        f"{get_signal_strength(best).lower()} confirmation."
+        f"Tone is {market_tone.lower()} with {get_macro_pressure(context)}. "
+        f"Main themes: {theme_text}. "
+        f"Best setup: {get_ticker(best)} — {get_smart_money_label(best)}."
     )
 
-    if second:
-        summary += f" {get_ticker(second)} is the secondary watch."
-
     if movers:
-        summary += f" Biggest live move: {movers[0]['symbol']} {format_percent(movers[0]['change_percent'])}."
+        summary += f" Biggest move: {movers[0]['symbol']} {format_percent(movers[0]['change_percent'])}."
 
     return summary
 
@@ -1084,17 +1062,15 @@ def build_action_checklist(
 
     if best:
         ticker = get_ticker(best)
-        actions.append(f"Run /scorecard {ticker}.")
-        actions.append(f"Confirm demand with /volume {ticker}.")
+        actions.append(f"/scorecard {ticker}")
+        actions.append(f"/volume {ticker}")
     else:
-        actions.append("Wait for a cleaner Smart Money setup.")
-
-    actions.append("Use /weeklycalendar before acting around CPI, PPI, or earnings.")
+        actions.append("/top10")
 
     if movers:
-        actions.append(f"Review biggest mover: /ticker {movers[0]['symbol']}.")
-    else:
-        actions.append("Use /top10 to compare the highest-ranked opportunities.")
+        actions.append(f"/ticker {movers[0]['symbol']}")
+
+    actions.append("/weeklycalendar before macro/earnings catalysts")
 
     return "\n".join(f"• {action}" for action in actions[:4])
 
@@ -1142,18 +1118,13 @@ Executive Summary
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
 
-{build_weekly_calendar_pointer()}
-
-Watchlist Movers
-{build_watchlist_snapshot(watchlist_symbols, movers)}
-
 Portfolio Impact
 {build_global_portfolio_impact(global_context, top_scores)}
 
 {build_defense_ai_warfare_impact(global_context, top_scores, scores)}
 
-Smart Money Rating Summary
-{build_score_summary(scores)}
+Watchlist Movers
+{build_watchlist_snapshot(watchlist_symbols, movers)}
 
 Top Opportunities
 {build_top_opportunities(top_scores, global_context, scoring_error)}
