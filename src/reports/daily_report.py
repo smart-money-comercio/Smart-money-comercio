@@ -119,6 +119,130 @@ DEFENSE_AI_WARFARE_CATEGORIES = [
     "COUNTER DRONE",
 ]
 
+GENERIC_THEME_LABELS = {
+    "market",
+    "markets",
+    "stock market",
+    "stocks",
+    "equities",
+    "market news",
+    "general market",
+}
+
+
+SMART_MONEY_LABEL_TRANSLATIONS = {
+    "Core Smart Money Quality": "Quality setup",
+    "Prime Opportunity": "Top-ranked setup",
+    "High Conviction": "High-conviction setup",
+    "Strong Watch": "Strong watchlist candidate",
+    "Developing Watch": "Developing setup",
+    "Early Watch": "Early-stage setup",
+    "Neutral": "Neutral setup",
+    "Weak Signal": "Weak signal",
+}
+
+
+def normalize_theme_name(theme: str | None) -> str:
+    text = " ".join(str(theme or "").split())
+
+    if not text:
+        return ""
+
+    if text.lower() in GENERIC_THEME_LABELS:
+        return ""
+
+    if text == "Oil / Geopolitical Risk":
+        return "Geopolitical / oil risk"
+
+    if text == "AI / Chips":
+        return "AI / chips"
+
+    if text == "AI Infrastructure / Power":
+        return "AI infrastructure / power"
+
+    if text == "Inflation / Fed":
+        return "Inflation / Fed risk"
+
+    if text == "Banks / Credit":
+        return "Banks / credit"
+
+    if text == "Consumer Stress":
+        return "Consumer pressure"
+
+    return text
+
+
+def get_clean_headline_themes(context: dict, limit: int = 4) -> list[str]:
+    themes = []
+
+    for theme in context.get("headline_themes", []) or []:
+        cleaned = normalize_theme_name(theme)
+
+        if cleaned and cleaned not in themes:
+            themes.append(cleaned)
+
+    return themes[:limit]
+
+
+def get_primary_theme(context: dict) -> str:
+    themes = get_clean_headline_themes(context, limit=1)
+
+    if themes:
+        return themes[0]
+
+    if has_geopolitical_pressure(context):
+        return "Geopolitical / oil risk"
+
+    if has_defense_ai_warfare_pressure(context):
+        return "Defense / AI warfare"
+
+    if context.get("nasdaq", 0) < -0.75:
+        return "Growth pressure"
+
+    if context.get("oil", 0) > 1:
+        return "Oil / inflation risk"
+
+    return "Macro / earnings setup"
+
+
+def translate_smart_money_label(item: dict) -> str:
+    raw_label = get_smart_money_label(item)
+
+    translations = {
+        "Core Smart Money Quality": "Quality setup",
+        "Core Smart Money quality": "Quality setup",
+        "Prime Opportunity": "Top-ranked setup",
+        "High Conviction": "High-conviction setup",
+        "Strong Watch": "Strong watchlist candidate",
+        "Developing Watch": "Developing setup",
+        "Early Watch": "Early-stage setup",
+        "Neutral": "Neutral setup",
+        "Weak Signal": "Weak signal",
+    }
+
+    return translations.get(raw_label, raw_label)
+
+def build_market_moves_line(context: dict, movers: list[dict]) -> str:
+    macro_moves = (
+        f"S&P {format_percent(context.get('sp500'))}, "
+        f"Nasdaq {format_percent(context.get('nasdaq'))}, "
+        f"Russell {format_percent(context.get('russell'))}, "
+        f"VIX {format_percent(context.get('vix'))}, "
+        f"Oil {format_percent(context.get('oil'))}, "
+        f"TLT {format_percent(context.get('tlt'))}"
+    )
+
+    if not movers:
+        return macro_moves
+
+    strongest = max(movers, key=lambda item: item["change_percent"])
+    weakest = min(movers, key=lambda item: item["change_percent"])
+
+    return (
+        f"{macro_moves}. "
+        f"Watchlist: {strongest['symbol']} strongest at {format_percent(strongest['change_percent'])}; "
+        f"{weakest['symbol']} weakest at {format_percent(weakest['change_percent'])}."
+    )
 
 def safe_float(value: Any) -> float | None:
     try:
@@ -139,6 +263,22 @@ def clean_text(value: Any, max_length: int = 160) -> str:
         return ""
 
     text = " ".join(str(value).split())
+
+    if len(text) <= max_length:
+        return text
+    
+REPORT_PHRASE_REPLACEMENTS = {
+    "Core Smart Money quality is strong": "Smart Money ranking is strong",
+    "core smart money quality is strong": "Smart Money ranking is strong",
+    "Core Smart Money Quality": "Quality setup",
+    "core smart money quality": "quality setup",
+}
+
+def clean_report_language(value: Any, max_length: int = 220) -> str:
+    text = " ".join(str(value or "").split())
+
+    for old, new in REPORT_PHRASE_REPLACEMENTS.items():
+        text = text.replace(old, new)
 
     if len(text) <= max_length:
         return text
@@ -560,6 +700,50 @@ def extract_headline_themes(payload: dict) -> list[str]:
     return (priority + others)[:6]
 
 
+def extract_headline_themes(payload: dict) -> list[str]:
+    theme_summary = payload.get("theme_summary") or {}
+    ranked = theme_summary.get("ranked_themes") or []
+    headlines = payload.get("headlines") or []
+
+    themes = []
+
+    def add_theme(theme: str | None) -> None:
+        if theme and theme not in themes:
+            themes.append(theme)
+
+    for item in ranked:
+        if isinstance(item, dict):
+            add_theme(item.get("theme"))
+        elif isinstance(item, (list, tuple)) and item:
+            add_theme(item[0])
+
+    for headline in headlines:
+        if isinstance(headline, dict):
+            for theme in headline.get("themes") or []:
+                add_theme(theme)
+
+    priority = [
+        theme
+        for theme in themes
+        if theme in HIGH_IMPACT_MACRO_THEMES
+    ]
+
+    others = [
+        theme
+        for theme in themes
+        if theme not in priority
+    ]
+
+    cleaned = []
+
+    for theme in priority + others:
+        normalized = normalize_theme_name(theme)
+
+        if normalized and normalized not in cleaned:
+            cleaned.append(normalized)
+
+    return cleaned[:6]
+
 def extract_headline_examples(payload: dict) -> list[str]:
     headlines = payload.get("headlines") or []
     examples = []
@@ -570,6 +754,7 @@ def extract_headline_examples(payload: dict) -> list[str]:
             title = item.get("title", "")
             source = item.get("source", "")
             themes = item.get("themes") or []
+
             formatted = f"{title} ({source or 'source'})" if title else ""
 
             if not formatted:
@@ -579,6 +764,7 @@ def extract_headline_examples(payload: dict) -> list[str]:
 
             if (
                 "Oil / Geopolitical Risk" in themes
+                or "Defense / AI Warfare" in themes
                 or any(keyword in lower_title for keyword in GEOPOLITICAL_PRESSURE_KEYWORDS)
                 or any(keyword in lower_title for keyword in DEFENSE_AI_WARFARE_KEYWORDS)
             ):
@@ -600,7 +786,6 @@ def extract_headline_examples(payload: dict) -> list[str]:
     combined = priority_examples + examples
 
     return combined[:4]
-
 
 def extract_market_move(payload: dict, symbol: str) -> float:
     moves = payload.get("market_moves") or []
@@ -839,31 +1024,30 @@ def build_defense_ai_warfare_impact(
     if not has_defense_ai_warfare_pressure(context):
         return ""
 
-    defense_names = []
-
-    for item in scores:
-        category = get_category(item)
-
-        if is_defense_ai_warfare_category(category):
-            defense_names.append(item)
+    defense_names = [
+        item
+        for item in scores
+        if is_defense_ai_warfare_category(get_category(item))
+    ]
 
     if defense_names:
         watch_text = "\n".join(
-            f"• {get_ticker(item)}: {get_smart_money_label(item)} | Action: {get_action_label(item)}"
+            f"• {get_ticker(item)}: {translate_smart_money_label(item)} | "
+            f"{get_category(item)} | {get_action_label(item)}"
             for item in defense_names[:4]
         )
     else:
-        watch_text = "• No direct defense/AI warfare watchlist names detected."
+        watch_text = "• No direct defense/AI warfare names detected in the current scored watchlist."
 
     return f"""
 Defense / AI Warfare Impact:
-Iran/Hormuz escalation supports attention on DoD, drones, counter-drone, missile defense, cyber, ISR, naval security, and AI warfare.
+Strikes and Hormuz risk shift the market conversation from generic AI to mission-critical defense technology: drones, counter-drone systems, missile defense, cyber, ISR, naval protection, and autonomous warfare.
 
-Watchlist:
+Watchlist Focus:
 {watch_text}
 
-Read:
-Theme confirmation only — confirm score, volume, valuation, and direct defense exposure before action.
+How I would treat it:
+Do not chase every defense stock. Prioritize names with direct DoD exposure, rising volume, strong Smart Money scores, and a clear role in AI-enabled defense or battlefield infrastructure.
 """.strip()
 
 
@@ -901,47 +1085,73 @@ Signal Mix: {label_text if label_text else "Mixed"}
 
 
 def build_opportunity_why(item: dict, context: dict) -> str:
-    ticker = get_ticker(item)
-    label = get_smart_money_label(item)
-    signal = get_signal_strength(item)
-    fit = get_portfolio_fit(item)
-    action = get_action_label(item)
-    volume = get_volume_label(item)
     category = get_category(item)
+    label = translate_smart_money_label(item)
+    action = get_action_label(item)
+    risk = get_risk_label(item)
 
-    strength = item.get("strength") or first_list_text(
+    raw_strength = item.get("strength") or first_list_text(
         item.get("strengths", []),
-        "Developing thesis; needs confirmation.",
-        100,
+        "",
+        140,
     )
 
-    weakness = item.get("weakness") or first_list_text(
+    raw_weakness = item.get("weakness") or first_list_text(
         item.get("weaknesses") or item.get("risks"),
-        "Risk still needs review.",
-        100,
+        "",
+        120,
     )
+
+    strength = clean_report_language(raw_strength, 140)
+    weakness = clean_report_language(raw_weakness, 120)
+
+    category_upper = str(category or "").upper()
+
+    if is_defense_ai_warfare_category(category) and has_defense_ai_warfare_pressure(context):
+        today_filter = (
+            "Geopolitical headlines make this theme more relevant today, especially if volume confirms demand for defense, cyber, ISR, drones, or AI warfare exposure."
+        )
+    elif "AI" in category_upper or "TECH" in category_upper or "SEMICONDUCTOR" in category_upper:
+        today_filter = (
+            "This is tied to the AI/growth trade, so confirmation should come from Nasdaq strength, earnings quality, and volume."
+        )
+    elif "ENERGY" in category_upper or "OIL" in category_upper or "POWER" in category_upper:
+        today_filter = (
+            "This setup is tied to energy, power, inflation, or infrastructure demand, so oil/rates and headline risk matter."
+        )
+    elif "DIVIDEND" in category_upper or "UTILITY" in category_upper or "INCOME" in category_upper:
+        today_filter = (
+            "This is more of a stability or income setup, useful when volatility or rate uncertainty rises."
+        )
+    else:
+        today_filter = category_macro_note(category, context)
+
+    if not strength or strength.lower() in {"smart money ranking is strong", "quality setup"}:
+        strength = "The name ranks well on the watchlist, but the setup still needs confirmation from price action and volume."
+
+    if not weakness:
+        weakness = "Main risk is chasing before confirmation."
 
     return (
-        f"{ticker}: {label}, {signal}. Fit: {fit}. Action: {action}. "
-        f"Volume: {volume}. Support: {strength} Risk: {weakness} "
-        f"{category_macro_note(category, context)}"
+        f"{label}. {strength} "
+        f"Today’s filter: {today_filter} "
+        f"Risk: {risk} — {weakness} "
+        f"Action: {action}."
     )
-
 
 def format_opportunity(index: int, item: dict, context: dict) -> str:
     ticker = get_ticker(item)
-    label = get_smart_money_label(item)
+    label = translate_smart_money_label(item)
     action = get_action_label(item)
     risk = get_risk_label(item)
     category = get_category(item)
-    why = clean_text(build_opportunity_why(item, context), 220)
+    why = clean_report_language(build_opportunity_why(item, context), 320)
 
     return (
         f"{index}. {ticker} — {label}\n"
-        f"   {action} | Risk: {risk} | Theme: {category}\n"
-        f"   {why}"
+        f"   Theme: {category} | Risk: {risk} | Action: {action}\n"
+        f"   Why it matters: {why}"
     )
-
 
 def build_top_opportunities(
     top_scores: list[dict],
@@ -999,29 +1209,70 @@ def build_executive_summary(
     context: dict,
 ) -> str:
     best = top_scores[0] if top_scores else None
-    biggest_mover = movers[0] if movers else None
-    themes = context.get("headline_themes", [])
+    primary_theme = get_primary_theme(context)
+    pressure = get_macro_pressure(context)
+    market_moves = build_market_moves_line(context, movers)
 
     lines = [
-        f"• Market tone: {market_tone}.",
-        f"• Macro pressure: {get_macro_pressure(context)}.",
+        f"• Main theme: {primary_theme}.",
+        f"• Market tone: {market_tone}; macro pressure: {pressure}.",
+        f"• Market moves: {market_moves}",
     ]
-
-    if themes:
-        lines.append(f"• Headline themes: {', '.join(themes[:3])}.")
 
     if best:
         lines.append(
-            f"• Best setup: {get_ticker(best)} — {get_smart_money_label(best)}; "
-            f"next step: {get_action_label(best).lower()}."
+            f"• Best watch: {get_ticker(best)} — {translate_smart_money_label(best)}. "
+            f"Next step: /scorecard {get_ticker(best)}."
         )
 
-    if biggest_mover:
+    if has_defense_ai_warfare_pressure(context):
         lines.append(
-            f"• Biggest move: {biggest_mover['symbol']} {format_percent(biggest_mover['change_percent'])}."
+            "• Defense read: escalation is a theme confirmation signal for defense, cyber, drones, ISR, and AI warfare names — not an automatic chase signal."
         )
 
     return "\n".join(lines)
+
+def build_portfolio_read(
+    context: dict,
+    top_scores: list[dict],
+    scores: list[dict],
+) -> str:
+    themes = get_clean_headline_themes(context, limit=3)
+    pressure = get_macro_pressure(context)
+    best = top_scores[0] if top_scores else None
+
+    notes = []
+
+    if has_geopolitical_pressure(context):
+        notes.append(
+            "Geopolitical risk is two-sided: it can pressure broad risk appetite through oil, shipping, and inflation, while increasing attention on defense and security exposure."
+        )
+
+    if has_defense_ai_warfare_pressure(context):
+        defense_names = [
+            item
+            for item in scores
+            if is_defense_ai_warfare_category(get_category(item))
+        ]
+
+        if defense_names:
+            names = ", ".join(get_ticker(item) for item in defense_names[:5])
+            notes.append(f"Defense/AI warfare watchlist exposure detected: {names}.")
+        else:
+            notes.append("Defense theme is active, but no direct defense/AI warfare watchlist exposure was detected.")
+
+    if best:
+        notes.append(
+            f"{get_ticker(best)} is the cleanest ranked setup today, but it still needs price/volume confirmation before action."
+        )
+
+    if themes:
+        notes.append(f"Headline themes to respect today: {', '.join(themes)}.")
+
+    if pressure == "no major macro pressure" and not notes:
+        notes.append("No major macro stress is dominating, so stock-specific quality and entry discipline matter most.")
+
+    return "\n".join(f"• {note}" for note in notes[:4])
 
 
 def build_clean_ai_summary(
@@ -1031,23 +1282,36 @@ def build_clean_ai_summary(
     context: dict,
 ) -> str:
     best = top_scores[0] if top_scores else None
-    themes = context.get("headline_themes", [])
-    theme_text = ", ".join(themes[:3]) if themes else "earnings, rates, and confirmation"
+    themes = get_clean_headline_themes(context, limit=3)
+    theme_text = ", ".join(themes) if themes else "earnings, rates, and confirmation"
+    pressure = get_macro_pressure(context)
 
     if not best:
         return (
-            f"Tone is {market_tone.lower()} with {get_macro_pressure(context)}. "
-            f"Main themes: {theme_text}. Wait for cleaner confirmation."
+            f"My read: the market tone is {market_tone.lower()} with {pressure}. "
+            f"The main themes are {theme_text}. I would stay patient and wait for a cleaner setup."
         )
 
+    ticker = get_ticker(best)
+    label = translate_smart_money_label(best)
+
     summary = (
-        f"Tone is {market_tone.lower()} with {get_macro_pressure(context)}. "
-        f"Main themes: {theme_text}. "
-        f"Best setup: {get_ticker(best)} — {get_smart_money_label(best)}."
+        f"My read: today is not just about chasing the biggest mover. "
+        f"The key themes are {theme_text}, and the pressure point is {pressure}. "
+        f"{ticker} is the cleanest watch right now because it has a {label.lower()} profile, "
+        f"but I would still confirm volume, price action, and risk before acting."
     )
 
+    if has_defense_ai_warfare_pressure(context):
+        summary += (
+            " Defense and AI warfare names deserve extra attention today, but only the names with real exposure and confirmation should move up the priority list."
+        )
+
     if movers:
-        summary += f" Biggest move: {movers[0]['symbol']} {format_percent(movers[0]['change_percent'])}."
+        summary += (
+            f" The biggest live move is {movers[0]['symbol']} at "
+            f"{format_percent(movers[0]['change_percent'])}, so that name should be checked first."
+        )
 
     return summary
 
@@ -1118,8 +1382,8 @@ Executive Summary
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
 
-Portfolio Impact
-{build_global_portfolio_impact(global_context, top_scores)}
+Portfolio Read
+{build_portfolio_read(global_context, top_scores, scores)}
 
 {build_defense_ai_warfare_impact(global_context, top_scores, scores)}
 
@@ -1132,7 +1396,7 @@ Top Opportunities
 Risk Notes
 {build_risk_notes(top_scores, movers, global_context)}
 
-AI Summary
+My Read
 {build_clean_ai_summary(top_scores, movers, market_tone, global_context)}
 
 Action Checklist

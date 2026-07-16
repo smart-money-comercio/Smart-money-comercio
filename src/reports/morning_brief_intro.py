@@ -24,7 +24,11 @@ MARKET_ASSETS = [
     {"symbol": "^RUT", "label": "Russell 2000"},
     {"symbol": "^VIX", "label": "VIX"},
     {"symbol": "USO", "label": "Oil"},
+    {"symbol": "TLT", "label": "Long Bonds"},
+    {"symbol": "GLD", "label": "Gold"},
+    {"symbol": "UUP", "label": "U.S. Dollar"},
 ]
+
 
 RSS_FEEDS = [
     "https://finance.yahoo.com/news/rssindex",
@@ -35,35 +39,200 @@ RSS_FEEDS = [
 
 THEME_KEYWORDS = {
     "AI / Chips": [
-        "ai", "chip", "semiconductor", "nvidia", "amd", "broadcom",
-        "sk hynix", "tsmc", "asml", "data center", "hyperscaler",
-        "openai", "apple",
+        "ai",
+        "artificial intelligence",
+        "chip",
+        "chips",
+        "semiconductor",
+        "nvidia",
+        "amd",
+        "broadcom",
+        "sk hynix",
+        "tsmc",
+        "asml",
+        "data center",
+        "hyperscaler",
+        "openai",
+        "apple",
+    ],
+    "AI Infrastructure / Power": [
+        "data center",
+        "data centers",
+        "power demand",
+        "electricity",
+        "grid",
+        "nuclear",
+        "utility",
+        "utilities",
+        "cooling",
+        "energy demand",
+        "ai infrastructure",
     ],
     "Oil / Geopolitical Risk": [
-        "oil", "crude", "hormuz", "iran", "middle east", "strait",
-        "geopolitical", "shipping",
+        "oil",
+        "crude",
+        "brent",
+        "wti",
+        "hormuz",
+        "strait of hormuz",
+        "iran",
+        "missile",
+        "strike",
+        "strikes",
+        "attack",
+        "attacks",
+        "tanker",
+        "tankers",
+        "shipping",
+        "blockade",
+        "gulf",
+        "middle east",
+        "red sea",
+        "geopolitical",
+        "energy export",
+        "oil supply",
+        "sanctions",
+    ],
+    "Defense / AI Warfare": [
+        "dod",
+        "department of defense",
+        "defense",
+        "defence",
+        "pentagon",
+        "military",
+        "missile defense",
+        "air defense",
+        "drone",
+        "drones",
+        "uav",
+        "counter-drone",
+        "counter drone",
+        "autonomous warfare",
+        "electronic warfare",
+        "isr",
+        "surveillance",
+        "radar",
+        "cyber warfare",
+        "battlefield",
     ],
     "Earnings Season": [
-        "earnings", "results", "guidance", "revenue", "profit",
-        "jpmorgan", "bank of america", "goldman", "wells fargo",
-        "citigroup", "morgan stanley",
+        "earnings",
+        "results",
+        "guidance",
+        "revenue",
+        "profit",
+        "margin",
+        "margins",
+        "jpmorgan",
+        "bank of america",
+        "goldman",
+        "wells fargo",
+        "citigroup",
+        "morgan stanley",
+        "netflix",
     ],
     "Inflation / Fed": [
-        "cpi", "ppi", "inflation", "fed", "federal reserve",
-        "rates", "yield", "treasury", "warsh",
+        "cpi",
+        "ppi",
+        "inflation",
+        "fed",
+        "federal reserve",
+        "rates",
+        "rate cut",
+        "rate cuts",
+        "yield",
+        "treasury",
+        "bond",
+        "bonds",
+        "warsh",
+    ],
+    "Banks / Credit": [
+        "bank",
+        "banks",
+        "credit",
+        "loan",
+        "loans",
+        "deposits",
+        "delinquency",
+        "commercial real estate",
+        "capital markets",
+        "trading revenue",
+        "jpmorgan",
+        "bank of america",
+        "goldman",
+        "wells fargo",
+        "citigroup",
+        "morgan stanley",
     ],
     "Consumer Stress": [
-        "credit card", "groceries", "consumer", "walmart",
-        "prices", "retail sales", "delinquency",
+        "credit card",
+        "groceries",
+        "consumer",
+        "walmart",
+        "prices",
+        "retail sales",
+        "delinquency",
+        "household",
+        "spending",
     ],
     "Policy / Regulation": [
-        "tariff", "refund", "eu", "regulation", "social media",
-        "retirement", "white house", "trump",
+        "tariff",
+        "tariffs",
+        "refund",
+        "eu",
+        "regulation",
+        "regulatory",
+        "social media",
+        "retirement",
+        "white house",
+        "trump",
+        "congress",
     ],
     "Automation / Mobility": [
-        "robotaxi", "waymo", "uber", "rivian", "tesla",
+        "robotaxi",
+        "waymo",
+        "uber",
+        "rivian",
+        "tesla",
         "autonomous",
+        "ev",
+        "electric vehicle",
     ],
+    "Market Breadth / Rotation": [
+        "rotation",
+        "breadth",
+        "small cap",
+        "small caps",
+        "russell",
+        "equal weight",
+        "cyclical",
+        "cyclicals",
+        "laggards",
+        "leadership",
+    ],
+}
+
+
+GENERIC_THEME_LABELS = {
+    "market",
+    "markets",
+    "stock market",
+    "stocks",
+    "equities",
+    "market news",
+    "general market",
+}
+
+
+THEME_LABEL_REPLACEMENTS = {
+    "Oil / Geopolitical Risk": "Geopolitical / oil risk",
+    "Defense / AI Warfare": "Defense / AI warfare",
+    "AI / Chips": "AI / chips",
+    "AI Infrastructure / Power": "AI infrastructure / power",
+    "Inflation / Fed": "Inflation / Fed risk",
+    "Banks / Credit": "Banks / credit",
+    "Consumer Stress": "Consumer pressure",
+    "Market Breadth / Rotation": "Market breadth / rotation",
 }
 
 
@@ -74,6 +243,52 @@ def clean_text(value: Any, max_length: int = 240) -> str:
         return text
 
     return text[: max_length - 3].rstrip() + "..."
+
+
+def clean_theme_label(theme: str | None) -> str:
+    text = " ".join(str(theme or "").split())
+
+    if not text:
+        return ""
+
+    if text.lower() in GENERIC_THEME_LABELS:
+        return ""
+
+    return THEME_LABEL_REPLACEMENTS.get(text, text)
+
+
+def get_clean_theme_list(theme_summary: dict) -> list[str]:
+    ranked = theme_summary.get("ranked_themes") or []
+    themes = []
+
+    for item in ranked:
+        if isinstance(item, dict):
+            raw_theme = item.get("theme")
+        elif isinstance(item, (list, tuple)) and item:
+            raw_theme = item[0]
+        else:
+            raw_theme = None
+
+        cleaned = clean_theme_label(raw_theme)
+
+        if cleaned and cleaned not in themes:
+            themes.append(cleaned)
+
+    return themes[:5]
+
+
+def get_top_theme(theme_summary: dict) -> str:
+    top_theme = clean_theme_label(theme_summary.get("top_theme"))
+
+    if top_theme:
+        return top_theme
+
+    clean_themes = get_clean_theme_list(theme_summary)
+
+    if clean_themes:
+        return clean_themes[0]
+
+    return "Macro / earnings setup"
 
 
 def now_iso() -> str:
@@ -200,9 +415,8 @@ def classify_headline(headline: str) -> list[str]:
         if any(keyword in text for keyword in keywords):
             themes.append(theme)
 
-    if not themes:
-        themes.append("Market")
-
+    # Do not add generic "Market" as a fallback.
+    # Generic headlines should not dominate the morning brief.
     return themes
 
 
@@ -226,7 +440,7 @@ def build_theme_summary(headlines: list[str]) -> dict:
         reverse=True,
     )
 
-    top_theme = ranked_themes[0][0] if ranked_themes else "Market"
+    top_theme = ranked_themes[0][0] if ranked_themes else "Macro / earnings setup"
 
     return {
         "top_theme": top_theme,
@@ -246,7 +460,7 @@ def format_market_recap(moves: list[dict]) -> str:
     dow = by_symbol.get("^DJI", {}).get("move")
 
     if sp500 is None or nasdaq is None or dow is None:
-        return "Stocks enter the day with investors focused on earnings, inflation, rates, and the next phase of the AI trade."
+        return "Stocks enter the day with investors focused on earnings, inflation, rates, geopolitical risk, and the next phase of the AI trade."
 
     direction = "higher" if sp500 >= 0 else "lower"
 
@@ -270,22 +484,30 @@ def build_today_issue_bullets(theme_summary: dict) -> list[str]:
 
         if theme == "AI / Chips":
             bullets.append("AI and chip-sector headlines remain the market’s most important growth theme.")
+        elif theme == "AI Infrastructure / Power":
+            bullets.append("AI infrastructure is broadening into power, data centers, cooling, and grid capacity.")
         elif theme == "Oil / Geopolitical Risk":
-            bullets.append("Oil and geopolitical risk are back in focus for inflation and risk sentiment.")
+            bullets.append("Geopolitical and oil risk are back in focus for inflation, shipping, and risk sentiment.")
+        elif theme == "Defense / AI Warfare":
+            bullets.append("Defense technology, cyber, drones, ISR, and AI warfare exposure deserve extra attention.")
         elif theme == "Earnings Season":
             bullets.append("Earnings season is driving the next test for margins, guidance, and credit quality.")
         elif theme == "Inflation / Fed":
             bullets.append("Inflation and Fed-rate expectations remain central to the market setup.")
+        elif theme == "Banks / Credit":
+            bullets.append("Bank and credit headlines are important for consumer strength and financial conditions.")
         elif theme == "Consumer Stress":
             bullets.append("Consumer stress headlines are worth watching for credit, retail, and bank exposure.")
         elif theme == "Policy / Regulation":
             bullets.append("Policy and regulation headlines could affect sector leadership.")
+        elif theme == "Market Breadth / Rotation":
+            bullets.append("Market breadth and rotation will show whether leadership is broadening or staying narrow.")
         elif example:
             bullets.append(example)
 
     if not bullets:
         bullets = [
-            "Earnings, inflation, rates, and AI leadership remain the main market drivers.",
+            "Earnings, inflation, rates, geopolitical risk, and AI leadership remain the main market drivers.",
             "Portfolio positioning should stay selective until leadership broadens.",
         ]
 
@@ -293,10 +515,16 @@ def build_today_issue_bullets(theme_summary: dict) -> list[str]:
 
 
 def build_what_watching(theme_summary: dict) -> str:
-    top_theme = theme_summary.get("top_theme", "Market")
     themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
+    top_theme = get_top_theme(theme_summary)
 
     watch_items = []
+
+    if "Oil / Geopolitical Risk" in themes:
+        watch_items.append("oil prices, shipping risk, and geopolitical spillover")
+
+    if "Defense / AI Warfare" in themes:
+        watch_items.append("whether defense, cyber, drones, ISR, and AI warfare names see follow-through")
 
     if "Inflation / Fed" in themes:
         watch_items.append("inflation data and the bond-market reaction")
@@ -307,8 +535,8 @@ def build_what_watching(theme_summary: dict) -> str:
     if "AI / Chips" in themes:
         watch_items.append("whether AI leadership stabilizes or continues to rotate")
 
-    if "Oil / Geopolitical Risk" in themes:
-        watch_items.append("oil prices and geopolitical spillover risk")
+    if "AI Infrastructure / Power" in themes:
+        watch_items.append("AI infrastructure demand across power, data centers, and grid capacity")
 
     if "Consumer Stress" in themes:
         watch_items.append("consumer credit, retail demand, and household pressure")
@@ -316,7 +544,9 @@ def build_what_watching(theme_summary: dict) -> str:
     if not watch_items:
         watch_items.append(f"whether the {top_theme.lower()} theme changes market leadership")
 
-    return "What we're watching: " + "; ".join(watch_items[:4]) + "."
+    watch_text = "; ".join(watch_items[:4])
+
+    return f"What we're watching: {watch_text}."
 
 
 def build_portfolio_read(theme_summary: dict) -> str:
@@ -324,11 +554,17 @@ def build_portfolio_read(theme_summary: dict) -> str:
 
     reads = []
 
+    if "Oil / Geopolitical Risk" in themes:
+        reads.append("treat geopolitical risk as two-sided: negative for oil/inflation/shipping risk, supportive for defense and security attention.")
+
+    if "Defense / AI Warfare" in themes:
+        reads.append("watch defense, drones, cyber, ISR, missile defense, and AI warfare names for real volume confirmation.")
+
     if "AI / Chips" in themes:
         reads.append("stay selective in AI and semiconductors; favor infrastructure winners over crowded momentum.")
 
-    if "Oil / Geopolitical Risk" in themes:
-        reads.append("watch oil-sensitive inflation risk and defense/geopolitical beneficiaries.")
+    if "AI Infrastructure / Power" in themes:
+        reads.append("AI infrastructure exposure remains important across power, grid, and data-center demand.")
 
     if "Earnings Season" in themes:
         reads.append("use earnings to separate companies with durable margins from weaker guidance stories.")
@@ -389,17 +625,18 @@ def build_fallback_intro() -> str:
     return """
 Good morning.
 
-Markets enter the day focused on earnings, inflation, interest rates, AI leadership, and portfolio risk. The daily report is using the latest available cached morning brief. Use /headlines and /global for live market context if you want a fresh intraday read.
+Markets enter the day focused on earnings, inflation, interest rates, geopolitical risk, AI leadership, and portfolio risk. The daily report is using the latest available cached morning brief. Use /headlines and /global for live market context if you want a fresh intraday read.
 
 In today's issue:
 • Market leadership and risk appetite.
 • Earnings and guidance quality.
 • Inflation, rates, and Fed expectations.
 • AI, semiconductors, and infrastructure demand.
+• Defense, cyber, drones, ISR, and geopolitical risk when headlines justify it.
 • Watchlist opportunities and risk notes.
 
 What we're watching:
-Whether earnings and macro data support a broader rally or keep leadership concentrated in a smaller group of high-conviction names.
+Whether earnings, macro data, and geopolitical headlines support a broader rally or keep leadership concentrated in a smaller group of high-conviction names.
 """.strip()
 
 
@@ -428,15 +665,14 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
     portfolio_read = build_portfolio_read(theme_summary)
 
     bullet_text = "\n".join(f"• {bullet}" for bullet in issue_bullets)
-
-    top_theme = theme_summary.get("top_theme", "Market")
+    top_theme = get_top_theme(theme_summary)
 
     return f"""
 Good morning.
 
 {market_recap}
 
-The dominant market theme right now is {top_theme}. The signal from headlines is that investors are not just reacting to price action — they are reassessing earnings quality, inflation risk, AI leadership, and where capital is rotating next.
+The dominant market theme right now is {top_theme}. The signal from headlines is that investors are reassessing earnings quality, inflation risk, AI leadership, geopolitical risk, and where capital is rotating next.
 
 In today's issue:
 {bullet_text}
