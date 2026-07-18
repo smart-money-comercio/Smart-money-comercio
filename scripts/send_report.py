@@ -2,6 +2,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
 
 import requests
 from dotenv import load_dotenv
@@ -137,6 +138,7 @@ def main() -> None:
         )
 
     refresh_morning_brief_safely()
+    ensure_morning_brief_cache_is_fresh(max_age_minutes=360)
 
     report = build_daily_report()
 

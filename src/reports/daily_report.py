@@ -37,6 +37,10 @@ DAILY_REPORT_LIVE_QUOTES = os.getenv("DAILY_REPORT_LIVE_QUOTES", "1").lower() in
 
 HIGH_IMPACT_MACRO_THEMES = {
     "Oil / Geopolitical Risk",
+    "Defense / AI Warfare",
+    "Defense Procurement / Munitions",
+    "AI / Chips",
+    "AI Infrastructure / Power",
     "Inflation / Fed",
     "Banks / Credit",
     "Consumer Stress",
@@ -100,6 +104,28 @@ DEFENSE_AI_WARFARE_KEYWORDS = [
     "radar",
     "autonomous",
     "ai warfare",
+    "famm",
+    "family of affordable mass missiles",
+    "low-cost cruise missile",
+    "low cost cruise missile",
+    "affordable mass missile",
+    "palletized munition",
+    "standoff weapon",
+    "standoff weapons",
+    "munitions",
+    "missile stockpile",
+    "strike munitions",
+    "barracuda",
+    "rusty dagger",
+    "coaspire",
+    "anduril",
+    "zone 5",
+    "leidos",
+    "kongsberg",
+    "framework agreements",
+    "multi-year procurement",
+    "defense industrial base",
+    "surge production",
 ]
 
 DEFENSE_AI_WARFARE_CATEGORIES = [
@@ -117,6 +143,11 @@ DEFENSE_AI_WARFARE_CATEGORIES = [
     "MISSILE",
     "COUNTER-DRONE",
     "COUNTER DRONE",
+    "MUNITION",
+    "MUNITIONS",
+    "MISSILES",
+    "PROPULSION",
+    "SENSORS",
 ]
 
 GENERIC_THEME_LABELS = {
@@ -157,6 +188,9 @@ def normalize_theme_name(theme: str | None) -> str:
     if text == "AI / Chips":
         return "AI / chips"
 
+    if text == "Defense Procurement / Munitions":
+        return "Defense procurement / munitions" 
+       
     if text == "AI Infrastructure / Power":
         return "AI infrastructure / power"
 
@@ -266,7 +300,13 @@ def clean_text(value: Any, max_length: int = 160) -> str:
 
     if len(text) <= max_length:
         return text
-    
+
+    if max_length <= 3:
+        return text[:max_length]
+
+    return text[: max_length - 3].rstrip() + "..."
+
+
 REPORT_PHRASE_REPLACEMENTS = {
     "Core Smart Money quality is strong": "Smart Money ranking is strong",
     "core smart money quality is strong": "Smart Money ranking is strong",
@@ -697,43 +737,6 @@ def extract_headline_themes(payload: dict) -> list[str]:
         if theme not in priority
     ]
 
-    return (priority + others)[:6]
-
-
-def extract_headline_themes(payload: dict) -> list[str]:
-    theme_summary = payload.get("theme_summary") or {}
-    ranked = theme_summary.get("ranked_themes") or []
-    headlines = payload.get("headlines") or []
-
-    themes = []
-
-    def add_theme(theme: str | None) -> None:
-        if theme and theme not in themes:
-            themes.append(theme)
-
-    for item in ranked:
-        if isinstance(item, dict):
-            add_theme(item.get("theme"))
-        elif isinstance(item, (list, tuple)) and item:
-            add_theme(item[0])
-
-    for headline in headlines:
-        if isinstance(headline, dict):
-            for theme in headline.get("themes") or []:
-                add_theme(theme)
-
-    priority = [
-        theme
-        for theme in themes
-        if theme in HIGH_IMPACT_MACRO_THEMES
-    ]
-
-    others = [
-        theme
-        for theme in themes
-        if theme not in priority
-    ]
-
     cleaned = []
 
     for theme in priority + others:
@@ -855,9 +858,10 @@ def headline_text_for_pressure(context: dict) -> str:
 
 def has_geopolitical_pressure(context: dict) -> bool:
     themes = context.get("headline_themes", []) or []
+    theme_text = " ".join(str(theme).lower() for theme in themes)
     text = headline_text_for_pressure(context)
 
-    if "Oil / Geopolitical Risk" in themes:
+    if "oil" in theme_text and ("geopolitical" in theme_text or "risk" in theme_text):
         return True
 
     return any(keyword in text for keyword in GEOPOLITICAL_PRESSURE_KEYWORDS)
@@ -865,9 +869,10 @@ def has_geopolitical_pressure(context: dict) -> bool:
 
 def has_defense_ai_warfare_pressure(context: dict) -> bool:
     themes = context.get("headline_themes", []) or []
+    theme_text = " ".join(str(theme).lower() for theme in themes)
     text = headline_text_for_pressure(context)
 
-    if "Oil / Geopolitical Risk" in themes:
+    if "defense" in theme_text or "warfare" in theme_text or "munitions" in theme_text:
         return True
 
     return any(keyword in text for keyword in DEFENSE_AI_WARFARE_KEYWORDS)
@@ -882,20 +887,23 @@ def is_defense_ai_warfare_category(category: str) -> bool:
 def get_macro_pressure(context: dict) -> str:
     pressures = []
     themes = context.get("headline_themes", []) or []
+    normalized_theme_text = " ".join(str(theme).lower() for theme in themes)
 
     if has_geopolitical_pressure(context):
         pressures.append("Hormuz/Iran geopolitical shipping risk")
 
-    if has_defense_ai_warfare_pressure(context):
+    if "procurement" in normalized_theme_text or "munitions" in normalized_theme_text:
+        pressures.append("defense procurement/munitions demand signal")
+    elif has_defense_ai_warfare_pressure(context):
         pressures.append("defense/AI warfare demand signal")
 
-    if "Inflation / Fed" in themes:
+    if "inflation" in normalized_theme_text or "fed" in normalized_theme_text:
         pressures.append("inflation/Fed event risk")
 
-    if "Banks / Credit" in themes:
+    if "bank" in normalized_theme_text or "credit" in normalized_theme_text:
         pressures.append("bank/credit risk")
 
-    if "Consumer Stress" in themes:
+    if "consumer" in normalized_theme_text:
         pressures.append("consumer stress risk")
 
     if context["vix"] > 3:
@@ -940,7 +948,7 @@ def category_macro_note(category: str, context: dict) -> str:
         return "Macro check: defense remains event-driven and useful as geopolitical ballast."
 
     if "AI" in category_upper or "SEMICONDUCTOR" in category_upper or "TECH" in category_upper:
-        if "AI / Chips" in themes or "AI Infrastructure / Power" in themes:
+        if any("ai" in str(theme).lower() for theme in themes):
             return "Macro check: AI remains a headline theme; confirm whether leadership is broadening or rotating."
 
         if context["nasdaq"] < -0.75:
@@ -955,7 +963,7 @@ def category_macro_note(category: str, context: dict) -> str:
         if context["oil"] > 1.5:
             return "Macro check: oil strength may support energy but can raise inflation pressure."
 
-        if "AI Infrastructure / Power" in themes:
+        if any("ai infrastructure" in str(theme).lower() or "power" in str(theme).lower() for theme in themes):
             return "Macro check: AI power demand remains a supportive infrastructure theme."
 
         return "Macro check: energy and power need commodity/capex confirmation."
@@ -1024,6 +1032,20 @@ def build_defense_ai_warfare_impact(
     if not has_defense_ai_warfare_pressure(context):
         return ""
 
+    procurement_theme_active = any(
+        "procurement" in str(theme).lower() or "munitions" in str(theme).lower()
+        for theme in context.get("headline_themes", []) or []
+    )
+
+    if procurement_theme_active:
+        impact_intro = (
+            "This is stronger than a normal defense headline. A multi-year munitions push points to budget-backed demand for low-cost missiles, autonomous strike systems, sensors, mission software, propulsion, and scalable defense manufacturing."
+        )
+    else:
+        impact_intro = (
+            "Strikes, shipping risk, and escalation headlines shift the market conversation from generic AI to mission-critical defense technology: drones, counter-drone systems, missile defense, cyber, ISR, naval protection, and autonomous warfare."
+        )
+
     defense_names = [
         item
         for item in scores
@@ -1039,15 +1061,26 @@ def build_defense_ai_warfare_impact(
     else:
         watch_text = "• No direct defense/AI warfare names detected in the current scored watchlist."
 
+    if top_scores:
+        best = top_scores[0]
+        action_text = (
+            f"Start with {get_ticker(best)} only if the score, volume, and price action confirm. "
+            "Do not chase every defense headline."
+        )
+    else:
+        action_text = (
+            "Do not chase every defense stock. Prioritize names with direct DoD exposure, rising volume, strong Smart Money scores, and a clear role in AI-enabled defense or battlefield infrastructure."
+        )
+
     return f"""
 Defense / AI Warfare Impact:
-Strikes and Hormuz risk shift the market conversation from generic AI to mission-critical defense technology: drones, counter-drone systems, missile defense, cyber, ISR, naval protection, and autonomous warfare.
+{impact_intro}
 
 Watchlist Focus:
 {watch_text}
 
 How I would treat it:
-Do not chase every defense stock. Prioritize names with direct DoD exposure, rising volume, strong Smart Money scores, and a clear role in AI-enabled defense or battlefield infrastructure.
+{action_text}
 """.strip()
 
 

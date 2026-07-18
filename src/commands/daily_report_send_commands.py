@@ -1,18 +1,14 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from src.commands.admin_commands import get_current_chat_id, is_admin
+from src.jobs.daily_report_scheduler import get_daily_report_chat_ids
 from src.reports.daily_report import build_daily_report
+from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
 from src.utils.telegram_messages import (
     edit_or_reply_long_message,
     send_long_message_to_chat,
     split_long_message,
-)
-from src.commands.admin_commands import get_current_chat_id, is_admin
-from src.jobs.daily_report_scheduler import get_daily_report_chat_ids
-from src.reports.daily_report import build_daily_report
-from src.utils.telegram_messages import (
-    edit_or_reply_long_message,
-    send_long_message_to_chat,
 )
 
 
@@ -44,14 +40,18 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     loading_message = await update.message.reply_text(
-        "🗞 Building and sending daily report...\n\n"
+        "🗞 Refreshing market data and sending daily report...\n\n"
         f"Destination count: {len(destinations)}",
         parse_mode=None,
     )
 
     try:
+        # Force a fresh Morning Brief before sending to the channel.
+        ensure_morning_brief_cache_is_fresh(force_refresh=True)
+
         report = build_daily_report()
         success_count = 0
+        failed_destinations = []
 
         for destination in destinations:
             try:
@@ -63,12 +63,20 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     parse_mode=None,
                 )
                 success_count += 1
-            except Exception:
-                continue
+            except Exception as exc:
+                failed_destinations.append(f"{destination}: {type(exc).__name__}")
+
+        failure_text = ""
+
+        if failed_destinations:
+            failure_text = "\n\nFailed destinations:\n" + "\n".join(
+                f"• {item}" for item in failed_destinations[:5]
+            )
 
         await loading_message.edit_text(
             "Daily report send complete.\n\n"
-            f"Successful destinations: {success_count}/{len(destinations)}",
+            f"Successful destinations: {success_count}/{len(destinations)}"
+            f"{failure_text}",
             parse_mode=None,
         )
 
@@ -95,11 +103,14 @@ async def testdaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     loading_message = await update.message.reply_text(
-        "🧪 Building test daily report...",
+        "🧪 Refreshing data and building test daily report...",
         parse_mode=None,
     )
 
     try:
+        # Force refresh so /testdaily visibly changes when new headlines/data exist.
+        ensure_morning_brief_cache_is_fresh(force_refresh=True)
+
         report = build_daily_report()
 
         await edit_or_reply_long_message(
@@ -116,6 +127,7 @@ async def testdaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"Error:\n{type(error).__name__}",
             parse_mode=None,
         )
+
 
 async def dailycheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
@@ -138,9 +150,11 @@ async def dailycheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     required_sections = [
         "Smart Money AI Daily Report",
+        "Daily Brief",
+        "Executive Summary",
         "Market Snapshot",
+        "Portfolio Read",
         "Watchlist Movers",
-        "Smart Money Score Summary",
         "Top Opportunities",
         "Risk Notes",
         "AI Summary",
@@ -150,6 +164,9 @@ async def dailycheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     ]
 
     try:
+        # Use max-age refresh, not force refresh, so dailycheck is realistic but not too aggressive.
+        ensure_morning_brief_cache_is_fresh(max_age_minutes=360)
+
         destinations = get_daily_report_chat_ids()
         report = build_daily_report()
         chunks = split_long_message(report)
@@ -167,6 +184,10 @@ async def dailycheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             missing_text = "None"
 
+        destination_text = ", ".join(str(destination) for destination in destinations)
+        if not destination_text:
+            destination_text = "None configured"
+
         message = f"""
 🧪 Daily Report System Check
 
@@ -181,7 +202,7 @@ Missing Sections:
 {missing_text}
 
 Destinations:
-{", ".join(destinations) if destinations else "None configured"}
+{destination_text}
 
 Next Test Commands:
 /report

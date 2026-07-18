@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -114,6 +115,42 @@ THEME_KEYWORDS = {
         "radar",
         "cyber warfare",
         "battlefield",
+    ],
+        "Defense Procurement / Munitions": [
+        "famm",
+        "family of affordable mass missiles",
+        "low-cost cruise missile",
+        "low cost cruise missile",
+        "affordable mass missile",
+        "air-launched cruise missile",
+        "palletized munition",
+        "palletized munitions",
+        "standoff weapon",
+        "standoff weapons",
+        "stand-off weapon",
+        "stand-off weapons",
+        "munitions",
+        "missile stockpile",
+        "weapons stockpile",
+        "strike munitions",
+        "mass missiles",
+        "affordable cruise missile",
+        "barracuda",
+        "barracuda-500",
+        "rusty dagger",
+        "agm-188",
+        "agm-189",
+        "coaspire",
+        "anduril",
+        "zone 5",
+        "leidos",
+        "kongsberg",
+        "multi-year procurement",
+        "framework agreements",
+        "defense industrial base",
+        "arsenal of freedom",
+        "surge production",
+        "firm-fixed-price",
     ],
     "Earnings Season": [
         "earnings",
@@ -233,6 +270,7 @@ THEME_LABEL_REPLACEMENTS = {
     "Banks / Credit": "Banks / credit",
     "Consumer Stress": "Consumer pressure",
     "Market Breadth / Rotation": "Market breadth / rotation",
+    "Defense Procurement / Munitions": "Defense procurement / munitions",
 }
 
 
@@ -399,13 +437,23 @@ def fetch_rss_headlines() -> list[str]:
                     headlines.append(title)
 
                 if len(headlines) >= 30:
-                    return headlines
+                    break
 
         except Exception:
             continue
 
-    return headlines
+        if len(headlines) >= 30:
+            break
 
+    manual_defense_headline = os.getenv("MANUAL_DEFENSE_HEADLINE", "").strip()
+
+    if manual_defense_headline:
+        manual_defense_headline = clean_text(manual_defense_headline, 180)
+
+        if manual_defense_headline and manual_defense_headline not in headlines:
+            headlines.insert(0, manual_defense_headline)
+
+    return headlines[:30]
 
 def classify_headline(headline: str) -> list[str]:
     text = headline.lower()
@@ -557,6 +605,11 @@ def build_portfolio_read(theme_summary: dict) -> str:
     if "Oil / Geopolitical Risk" in themes:
         reads.append("treat geopolitical risk as two-sided: negative for oil/inflation/shipping risk, supportive for defense and security attention.")
 
+    if "Defense Procurement / Munitions" in themes:
+        reads.append(
+            "treat munitions procurement as a real demand signal; prioritize public names with direct exposure to missiles, autonomous systems, sensors, mission software, and scalable production."
+        )
+
     if "Defense / AI Warfare" in themes:
         reads.append("watch defense, drones, cyber, ISR, missile defense, and AI warfare names for real volume confirmation.")
 
@@ -639,6 +692,478 @@ What we're watching:
 Whether earnings, macro data, and geopolitical headlines support a broader rally or keep leadership concentrated in a smaller group of high-conviction names.
 """.strip()
 
+def get_market_move(market_moves: list[dict], symbol: str) -> float | None:
+    for item in market_moves:
+        if str(item.get("symbol", "")).upper() == symbol.upper():
+            value = item.get("move")
+
+            try:
+                if value is None:
+                    return None
+
+                return float(value)
+            except Exception:
+                return None
+
+    return None
+
+
+def format_index_move(label: str, value: float | None) -> str:
+    if value is None:
+        return f"{label} was unavailable"
+
+    direction = "gained" if value >= 0 else "fell"
+
+    return f"{label} {direction} {abs(value):.1f}%"
+
+
+def build_index_recap(market_moves: list[dict]) -> str:
+    sp500 = get_market_move(market_moves, "^GSPC")
+    nasdaq = get_market_move(market_moves, "^IXIC")
+    dow = get_market_move(market_moves, "^DJI")
+
+    if sp500 is None or nasdaq is None or dow is None:
+        return (
+            "Major index data was limited in the latest cache, so today’s read leans more on "
+            "headlines, earnings, macro risk, and watchlist movement."
+        )
+
+    green_count = len([value for value in [sp500, nasdaq, dow] if value is not None and value >= 0])
+    red_count = len([value for value in [sp500, nasdaq, dow] if value is not None and value < 0])
+
+    if green_count > red_count:
+        balance = "Still, the balance tipped positive"
+    elif red_count > green_count:
+        balance = "The balance tilted defensive"
+    else:
+        balance = "The market finished mixed"
+
+    return (
+        f"{balance}, with {format_index_move('the S&P 500', sp500)}, "
+        f"{format_index_move('the Nasdaq', nasdaq)}, and "
+        f"{format_index_move('the Dow', dow)}."
+    )
+
+
+def build_theme_collision_sentence(theme_summary: dict) -> str:
+    themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
+    top_theme = get_top_theme(theme_summary)
+
+    has_earnings = "Earnings Season" in themes
+    has_oil_geo = "Oil / Geopolitical Risk" in themes
+    has_ai = "AI / Chips" in themes or "AI Infrastructure / Power" in themes
+    has_defense = "Defense / AI Warfare" in themes
+    has_munitions = "Defense Procurement / Munitions" in themes
+    has_fed = "Inflation / Fed" in themes
+    has_banks = "Banks / Credit" in themes
+
+    if has_earnings and has_oil_geo and has_ai:
+        return (
+            "The good earnings vibes collided with Hormuz worries and pressure in parts of the AI/chip trade."
+        )
+
+    if has_earnings and has_oil_geo:
+        return (
+            "The market is trying to balance better earnings news against renewed oil and geopolitical risk."
+        )
+
+    if has_munitions and has_oil_geo:
+        return (
+            "The market is watching a real defense procurement signal: Hormuz and Iran risk are colliding with a Pentagon push to scale low-cost missiles and rebuild munitions depth."
+        )
+
+    if has_munitions:
+        return (
+            "A major defense procurement signal is back in focus, with investors watching low-cost missiles, munitions depth, production scale, and defense industrial base expansion."
+        )
+
+    if has_oil_geo and has_defense:
+        return (
+            "Hormuz and Iran-related headlines are putting oil, shipping, defense technology, and AI warfare exposure back in focus."
+        )
+
+    if has_ai and has_fed:
+        return (
+            "AI leadership is still important, but rates and Fed expectations are shaping how much investors are willing to pay for growth."
+        )
+
+    if has_banks and has_earnings:
+        return (
+            "Bank earnings are giving investors a fresh read on credit quality, deposits, trading, and the health of the consumer."
+        )
+
+    if top_theme:
+        return f"The main setup today is {top_theme}, with investors watching whether the theme changes market leadership."
+
+    return (
+        "Markets are focused on earnings, inflation, rates, AI leadership, and whether risk appetite can broaden."
+    )
+
+
+def build_issue_title(theme: str, example: str = "") -> str:
+    if theme == "Oil / Geopolitical Risk":
+        return "Hormuz risk, oil prices, and the inflation problem investors cannot ignore"
+
+    if theme == "Defense / AI Warfare":
+        return "Why renewed strikes matter for defense technology, drones, cyber, ISR, and AI warfare"
+
+    if theme == "Defense Procurement / Munitions":
+        return "Why the Pentagon’s low-cost missile push matters for defense, autonomy, munitions, and AI warfare stocks"    
+    
+    if theme == "AI / Chips":
+        return "The AI trade faces another test from chips, memory, and semiconductor demand"
+
+    if theme == "AI Infrastructure / Power":
+        return "AI infrastructure keeps spreading into power, data centers, and grid capacity"
+
+    if theme == "Earnings Season":
+        return "Earnings season separates real margin strength from weak guidance stories"
+
+    if theme == "Banks / Credit":
+        return "Banks give the first real read on credit, deposits, trading, and consumer stress"
+
+    if theme == "Inflation / Fed":
+        return "How to decode the Fed path after the latest inflation and rates signals"
+
+    if theme == "Consumer Stress":
+        return "The consumer stress signals that matter for retail, banks, and credit quality"
+
+    if theme == "Policy / Regulation":
+        return "Policy headlines that could shift sector leadership"
+
+    if theme == "Market Breadth / Rotation":
+        return "Whether market leadership is finally broadening beyond the usual winners"
+
+    if example:
+        return clean_text(example, 120)
+
+    return "The market setup investors need to watch today"
+
+
+def build_today_issue_bullets(theme_summary: dict) -> list[str]:
+    ranked = theme_summary.get("ranked_themes") or []
+    theme_headlines = theme_summary.get("theme_headlines") or {}
+
+    candidates = []
+
+    for theme, _count in ranked[:8]:
+        if clean_theme_label(theme) == "":
+            continue
+
+        examples = theme_headlines.get(theme, [])
+        example = examples[0] if examples else ""
+        title = build_issue_title(theme, example)
+
+        if title and title not in candidates:
+            candidates.append(title)
+
+    if not candidates:
+        return [
+            "Earnings, inflation, rates, and AI leadership drive the setup",
+            "How to separate real strength from short-term market noise",
+            "What today’s watchlist movement says about risk appetite",
+        ]
+
+    primary = candidates[0]
+    rotated_tail = rotate_items(candidates[1:], get_daily_issue_seed(theme_summary))
+
+    return [primary] + rotated_tail[:4]
+
+
+def build_what_watching(theme_summary: dict) -> str:
+    themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
+
+    watch_items = []
+
+    if "Earnings Season" in themes:
+        watch_items.append("earnings quality, guidance, and margin durability")
+
+    if "Banks / Credit" in themes:
+        watch_items.append("bank earnings, deposits, credit quality, and trading revenue")
+
+    if "AI / Chips" in themes:
+        watch_items.append("AI/chip leadership, memory pressure, and semiconductor demand")
+
+    if "AI Infrastructure / Power" in themes:
+        watch_items.append("power, grid, data-center, and AI infrastructure demand")
+
+    if "Oil / Geopolitical Risk" in themes:
+        watch_items.append("oil prices, Hormuz/shipping risk, and inflation spillover")
+
+    if "Defense / AI Warfare" in themes:
+        watch_items.append("defense, cyber, drones, ISR, missile defense, and AI warfare follow-through")
+
+    if "Defense Procurement / Munitions" in themes:
+        watch_items.append("low-cost missile procurement, munitions scale, Anduril-style defense tech, and public suppliers with production exposure")
+   
+    if "Inflation / Fed" in themes:
+        watch_items.append("Fed commentary, Treasury yields, and inflation expectations")
+
+    if "Consumer Stress" in themes:
+        watch_items.append("retail sales, consumer credit, and household pressure")
+
+    if not watch_items:
+        watch_items.append("whether leadership broadens or stays concentrated in a few high-conviction names")
+
+    today_name = datetime.now(ZoneInfo(TIMEZONE)).strftime("%A")
+
+    return f"What we're watching {today_name}: " + "; ".join(watch_items[:4]) + "."
+
+
+def build_quote_of_day() -> str:
+    quote = os.getenv("DAILY_QUOTE_TEXT", "").strip()
+    attribution = os.getenv("DAILY_QUOTE_ATTRIBUTION", "").strip()
+
+    if quote and attribution:
+        return f"""
+Quote of the day
+
+"{quote}"
+— {attribution}
+""".strip()
+
+    if quote:
+        return f"""
+Quote of the day
+
+"{quote}"
+""".strip()
+
+    return ""
+def get_cache_age_minutes(payload: dict) -> float | None:
+    if not payload:
+        return None
+
+    raw_iso = payload.get("cached_at_iso") or payload.get("updated_at")
+    raw_epoch = payload.get("cached_at")
+
+    if raw_iso:
+        try:
+            cached_at = datetime.fromisoformat(str(raw_iso).replace("Z", "+00:00"))
+
+            if cached_at.tzinfo is None:
+                cached_at = cached_at.replace(tzinfo=ZoneInfo(TIMEZONE))
+
+            now = datetime.now(cached_at.tzinfo)
+
+            return max(0, (now - cached_at).total_seconds() / 60)
+        except Exception:
+            pass
+
+    try:
+        cached_at_epoch = float(raw_epoch or 0)
+
+        if cached_at_epoch <= 0:
+            return None
+
+        return max(0, (time.time() - cached_at_epoch) / 60)
+    except Exception:
+        return None
+
+
+def ensure_morning_brief_cache_is_fresh(
+    max_age_minutes: int | None = None,
+    force_refresh: bool = False,
+) -> dict:
+    """
+    Use this from /report, /senddaily, scheduled delivery, and scripts.
+
+    Do not call this from build_daily_report(), because deploycheck and runtime
+    smoke tests should stay fast and network-safe.
+    """
+    if max_age_minutes is None:
+        try:
+            max_age_minutes = int(os.getenv("MORNING_BRIEF_MAX_CACHE_MINUTES", "360"))
+        except Exception:
+            max_age_minutes = 360
+
+    payload = load_morning_brief_cache()
+    age_minutes = get_cache_age_minutes(payload)
+
+    should_refresh = (
+        force_refresh
+        or not payload
+        or age_minutes is None
+        or age_minutes > max_age_minutes
+    )
+
+    if not should_refresh:
+        return payload
+
+    try:
+        refreshed = refresh_morning_brief_cache()
+
+        if refreshed:
+            return refreshed
+    except Exception as exc:
+        if payload:
+            payload["refresh_error"] = str(exc)
+            return payload
+
+        return {
+            "refresh_error": str(exc),
+            "market_moves": [],
+            "headlines": [],
+            "theme_summary": {},
+        }
+
+    return payload or {}
+
+
+def build_data_freshness_line(payload: dict) -> str:
+    age_minutes = get_cache_age_minutes(payload)
+    cached_at_iso = payload.get("cached_at_iso") or payload.get("cached_at") or "unknown"
+
+    if age_minutes is None:
+        return "Data freshness: Morning brief cache timestamp unavailable."
+
+    if age_minutes > 720:
+        return (
+            f"Data freshness: WARNING — Morning brief cache is stale "
+            f"({age_minutes:.0f} minutes old, refreshed at {cached_at_iso})."
+        )
+
+    return (
+        f"Data freshness: Morning brief refreshed {age_minutes:.0f} minutes ago "
+        f"({cached_at_iso})."
+    )
+
+
+def rotate_items(items: list[str], seed: int) -> list[str]:
+    if not items:
+        return items
+
+    offset = seed % len(items)
+
+    return items[offset:] + items[:offset]
+
+
+def get_daily_issue_seed(theme_summary: dict) -> int:
+    today_key = int(datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y%m%d"))
+
+    ranked = theme_summary.get("ranked_themes") or []
+    theme_score = 0
+
+    for _theme, count in ranked:
+        try:
+            theme_score += int(count)
+        except Exception:
+            continue
+
+    return today_key + theme_score
+
+
+def build_daily_focus_line(theme_summary: dict) -> str:
+    top_theme = get_top_theme(theme_summary) or "the market setup"
+
+    lenses = [
+        "whether the move is backed by real demand or just headline momentum",
+        "which themes are creating portfolio risk versus real opportunity",
+        "whether leadership is broadening or staying concentrated",
+        "where earnings, macro risk, and policy are changing the setup",
+        "which watchlist names need confirmation before adding exposure",
+    ]
+
+    index = datetime.now(ZoneInfo(TIMEZONE)).toordinal() % len(lenses)
+    lens = lenses[index]
+
+    return f"Daily focus: {lens}, with {top_theme} as the lead theme."
+def get_cache_age_minutes(payload: dict) -> float | None:
+    if not payload:
+        return None
+
+    raw_iso = payload.get("cached_at_iso") or payload.get("updated_at") or ""
+
+    if raw_iso:
+        try:
+            cached_at = datetime.fromisoformat(str(raw_iso).replace("Z", "+00:00"))
+
+            if cached_at.tzinfo is None:
+                cached_at = cached_at.replace(tzinfo=ZoneInfo(TIMEZONE))
+
+            now = datetime.now(cached_at.tzinfo)
+            return max(0, (now - cached_at).total_seconds() / 60)
+        except Exception:
+            pass
+
+    try:
+        cached_at_epoch = float(payload.get("cached_at", 0) or 0)
+
+        if cached_at_epoch <= 0:
+            return None
+
+        return max(0, (time.time() - cached_at_epoch) / 60)
+    except Exception:
+        return None
+
+
+def ensure_morning_brief_cache_is_fresh(
+    max_age_minutes: int | None = None,
+    force_refresh: bool = False,
+) -> dict:
+    """
+    Refresh Morning Brief cache before user-facing reports.
+
+    build_daily_report() should remain cache-only so deploycheck/preflight
+    stays fast and network-safe.
+    """
+    if max_age_minutes is None:
+        try:
+            max_age_minutes = int(os.getenv("MORNING_BRIEF_MAX_CACHE_MINUTES", "360"))
+        except Exception:
+            max_age_minutes = 360
+
+    payload = load_morning_brief_cache()
+    age_minutes = get_cache_age_minutes(payload)
+
+    should_refresh = (
+        force_refresh
+        or not payload
+        or age_minutes is None
+        or age_minutes > max_age_minutes
+    )
+
+    if not should_refresh:
+        return payload
+
+    try:
+        refreshed = refresh_morning_brief_cache()
+
+        if refreshed:
+            return refreshed
+
+    except Exception as exc:
+        if payload:
+            payload["refresh_error"] = str(exc)
+            return payload
+
+        return {
+            "refresh_error": str(exc),
+            "market_moves": [],
+            "headlines": [],
+            "theme_summary": {},
+        }
+
+    return payload or {}
+
+
+def build_data_freshness_line(payload: dict) -> str:
+    age_minutes = get_cache_age_minutes(payload)
+    cached_at_iso = payload.get("cached_at_iso") or payload.get("cached_at") or "unknown"
+
+    if age_minutes is None:
+        return "Data freshness: Morning brief cache timestamp unavailable."
+
+    if age_minutes > 720:
+        return (
+            f"Data freshness: WARNING — Morning brief cache is stale "
+            f"({age_minutes:.0f} minutes old, refreshed at {cached_at_iso})."
+        )
+
+    return (
+        f"Data freshness: Morning brief refreshed {age_minutes:.0f} minutes ago "
+        f"({cached_at_iso})."
+    )
 
 def build_morning_brief_intro(force_refresh: bool = False) -> str:
     """
@@ -659,28 +1184,37 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
     theme_summary = payload.get("theme_summary") or {}
     cached_at_iso = payload.get("cached_at_iso", "latest available cache")
 
-    market_recap = format_market_recap(market_moves)
+    opening_sentence = build_theme_collision_sentence(theme_summary)
+    index_recap = build_index_recap(market_moves)
     issue_bullets = build_today_issue_bullets(theme_summary)
     what_watching = build_what_watching(theme_summary)
     portfolio_read = build_portfolio_read(theme_summary)
+    quote_of_day = build_quote_of_day()
+    daily_focus = build_daily_focus_line(theme_summary)
+    freshness_line = build_data_freshness_line(payload)
 
     bullet_text = "\n".join(f"• {bullet}" for bullet in issue_bullets)
-    top_theme = get_top_theme(theme_summary)
+
+    quote_block = ""
+
+    if quote_of_day:
+        quote_block = f"\n\n{quote_of_day}"
 
     return f"""
-Good morning.
+Good morning!
 
-{market_recap}
+{opening_sentence}
 
-The dominant market theme right now is {top_theme}. The signal from headlines is that investors are reassessing earnings quality, inflation risk, AI leadership, geopolitical risk, and where capital is rotating next.
+{index_recap}
 
-In today's issue:
+{daily_focus}
+
+In today's issue
 {bullet_text}
 
 {what_watching}
 
-{portfolio_read}
+{portfolio_read}{quote_block}
 
-Data freshness:
-Morning brief refreshed at {cached_at_iso}.
+{freshness_line}
 """.strip()
