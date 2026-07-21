@@ -17,6 +17,27 @@ TIMEZONE = "America/Lima"
 REQUEST_TIMEOUT = 6
 CACHE_TTL_SECONDS = 60 * 60 * 6
 
+WEEK_AHEAD_EARNINGS = os.getenv(
+    "WEEK_AHEAD_EARNINGS",
+    "",
+).strip()
+
+WEEK_AHEAD_ECON_EVENTS = os.getenv(
+    "WEEK_AHEAD_ECON_EVENTS",
+    "",
+).strip()
+
+WEEK_AHEAD_NARRATIVES = os.getenv(
+    "WEEK_AHEAD_NARRATIVES",
+    "",
+).strip()
+
+
+MARKET_ASSETS = [ 
+    {"symbol": "^GSPC", "label": "S&P 500"},
+    {"symbol": "^IXIC", "label": "Nasdaq"},
+    {"symbol": "^DJI", "label": "Dow"},
+]
 
 MARKET_ASSETS = [
     {"symbol": "^GSPC", "label": "S&P 500"},
@@ -421,25 +442,33 @@ def get_asset_move(symbol: str) -> dict:
         ]
 
         if len(clean_closes) < 2:
-            return {"symbol": symbol, "move": None}
+            return {"symbol": symbol, "move": None, "week_move": None}
 
+        week_start = clean_closes[0]
         previous = clean_closes[-2]
         latest = clean_closes[-1]
 
         if previous == 0:
-            return {"symbol": symbol, "move": None}
+            day_move = None
+        else:
+            day_move = ((latest - previous) / previous) * 100
 
-        move = ((latest - previous) / previous) * 100
+        if week_start == 0:
+            week_move = None
+        else:
+            week_move = ((latest - week_start) / week_start) * 100
 
         return {
             "symbol": symbol,
             "latest": round(latest, 2),
             "previous": round(previous, 2),
-            "move": round(move, 2),
+            "week_start": round(week_start, 2),
+            "move": round(day_move, 2) if day_move is not None else None,
+            "week_move": round(week_move, 2) if week_move is not None else None,
         }
 
     except Exception:
-        return {"symbol": symbol, "move": None}
+        return {"symbol": symbol, "move": None, "week_move": None}
 
 
 def fetch_market_moves() -> list[dict]:
@@ -1292,6 +1321,161 @@ def build_data_freshness_line(payload: dict) -> str:
         f"Data freshness: Morning brief refreshed {age_minutes:.0f} minutes ago "
         f"({cached_at_iso})."
     )
+
+def parse_env_list(value: str, separator: str = ",") -> list[str]:
+    return [
+        item.strip()
+        for item in str(value or "").split(separator)
+        if item.strip()
+    ]
+
+
+def get_market_week_move(market_moves: list[dict], symbol: str) -> float | None:
+    for item in market_moves:
+        if str(item.get("symbol", "")).upper() == symbol.upper():
+            try:
+                value = item.get("week_move")
+
+                if value is None:
+                    return None
+
+                return float(value)
+            except Exception:
+                return None
+
+    return None
+
+
+def should_show_week_ahead_block() -> bool:
+    now_et = datetime.now(ZoneInfo(MARKET_TIMEZONE))
+    # Friday after close, Saturday, Sunday, and Monday should emphasize the week ahead.
+    return now_et.weekday() in {0, 4, 5, 6}
+
+
+def format_move_phrase(label: str, value: float | None, period: str = "") -> str:
+    if value is None:
+        return f"{label} was unavailable"
+
+    direction = "gained" if value >= 0 else "lost"
+    period_text = f" {period}" if period else ""
+
+    return f"{label} {direction} {abs(value):.1f}%{period_text}"
+
+
+def build_weekly_market_recap(market_moves: list[dict]) -> str:
+    sp_day = get_market_move(market_moves, "^GSPC")
+    dow_day = get_market_move(market_moves, "^DJI")
+    nasdaq_day = get_market_move(market_moves, "^IXIC")
+
+    sp_week = get_market_week_move(market_moves, "^GSPC")
+    dow_week = get_market_week_move(market_moves, "^DJI")
+    nasdaq_week = get_market_week_move(market_moves, "^IXIC")
+
+    if sp_day is None or dow_day is None or nasdaq_day is None:
+        return (
+            "The latest index recap is limited, so the week-ahead read should lean more on "
+            "headlines, earnings, macro themes, and portfolio exposure."
+        )
+
+    if sp_day < 0 and nasdaq_day < 0:
+        opener = "A new week begins after a rough day in the markets."
+    elif sp_day >= 0 and nasdaq_day >= 0:
+        opener = "A new week begins after a constructive close for the major indexes."
+    else:
+        opener = "A new week begins after a mixed finish for the major indexes."
+
+    if sp_week is None or dow_week is None or nasdaq_week is None:
+        return (
+            f"{opener} The S&P 500 {format_move_phrase('', sp_day).strip()}, "
+            f"the Dow {format_move_phrase('', dow_day).strip()}, and "
+            f"the Nasdaq {format_move_phrase('', nasdaq_day).strip()} in the latest completed session."
+        )
+
+    return (
+        f"{opener} In the latest completed session, "
+        f"{format_move_phrase('the S&P 500', sp_day)}, "
+        f"{format_move_phrase('the Dow', dow_day)}, and "
+        f"{format_move_phrase('the Nasdaq', nasdaq_day)}. "
+        f"Across the recent five-day window, "
+        f"{format_move_phrase('the S&P 500', sp_week)}, "
+        f"{format_move_phrase('the Dow', dow_week)}, and "
+        f"{format_move_phrase('the Nasdaq', nasdaq_week)}."
+    )
+
+
+def infer_week_ahead_narratives(theme_summary: dict) -> list[str]:
+    themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
+    narratives = []
+
+    if "Oil / Geopolitical Risk" in themes:
+        narratives.append("Hormuz, oil, shipping, and Middle East risk")
+
+    if "AI / Chips" in themes:
+        narratives.append("whether the semiconductor trade stabilizes or keeps selling off")
+
+    if "AI Infrastructure / Power" in themes:
+        narratives.append("AI infrastructure, power demand, data centers, and grid capacity")
+
+    if "Earnings Season" in themes:
+        narratives.append("earnings quality, guidance, margins, and Big Tech AI returns")
+
+    if "Defense Procurement / Munitions" in themes:
+        narratives.append("defense procurement, munitions depth, and low-cost missile demand")
+
+    if "Inflation / Fed" in themes:
+        narratives.append("Fed commentary, Treasury yields, and inflation expectations")
+
+    if "Banks / Credit" in themes:
+        narratives.append("bank earnings, credit quality, deposits, and consumer resilience")
+
+    if not narratives:
+        narratives.append("earnings, rates, AI leadership, risk appetite, and portfolio confirmation")
+
+    return narratives[:5]
+
+
+def build_week_ahead_block(theme_summary: dict, market_moves: list[dict]) -> str:
+    if not should_show_week_ahead_block():
+        return ""
+
+    manual_narratives = parse_env_list(WEEK_AHEAD_NARRATIVES, separator=";")
+    earnings = parse_env_list(WEEK_AHEAD_EARNINGS)
+    econ_events = parse_env_list(WEEK_AHEAD_ECON_EVENTS, separator=";")
+
+    narratives = manual_narratives or infer_week_ahead_narratives(theme_summary)
+    market_recap = build_weekly_market_recap(market_moves)
+
+    if earnings:
+        earnings_text = (
+            "Earnings focus: "
+            + ", ".join(earnings[:10])
+            + "."
+        )
+    else:
+        earnings_text = (
+            "Earnings focus: use /weeklycalendar for the full company schedule; "
+            "watch especially for Big Tech, semiconductors, banks, industrials, power, and consumer read-throughs."
+        )
+
+    if econ_events:
+        econ_text = "Economic calendar: " + "; ".join(econ_events[:5]) + "."
+    else:
+        econ_text = (
+            "Economic calendar: if the data calendar is light, the market may lean more heavily on earnings, yields, oil, the dollar, and headlines."
+        )
+
+    narrative_text = "\n".join(f"• {item}" for item in narratives[:5])
+
+    return f"""
+Week Ahead / Big Picture
+{market_recap}
+
+The big narratives:
+{narrative_text}
+
+{earnings_text}
+{econ_text}
+""".strip()
 
 def build_morning_brief_intro(force_refresh: bool = False) -> str:
     """

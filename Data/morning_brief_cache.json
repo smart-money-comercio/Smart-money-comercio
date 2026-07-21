@@ -1,27 +1,27 @@
 {
-  "cached_at": 1784594098.2091377,
-  "cached_at_iso": "2026-07-20T19:34:58.241955-05:00",
+  "cached_at": 1784594757.6375551,
+  "cached_at_iso": "2026-07-20T19:45:57.658148-05:00",
   "headlines": [
     "Major car dealer cuts 40% of its locations, issues serious warning",
+    "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
+    "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
     "A $1.7 Billion Reason to Buy Bloom Energy Stock Now",
     "Microsoft cut 4,800 jobs, filed 2,879 H-1B visas \u2014 but the real reason behind its $1.2T market value drop is far bigger",
-    "5 things no one tells you about becoming a millionaire in America \u2014 are you ready for them?",
-    "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
-    "Analyst Report: JB Hunt Transport Services Inc",
     "Amazon closes another major facility, nearly 500 workers affected",
-    "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
-    "What IBM, Micron, and Sandisk all have in common",
+    "5 things no one tells you about becoming a millionaire in America \u2014 are you ready for them?",
     "A retiree has $1 million and a $100K pension \u2014 here's why waiting until 70 for Social Security could be the smart play",
     "Lionsgate Stock Surges on Buyout Buzz. How to Play LION Here.",
-    "Market Update: JBHT",
-    "Jensen Huang's staggering $4 trillion bet shifts Nvidia",
     "Apple Intelligence Just Got the Green Light in China. What That Means for AAPL Stock.",
+    "Jensen Huang's staggering $4 trillion bet shifts Nvidia",
     "A financial planner explains why splitting your partner's $2,100 mortgage will leave you with nothing. And it's okay",
     "Netflix Tanks on Lower Margins and Flat Outlook - Time to Buy NFLX?",
     "Nearly half of retirees leave work earlier than planned \u2014 the 3 reasons Americans are retiring at 62 instead of 65",
-    "Weekly Stock List",
-    "AMD Just Passed Nvidia at the Top of a $45 Billion Semiconductor ETF. Micron Is Closing In.",
-    "A couple with $6.1 million can't agree on when to retire \u2014 Ramit Sethi says 'it's not the numbers' holding them back"
+    "A couple with $6.1 million can't agree on when to retire \u2014 Ramit Sethi says 'it's not the numbers' holding them back",
+    "Big Blue Blues",
+    "Synopsys Should Benefit No Matter Who Wins The AI Race. Here\u2019s What Explains Its Poor Stock Performance.",
+    "Taiwan Semiconductor\u2019s $100 Billion Arizona Expansion Is a Bullish Sign for Investors",
+    "What a New Uber Eats Deal Means for GameStop Stock",
+    "Oppenheimer Downgraded IBM Following Its Sharp Post-Earnings Drop. What the Warning Means for IBM Stock."
   ],
   "market_moves": [
     {
@@ -29,63 +29,81 @@
       "latest": 7443.28,
       "move": -0.19,
       "previous": 7457.69,
-      "symbol": "^GSPC"
+      "symbol": "^GSPC",
+      "week_move": -1.33,
+      "week_start": 7543.59
     },
     {
       "label": "Nasdaq",
       "latest": 25508.07,
       "move": -0.05,
       "previous": 25520.24,
-      "symbol": "^IXIC"
+      "symbol": "^IXIC",
+      "week_move": -2.29,
+      "week_start": 26107.01
     },
     {
       "label": "Dow",
       "latest": 51839.26,
       "move": -0.59,
       "previous": 52146.42,
-      "symbol": "^DJI"
+      "symbol": "^DJI",
+      "week_move": -1.27,
+      "week_start": 52508.27
     },
     {
       "label": "Russell 2000",
       "latest": 2942.43,
       "move": -0.67,
       "previous": 2962.22,
-      "symbol": "^RUT"
+      "symbol": "^RUT",
+      "week_move": -0.75,
+      "week_start": 2964.76
     },
     {
       "label": "VIX",
       "latest": 18.65,
       "move": -0.64,
       "previous": 18.77,
-      "symbol": "^VIX"
+      "symbol": "^VIX",
+      "week_move": 13.03,
+      "week_start": 16.5
     },
     {
       "label": "Oil",
       "latest": 125.51,
       "move": 1.25,
       "previous": 123.96,
-      "symbol": "USO"
+      "symbol": "USO",
+      "week_move": 4.44,
+      "week_start": 120.17
     },
     {
       "label": "Long Bonds",
       "latest": 83.89,
       "move": -0.75,
       "previous": 84.52,
-      "symbol": "TLT"
+      "symbol": "TLT",
+      "week_move": -0.23,
+      "week_start": 84.08
     },
     {
       "label": "Gold",
       "latest": 367.6,
       "move": -0.22,
       "previous": 368.41,
-      "symbol": "GLD"
+      "symbol": "GLD",
+      "week_move": -1.22,
+      "week_start": 372.15
     },
     {
       "label": "U.S. Dollar",
       "latest": 28.39,
       "move": 0.21,
       "previous": 28.33,
-      "symbol": "UUP"
+      "symbol": "UUP",
+      "week_move": 0.0,
+      "week_start": 28.39
     }
   ],
   "source": "Yahoo Finance RSS and market chart data",
@@ -93,23 +111,23 @@
     "ranked_themes": [
       [
         "AI / Chips",
-        11
-      ],
-      [
-        "Automation / Mobility",
-        3
+        10
       ],
       [
         "Earnings Season",
-        3
+        4
       ],
       [
         "Inflation / Fed",
-        3
+        4
       ],
       [
         "Consumer Stress",
-        1
+        3
+      ],
+      [
+        "Automation / Mobility",
+        2
       ],
       [
         "Banks / Credit",
@@ -118,20 +136,21 @@
     ],
     "theme_headlines": {
       "AI / Chips": [
-        "5 things no one tells you about becoming a millionaire in America \u2014 are you ready for them?",
+        "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
         "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
-        "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season"
+        "5 things no one tells you about becoming a millionaire in America \u2014 are you ready for them?"
       ],
       "Automation / Mobility": [
         "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
-        "What a New Uber Eats Deal Means for GameStop Stock",
-        "Here's What Reddit CEO Steve Huffman's Sale of Company Shares for $3.6 Million Means for Investors"
+        "What a New Uber Eats Deal Means for GameStop Stock"
       ],
       "Banks / Credit": [
         "HELOC and home equity loan rates today, Monday, July 20, 2026: Rates are incredibly close"
       ],
       "Consumer Stress": [
-        "Why IBM Stock Crashed 25% Even as AI Spending Exploded"
+        "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
+        "5 Ways the \u2018Die With Zero\u2019 Strategy Can Change Your Approach to Saving and Spending",
+        "Bitcoin and ethereum prices today, Monday, July 20, 2026: Crypto prices mixed as second half 2026 outlooks conflict"
       ],
       "Earnings Season": [
         "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
@@ -140,8 +159,11 @@
       ],
       "Inflation / Fed": [
         "Mortgage and refinance rates today, Monday, July 20, 2026: Purchase rates move higher than refi rates",
-        "Best high-yield savings interest rates today, Monday, July 20, 2026: Earn up to 4.10% APY",
-        "HELOC and home equity loan rates today, Monday, July 20, 2026: Rates are incredibly close"
+        "HELOC and home equity loan rates today, Monday, July 20, 2026: Rates are incredibly close",
+        "Best high-yield savings interest rates today, Monday, July 20, 2026: Earn up to 4.10% APY"
+      ],
+      "Policy / Regulation": [
+        "Bitcoin and ethereum prices today, Monday, July 20, 2026: Crypto prices mixed as second half 2026 outlooks conflict"
       ]
     },
     "top_theme": "AI / Chips"
