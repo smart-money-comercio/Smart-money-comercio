@@ -273,6 +273,42 @@ THEME_LABEL_REPLACEMENTS = {
     "Defense Procurement / Munitions": "Defense procurement / munitions",
 }
 
+MARKET_TIMEZONE = os.getenv("MARKET_TIMEZONE", "America/New_York")
+
+
+def get_us_market_session_status() -> dict:
+    now_et = datetime.now(ZoneInfo(MARKET_TIMEZONE))
+    weekday = now_et.weekday()
+
+    if weekday >= 5:
+        return {
+            "state": "closed_weekend",
+            "label": "Weekend brief — U.S. markets are closed.",
+            "price_note": "Index and watchlist price moves reflect the last completed regular session; headlines can still update over the weekend.",
+        }
+
+    market_open = now_et.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+
+    if now_et < market_open:
+        return {
+            "state": "pre_market",
+            "label": "Pre-market brief — U.S. markets have not opened yet.",
+            "price_note": "Index and watchlist moves may still reflect the prior session until live trading begins.",
+        }
+
+    if now_et > market_close:
+        return {
+            "state": "after_hours",
+            "label": "After-hours brief — the regular U.S. market session is closed.",
+            "price_note": "Index and watchlist moves reflect the completed regular session; new headlines may still change tomorrow’s setup.",
+        }
+
+    return {
+        "state": "open",
+        "label": "Market session brief — U.S. markets are open.",
+        "price_note": "Price moves and watchlist movement may update during the session.",
+    }
 
 def clean_text(value: Any, max_length: int = 240) -> str:
     text = " ".join(str(value or "").split())
@@ -718,36 +754,62 @@ def format_index_move(label: str, value: float | None) -> str:
 
 
 def build_index_recap(market_moves: list[dict]) -> str:
+    session = get_us_market_session_status()
+
     sp500 = get_market_move(market_moves, "^GSPC")
     nasdaq = get_market_move(market_moves, "^IXIC")
     dow = get_market_move(market_moves, "^DJI")
 
     if sp500 is None or nasdaq is None or dow is None:
         return (
-            "Major index data was limited in the latest cache, so today’s read leans more on "
-            "headlines, earnings, macro risk, and watchlist movement."
+            f"{session['label']} "
+            "Major index data is limited in the latest cache, so today’s read leans more on "
+            "headlines, earnings, macro risk, and watchlist movement. "
+            f"{session['price_note']}"
         )
 
     green_count = len([value for value in [sp500, nasdaq, dow] if value is not None and value >= 0])
     red_count = len([value for value in [sp500, nasdaq, dow] if value is not None and value < 0])
 
     if green_count > red_count:
-        balance = "Still, the balance tipped positive"
+        balance = "The last completed session tilted positive"
     elif red_count > green_count:
-        balance = "The balance tilted defensive"
+        balance = "The last completed session tilted defensive"
     else:
-        balance = "The market finished mixed"
+        balance = "The last completed session finished mixed"
+
+    if session["state"] == "open":
+        balance = balance.replace("last completed session", "market session")
 
     return (
-        f"{balance}, with {format_index_move('the S&P 500', sp500)}, "
+        f"{session['label']} {balance}, with "
+        f"{format_index_move('the S&P 500', sp500)}, "
         f"{format_index_move('the Nasdaq', nasdaq)}, and "
-        f"{format_index_move('the Dow', dow)}."
+        f"{format_index_move('the Dow', dow)}. "
+        f"{session['price_note']}"
     )
 
 
 def build_theme_collision_sentence(theme_summary: dict) -> str:
     themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
     top_theme = get_top_theme(theme_summary)
+    examples = get_theme_examples(theme_summary, limit=3)
+
+    if examples:
+        first_theme, first_headline = examples[0]
+        second_headline = examples[1][1] if len(examples) > 1 else ""
+
+        if second_headline:
+            return (
+                f"The headline setup is led by {first_headline}. "
+                f"The second read-through is {second_headline}. "
+                f"For the portfolio, the question is whether this changes exposure to {clean_theme_label(first_theme) or top_theme}."
+            )
+
+        return (
+            f"The headline setup is led by {first_headline}. "
+            f"For the portfolio, the question is whether this creates real confirmation or just more noise around {top_theme}."
+        )
 
     has_earnings = "Earnings Season" in themes
     has_oil_geo = "Oil / Geopolitical Risk" in themes
@@ -757,9 +819,19 @@ def build_theme_collision_sentence(theme_summary: dict) -> str:
     has_fed = "Inflation / Fed" in themes
     has_banks = "Banks / Credit" in themes
 
+    if has_munitions and has_oil_geo:
+        return (
+            "The market is watching a real defense procurement signal: geopolitical risk is colliding with a Pentagon push to scale low-cost missiles and rebuild munitions depth."
+        )
+
+    if has_munitions:
+        return (
+            "A major defense procurement signal is in focus, with investors watching low-cost missiles, munitions depth, production scale, and defense industrial base expansion."
+        )
+
     if has_earnings and has_oil_geo and has_ai:
         return (
-            "The good earnings vibes collided with Hormuz worries and pressure in parts of the AI/chip trade."
+            "Earnings, oil risk, and the AI trade are competing for investor attention."
         )
 
     if has_earnings and has_oil_geo:
@@ -767,19 +839,9 @@ def build_theme_collision_sentence(theme_summary: dict) -> str:
             "The market is trying to balance better earnings news against renewed oil and geopolitical risk."
         )
 
-    if has_munitions and has_oil_geo:
-        return (
-            "The market is watching a real defense procurement signal: Hormuz and Iran risk are colliding with a Pentagon push to scale low-cost missiles and rebuild munitions depth."
-        )
-
-    if has_munitions:
-        return (
-            "A major defense procurement signal is back in focus, with investors watching low-cost missiles, munitions depth, production scale, and defense industrial base expansion."
-        )
-
     if has_oil_geo and has_defense:
         return (
-            "Hormuz and Iran-related headlines are putting oil, shipping, defense technology, and AI warfare exposure back in focus."
+            "Geopolitical headlines are putting oil, shipping, defense technology, and AI warfare exposure back in focus."
         )
 
     if has_ai and has_fed:
@@ -792,11 +854,8 @@ def build_theme_collision_sentence(theme_summary: dict) -> str:
             "Bank earnings are giving investors a fresh read on credit quality, deposits, trading, and the health of the consumer."
         )
 
-    if top_theme:
-        return f"The main setup today is {top_theme}, with investors watching whether the theme changes market leadership."
-
     return (
-        "Markets are focused on earnings, inflation, rates, AI leadership, and whether risk appetite can broaden."
+        f"The main setup today is {top_theme}, with investors watching whether the theme changes market leadership."
     )
 
 
@@ -839,29 +898,98 @@ def build_issue_title(theme: str, example: str = "") -> str:
 
     return "The market setup investors need to watch today"
 
+def get_theme_examples(theme_summary: dict, limit: int = 6) -> list[tuple[str, str]]:
+    theme_headlines = theme_summary.get("theme_headlines") or {}
+    ranked = theme_summary.get("ranked_themes") or []
+
+    examples = []
+
+    for item in ranked:
+        if isinstance(item, dict):
+            theme = item.get("theme")
+        elif isinstance(item, (list, tuple)) and item:
+            theme = item[0]
+        else:
+            theme = None
+
+        if not theme:
+            continue
+
+        for headline in theme_headlines.get(theme, []) or []:
+            cleaned_headline = clean_text(headline, 120)
+
+            if cleaned_headline and (theme, cleaned_headline) not in examples:
+                examples.append((theme, cleaned_headline))
+
+            if len(examples) >= limit:
+                return examples
+
+    return examples
+
+
+def build_headline_issue_bullet(theme: str, headline: str) -> str:
+    if theme == "Defense Procurement / Munitions":
+        return f"Defense procurement watch: {headline}"
+
+    if theme == "Defense / AI Warfare":
+        return f"Defense and AI warfare read-through: {headline}"
+
+    if theme == "Oil / Geopolitical Risk":
+        return f"Oil/geopolitical risk: {headline}"
+
+    if theme == "AI / Chips":
+        return f"AI and chips: {headline}"
+
+    if theme == "AI Infrastructure / Power":
+        return f"AI infrastructure and power demand: {headline}"
+
+    if theme == "Earnings Season":
+        return f"Earnings setup: {headline}"
+
+    if theme == "Banks / Credit":
+        return f"Banks and credit: {headline}"
+
+    if theme == "Inflation / Fed":
+        return f"Fed/rates setup: {headline}"
+
+    if theme == "Consumer Stress":
+        return f"Consumer pressure: {headline}"
+
+    return headline
 
 def build_today_issue_bullets(theme_summary: dict) -> list[str]:
-    ranked = theme_summary.get("ranked_themes") or []
-    theme_headlines = theme_summary.get("theme_headlines") or {}
+    examples = get_theme_examples(theme_summary, limit=8)
 
+    headline_bullets = []
+
+    for theme, headline in examples:
+        bullet = build_headline_issue_bullet(theme, headline)
+
+        if bullet and bullet not in headline_bullets:
+            headline_bullets.append(bullet)
+
+    if headline_bullets:
+        primary = headline_bullets[0]
+        rotated_tail = rotate_items(headline_bullets[1:], get_daily_issue_seed(theme_summary))
+        return [primary] + rotated_tail[:4]
+
+    ranked = theme_summary.get("ranked_themes") or []
     candidates = []
 
     for theme, _count in ranked[:8]:
         if clean_theme_label(theme) == "":
             continue
 
-        examples = theme_headlines.get(theme, [])
-        example = examples[0] if examples else ""
-        title = build_issue_title(theme, example)
+        title = build_issue_title(theme)
 
         if title and title not in candidates:
             candidates.append(title)
 
     if not candidates:
         return [
-            "Earnings, inflation, rates, and AI leadership drive the setup",
-            "How to separate real strength from short-term market noise",
-            "What today’s watchlist movement says about risk appetite",
+            "Fresh headline flow is limited, so today’s focus is earnings, rates, AI leadership, macro risk, and watchlist confirmation.",
+            "Separate real demand signals from repeated market noise.",
+            "Use price and volume confirmation before acting on any headline-driven move.",
         ]
 
     primary = candidates[0]
@@ -1192,6 +1320,7 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
     quote_of_day = build_quote_of_day()
     daily_focus = build_daily_focus_line(theme_summary)
     freshness_line = build_data_freshness_line(payload)
+    session = get_us_market_session_status()
 
     bullet_text = "\n".join(f"• {bullet}" for bullet in issue_bullets)
 
@@ -1202,6 +1331,9 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
 
     return f"""
 Good morning!
+
+Market Status:
+{session['label']}
 
 {opening_sentence}
 

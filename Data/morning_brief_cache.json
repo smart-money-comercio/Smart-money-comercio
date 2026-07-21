@@ -1,90 +1,90 @@
 {
-  "cached_at": 1784394028.7722619,
-  "cached_at_iso": "2026-07-18T12:00:28.833360-05:00",
+  "cached_at": 1784594098.2091377,
+  "cached_at_iso": "2026-07-20T19:34:58.241955-05:00",
   "headlines": [
-    "This Emerging Markets ETF Beat the S&P 500 for 16 Years. Could It Happen Again?",
-    "Dow Jones Futures: Google, Tesla, AMD Loom After AI Stock Sell-Off",
-    "Dave Ramsey: 'You can't outearn stupidity' \u2014 here's why teachers become millionaires so often and how to follow along",
-    "Stock Market Week Ahead: Navigating Uncertainty",
-    "For Gen Z, saving for vacation tops retirement: JPM study",
-    "Why Investors Shouldn't Worry About Life360 Director Charles Prober Selling 7,930 Shares for $420,700",
-    "Elon Musk's SpaceX has lost $1T in market cap since mid-June as Starship launch is scrubbed",
-    "Oil and Gas Employment Hits a 2026 Low Even as Production Sets Records",
-    "CEO: SpaceX's record IPO was the space economy's opening act. Here's what comes next.",
-    "France pulled $15B in gold from US vaults, and more European countries may follow. Is a global currency shift coming?",
-    "Should You Buy This Sneaky AI Dividend Stock Up 330% In The Last 5 Years?",
-    "This week's AI winners and losers",
-    "Scott Bessent assures Americans Fort Knox gold is still there \u2014 then reminds them the dollar is no longer backed by it",
-    "Warsh believes America's $700B AI buildout will lower prices \u2014 but his colleagues warn it will fuel persistent inflation",
-    "Fidelity data breach: Deadline looms for up to $5,000 per customer settlement payouts",
-    "There\u2019s an ETF That Promises You Can\u2019t Lose Money. What\u2019s the Catch?",
-    "Pennymac mortgage review 2026",
-    "Prepaid card vs. debit card: What's the difference?",
-    "What is a certified check, and how does it work?",
-    "What are mortgage discount points, and should you pay for them?"
+    "Major car dealer cuts 40% of its locations, issues serious warning",
+    "A $1.7 Billion Reason to Buy Bloom Energy Stock Now",
+    "Microsoft cut 4,800 jobs, filed 2,879 H-1B visas \u2014 but the real reason behind its $1.2T market value drop is far bigger",
+    "5 things no one tells you about becoming a millionaire in America \u2014 are you ready for them?",
+    "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
+    "Analyst Report: JB Hunt Transport Services Inc",
+    "Amazon closes another major facility, nearly 500 workers affected",
+    "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
+    "What IBM, Micron, and Sandisk all have in common",
+    "A retiree has $1 million and a $100K pension \u2014 here's why waiting until 70 for Social Security could be the smart play",
+    "Lionsgate Stock Surges on Buyout Buzz. How to Play LION Here.",
+    "Market Update: JBHT",
+    "Jensen Huang's staggering $4 trillion bet shifts Nvidia",
+    "Apple Intelligence Just Got the Green Light in China. What That Means for AAPL Stock.",
+    "A financial planner explains why splitting your partner's $2,100 mortgage will leave you with nothing. And it's okay",
+    "Netflix Tanks on Lower Margins and Flat Outlook - Time to Buy NFLX?",
+    "Nearly half of retirees leave work earlier than planned \u2014 the 3 reasons Americans are retiring at 62 instead of 65",
+    "Weekly Stock List",
+    "AMD Just Passed Nvidia at the Top of a $45 Billion Semiconductor ETF. Micron Is Closing In.",
+    "A couple with $6.1 million can't agree on when to retire \u2014 Ramit Sethi says 'it's not the numbers' holding them back"
   ],
   "market_moves": [
     {
       "label": "S&P 500",
-      "latest": 7457.69,
-      "move": -1.01,
-      "previous": 7533.77,
+      "latest": 7443.28,
+      "move": -0.19,
+      "previous": 7457.69,
       "symbol": "^GSPC"
     },
     {
       "label": "Nasdaq",
-      "latest": 25520.24,
-      "move": -1.4,
-      "previous": 25881.95,
+      "latest": 25508.07,
+      "move": -0.05,
+      "previous": 25520.24,
       "symbol": "^IXIC"
     },
     {
       "label": "Dow",
-      "latest": 52146.42,
-      "move": -0.77,
-      "previous": 52552.97,
+      "latest": 51839.26,
+      "move": -0.59,
+      "previous": 52146.42,
       "symbol": "^DJI"
     },
     {
       "label": "Russell 2000",
-      "latest": 2962.22,
-      "move": -0.42,
-      "previous": 2974.57,
+      "latest": 2942.43,
+      "move": -0.67,
+      "previous": 2962.22,
       "symbol": "^RUT"
     },
     {
       "label": "VIX",
-      "latest": 18.77,
-      "move": 12.19,
-      "previous": 16.73,
+      "latest": 18.65,
+      "move": -0.64,
+      "previous": 18.77,
       "symbol": "^VIX"
     },
     {
       "label": "Oil",
-      "latest": 123.96,
-      "move": 3.91,
-      "previous": 119.3,
+      "latest": 125.51,
+      "move": 1.25,
+      "previous": 123.96,
       "symbol": "USO"
     },
     {
       "label": "Long Bonds",
-      "latest": 84.52,
-      "move": 0.37,
-      "previous": 84.21,
+      "latest": 83.89,
+      "move": -0.75,
+      "previous": 84.52,
       "symbol": "TLT"
     },
     {
       "label": "Gold",
-      "latest": 368.41,
-      "move": 0.95,
-      "previous": 364.96,
+      "latest": 367.6,
+      "move": -0.22,
+      "previous": 368.41,
       "symbol": "GLD"
     },
     {
       "label": "U.S. Dollar",
-      "latest": 28.33,
-      "move": -0.04,
-      "previous": 28.34,
+      "latest": 28.39,
+      "move": 0.21,
+      "previous": 28.33,
       "symbol": "UUP"
     }
   ],
@@ -96,62 +96,52 @@
         11
       ],
       [
-        "Inflation / Fed",
-        6
-      ],
-      [
         "Automation / Mobility",
-        5
+        3
       ],
       [
-        "Oil / Geopolitical Risk",
-        4
+        "Earnings Season",
+        3
+      ],
+      [
+        "Inflation / Fed",
+        3
       ],
       [
         "Consumer Stress",
-        4
+        1
       ],
       [
-        "Policy / Regulation",
-        3
+        "Banks / Credit",
+        1
       ]
     ],
     "theme_headlines": {
       "AI / Chips": [
-        "This Emerging Markets ETF Beat the S&P 500 for 16 Years. Could It Happen Again?",
-        "Dow Jones Futures: Google, Tesla, AMD Loom After AI Stock Sell-Off",
-        "Dave Ramsey: 'You can't outearn stupidity' \u2014 here's why teachers become millionaires so often and how to follow along"
-      ],
-      "AI Infrastructure / Power": [
-        "Price Prediction: Qualcomm Has Over 50% Upside as AI Data Center Push Accelerates"
+        "5 things no one tells you about becoming a millionaire in America \u2014 are you ready for them?",
+        "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
+        "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season"
       ],
       "Automation / Mobility": [
-        "Dow Jones Futures: Google, Tesla, AMD Loom After AI Stock Sell-Off",
-        "Oil and Gas Employment Hits a 2026 Low Even as Production Sets Records",
-        "Warsh believes America's $700B AI buildout will lower prices \u2014 but his colleagues warn it will fuel persistent inflation"
+        "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
+        "What a New Uber Eats Deal Means for GameStop Stock",
+        "Here's What Reddit CEO Steve Huffman's Sale of Company Shares for $3.6 Million Means for Investors"
       ],
       "Banks / Credit": [
-        "HELOC and home equity loan rates today, Friday, July 17, 2026: Why understanding how rates work matters"
+        "HELOC and home equity loan rates today, Monday, July 20, 2026: Rates are incredibly close"
       ],
       "Consumer Stress": [
-        "Warsh believes America's $700B AI buildout will lower prices \u2014 but his colleagues warn it will fuel persistent inflation",
-        "Bitcoin and ethereum prices today, Friday, July 17, 2026: Prices ease as conflict in Iran escalates",
-        "Silver prices today, Friday, July 17, 2026: Silver prices hit 8-month lows as airstrikes continue across Iran"
+        "Why IBM Stock Crashed 25% Even as AI Spending Exploded"
+      ],
+      "Earnings Season": [
+        "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
+        "Netflix Tanks on Lower Margins and Flat Outlook - Time to Buy NFLX?",
+        "Oppenheimer Downgraded IBM Following Its Sharp Post-Earnings Drop. What the Warning Means for IBM Stock."
       ],
       "Inflation / Fed": [
-        "Warsh believes America's $700B AI buildout will lower prices \u2014 but his colleagues warn it will fuel persistent inflation",
-        "Price Prediction: Qualcomm Has Over 50% Upside as AI Data Center Push Accelerates",
-        "Best CD rates today, Saturday, July 18, 2026: Best account provides 4.10% APY"
-      ],
-      "Oil / Geopolitical Risk": [
-        "Oil and Gas Employment Hits a 2026 Low Even as Production Sets Records",
-        "Bitcoin and ethereum prices today, Friday, July 17, 2026: Prices ease as conflict in Iran escalates",
-        "Silver prices today, Friday, July 17, 2026: Silver prices hit 8-month lows as airstrikes continue across Iran"
-      ],
-      "Policy / Regulation": [
-        "For Gen Z, saving for vacation tops retirement: JPM study",
-        "France pulled $15B in gold from US vaults, and more European countries may follow. Is a global currency shift coming?",
-        "Bitcoin and ethereum prices today, Friday, July 17, 2026: Prices ease as conflict in Iran escalates"
+        "Mortgage and refinance rates today, Monday, July 20, 2026: Purchase rates move higher than refi rates",
+        "Best high-yield savings interest rates today, Monday, July 20, 2026: Earn up to 4.10% APY",
+        "HELOC and home equity loan rates today, Monday, July 20, 2026: Rates are incredibly close"
       ]
     },
     "top_theme": "AI / Chips"
