@@ -18,6 +18,10 @@ from src.utils.score_display import (
     get_volume_label,
 )
 from src.utils.watchlist_store import load_watchlist
+from src.intelligence.watchlist_evolution import (
+    build_evolved_watchlist_universe,
+    record_watchlist_evolution_day,
+)
 
 
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
@@ -567,11 +571,12 @@ def fetch_watchlist_quotes(context: dict | None = None) -> tuple[list[str], dict
     except Exception:
         symbols = []
 
-    symbols = build_relevant_watchlist(
-        current_symbols=symbols,
-        context=context,
-        max_symbols=MAX_RELEVANT_WATCHLIST,
-    )
+    symbols = build_evolved_watchlist_universe(
+    manual_symbols=symbols,
+    context=context,
+    scores=context.get("scores", []) if isinstance(context, dict) else [],
+    max_symbols=MAX_RELEVANT_WATCHLIST,
+)
 
     if not symbols:
         return [], {}
@@ -1431,7 +1436,11 @@ def build_daily_report() -> str:
     top_scores = scores[:MAX_TOP_OPPORTUNITIES]
 
     global_context = load_global_context()
+    global_context["scores"] = scores
+
     watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes(global_context)
+    record_watchlist_evolution_day(watchlist_symbols, global_context)
+    
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     market_tone = build_market_tone(movers)
 

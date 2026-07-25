@@ -1,43 +1,43 @@
 {
-  "cached_at": 1784998419.6410992,
-  "cached_at_iso": "2026-07-25T11:53:39.641103-05:00",
+  "cached_at": 1785007215.1342664,
+  "cached_at_iso": "2026-07-25T14:20:15.134269-05:00",
   "condensed_headlines": [
     "Banks / Credit: Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
+    "AI / Chips: Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
+    "Nvidia / AI chips: Is NVIDIA Corporation (NVDA) A Good Stock To Buy Now?",
     "AI / Chips: Workers remain confident in their skills despite economic jitters: Study",
     "AI / Chips: You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
     "Fed / Rates: Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-    "AI / Chips: Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for",
-    "Earnings Season: Meta Stock Is Down Nearly 10% in 2026. Should You Buy Before July 29 Q2 Earnings?",
-    "Alphabet / Cloud: Alphabet flops, Intel shocks, and Tesla tanks: AlphaSpace weekly recap"
+    "Banks / Credit: Do I need a business bank account if I'm self-employed?"
   ],
   "headlines": [
     "Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
+    "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
+    "Is NVIDIA Corporation (NVDA) A Good Stock To Buy Now?",
     "Workers remain confident in their skills despite economic jitters: Study",
     "You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
+    "Global Markets (SPGM) or Emerging Growth (IEMG)? Which Fund is the Right Choice?",
     "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-    "Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for",
-    "Meta Stock Is Down Nearly 10% in 2026. Should You Buy Before July 29 Q2 Earnings?",
-    "If you always say \u2018yes\u2019 to these 5 crucial things, you're probably broke (regardless of how much money you make)",
-    "Alphabet flops, Intel shocks, and Tesla tanks: AlphaSpace weekly recap",
-    "UFC star Sean Strickland's brutally blunt money advice hits 5.2M views \u2014 and it's just 2 simple steps",
-    "Shippers face tighter capacity as trucking rates hold near record highs",
-    "Mid-term stock market curse and what comes next",
-    "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
-    "Google and Tesla lost half a trillion dollars this week as their suppliers cashed in: Chart of the Day",
-    "You\u2019ve got a leg up on about 50% of Americans if you check off any of these three boxes \u2014 how do you stack up?",
-    "When is the Fed's next meeting? See the full schedule for 2026.",
-    "3 Major Reasons to Buy Vertiv Before July 29 Q2 Earnings",
-    "HELOC and home equity loan rates today, Friday, July 24, 2026: Have they improved?",
     "Do I need a business bank account if I'm self-employed?",
     "What is an add-on CD?",
-    "Happen Bank review (2026): A top-rated online bank with high yields and low fees"
+    "Happen Bank review (2026): A top-rated online bank with high yields and low fees",
+    "Medicare Will Split Your $2,100 Drug Bill Into Monthly Installments. You Have to Ask First.",
+    "HELOC and home equity loan rates today, Friday, July 24, 2026: Have they improved?",
+    "When is the Fed's next meeting? See the full schedule for 2026.",
+    "Gold prices today, Friday, July 24, 2026: Gold price remains below $4,100 ahead of next week\u2019s rate decision",
+    "Silver prices today, Friday, July 24, 2026: Silver returns above $58 as markets price in higher rate risks",
+    "The 3 Dividend ETFs That Can Fund a 30-Year Retirement Without Ever Selling a Share",
+    "Bitcoin and ethereum prices today, Friday, July 24, 2026: Crypto prices retreat on higher U.S. Treasury yields",
+    "Mortgage and refinance interest rates today, Saturday, July 25, 2026: Highest rates this year",
+    "Best CD rates today, Saturday, July 25, 2026: Best account provides 4.20% APY",
+    "Best high-yield savings interest rates today, Friday, July 24, 2026: Earn up to 4.15% APY"
   ],
   "issue_bullets": [
-    "Fed/rates setup: Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-    "Fed/rates setup: Shippers face tighter capacity as trucking rates hold near record highs",
     "Fed/rates setup: Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
     "AI and chips: Workers remain confident in their skills despite economic jitters: Study",
-    "AI and chips: You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible"
+    "Banks and credit: Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
+    "Banks and credit: Do I need a business bank account if I'm self-employed?",
+    "Fed/rates setup: Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household"
   ],
   "market_moves": [
     {
@@ -208,11 +208,11 @@
     "ranked_themes": [
       [
         "Inflation / Fed",
-        11
+        13
       ],
       [
         "AI / Chips",
-        6
+        8
       ],
       [
         "Banks / Credit",
@@ -227,45 +227,44 @@
         4
       ],
       [
-        "Earnings Season",
+        "Policy / Regulation",
         3
       ]
     ],
     "theme_headlines": {
       "AI / Chips": [
-        "Workers remain confident in their skills despite economic jitters: Study",
-        "You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
-        "Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for"
+        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
+        "Is NVIDIA Corporation (NVDA) A Good Stock To Buy Now?",
+        "Workers remain confident in their skills despite economic jitters: Study"
       ],
       "Automation / Mobility": [
         "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-        "Alphabet flops, Intel shocks, and Tesla tanks: AlphaSpace weekly recap",
-        "Google and Tesla lost half a trillion dollars this week as their suppliers cashed in: Chart of the Day"
+        "Happen Bank review (2026): A top-rated online bank with high yields and low fees",
+        "The 3 Dividend ETFs That Can Fund a 30-Year Retirement Without Ever Selling a Share"
       ],
       "Banks / Credit": [
         "Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
-        "Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for",
-        "HELOC and home equity loan rates today, Friday, July 24, 2026: Have they improved?"
+        "Do I need a business bank account if I'm self-employed?",
+        "Happen Bank review (2026): A top-rated online bank with high yields and low fees"
       ],
       "Consumer Stress": [
         "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-        "Bitcoin and ethereum prices today, Friday, July 24, 2026: Crypto prices retreat on higher U.S. Treasury yields",
+        "Gold prices today, Friday, July 24, 2026: Gold price remains below $4,100 ahead of next week\u2019s rate decision",
         "Silver prices today, Friday, July 24, 2026: Silver returns above $58 as markets price in higher rate risks"
       ],
       "Earnings Season": [
-        "Meta Stock Is Down Nearly 10% in 2026. Should You Buy Before July 29 Q2 Earnings?",
-        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
-        "3 Major Reasons to Buy Vertiv Before July 29 Q2 Earnings"
+        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
       ],
       "Inflation / Fed": [
+        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
         "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-        "Shippers face tighter capacity as trucking rates hold near record highs",
-        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
+        "Happen Bank review (2026): A top-rated online bank with high yields and low fees"
       ],
       "Oil / Geopolitical Risk": [
         "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
       ],
       "Policy / Regulation": [
+        "The 3 Dividend ETFs That Can Fund a 30-Year Retirement Without Ever Selling a Share",
         "Bitcoin and ethereum prices today, Friday, July 24, 2026: Crypto prices retreat on higher U.S. Treasury yields",
         "How Trump Accounts could impact your child's student aid"
       ]
