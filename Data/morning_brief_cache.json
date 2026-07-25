@@ -1,108 +1,108 @@
 {
-  "cached_at": 1784594757.6375551,
-  "cached_at_iso": "2026-07-20T19:45:57.658148-05:00",
+  "cached_at": 1784997111.123827,
+  "cached_at_iso": "2026-07-25T11:31:51.123832-05:00",
   "headlines": [
-    "Major car dealer cuts 40% of its locations, issues serious warning",
-    "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
-    "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
-    "A $1.7 Billion Reason to Buy Bloom Energy Stock Now",
-    "Microsoft cut 4,800 jobs, filed 2,879 H-1B visas \u2014 but the real reason behind its $1.2T market value drop is far bigger",
-    "Amazon closes another major facility, nearly 500 workers affected",
-    "5 things no one tells you about becoming a millionaire in America \u2014 are you ready for them?",
-    "A retiree has $1 million and a $100K pension \u2014 here's why waiting until 70 for Social Security could be the smart play",
-    "Lionsgate Stock Surges on Buyout Buzz. How to Play LION Here.",
-    "Apple Intelligence Just Got the Green Light in China. What That Means for AAPL Stock.",
-    "Jensen Huang's staggering $4 trillion bet shifts Nvidia",
-    "A financial planner explains why splitting your partner's $2,100 mortgage will leave you with nothing. And it's okay",
-    "Netflix Tanks on Lower Margins and Flat Outlook - Time to Buy NFLX?",
-    "Nearly half of retirees leave work earlier than planned \u2014 the 3 reasons Americans are retiring at 62 instead of 65",
-    "A couple with $6.1 million can't agree on when to retire \u2014 Ramit Sethi says 'it's not the numbers' holding them back",
-    "Big Blue Blues",
-    "Synopsys Should Benefit No Matter Who Wins The AI Race. Here\u2019s What Explains Its Poor Stock Performance.",
-    "Taiwan Semiconductor\u2019s $100 Billion Arizona Expansion Is a Bullish Sign for Investors",
-    "What a New Uber Eats Deal Means for GameStop Stock",
-    "Oppenheimer Downgraded IBM Following Its Sharp Post-Earnings Drop. What the Warning Means for IBM Stock."
+    "Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
+    "Workers remain confident in their skills despite economic jitters: Study",
+    "You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
+    "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
+    "Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for",
+    "Why Retirees With Pension Income Still Need a Dividend Portfolio",
+    "If you always say \u2018yes\u2019 to these 5 crucial things, you're probably broke (regardless of how much money you make)",
+    "Alphabet flops, Intel shocks, and Tesla tanks: AlphaSpace weekly recap",
+    "UFC star Sean Strickland's brutally blunt money advice hits 5.2M views \u2014 and it's just 2 simple steps",
+    "Shippers face tighter capacity as trucking rates hold near record highs",
+    "3 Reasons Ford Looks Overlooked Ahead of Its July 28 Q2 Earnings",
+    "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
+    "Google and Tesla lost half a trillion dollars this week as their suppliers cashed in: Chart of the Day",
+    "You\u2019ve got a leg up on about 50% of Americans if you check off any of these three boxes \u2014 how do you stack up?",
+    "Eli Lilly, Dell Among Stocks To Watch As Market Leadership Shifts",
+    "Bank of America revamps AMD stock price target for 2026",
+    "Micron\u2019s AI Repricing Is Real \u2014 But the Market Still Isn\u2019t Sure It Can Last",
+    "Social Security's 4.7% 'Trump Bump' for 2027 sounds great \u2014 until you see what's fueling it",
+    "When is the Fed's next meeting? See the full schedule for 2026.",
+    "What is an add-on CD?"
   ],
   "market_moves": [
     {
       "label": "S&P 500",
-      "latest": 7443.28,
-      "move": -0.19,
-      "previous": 7457.69,
+      "latest": 7411.98,
+      "move": 0.05,
+      "previous": 7408.3,
       "symbol": "^GSPC",
-      "week_move": -1.33,
-      "week_start": 7543.59
+      "week_move": -0.42,
+      "week_start": 7443.28
     },
     {
       "label": "Nasdaq",
-      "latest": 25508.07,
-      "move": -0.05,
-      "previous": 25520.24,
+      "latest": 24975.82,
+      "move": -0.64,
+      "previous": 25137.69,
       "symbol": "^IXIC",
-      "week_move": -2.29,
-      "week_start": 26107.01
+      "week_move": -2.09,
+      "week_start": 25508.07
     },
     {
       "label": "Dow",
-      "latest": 51839.26,
-      "move": -0.59,
-      "previous": 52146.42,
+      "latest": 51947.25,
+      "move": 0.46,
+      "previous": 51711.65,
       "symbol": "^DJI",
-      "week_move": -1.27,
-      "week_start": 52508.27
+      "week_move": 0.21,
+      "week_start": 51839.26
     },
     {
       "label": "Russell 2000",
-      "latest": 2942.43,
-      "move": -0.67,
-      "previous": 2962.22,
+      "latest": 2930.0,
+      "move": -0.35,
+      "previous": 2940.16,
       "symbol": "^RUT",
-      "week_move": -0.75,
-      "week_start": 2964.76
+      "week_move": -0.42,
+      "week_start": 2942.43
     },
     {
       "label": "VIX",
-      "latest": 18.65,
+      "latest": 18.58,
       "move": -0.64,
-      "previous": 18.77,
+      "previous": 18.7,
       "symbol": "^VIX",
-      "week_move": 13.03,
-      "week_start": 16.5
+      "week_move": -0.38,
+      "week_start": 18.65
     },
     {
       "label": "Oil",
-      "latest": 125.51,
-      "move": 1.25,
-      "previous": 123.96,
+      "latest": 136.69,
+      "move": -2.01,
+      "previous": 139.49,
       "symbol": "USO",
-      "week_move": 4.44,
-      "week_start": 120.17
+      "week_move": 8.91,
+      "week_start": 125.51
     },
     {
       "label": "Long Bonds",
-      "latest": 83.89,
-      "move": -0.75,
-      "previous": 84.52,
+      "latest": 83.25,
+      "move": 0.1,
+      "previous": 83.17,
       "symbol": "TLT",
-      "week_move": -0.23,
-      "week_start": 84.08
+      "week_move": -0.76,
+      "week_start": 83.89
     },
     {
       "label": "Gold",
-      "latest": 367.6,
-      "move": -0.22,
-      "previous": 368.41,
+      "latest": 371.9,
+      "move": 0.1,
+      "previous": 371.52,
       "symbol": "GLD",
-      "week_move": -1.22,
-      "week_start": 372.15
+      "week_move": 1.17,
+      "week_start": 367.6
     },
     {
       "label": "U.S. Dollar",
-      "latest": 28.39,
-      "move": 0.21,
-      "previous": 28.33,
+      "latest": 28.58,
+      "move": 0.07,
+      "previous": 28.56,
       "symbol": "UUP",
-      "week_move": 0.0,
+      "week_move": 0.67,
       "week_start": 28.39
     }
   ],
@@ -111,59 +111,70 @@
     "ranked_themes": [
       [
         "AI / Chips",
-        10
-      ],
-      [
-        "Earnings Season",
-        4
+        9
       ],
       [
         "Inflation / Fed",
-        4
-      ],
-      [
-        "Consumer Stress",
-        3
-      ],
-      [
-        "Automation / Mobility",
-        2
+        8
       ],
       [
         "Banks / Credit",
-        1
+        6
+      ],
+      [
+        "Automation / Mobility",
+        5
+      ],
+      [
+        "Consumer Stress",
+        4
+      ],
+      [
+        "Earnings Season",
+        3
       ]
     ],
     "theme_headlines": {
       "AI / Chips": [
-        "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
-        "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
-        "5 things no one tells you about becoming a millionaire in America \u2014 are you ready for them?"
+        "Workers remain confident in their skills despite economic jitters: Study",
+        "You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
+        "Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for"
       ],
       "Automation / Mobility": [
-        "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
-        "What a New Uber Eats Deal Means for GameStop Stock"
+        "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
+        "Alphabet flops, Intel shocks, and Tesla tanks: AlphaSpace weekly recap",
+        "Google and Tesla lost half a trillion dollars this week as their suppliers cashed in: Chart of the Day"
       ],
       "Banks / Credit": [
-        "HELOC and home equity loan rates today, Monday, July 20, 2026: Rates are incredibly close"
+        "Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
+        "Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for",
+        "Bank of America revamps AMD stock price target for 2026"
       ],
       "Consumer Stress": [
-        "Why IBM Stock Crashed 25% Even as AI Spending Exploded",
-        "5 Ways the \u2018Die With Zero\u2019 Strategy Can Change Your Approach to Saving and Spending",
-        "Bitcoin and ethereum prices today, Monday, July 20, 2026: Crypto prices mixed as second half 2026 outlooks conflict"
+        "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
+        "Gold prices today, Friday, July 24, 2026: Gold price remains below $4,100 ahead of next week\u2019s rate decision",
+        "Silver prices today, Friday, July 24, 2026: Silver returns above $58 as markets price in higher rate risks"
       ],
       "Earnings Season": [
-        "Why Analysts Still See Nvidia as the Top Chip Stock to Buy for Q2 Earnings Season",
-        "Netflix Tanks on Lower Margins and Flat Outlook - Time to Buy NFLX?",
-        "Oppenheimer Downgraded IBM Following Its Sharp Post-Earnings Drop. What the Warning Means for IBM Stock."
+        "3 Reasons Ford Looks Overlooked Ahead of Its July 28 Q2 Earnings",
+        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
+        "Bank of America revamps AMD stock price target for 2026"
       ],
       "Inflation / Fed": [
-        "Mortgage and refinance rates today, Monday, July 20, 2026: Purchase rates move higher than refi rates",
-        "HELOC and home equity loan rates today, Monday, July 20, 2026: Rates are incredibly close",
-        "Best high-yield savings interest rates today, Monday, July 20, 2026: Earn up to 4.10% APY"
+        "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
+        "Shippers face tighter capacity as trucking rates hold near record highs",
+        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
+      ],
+      "Market Breadth / Rotation": [
+        "Eli Lilly, Dell Among Stocks To Watch As Market Leadership Shifts"
+      ],
+      "Oil / Geopolitical Risk": [
+        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
       ],
       "Policy / Regulation": [
-        "Bitcoin and ethereum prices today, Monday, July 20, 2026: Crypto prices mixed as second half 2026 outlooks conflict"
+        "Social Security's 4.7% 'Trump Bump' for 2027 sounds great \u2014 until you see what's fueling it",
+        "Bitcoin and ethereum prices today, Friday, July 24, 2026: Crypto prices retreat on higher U.S. Treasury yields",
+        "How Trump Accounts could impact your child's student aid"
       ]
     },
     "top_theme": "AI / Chips"

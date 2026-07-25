@@ -32,6 +32,14 @@ WEEK_AHEAD_NARRATIVES = os.getenv(
     "",
 ).strip()
 
+ISSUE_MEMORY_FILE = PROJECT_ROOT / "data" / "morning_brief_issue_memory.json"
+
+ISSUE_MEMORY_DAYS = int(
+    os.getenv(
+        "MORNING_BRIEF_MEMORY_DAYS",
+        "4",
+    )
+)
 
 MARKET_ASSETS = [ 
     {"symbol": "^GSPC", "label": "S&P 500"},
@@ -412,6 +420,170 @@ def write_json(path: Path, data: Any) -> None:
     except Exception:
         return
 
+def today_memory_key() -> str:
+    return datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d")
+
+
+def normalize_issue_memory_key(value: str) -> str:
+    text = clean_text(value, 500).lower()
+    normalized = []
+
+    for character in text:
+        if character.isalnum():
+            normalized.append(character)
+        else:
+            normalized.append(" ")
+
+    return " ".join("".join(normalized).split())
+
+
+def load_issue_memory() -> dict:
+    data = read_json(ISSUE_MEMORY_FILE, {"days": []})
+
+    if not isinstance(data, dict):
+        return {"days": []}
+
+    days = data.get("days")
+
+    if not isinstance(days, list):
+        data["days"] = []
+
+    return data
+
+
+def save_issue_memory(memory: dict) -> None:
+    write_json(ISSUE_MEMORY_FILE, memory)
+
+
+def prune_issue_memory(memory: dict) -> dict:
+    days = memory.get("days") or []
+
+    if not isinstance(days, list):
+        days = []
+
+    cleaned_days = []
+
+    for day in days:
+        if not isinstance(day, dict):
+            continue
+
+        date = str(day.get("date", "")).strip()
+        bullets = day.get("bullets") or []
+
+        if not date or not isinstance(bullets, list):
+            continue
+
+        cleaned_days.append(
+            {
+                "date": date,
+                "bullets": bullets[:8],
+                "keys": [
+                    normalize_issue_memory_key(item)
+                    for item in bullets[:8]
+                ],
+            }
+        )
+
+    cleaned_days = cleaned_days[-ISSUE_MEMORY_DAYS:]
+
+    return {"days": cleaned_days}
+
+
+def get_recent_issue_keys(memory: dict, exclude_today: bool = True) -> set[str]:
+    today = today_memory_key()
+    keys = set()
+
+    for day in memory.get("days") or []:
+        if exclude_today and day.get("date") == today:
+            continue
+
+        for key in day.get("keys") or []:
+            if key:
+                keys.add(key)
+
+    return keys
+
+
+def reframe_repeated_issue_bullet(bullet: str, index: int) -> str:
+    angles = [
+        "Portfolio angle",
+        "Risk check",
+        "Confirmation watch",
+        "Big-picture read",
+        "Watchlist impact",
+    ]
+
+    angle = angles[index % len(angles)]
+
+    if bullet.startswith(angle):
+        return bullet
+
+    return f"{angle}: {bullet}"
+
+
+def apply_issue_memory_filter(bullets: list[str]) -> list[str]:
+    memory = prune_issue_memory(load_issue_memory())
+    recent_keys = get_recent_issue_keys(memory, exclude_today=True)
+
+    fresh_bullets = []
+    reframed_bullets = []
+
+    for index, bullet in enumerate(bullets):
+        cleaned = clean_text(bullet, 180)
+
+        if not cleaned:
+            continue
+
+        key = normalize_issue_memory_key(cleaned)
+
+        if key in recent_keys:
+            reframed_bullets.append(
+                reframe_repeated_issue_bullet(cleaned, index)
+            )
+        else:
+            fresh_bullets.append(cleaned)
+
+    combined = fresh_bullets + reframed_bullets
+
+    unique = []
+
+    for bullet in combined:
+        if bullet not in unique:
+            unique.append(bullet)
+
+    return unique[:5]
+
+
+def record_issue_bullets(bullets: list[str]) -> None:
+    memory = prune_issue_memory(load_issue_memory())
+    today = today_memory_key()
+
+    cleaned_bullets = [
+        clean_text(item, 180)
+        for item in bullets
+        if clean_text(item, 180)
+    ][:8]
+
+    days = [
+        day
+        for day in memory.get("days") or []
+        if day.get("date") != today
+    ]
+
+    days.append(
+        {
+            "date": today,
+            "bullets": cleaned_bullets,
+            "keys": [
+                normalize_issue_memory_key(item)
+                for item in cleaned_bullets
+            ],
+        }
+    )
+
+    memory["days"] = days[-ISSUE_MEMORY_DAYS:]
+
+    save_issue_memory(memory)
 
 def request_text(url: str) -> str:
     request = urllib.request.Request(
@@ -585,48 +757,6 @@ def format_market_recap(moves: list[dict]) -> str:
     )
 
 
-def build_today_issue_bullets(theme_summary: dict) -> list[str]:
-    ranked = theme_summary.get("ranked_themes") or []
-    theme_headlines = theme_summary.get("theme_headlines") or {}
-
-    bullets = []
-
-    for theme, _count in ranked[:5]:
-        examples = theme_headlines.get(theme, [])
-        example = examples[0] if examples else ""
-
-        if theme == "AI / Chips":
-            bullets.append("AI and chip-sector headlines remain the market’s most important growth theme.")
-        elif theme == "AI Infrastructure / Power":
-            bullets.append("AI infrastructure is broadening into power, data centers, cooling, and grid capacity.")
-        elif theme == "Oil / Geopolitical Risk":
-            bullets.append("Geopolitical and oil risk are back in focus for inflation, shipping, and risk sentiment.")
-        elif theme == "Defense / AI Warfare":
-            bullets.append("Defense technology, cyber, drones, ISR, and AI warfare exposure deserve extra attention.")
-        elif theme == "Earnings Season":
-            bullets.append("Earnings season is driving the next test for margins, guidance, and credit quality.")
-        elif theme == "Inflation / Fed":
-            bullets.append("Inflation and Fed-rate expectations remain central to the market setup.")
-        elif theme == "Banks / Credit":
-            bullets.append("Bank and credit headlines are important for consumer strength and financial conditions.")
-        elif theme == "Consumer Stress":
-            bullets.append("Consumer stress headlines are worth watching for credit, retail, and bank exposure.")
-        elif theme == "Policy / Regulation":
-            bullets.append("Policy and regulation headlines could affect sector leadership.")
-        elif theme == "Market Breadth / Rotation":
-            bullets.append("Market breadth and rotation will show whether leadership is broadening or staying narrow.")
-        elif example:
-            bullets.append(example)
-
-    if not bullets:
-        bullets = [
-            "Earnings, inflation, rates, geopolitical risk, and AI leadership remain the main market drivers.",
-            "Portfolio positioning should stay selective until leadership broadens.",
-        ]
-
-    return bullets[:5]
-
-
 def build_what_watching(theme_summary: dict) -> str:
     themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
     top_theme = get_top_theme(theme_summary)
@@ -706,6 +836,12 @@ def refresh_morning_brief_cache() -> dict:
     market_moves = fetch_market_moves()
     headlines = fetch_rss_headlines()
     theme_summary = build_theme_summary(headlines)
+
+    issue_bullets = build_today_issue_bullets(
+        theme_summary,
+        use_memory=True,
+        record_memory=True,
+    )
 
     payload = {
         "cached_at": time.time(),
@@ -986,7 +1122,11 @@ def build_headline_issue_bullet(theme: str, headline: str) -> str:
 
     return headline
 
-def build_today_issue_bullets(theme_summary: dict) -> list[str]:
+def build_today_issue_bullets(
+    theme_summary: dict,
+    use_memory: bool = False,
+    record_memory: bool = False,
+) -> list[str]:
     examples = get_theme_examples(theme_summary, limit=8)
 
     headline_bullets = []
@@ -999,33 +1139,52 @@ def build_today_issue_bullets(theme_summary: dict) -> list[str]:
 
     if headline_bullets:
         primary = headline_bullets[0]
-        rotated_tail = rotate_items(headline_bullets[1:], get_daily_issue_seed(theme_summary))
-        return [primary] + rotated_tail[:4]
+        rotated_tail = rotate_items(
+            headline_bullets[1:],
+            get_daily_issue_seed(theme_summary),
+        )
+        bullets = [primary] + rotated_tail[:4]
+    else:
+        ranked = theme_summary.get("ranked_themes") or []
+        candidates = []
 
-    ranked = theme_summary.get("ranked_themes") or []
-    candidates = []
+        for item in ranked[:8]:
+            if isinstance(item, dict):
+                theme = item.get("theme")
+            elif isinstance(item, (list, tuple)) and item:
+                theme = item[0]
+            else:
+                theme = None
 
-    for theme, _count in ranked[:8]:
-        if clean_theme_label(theme) == "":
-            continue
+            if clean_theme_label(theme) == "":
+                continue
 
-        title = build_issue_title(theme)
+            title = build_issue_title(theme)
 
-        if title and title not in candidates:
-            candidates.append(title)
+            if title and title not in candidates:
+                candidates.append(title)
 
-    if not candidates:
-        return [
-            "Fresh headline flow is limited, so today’s focus is earnings, rates, AI leadership, macro risk, and watchlist confirmation.",
-            "Separate real demand signals from repeated market noise.",
-            "Use price and volume confirmation before acting on any headline-driven move.",
-        ]
+        if not candidates:
+            bullets = [
+                "Fresh headline flow is limited, so today’s focus is earnings, rates, AI leadership, macro risk, and watchlist confirmation.",
+                "Separate real demand signals from repeated market noise.",
+                "Use price and volume confirmation before acting on any headline-driven move.",
+            ]
+        else:
+            primary = candidates[0]
+            rotated_tail = rotate_items(
+                candidates[1:],
+                get_daily_issue_seed(theme_summary),
+            )
+            bullets = [primary] + rotated_tail[:4]
 
-    primary = candidates[0]
-    rotated_tail = rotate_items(candidates[1:], get_daily_issue_seed(theme_summary))
+    if use_memory and "apply_issue_memory_filter" in globals():
+        bullets = apply_issue_memory_filter(bullets)
 
-    return [primary] + rotated_tail[:4]
+    if record_memory and "record_issue_bullets" in globals():
+        record_issue_bullets(bullets)
 
+    return bullets[:5]
 
 def build_what_watching(theme_summary: dict) -> str:
     themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
@@ -1498,7 +1657,15 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
 
     opening_sentence = build_theme_collision_sentence(theme_summary)
     index_recap = build_index_recap(market_moves)
-    issue_bullets = build_today_issue_bullets(theme_summary)
+    week_ahead_block = build_week_ahead_block(theme_summary, market_moves)
+    issue_bullets = payload.get("issue_bullets")
+
+    if not isinstance(issue_bullets, list) or not issue_bullets:
+        issue_bullets = build_today_issue_bullets(
+        theme_summary,
+        use_memory=False,
+        record_memory=False,
+    )
     what_watching = build_what_watching(theme_summary)
     portfolio_read = build_portfolio_read(theme_summary)
     quote_of_day = build_quote_of_day()
@@ -1522,6 +1689,8 @@ Market Status:
 {opening_sentence}
 
 {index_recap}
+
+{week_ahead_block}
 
 {daily_focus}
 
