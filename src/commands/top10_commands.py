@@ -7,7 +7,7 @@ from src.reports.top10_report import build_top10_report
 from src.scoring.scoring_engine import get_stock_scores
 
 
-MAX_TOP_RESULTS = 10
+MAX_TOP_RESULTS = 20
 
 
 async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -15,7 +15,7 @@ async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     loading_message = await update.message.reply_text(
-        "🏆 Building Smart Money AI Top 10..."
+        "🏆 Building Smart Money AI Top 20..."
     )
 
     try:
@@ -25,6 +25,6 @@ async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as error:
         await loading_message.edit_text(
-            "Unable to build Smart Money AI Top 10 right now.\n\n"
+            "Unable to build Smart Money AI Top 20 right now.\n\n"
             f"Error:\n{type(error).__name__}"
         )

@@ -1,27 +1,43 @@
 {
-  "cached_at": 1784997111.123827,
-  "cached_at_iso": "2026-07-25T11:31:51.123832-05:00",
+  "cached_at": 1784998419.6410992,
+  "cached_at_iso": "2026-07-25T11:53:39.641103-05:00",
+  "condensed_headlines": [
+    "Banks / Credit: Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
+    "AI / Chips: Workers remain confident in their skills despite economic jitters: Study",
+    "AI / Chips: You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
+    "Fed / Rates: Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
+    "AI / Chips: Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for",
+    "Earnings Season: Meta Stock Is Down Nearly 10% in 2026. Should You Buy Before July 29 Q2 Earnings?",
+    "Alphabet / Cloud: Alphabet flops, Intel shocks, and Tesla tanks: AlphaSpace weekly recap"
+  ],
   "headlines": [
     "Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
     "Workers remain confident in their skills despite economic jitters: Study",
     "You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
     "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
     "Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for",
-    "Why Retirees With Pension Income Still Need a Dividend Portfolio",
+    "Meta Stock Is Down Nearly 10% in 2026. Should You Buy Before July 29 Q2 Earnings?",
     "If you always say \u2018yes\u2019 to these 5 crucial things, you're probably broke (regardless of how much money you make)",
     "Alphabet flops, Intel shocks, and Tesla tanks: AlphaSpace weekly recap",
     "UFC star Sean Strickland's brutally blunt money advice hits 5.2M views \u2014 and it's just 2 simple steps",
     "Shippers face tighter capacity as trucking rates hold near record highs",
-    "3 Reasons Ford Looks Overlooked Ahead of Its July 28 Q2 Earnings",
+    "Mid-term stock market curse and what comes next",
     "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
     "Google and Tesla lost half a trillion dollars this week as their suppliers cashed in: Chart of the Day",
     "You\u2019ve got a leg up on about 50% of Americans if you check off any of these three boxes \u2014 how do you stack up?",
-    "Eli Lilly, Dell Among Stocks To Watch As Market Leadership Shifts",
-    "Bank of America revamps AMD stock price target for 2026",
-    "Micron\u2019s AI Repricing Is Real \u2014 But the Market Still Isn\u2019t Sure It Can Last",
-    "Social Security's 4.7% 'Trump Bump' for 2027 sounds great \u2014 until you see what's fueling it",
     "When is the Fed's next meeting? See the full schedule for 2026.",
-    "What is an add-on CD?"
+    "3 Major Reasons to Buy Vertiv Before July 29 Q2 Earnings",
+    "HELOC and home equity loan rates today, Friday, July 24, 2026: Have they improved?",
+    "Do I need a business bank account if I'm self-employed?",
+    "What is an add-on CD?",
+    "Happen Bank review (2026): A top-rated online bank with high yields and low fees"
+  ],
+  "issue_bullets": [
+    "Fed/rates setup: Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
+    "Fed/rates setup: Shippers face tighter capacity as trucking rates hold near record highs",
+    "Fed/rates setup: Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
+    "AI and chips: Workers remain confident in their skills despite economic jitters: Study",
+    "AI and chips: You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible"
   ],
   "market_moves": [
     {
@@ -104,29 +120,110 @@
       "symbol": "UUP",
       "week_move": 0.67,
       "week_start": 28.39
+    },
+    {
+      "label": "GOOG",
+      "latest": 319.09,
+      "move": 0.24,
+      "previous": 318.34,
+      "symbol": "GOOG",
+      "week_move": -9.19,
+      "week_start": 351.37
+    },
+    {
+      "label": "TSLA",
+      "latest": 313.03,
+      "move": -2.08,
+      "previous": 319.69,
+      "symbol": "TSLA",
+      "week_move": -15.3,
+      "week_start": 369.57
+    },
+    {
+      "label": "NVDA",
+      "latest": 206.84,
+      "move": -0.92,
+      "previous": 208.76,
+      "symbol": "NVDA",
+      "week_move": 1.75,
+      "week_start": 203.28
+    },
+    {
+      "label": "AMD",
+      "latest": 521.95,
+      "move": -3.29,
+      "previous": 539.69,
+      "symbol": "AMD",
+      "week_move": 3.65,
+      "week_start": 503.57
+    },
+    {
+      "label": "INTC",
+      "latest": 92.32,
+      "move": -7.89,
+      "previous": 100.23,
+      "symbol": "INTC",
+      "week_move": -4.88,
+      "week_start": 97.06
+    },
+    {
+      "label": "TSM",
+      "latest": 403.41,
+      "move": -2.93,
+      "previous": 415.58,
+      "symbol": "TSM",
+      "week_move": 0.28,
+      "week_start": 402.3
+    },
+    {
+      "label": "MSFT",
+      "latest": 381.7,
+      "move": 0.03,
+      "previous": 381.58,
+      "symbol": "MSFT",
+      "week_move": -5.12,
+      "week_start": 402.29
+    },
+    {
+      "label": "META",
+      "latest": 595.19,
+      "move": -1.8,
+      "previous": 606.1,
+      "symbol": "META",
+      "week_move": -7.84,
+      "week_start": 645.85
+    },
+    {
+      "label": "AMZN",
+      "latest": 232.11,
+      "move": -0.66,
+      "previous": 233.66,
+      "symbol": "AMZN",
+      "week_move": -7.15,
+      "week_start": 249.99
     }
   ],
   "source": "Yahoo Finance RSS and market chart data",
   "theme_summary": {
     "ranked_themes": [
       [
-        "AI / Chips",
-        9
-      ],
-      [
         "Inflation / Fed",
-        8
+        11
       ],
       [
-        "Banks / Credit",
+        "AI / Chips",
         6
       ],
       [
-        "Automation / Mobility",
+        "Banks / Credit",
         5
       ],
       [
         "Consumer Stress",
+        4
+      ],
+      [
+        "Automation / Mobility",
         4
       ],
       [
@@ -148,35 +245,31 @@
       "Banks / Credit": [
         "Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
         "Apple warns scammers are using FaceTime to steal bank account passwords \u2014 here's what to watch for",
-        "Bank of America revamps AMD stock price target for 2026"
+        "HELOC and home equity loan rates today, Friday, July 24, 2026: Have they improved?"
       ],
       "Consumer Stress": [
         "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-        "Gold prices today, Friday, July 24, 2026: Gold price remains below $4,100 ahead of next week\u2019s rate decision",
+        "Bitcoin and ethereum prices today, Friday, July 24, 2026: Crypto prices retreat on higher U.S. Treasury yields",
         "Silver prices today, Friday, July 24, 2026: Silver returns above $58 as markets price in higher rate risks"
       ],
       "Earnings Season": [
-        "3 Reasons Ford Looks Overlooked Ahead of Its July 28 Q2 Earnings",
+        "Meta Stock Is Down Nearly 10% in 2026. Should You Buy Before July 29 Q2 Earnings?",
         "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
-        "Bank of America revamps AMD stock price target for 2026"
+        "3 Major Reasons to Buy Vertiv Before July 29 Q2 Earnings"
       ],
       "Inflation / Fed": [
         "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
         "Shippers face tighter capacity as trucking rates hold near record highs",
         "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
       ],
-      "Market Breadth / Rotation": [
-        "Eli Lilly, Dell Among Stocks To Watch As Market Leadership Shifts"
-      ],
       "Oil / Geopolitical Risk": [
         "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
       ],
       "Policy / Regulation": [
-        "Social Security's 4.7% 'Trump Bump' for 2027 sounds great \u2014 until you see what's fueling it",
         "Bitcoin and ethereum prices today, Friday, July 24, 2026: Crypto prices retreat on higher U.S. Treasury yields",
         "How Trump Accounts could impact your child's student aid"
       ]
     },
-    "top_theme": "AI / Chips"
+    "top_theme": "Inflation / Fed"
   }
 }

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.config.theme_watchlist_universe import build_relevant_watchlist
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
@@ -22,8 +23,9 @@ from src.utils.watchlist_store import load_watchlist
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 MAX_TOP_OPPORTUNITIES = 2
-MAX_WATCHLIST_MOVERS = 3
-MAX_MORNING_BRIEF_CHARS = 950
+MAX_WATCHLIST_MOVERS = 6
+MAX_RELEVANT_WATCHLIST = 20
+MAX_MORNING_BRIEF_CHARS = 1900
 
 # Default back to live movement.
 # Set DAILY_REPORT_LIVE_QUOTES=0 only if you need emergency fast mode.
@@ -172,6 +174,25 @@ SMART_MONEY_LABEL_TRANSLATIONS = {
     "Weak Signal": "Weak signal",
 }
 
+MARKET_TIMEZONE = os.getenv("MARKET_TIMEZONE", "America/New_York")
+
+
+def get_market_status_label() -> str:
+    now_et = datetime.now(ZoneInfo(MARKET_TIMEZONE))
+
+    if now_et.weekday() >= 5:
+        return "Closed — weekend. Price moves reflect the last completed regular session."
+
+    market_open = now_et.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+
+    if now_et < market_open:
+        return "Closed — pre-market. Moves may reflect the prior regular session."
+
+    if now_et > market_close:
+        return "Closed — after-hours. Moves reflect the completed regular session."
+
+    return "Open — live session."
 
 def normalize_theme_name(theme: str | None) -> str:
     text = " ".join(str(theme or "").split())
@@ -540,11 +561,17 @@ def get_quote_change_percent(quote: dict | None):
     )
 
 
-def fetch_watchlist_quotes() -> tuple[list[str], dict]:
+def fetch_watchlist_quotes(context: dict | None = None) -> tuple[list[str], dict]:
     try:
         symbols = load_watchlist()
     except Exception:
-        return [], {}
+        symbols = []
+
+    symbols = build_relevant_watchlist(
+        current_symbols=symbols,
+        context=context,
+        max_symbols=MAX_RELEVANT_WATCHLIST,
+    )
 
     if not symbols:
         return [], {}
@@ -623,6 +650,7 @@ def build_market_snapshot(symbols: list[str], movers: list[dict]) -> str:
         quote_status = "Off" if not DAILY_REPORT_LIVE_QUOTES else "Unavailable"
 
         return f"""
+Market Session: {get_market_status_label()}        
 Tone: Quote data unavailable
 Watchlist: {len(symbols)} symbols
 Live Quotes: {quote_status}
@@ -638,6 +666,7 @@ Use: /global, /headlines, /watchlist movers, or /ticker SYMBOL for live context.
     weakest = min(movers, key=lambda item: item["change_percent"])
 
     return f"""
+Market Session: {get_market_status_label()}    
 Tone: {build_market_tone(movers)}
 Breadth: {positive} up / {negative} down / {len(movers)} live
 Average Move: {format_percent(average)}
@@ -650,13 +679,27 @@ def build_watchlist_snapshot(symbols: list[str], movers: list[dict]) -> str:
     if not symbols:
         return "Watchlist unavailable."
 
-    if not movers:
-        return f"{len(symbols)} symbols loaded, but live movement data is unavailable."
+    universe_text = ", ".join(symbols[:MAX_RELEVANT_WATCHLIST])
 
-    return "\n".join(
+    if not movers:
+        return (
+            f"Relevant research universe: {len(symbols)} symbols\n"
+            f"{universe_text}\n\n"
+            "Live movement data is unavailable."
+        )
+
+    mover_text = "\n".join(
         f"• {item['symbol']}: {format_price(item['price'])} ({format_percent(item['change_percent'])})"
         for item in movers[:MAX_WATCHLIST_MOVERS]
     )
+
+    return f"""
+Relevant research universe: {len(symbols)} symbols
+{universe_text}
+
+Largest live movers:
+{mover_text}
+""".strip()
 
 
 def safe_morning_brief_intro() -> str:
@@ -1387,10 +1430,10 @@ def build_daily_report() -> str:
     scores = normalize_scores(raw_scores)
     top_scores = scores[:MAX_TOP_OPPORTUNITIES]
 
-    watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes()
+    global_context = load_global_context()
+    watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes(global_context)
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     market_tone = build_market_tone(movers)
-    global_context = load_global_context()
 
     morning_brief_intro = safe_morning_brief_intro()
 
