@@ -17,6 +17,74 @@ TIMEZONE = "America/Lima"
 REQUEST_TIMEOUT = 6
 CACHE_TTL_SECONDS = 60 * 60 * 6
 
+RECAP_SYMBOLS = [
+    symbol.strip().upper()
+    for symbol in os.getenv(
+        "MORNING_BRIEF_RECAP_SYMBOLS",
+        "GOOG,TSLA,NVDA,AMD,INTC,TSM,MSFT,META,AMZN",
+    ).split(",")
+    if symbol.strip()
+]
+
+HEADLINE_BLOCK_LIMIT = int(
+    os.getenv(
+        "MORNING_BRIEF_HEADLINE_LIMIT",
+        "7",
+    )
+)
+HEADLINE_RELEVANCE_KEYWORDS = [
+    "alphabet",
+    "google",
+    "goog",
+    "googl",
+    "tesla",
+    "tsla",
+    "nvidia",
+    "nvda",
+    "amd",
+    "intel",
+    "intc",
+    "ibm",
+    "amazon",
+    "amzn",
+    "spacex",
+    "musk",
+    "cloud",
+    "ai",
+    "artificial intelligence",
+    "semiconductor",
+    "chip",
+    "chips",
+    "robotaxi",
+    "drone",
+    "defense",
+    "missile",
+    "oil",
+    "inflation",
+    "mortgage",
+    "rates",
+    "bond",
+    "bonds",
+    "fed",
+    "dollar",
+    "hedge fund",
+    "blackstone",
+    "earnings",
+    "settlement",
+    "ftc",
+    "etf",
+    "congress",
+    "lawmaker",
+]
+
+LOW_RELEVANCE_HEADLINE_KEYWORDS = [
+    "hoa",
+    "influencer heir",
+    "seniors",
+    "sauce",
+    "celebrity",
+]
+
 WEEK_AHEAD_EARNINGS = os.getenv(
     "WEEK_AHEAD_EARNINGS",
     "",
@@ -645,9 +713,23 @@ def get_asset_move(symbol: str) -> dict:
 
 def fetch_market_moves() -> list[dict]:
     moves = []
+    seen_symbols = set()
 
-    for asset in MARKET_ASSETS:
-        data = get_asset_move(asset["symbol"])
+    assets = list(MARKET_ASSETS)
+
+    for symbol in RECAP_SYMBOLS:
+        if symbol not in seen_symbols:
+            assets.append({"symbol": symbol, "label": symbol})
+
+    for asset in assets:
+        symbol = asset["symbol"]
+
+        if symbol in seen_symbols:
+            continue
+
+        seen_symbols.add(symbol)
+
+        data = get_asset_move(symbol)
         data["label"] = asset["label"]
         moves.append(data)
 
@@ -825,6 +907,190 @@ def build_portfolio_read(theme_summary: dict) -> str:
 
     return "Portfolio read: " + " ".join(reads[:3])
 
+def headline_has_portfolio_relevance(headline: str) -> bool:
+    text = str(headline or "").lower()
+
+    if not text:
+        return False
+
+    has_relevant_keyword = any(
+        keyword in text
+        for keyword in HEADLINE_RELEVANCE_KEYWORDS
+    )
+
+    has_low_relevance_keyword = any(
+        keyword in text
+        for keyword in LOW_RELEVANCE_HEADLINE_KEYWORDS
+    )
+
+    if has_low_relevance_keyword and not has_relevant_keyword:
+        return False
+
+    return has_relevant_keyword or bool(classify_headline(headline))
+
+
+def get_headline_tag(headline: str) -> str:
+    text = str(headline or "").lower()
+    themes = classify_headline(headline)
+
+    if "ibm" in text:
+        return "IBM / AI"
+
+    if "google cloud" in text or "alphabet" in text or "goog" in text:
+        return "Alphabet / Cloud"
+
+    if "amd" in text and ("nvidia" in text or "helios" in text):
+        return "AMD / Nvidia"
+
+    if "nvidia" in text or "nvda" in text:
+        return "Nvidia / AI chips"
+
+    if "intel" in text or "intc" in text:
+        return "Intel / Chips"
+
+    if "tesla" in text and "spacex" in text:
+        return "Tesla / SpaceX"
+
+    if "tesla" in text or "tsla" in text or "robotaxi" in text:
+        return "Tesla / Robotaxi"
+
+    if "spacex" in text or "starship" in text:
+        return "SpaceX / Aerospace"
+
+    if "blackstone" in text or "exuberance" in text:
+        return "AI valuation"
+
+    if "mortgage" in text or "bond" in text or "bonds" in text:
+        return "Rates / Bonds"
+
+    if "oil" in text or "inflation" in text or "hormuz" in text:
+        return "Oil / Inflation"
+
+    if "ftc" in text or "settlement" in text or "refund" in text:
+        return "Regulation / Consumer"
+
+    if "etf" in text and ("congress" in text or "lawmaker" in text):
+        return "Political trades"
+
+    if "Defense Procurement / Munitions" in themes:
+        return "Defense procurement"
+
+    if "Defense / AI Warfare" in themes:
+        return "Defense / AI warfare"
+
+    if "AI / Chips" in themes:
+        return "AI / Chips"
+
+    if "Inflation / Fed" in themes:
+        return "Fed / Rates"
+
+    if "Banks / Credit" in themes:
+        return "Banks / Credit"
+
+    if themes:
+        return clean_theme_label(themes[0]) or "Market"
+
+    return "Market"
+
+
+def tailor_headline_text(headline: str) -> str:
+    raw = clean_text(headline, 180)
+    text = raw.lower()
+
+    if "what ibm execs think" in text and "90 days" in text:
+        return "execs lay out what needs to change after the brutal warning."
+
+    if "ibm ceo" in text and ("earnings shortfall" in text or "stock plunge" in text):
+        return "CEO defends the AI strategy after the earnings shortfall and stock plunge."
+
+    if "google cloud" in text and "profit engine" in text:
+        return "Google Cloud is becoming Alphabet’s key profit-engine read-through."
+
+    if "amd" in text and "helios" in text:
+        return "Helios sharpens AMD’s direct challenge to Nvidia in AI infrastructure."
+
+    if "tesla" in text and "robotaxis" in text:
+        return "the once-bullish robotaxi tone is starting to shift."
+
+    if "tesla" in text and "worst day" in text:
+        return "the worst trading day in a year hits Musk’s net worth and sentiment."
+
+    if "spacex" in text and "starship" in text:
+        return "another Starship test keeps the aerospace growth narrative active."
+
+    if "tesla-spacex merger" in text or "tesla spacex merger" in text:
+        return "Musk overlap keeps the Tesla-SpaceX combination narrative alive."
+
+    if "mortgage rates" in text and "oil" in text:
+        return "oil-driven inflation worries push mortgage rates higher."
+
+    if "hedge funds" in text and "bond trade" in text:
+        return "a favorite bond-market trade is losing momentum."
+
+    if "blackstone" in text and "excessive exuberance" in text:
+        return "Schwarzman warns investors to stay mindful of AI exuberance."
+
+    if "amazon prime" in text and "ftc settlement" in text:
+        return "Prime settlement raises refund and consumer-regulation questions."
+
+    if "etf" in text and "democratic lawmaker trades" in text:
+        return "political-trading ETF headlines remain worth watching."
+
+    # Generic cleanup for Yahoo-style headlines.
+    cleaned = raw
+    cleaned = cleaned.replace(": Chart of the Day", "")
+    cleaned = cleaned.replace(": One Big Investment Idea", "")
+    cleaned = cleaned.replace(" — here's how to shop the sell-off", "")
+    cleaned = cleaned.replace(" - ", ": ")
+
+    return clean_text(cleaned, 115)
+
+
+def build_condensed_headlines(
+    headlines: list[str],
+    limit: int = HEADLINE_BLOCK_LIMIT,
+) -> list[str]:
+    curated = []
+    seen_keys = set()
+
+    for headline in headlines or []:
+        if not headline_has_portfolio_relevance(headline):
+            continue
+
+        tag = get_headline_tag(headline)
+        tailored = tailor_headline_text(headline)
+
+        if not tailored:
+            continue
+
+        bullet = f"{tag}: {tailored}"
+        key = normalize_issue_memory_key(bullet)
+
+        if key in seen_keys:
+            continue
+
+        seen_keys.add(key)
+        curated.append(bullet)
+
+        if len(curated) >= limit:
+            break
+
+    return curated
+
+
+def build_headlines_block(payload: dict) -> str:
+    headlines = payload.get("condensed_headlines")
+
+    if not isinstance(headlines, list) or not headlines:
+        headlines = build_condensed_headlines(
+            payload.get("headlines") or [],
+            limit=HEADLINE_BLOCK_LIMIT,
+        )
+
+    if not headlines:
+        return ""
+
+    return "Headlines\n" + "\n".join(f"• {item}" for item in headlines[:HEADLINE_BLOCK_LIMIT])
 
 def refresh_morning_brief_cache() -> dict:
     """
@@ -842,15 +1108,20 @@ def refresh_morning_brief_cache() -> dict:
         use_memory=True,
         record_memory=True,
     )
-
+    condensed_headlines = build_condensed_headlines(
+    headlines,
+    limit=HEADLINE_BLOCK_LIMIT,
+    )
     payload = {
-        "cached_at": time.time(),
-        "cached_at_iso": now_iso(),
-        "source": "Yahoo Finance RSS and market chart data",
-        "market_moves": market_moves,
-        "headlines": headlines[:20],
-        "theme_summary": theme_summary,
-    }
+    "cached_at": time.time(),
+    "cached_at_iso": now_iso(),
+    "source": "Yahoo Finance RSS and market chart data",
+    "market_moves": market_moves,
+    "headlines": headlines[:20],
+    "theme_summary": theme_summary,
+    "issue_bullets": issue_bullets,
+    "condensed_headlines": condensed_headlines,
+}
 
     write_json(CACHE_FILE, payload)
 
@@ -1636,6 +1907,157 @@ The big narratives:
 {econ_text}
 """.strip()
 
+def get_move_from_cache(market_moves: list[dict], symbol: str) -> float | None:
+    for item in market_moves:
+        if str(item.get("symbol", "")).upper() == symbol.upper():
+            value = item.get("move")
+
+            try:
+                if value is None:
+                    return None
+
+                return float(value)
+            except Exception:
+                return None
+
+    return None
+
+
+def build_notable_stock_recap(market_moves: list[dict]) -> str:
+    candidates = []
+
+    index_symbols = {
+        "^GSPC",
+        "^IXIC",
+        "^DJI",
+        "^RUT",
+        "^VIX",
+        "USO",
+        "TLT",
+        "GLD",
+        "UUP",
+    }
+
+    for item in market_moves:
+        symbol = str(item.get("symbol", "")).upper()
+
+        if not symbol or symbol in index_symbols:
+            continue
+
+        move = get_move_from_cache(market_moves, symbol)
+
+        if move is None:
+            continue
+
+        if abs(move) >= 2.5:
+            candidates.append((symbol, move))
+
+    candidates.sort(key=lambda item: abs(item[1]), reverse=True)
+
+    if not candidates:
+        return ""
+
+    parts = []
+
+    for symbol, move in candidates[:3]:
+        verb = "rose" if move >= 0 else "fell"
+        parts.append(f"{symbol} {verb} {abs(move):.1f}%")
+
+    return "A quick recap: " + ", ".join(parts) + "."
+
+
+def build_index_recap_sentence(market_moves: list[dict]) -> str:
+    sp500 = get_move_from_cache(market_moves, "^GSPC")
+    nasdaq = get_move_from_cache(market_moves, "^IXIC")
+    dow = get_move_from_cache(market_moves, "^DJI")
+
+    if sp500 is None or nasdaq is None or dow is None:
+        return "Index data was limited in the latest cache, so the market read leans more on headlines and portfolio themes."
+
+    if sp500 < 0 and nasdaq < 0 and dow < 0:
+        lead = "The bad day pulled"
+    elif sp500 > 0 and nasdaq > 0 and dow > 0:
+        lead = "The positive session lifted"
+    else:
+        lead = "The mixed session left"
+
+    return (
+        f"{lead} the S&P 500 {'down' if sp500 < 0 else 'up'} {abs(sp500):.1f}%, "
+        f"the Nasdaq {'down' if nasdaq < 0 else 'up'} {abs(nasdaq):.1f}%, "
+        f"and the Dow {'down' if dow < 0 else 'up'} {abs(dow):.1f}%."
+    )
+
+
+def build_macro_bridge_sentence(theme_summary: dict, market_moves: list[dict]) -> str:
+    themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
+    oil_move = get_move_from_cache(market_moves, "USO")
+    dollar_move = get_move_from_cache(market_moves, "UUP")
+    vix_move = get_move_from_cache(market_moves, "^VIX")
+
+    pieces = []
+
+    if "Oil / Geopolitical Risk" in themes:
+        if oil_move is not None and oil_move > 1:
+            pieces.append(f"oil strength, with USO up {oil_move:.1f}%")
+        else:
+            pieces.append("geopolitical and oil risk")
+
+    if "Defense Procurement / Munitions" in themes:
+        pieces.append("a defense procurement signal that matters for munitions and production scale")
+
+    if "AI / Chips" in themes:
+        pieces.append("pressure in the semiconductor trade")
+
+    if "Inflation / Fed" in themes:
+        pieces.append("Fed and inflation risk")
+
+    if dollar_move is not None and abs(dollar_move) >= 0.4:
+        direction = "stronger" if dollar_move > 0 else "weaker"
+        pieces.append(f"a {direction} dollar")
+
+    if vix_move is not None and vix_move > 3:
+        pieces.append("higher volatility")
+
+    if not pieces:
+        return ""
+
+    return "Add in " + ", ".join(pieces[:4]) + ", and the portfolio read becomes more about confirmation than chasing."
+
+
+def build_flowing_what_watching(theme_summary: dict) -> str:
+    today_name = datetime.now(ZoneInfo(TIMEZONE)).strftime("%A")
+
+    earnings = parse_env_list(WEEK_AHEAD_EARNINGS)
+    econ_events = parse_env_list(WEEK_AHEAD_ECON_EVENTS, separator=";")
+
+    watch_parts = []
+
+    if earnings:
+        watch_parts.append("reports from " + ", ".join(earnings[:6]))
+
+    if econ_events:
+        watch_parts.append(", ".join(econ_events[:3]))
+
+    if not watch_parts:
+        themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
+
+        if "Earnings Season" in themes:
+            watch_parts.append("earnings quality, guidance, and margin durability")
+
+        if "AI / Chips" in themes:
+            watch_parts.append("whether AI and chip leadership stabilizes")
+
+        if "Oil / Geopolitical Risk" in themes:
+            watch_parts.append("oil, shipping, and geopolitical risk")
+
+        if "Defense Procurement / Munitions" in themes:
+            watch_parts.append("defense procurement and public supplier read-throughs")
+
+        if not watch_parts:
+            watch_parts.append("whether the week’s big narratives change market leadership")
+
+    return f"What we're watching {today_name}: " + "; ".join(watch_parts[:4]) + "."
+
 def build_morning_brief_intro(force_refresh: bool = False) -> str:
     """
     Report-safe builder.
@@ -1660,6 +2082,11 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
     week_ahead_block = build_week_ahead_block(theme_summary, market_moves)
     issue_bullets = payload.get("issue_bullets")
 
+    stock_recap = build_notable_stock_recap(market_moves)
+    index_recap = build_index_recap_sentence(market_moves)
+    macro_bridge = build_macro_bridge_sentence(theme_summary, market_moves)
+    what_watching = build_flowing_what_watching(theme_summary)
+
     if not isinstance(issue_bullets, list) or not issue_bullets:
         issue_bullets = build_today_issue_bullets(
         theme_summary,
@@ -1672,6 +2099,7 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
     daily_focus = build_daily_focus_line(theme_summary)
     freshness_line = build_data_freshness_line(payload)
     session = get_us_market_session_status()
+    headlines_block = build_headlines_block(payload)
 
     bullet_text = "\n".join(f"• {bullet}" for bullet in issue_bullets)
 
@@ -1683,19 +2111,20 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
     return f"""
 Good morning!
 
-Market Status:
-{session['label']}
-
 {opening_sentence}
+
+{stock_recap}
 
 {index_recap}
 
-{week_ahead_block}
+{macro_bridge}
 
-{daily_focus}
+{week_ahead_block}
 
 In today's issue
 {bullet_text}
+
+{headlines_block}
 
 {what_watching}
 
