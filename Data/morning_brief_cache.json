@@ -1,225 +1,311 @@
 {
-  "cached_at": 1785007215.1342664,
-  "cached_at_iso": "2026-07-25T14:20:15.134269-05:00",
+  "cached_at": 1785169321.1077023,
+  "cached_at_iso": "2026-07-27T11:22:01.107706-05:00",
   "condensed_headlines": [
-    "Banks / Credit: Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
-    "AI / Chips: Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
-    "Nvidia / AI chips: Is NVIDIA Corporation (NVDA) A Good Stock To Buy Now?",
-    "AI / Chips: Workers remain confident in their skills despite economic jitters: Study",
-    "AI / Chips: You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
-    "Fed / Rates: Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-    "Banks / Credit: Do I need a business bank account if I'm self-employed?"
+    "AI / Chips: After 80 stores close, 63-year-old chain gives Chapter 11 warning",
+    "Oil / Inflation: Stock market today: Dow, S&P 500, Nasdaq fluctuate as chip stocks tumble, oil prices fall",
+    "AI / Chips: Here\u2019s How Microsoft\u2019s Mistral Partnership Could Strengthen Azure\u2019s AI Leadership",
+    "Tesla / Robotaxi: This Bearish Put Spread Can Cash In On Tesla Stock's Bleak Outlook",
+    "Earnings Season: Enterprise Products Partners' Next Earnings Report on July 30 Could Send the Stock Soaring. Here's Why.",
+    "AI / Chips: Tech stocks today: Big Tech earnings this week mark a pivotal moment for the AI trade",
+    "Earnings Season: Ford, General Motors Upgraded On Profit, Cash Flow Outlooks. One Eyes A Buy Point."
   ],
   "headlines": [
-    "Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
-    "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
-    "Is NVIDIA Corporation (NVDA) A Good Stock To Buy Now?",
-    "Workers remain confident in their skills despite economic jitters: Study",
-    "You can \u2018ease off the gas\u2019 once you hit $100,000, said Charlie Munger. Here\u2019s how to get there as fast as possible",
-    "Global Markets (SPGM) or Emerging Growth (IEMG)? Which Fund is the Right Choice?",
-    "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-    "Do I need a business bank account if I'm self-employed?",
-    "What is an add-on CD?",
-    "Happen Bank review (2026): A top-rated online bank with high yields and low fees",
-    "Medicare Will Split Your $2,100 Drug Bill Into Monthly Installments. You Have to Ask First.",
-    "HELOC and home equity loan rates today, Friday, July 24, 2026: Have they improved?",
-    "When is the Fed's next meeting? See the full schedule for 2026.",
-    "Gold prices today, Friday, July 24, 2026: Gold price remains below $4,100 ahead of next week\u2019s rate decision",
-    "Silver prices today, Friday, July 24, 2026: Silver returns above $58 as markets price in higher rate risks",
-    "The 3 Dividend ETFs That Can Fund a 30-Year Retirement Without Ever Selling a Share",
-    "Bitcoin and ethereum prices today, Friday, July 24, 2026: Crypto prices retreat on higher U.S. Treasury yields",
-    "Mortgage and refinance interest rates today, Saturday, July 25, 2026: Highest rates this year",
-    "Best CD rates today, Saturday, July 25, 2026: Best account provides 4.20% APY",
-    "Best high-yield savings interest rates today, Friday, July 24, 2026: Earn up to 4.15% APY"
+    "After 80 stores close, 63-year-old chain gives Chapter 11 warning",
+    "Stock market today: Dow, S&P 500, Nasdaq fluctuate as chip stocks tumble, oil prices fall",
+    "Here\u2019s How Microsoft\u2019s Mistral Partnership Could Strengthen Azure\u2019s AI Leadership",
+    "This Bearish Put Spread Can Cash In On Tesla Stock's Bleak Outlook",
+    "Avino Silver & Gold (ASM): \u201cCrazy Cheap With Massive Asymmetry?\u201d",
+    "Enterprise Products Partners' Next Earnings Report on July 30 Could Send the Stock Soaring. Here's Why.",
+    "Tech stocks today: Big Tech earnings this week mark a pivotal moment for the AI trade",
+    "Ford, General Motors Upgraded On Profit, Cash Flow Outlooks. One Eyes A Buy Point.",
+    "One number instantly explains why Apple's investors are having a wildly different year than Oracle's",
+    "The Campbell\u2019s Company (CPB) Offers Promising Upside Despite Past Challenges",
+    "Could Buying Visa Stock Today Set You Up for Life?",
+    "SanDisk\u2019s $42 Billion Backlog Is Real \u2014 So Is the Valuation Question Now Hitting Every Memory Stock",
+    "Stock Market Today: Indexes Mixed On U.S.-Iran War Pause; Pharma Player Tests Entry, Oil Skids (Live Coverage)",
+    "Kevin O'Leary says save $100,000 by age 33 \u2014 most Americans in that age group aren't even close to that",
+    "Super Micro\u2019s Margin Beat Is Genuine. And So Is The \u2018Value Trap\u2019 Thesis",
+    "$1.3B Tampa Team Joins UBS from Bank of America Private Bank",
+    "'Job lock' hits 24% of U.S. workers \u2014 staying in jobs they hate because losing health insurance terrifies them",
+    "Apple Stock Hits Record High Before Fiscal Q3 Earnings",
+    "The ACA Coverage Debate Just Became a $50 Billion Question for Intuitive Surgical",
+    "Apple overtakes Nvidia as most valuable company as iPhone maker avoids 'capex pitfalls'"
   ],
   "issue_bullets": [
-    "Fed/rates setup: Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
-    "AI and chips: Workers remain confident in their skills despite economic jitters: Study",
-    "Banks and credit: Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
-    "Banks and credit: Do I need a business bank account if I'm self-employed?",
-    "Fed/rates setup: Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household"
+    "AI and chips: After 80 stores close, 63-year-old chain gives Chapter 11 warning",
+    "Earnings setup: Ford, General Motors Upgraded On Profit, Cash Flow Outlooks. One Eyes A Buy Point.",
+    "Oil/geopolitical risk: Stock market today: Dow, S&P 500, Nasdaq fluctuate as chip stocks tumble, oil prices fall",
+    "Oil/geopolitical risk: Stock Market Today: Indexes Mixed On U.S.-Iran War Pause; Pharma Player Tests Entry, Oil Skids (Live Coverage)",
+    "AI and chips: Stock market today: Dow, S&P 500, Nasdaq fluctuate as chip stocks tumble, oil prices fall"
   ],
   "market_moves": [
     {
       "label": "S&P 500",
-      "latest": 7411.98,
-      "move": 0.05,
+      "latest": 7401.14,
+      "move": -0.1,
       "previous": 7408.3,
       "symbol": "^GSPC",
-      "week_move": -0.42,
-      "week_start": 7443.28
+      "week_move": -1.44,
+      "week_start": 7509.2
     },
     {
       "label": "Nasdaq",
-      "latest": 24975.82,
-      "move": -0.64,
+      "latest": 24877.44,
+      "move": -1.04,
       "previous": 25137.69,
       "symbol": "^IXIC",
-      "week_move": -2.09,
-      "week_start": 25508.07
+      "week_move": -3.71,
+      "week_start": 25837.21
     },
     {
       "label": "Dow",
-      "latest": 51947.25,
-      "move": 0.46,
+      "latest": 52078.99,
+      "move": 0.71,
       "previous": 51711.65,
       "symbol": "^DJI",
-      "week_move": 0.21,
-      "week_start": 51839.26
+      "week_move": -0.28,
+      "week_start": 52224.64
     },
     {
       "label": "Russell 2000",
-      "latest": 2930.0,
-      "move": -0.35,
+      "latest": 2935.22,
+      "move": -0.17,
       "previous": 2940.16,
       "symbol": "^RUT",
-      "week_move": -0.42,
-      "week_start": 2942.43
+      "week_move": -1.75,
+      "week_start": 2987.4
     },
     {
       "label": "VIX",
-      "latest": 18.58,
-      "move": -0.64,
+      "latest": 19.22,
+      "move": 2.78,
       "previous": 18.7,
       "symbol": "^VIX",
-      "week_move": -0.38,
-      "week_start": 18.65
+      "week_move": 12.73,
+      "week_start": 17.05
     },
     {
       "label": "Oil",
-      "latest": 136.69,
-      "move": -2.01,
+      "latest": 127.53,
+      "move": -8.57,
       "previous": 139.49,
       "symbol": "USO",
-      "week_move": 8.91,
-      "week_start": 125.51
+      "week_move": -1.02,
+      "week_start": 128.85
     },
     {
       "label": "Long Bonds",
-      "latest": 83.25,
-      "move": 0.1,
+      "latest": 83.71,
+      "move": 0.64,
       "previous": 83.17,
       "symbol": "TLT",
-      "week_move": -0.76,
-      "week_start": 83.89
+      "week_move": 0.05,
+      "week_start": 83.66
     },
     {
       "label": "Gold",
-      "latest": 371.9,
-      "move": 0.1,
+      "latest": 374.52,
+      "move": 0.81,
       "previous": 371.52,
       "symbol": "GLD",
-      "week_move": 1.17,
-      "week_start": 367.6
+      "week_move": -0.08,
+      "week_start": 374.81
     },
     {
       "label": "U.S. Dollar",
-      "latest": 28.58,
-      "move": 0.07,
+      "latest": 28.57,
+      "move": 0.02,
       "previous": 28.56,
       "symbol": "UUP",
-      "week_move": 0.67,
-      "week_start": 28.39
+      "week_move": 0.3,
+      "week_start": 28.48
     },
     {
       "label": "GOOG",
-      "latest": 319.09,
-      "move": 0.24,
+      "latest": 327.69,
+      "move": 2.94,
       "previous": 318.34,
       "symbol": "GOOG",
-      "week_move": -9.19,
-      "week_start": 351.37
+      "week_move": -5.34,
+      "week_start": 346.19
     },
     {
       "label": "TSLA",
-      "latest": 313.03,
-      "move": -2.08,
+      "latest": 308.05,
+      "move": -3.64,
       "previous": 319.69,
       "symbol": "TSLA",
-      "week_move": -15.3,
-      "week_start": 369.57
+      "week_move": -18.71,
+      "week_start": 378.93
     },
     {
       "label": "NVDA",
-      "latest": 206.84,
-      "move": -0.92,
+      "latest": 197.25,
+      "move": -5.51,
       "previous": 208.76,
       "symbol": "NVDA",
-      "week_move": 1.75,
-      "week_start": 203.28
+      "week_move": -4.84,
+      "week_start": 207.29
     },
     {
       "label": "AMD",
-      "latest": 521.95,
-      "move": -3.29,
+      "latest": 482.82,
+      "move": -10.54,
       "previous": 539.69,
       "symbol": "AMD",
-      "week_move": 3.65,
-      "week_start": 503.57
+      "week_move": -11.32,
+      "week_start": 544.43
     },
     {
       "label": "INTC",
-      "latest": 92.32,
-      "move": -7.89,
+      "latest": 89.68,
+      "move": -10.52,
       "previous": 100.23,
       "symbol": "INTC",
-      "week_move": -4.88,
-      "week_start": 97.06
+      "week_move": -14.95,
+      "week_start": 105.45
     },
     {
       "label": "TSM",
-      "latest": 403.41,
-      "move": -2.93,
+      "latest": 394.48,
+      "move": -5.08,
       "previous": 415.58,
       "symbol": "TSM",
-      "week_move": 0.28,
-      "week_start": 402.3
+      "week_move": -7.1,
+      "week_start": 424.61
     },
     {
       "label": "MSFT",
-      "latest": 381.7,
-      "move": 0.03,
+      "latest": 389.64,
+      "move": 2.11,
       "previous": 381.58,
       "symbol": "MSFT",
-      "week_move": -5.12,
-      "week_start": 402.29
+      "week_move": -2.04,
+      "week_start": 397.75
     },
     {
       "label": "META",
-      "latest": 595.19,
-      "move": -1.8,
+      "latest": 597.94,
+      "move": -1.35,
       "previous": 606.1,
       "symbol": "META",
-      "week_move": -7.84,
-      "week_start": 645.85
+      "week_move": -7.12,
+      "week_start": 643.81
     },
     {
       "label": "AMZN",
-      "latest": 232.11,
-      "move": -0.66,
+      "latest": 231.14,
+      "move": -1.08,
       "previous": 233.66,
       "symbol": "AMZN",
-      "week_move": -7.15,
-      "week_start": 249.99
+      "week_move": -6.63,
+      "week_start": 247.55
+    },
+    {
+      "label": "AVGO",
+      "latest": 379.91,
+      "move": -3.2,
+      "previous": 392.47,
+      "symbol": "AVGO",
+      "week_move": -1.71,
+      "week_start": 386.5
+    },
+    {
+      "label": "ASML",
+      "latest": 1629.3,
+      "move": -9.63,
+      "previous": 1803.0,
+      "symbol": "ASML",
+      "week_move": -9.56,
+      "week_start": 1801.51
+    },
+    {
+      "label": "MU",
+      "latest": 875.21,
+      "move": -11.61,
+      "previous": 990.21,
+      "symbol": "MU",
+      "week_move": -9.85,
+      "week_start": 970.82
+    },
+    {
+      "label": "PLTR",
+      "latest": 129.56,
+      "move": 5.02,
+      "previous": 123.37,
+      "symbol": "PLTR",
+      "week_move": -2.34,
+      "week_start": 132.66
+    },
+    {
+      "label": "GEV",
+      "latest": 969.5,
+      "move": -5.98,
+      "previous": 1031.19,
+      "symbol": "GEV",
+      "week_move": -10.13,
+      "week_start": 1078.81
+    },
+    {
+      "label": "VRT",
+      "latest": 278.11,
+      "move": -8.53,
+      "previous": 304.04,
+      "symbol": "VRT",
+      "week_move": -8.67,
+      "week_start": 304.5
+    },
+    {
+      "label": "AVAV",
+      "latest": 154.74,
+      "move": -2.51,
+      "previous": 158.73,
+      "symbol": "AVAV",
+      "week_move": 3.96,
+      "week_start": 148.84
+    },
+    {
+      "label": "KTOS",
+      "latest": 48.77,
+      "move": -1.36,
+      "previous": 49.44,
+      "symbol": "KTOS",
+      "week_move": 1.16,
+      "week_start": 48.21
+    },
+    {
+      "label": "LMT",
+      "latest": 583.52,
+      "move": 2.63,
+      "previous": 568.59,
+      "symbol": "LMT",
+      "week_move": 15.07,
+      "week_start": 507.09
+    },
+    {
+      "label": "RTX",
+      "latest": 219.34,
+      "move": 4.87,
+      "previous": 209.16,
+      "symbol": "RTX",
+      "week_move": 13.25,
+      "week_start": 193.67
     }
   ],
   "source": "Yahoo Finance RSS and market chart data",
   "theme_summary": {
     "ranked_themes": [
       [
-        "Inflation / Fed",
-        13
-      ],
-      [
         "AI / Chips",
-        8
+        11
       ],
       [
-        "Banks / Credit",
-        5
+        "Earnings Season",
+        6
       ],
       [
-        "Consumer Stress",
+        "Oil / Geopolitical Risk",
         4
       ],
       [
@@ -227,48 +313,52 @@
         4
       ],
       [
-        "Policy / Regulation",
-        3
+        "Consumer Stress",
+        2
+      ],
+      [
+        "Market Breadth / Rotation",
+        1
       ]
     ],
     "theme_headlines": {
       "AI / Chips": [
-        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
-        "Is NVIDIA Corporation (NVDA) A Good Stock To Buy Now?",
-        "Workers remain confident in their skills despite economic jitters: Study"
+        "After 80 stores close, 63-year-old chain gives Chapter 11 warning",
+        "Stock market today: Dow, S&P 500, Nasdaq fluctuate as chip stocks tumble, oil prices fall",
+        "Here\u2019s How Microsoft\u2019s Mistral Partnership Could Strengthen Azure\u2019s AI Leadership"
       ],
       "Automation / Mobility": [
-        "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-        "Happen Bank review (2026): A top-rated online bank with high yields and low fees",
-        "The 3 Dividend ETFs That Can Fund a 30-Year Retirement Without Ever Selling a Share"
+        "This Bearish Put Spread Can Cash In On Tesla Stock's Bleak Outlook",
+        "SanDisk\u2019s $42 Billion Backlog Is Real \u2014 So Is the Valuation Question Now Hitting Every Memory Stock",
+        "Kevin O'Leary says save $100,000 by age 33 \u2014 most Americans in that age group aren't even close to that"
       ],
       "Banks / Credit": [
-        "Outdoor giant now closing 91 stores in Chapter 11 bankruptcy",
-        "Do I need a business bank account if I'm self-employed?",
-        "Happen Bank review (2026): A top-rated online bank with high yields and low fees"
+        "$1.3B Tampa Team Joins UBS from Bank of America Private Bank"
       ],
       "Consumer Stress": [
-        "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-        "Gold prices today, Friday, July 24, 2026: Gold price remains below $4,100 ahead of next week\u2019s rate decision",
-        "Silver prices today, Friday, July 24, 2026: Silver returns above $58 as markets price in higher rate risks"
+        "Stock market today: Dow, S&P 500, Nasdaq fluctuate as chip stocks tumble, oil prices fall",
+        "Oil prices near one-week low after US, Iran pause fighting over weekend"
+      ],
+      "Defense / AI Warfare": [
+        "Pentagon Suppliers Warn U.S. Won't Have Magnet Capacity By 2027"
       ],
       "Earnings Season": [
-        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
+        "Enterprise Products Partners' Next Earnings Report on July 30 Could Send the Stock Soaring. Here's Why.",
+        "Tech stocks today: Big Tech earnings this week mark a pivotal moment for the AI trade",
+        "Ford, General Motors Upgraded On Profit, Cash Flow Outlooks. One Eyes A Buy Point."
       ],
       "Inflation / Fed": [
-        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus",
-        "Federal debt interest hits $857B in 9 months \u2014 that's $737/month for every U.S. household",
-        "Happen Bank review (2026): A top-rated online bank with high yields and low fees"
+        "Stocks mixed, oil and Treasury yields drop on Iran-US truce"
+      ],
+      "Market Breadth / Rotation": [
+        "Here\u2019s How Microsoft\u2019s Mistral Partnership Could Strengthen Azure\u2019s AI Leadership"
       ],
       "Oil / Geopolitical Risk": [
-        "Dow Jones Futures: Market Triggers Sell Signal; Apple Earnings, Iran News, Fed Meeting In Focus"
-      ],
-      "Policy / Regulation": [
-        "The 3 Dividend ETFs That Can Fund a 30-Year Retirement Without Ever Selling a Share",
-        "Bitcoin and ethereum prices today, Friday, July 24, 2026: Crypto prices retreat on higher U.S. Treasury yields",
-        "How Trump Accounts could impact your child's student aid"
+        "Stock market today: Dow, S&P 500, Nasdaq fluctuate as chip stocks tumble, oil prices fall",
+        "Stock Market Today: Indexes Mixed On U.S.-Iran War Pause; Pharma Player Tests Entry, Oil Skids (Live Coverage)",
+        "Stocks mixed, oil and Treasury yields drop on Iran-US truce"
       ]
     },
-    "top_theme": "Inflation / Fed"
+    "top_theme": "AI / Chips"
   }
 }

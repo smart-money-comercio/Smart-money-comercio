@@ -100,6 +100,14 @@ WEEK_AHEAD_NARRATIVES = os.getenv(
     "",
 ).strip()
 
+RECAP_SYMBOLS = [
+    symbol.strip().upper()
+    for symbol in os.getenv(
+        "MORNING_BRIEF_RECAP_SYMBOLS",
+        "GOOG,TSLA,NVDA,AMD,INTC,TSM,MSFT,META,AMZN,AVGO,ASML,MU,PLTR,GEV,VRT,AVAV,KTOS,LMT,RTX",
+    ).split(",")
+    if symbol.strip()
+]
 ISSUE_MEMORY_FILE = PROJECT_ROOT / "data" / "morning_brief_issue_memory.json"
 
 ISSUE_MEMORY_DAYS = int(
@@ -718,8 +726,15 @@ def fetch_market_moves() -> list[dict]:
     assets = list(MARKET_ASSETS)
 
     for symbol in RECAP_SYMBOLS:
-        if symbol not in seen_symbols:
-            assets.append({"symbol": symbol, "label": symbol})
+        clean_symbol = str(symbol or "").strip().upper()
+
+        if clean_symbol and clean_symbol not in seen_symbols:
+            assets.append(
+                {
+                    "symbol": clean_symbol,
+                    "label": clean_symbol,
+                }
+            )
 
     for asset in assets:
         symbol = asset["symbol"]
@@ -2058,6 +2073,180 @@ def build_flowing_what_watching(theme_summary: dict) -> str:
 
     return f"What we're watching {today_name}: " + "; ".join(watch_parts[:4]) + "."
 
+def get_move_from_cache(market_moves: list[dict], symbol: str) -> float | None:
+    for item in market_moves:
+        if str(item.get("symbol", "")).upper() == symbol.upper():
+            value = item.get("move")
+
+            try:
+                if value is None:
+                    return None
+
+                return float(value)
+            except Exception:
+                return None
+
+    return None
+
+
+def build_notable_stock_recap(market_moves: list[dict]) -> str:
+    index_symbols = {
+        "^GSPC",
+        "^IXIC",
+        "^DJI",
+        "^RUT",
+        "^VIX",
+        "USO",
+        "TLT",
+        "GLD",
+        "UUP",
+    }
+
+    candidates = []
+
+    for item in market_moves:
+        symbol = str(item.get("symbol", "")).upper()
+
+        if not symbol or symbol in index_symbols:
+            continue
+
+        move = get_move_from_cache(market_moves, symbol)
+
+        if move is None:
+            continue
+
+        if abs(move) >= 2.5:
+            candidates.append((symbol, move))
+
+    candidates.sort(key=lambda item: abs(item[1]), reverse=True)
+
+    if not candidates:
+        return ""
+
+    parts = []
+
+    for symbol, move in candidates[:3]:
+        verb = "rose" if move >= 0 else "fell"
+        parts.append(f"{symbol} {verb} {abs(move):.1f}%")
+
+    return "A quick recap: " + ", ".join(parts) + "."
+
+
+def build_index_recap_sentence(market_moves: list[dict]) -> str:
+    sp500 = get_move_from_cache(market_moves, "^GSPC")
+    nasdaq = get_move_from_cache(market_moves, "^IXIC")
+    dow = get_move_from_cache(market_moves, "^DJI")
+
+    if sp500 is None or nasdaq is None or dow is None:
+        return (
+            "Index data was limited in the latest cache, so the market read leans more on "
+            "headlines, portfolio themes, and watchlist confirmation."
+        )
+
+    if sp500 < 0 and nasdaq < 0 and dow < 0:
+        lead = "The bad day pulled"
+    elif sp500 > 0 and nasdaq > 0 and dow > 0:
+        lead = "The positive session lifted"
+    else:
+        lead = "The mixed session left"
+
+    return (
+        f"{lead} the S&P 500 {'down' if sp500 < 0 else 'up'} {abs(sp500):.1f}%, "
+        f"the Nasdaq {'down' if nasdaq < 0 else 'up'} {abs(nasdaq):.1f}%, "
+        f"and the Dow {'down' if dow < 0 else 'up'} {abs(dow):.1f}%."
+    )
+
+
+def build_macro_bridge_sentence(theme_summary: dict, market_moves: list[dict]) -> str:
+    themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
+    oil_move = get_move_from_cache(market_moves, "USO")
+    dollar_move = get_move_from_cache(market_moves, "UUP")
+    vix_move = get_move_from_cache(market_moves, "^VIX")
+
+    pieces = []
+
+    if "Oil / Geopolitical Risk" in themes:
+        if oil_move is not None and oil_move > 1:
+            pieces.append(f"oil strength, with USO up {oil_move:.1f}%")
+        else:
+            pieces.append("geopolitical and oil risk")
+
+    if "Defense Procurement / Munitions" in themes:
+        pieces.append("defense procurement demand tied to munitions and production scale")
+
+    if "Defense / AI Warfare" in themes:
+        pieces.append("defense, drones, cyber, ISR, and AI warfare exposure")
+
+    if "AI / Chips" in themes:
+        pieces.append("pressure or leadership in the semiconductor trade")
+
+    if "AI Infrastructure / Power" in themes:
+        pieces.append("AI infrastructure and power-demand read-throughs")
+
+    if "Inflation / Fed" in themes:
+        pieces.append("Fed, rates, and inflation risk")
+
+    if dollar_move is not None and abs(dollar_move) >= 0.4:
+        direction = "stronger" if dollar_move > 0 else "weaker"
+        pieces.append(f"a {direction} dollar")
+
+    if vix_move is not None and vix_move > 3:
+        pieces.append("higher volatility")
+
+    if not pieces:
+        return ""
+
+    return (
+        "Add in "
+        + ", ".join(pieces[:4])
+        + ", and the portfolio read becomes more about confirmation than chasing."
+    )
+
+
+def build_flowing_what_watching(theme_summary: dict) -> str:
+    today_name = datetime.now(ZoneInfo(TIMEZONE)).strftime("%A")
+
+    earnings = parse_env_list(WEEK_AHEAD_EARNINGS) if "parse_env_list" in globals() else []
+    econ_events = (
+        parse_env_list(WEEK_AHEAD_ECON_EVENTS, separator=";")
+        if "parse_env_list" in globals()
+        else []
+    )
+
+    watch_parts = []
+
+    if earnings:
+        watch_parts.append("reports from " + ", ".join(earnings[:6]))
+
+    if econ_events:
+        watch_parts.append(", ".join(econ_events[:3]))
+
+    if not watch_parts:
+        themes = [item[0] for item in theme_summary.get("ranked_themes", [])]
+
+        if "Earnings Season" in themes:
+            watch_parts.append("earnings quality, guidance, and margin durability")
+
+        if "AI / Chips" in themes:
+            watch_parts.append("whether AI and chip leadership stabilizes")
+
+        if "AI Infrastructure / Power" in themes:
+            watch_parts.append("power, data-center, and AI infrastructure demand")
+
+        if "Oil / Geopolitical Risk" in themes:
+            watch_parts.append("oil, shipping, and geopolitical risk")
+
+        if "Defense Procurement / Munitions" in themes:
+            watch_parts.append("defense procurement and public supplier read-throughs")
+
+        if "Defense / AI Warfare" in themes:
+            watch_parts.append("defense, cyber, drones, ISR, and AI warfare follow-through")
+
+        if not watch_parts:
+            watch_parts.append("whether the week’s big narratives change market leadership")
+
+    return f"What we're watching {today_name}: " + "; ".join(watch_parts[:4]) + "."
+
 def build_morning_brief_intro(force_refresh: bool = False) -> str:
     """
     Report-safe builder.
@@ -2078,15 +2267,17 @@ def build_morning_brief_intro(force_refresh: bool = False) -> str:
     cached_at_iso = payload.get("cached_at_iso", "latest available cache")
 
     opening_sentence = build_theme_collision_sentence(theme_summary)
-    index_recap = build_index_recap(market_moves)
+    stock_recap = build_notable_stock_recap(market_moves)
+    index_recap = build_index_recap_sentence(market_moves)
+    macro_bridge = build_macro_bridge_sentence(theme_summary, market_moves)
+    what_watching = build_flowing_what_watching(theme_summary)
     week_ahead_block = build_week_ahead_block(theme_summary, market_moves)
     issue_bullets = payload.get("issue_bullets")
 
     stock_recap = build_notable_stock_recap(market_moves)
     index_recap = build_index_recap_sentence(market_moves)
     macro_bridge = build_macro_bridge_sentence(theme_summary, market_moves)
-    what_watching = build_flowing_what_watching(theme_summary)
-
+    
     if not isinstance(issue_bullets, list) or not issue_bullets:
         issue_bullets = build_today_issue_bullets(
         theme_summary,
