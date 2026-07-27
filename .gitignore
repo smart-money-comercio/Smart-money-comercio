@@ -40,3 +40,13 @@ data/*.log
 # Deployment artifacts
 *.zip
 smart-money-upload/
+
+# Runtime AI memory/cache files
+data/ai_summary_memory.json
+data/daily_market_memory.json
+data/watchlist_evolution_memory.json
+data/morning_brief_issue_memory.json
+Data/ai_summary_memory.json
+Data/daily_market_memory.json
+Data/watchlist_evolution_memory.json
+Data/morning_brief_issue_memory.json
