@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from src.config.theme_watchlist_universe import build_relevant_watchlist
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
+from src.intelligence.market_memory import build_what_changed_today
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
     get_action_label,
@@ -1440,9 +1441,18 @@ def build_daily_report() -> str:
 
     watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes(global_context)
     record_watchlist_evolution_day(watchlist_symbols, global_context)
-    
+
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     market_tone = build_market_tone(movers)
+
+    what_changed_today = build_what_changed_today(
+    context=global_context,
+    top_scores=top_scores,
+    movers=movers,
+    market_tone=market_tone,
+    watchlist_symbols=watchlist_symbols,
+    record=True,
+)
 
     morning_brief_intro = safe_morning_brief_intro()
 
@@ -1463,6 +1473,12 @@ Generated: {timestamp} {REPORT_TIMEZONE}
 
 Executive Summary
 {executive_summary}
+
+Executive Summary
+{executive_summary}
+
+What Changed Today
+{what_changed_today}
 
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
