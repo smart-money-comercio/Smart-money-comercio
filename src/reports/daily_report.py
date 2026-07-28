@@ -1355,6 +1355,7 @@ def build_top_opportunities(
 
 def build_risk_notes(top_scores: list[dict], movers: list[dict], context: dict) -> str:
     notes = []
+    macro_pressure = get_macro_pressure(context)
 
     elevated_risk = [
         get_ticker(item)
@@ -1363,26 +1364,37 @@ def build_risk_notes(top_scores: list[dict], movers: list[dict], context: dict) 
     ]
 
     large_movers = [
-        item["symbol"]
+        item
         for item in movers
-        if abs(item["change_percent"]) >= 2
+        if abs(item.get("change_percent", 0)) >= 2
     ]
 
-    macro_pressure = get_macro_pressure(context)
-
     if macro_pressure != "no major macro pressure":
-        notes.append(f"Macro pressure: {macro_pressure}.")
+        notes.append(f"Main risk: {macro_pressure}.")
 
     if elevated_risk:
-        notes.append("Tighter sizing needed on: " + ", ".join(elevated_risk[:3]) + ".")
+        notes.append(
+            "Sizing risk: keep entries smaller on "
+            + ", ".join(elevated_risk[:3])
+            + "."
+        )
 
     if large_movers:
-        notes.append("Large live moves: " + ", ".join(sorted(set(large_movers))[:4]) + ".")
+        biggest = large_movers[0]
+        notes.append(
+            f"Move risk: {biggest['symbol']} is already moving "
+            f"{format_percent(biggest['change_percent'])}; avoid chasing without confirmation."
+        )
+
+    if has_defense_ai_warfare_pressure(context):
+        notes.append(
+            "Theme risk: defense headlines need contract, backlog, budget, or volume confirmation."
+        )
 
     if not notes:
-        return "No major report-level risk flags detected."
+        return "No major report-level risk flags. Main risk is still chasing before confirmation."
 
-    return "\n".join(f"• {note}" for note in notes[:4])
+    return "\n".join(f"• {note}" for note in notes[:3])
 
 
 def build_executive_summary(
@@ -1573,18 +1585,32 @@ def build_action_checklist(
 ) -> str:
     actions = []
     best = top_scores[0] if top_scores else None
+    macro_pressure = get_macro_pressure(context)
+    themes = " ".join(context.get("headline_themes", []) or []).lower()
 
     if best:
         ticker = get_ticker(best)
-        actions.append(f"/scorecard {ticker}")
-        actions.append(f"/volume {ticker}")
+        actions.append(f"/scorecard {ticker} — validate the top-ranked setup.")
+        actions.append(f"/volume {ticker} — confirm whether money flow supports the score.")
     else:
-        actions.append("/top10")
+        actions.append("/top10 — refresh the ranked opportunity list.")
 
     if movers:
-        actions.append(f"/ticker {movers[0]['symbol']}")
+        mover = movers[0]
+        actions.append(
+            f"/ticker {mover['symbol']} — inspect the largest live move before acting."
+        )
 
-    actions.append("/weeklycalendar before macro/earnings catalysts")
+    if (
+        macro_pressure != "no major macro pressure"
+        or "earnings" in themes
+        or "fed" in themes
+        or "inflation" in themes
+    ):
+        actions.append("/weeklycalendar — check upcoming catalysts before sizing.")
+
+    if has_defense_ai_warfare_pressure(context):
+        actions.append("/defense — review defense/AI warfare exposure separately.")
 
     return "\n".join(f"• {action}" for action in actions[:4])
 
