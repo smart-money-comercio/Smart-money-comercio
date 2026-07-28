@@ -2,64 +2,87 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 
-async def commands_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = [
-        "📋 Smart Money AI Command Menu",
-        "",
-        "System:",
-        "/start - Start the bot",
-        "/help - Help menu",
-        "/commands - Full command menu",
-        "/health - Bot health check",
-        "/system - System status",
-        "/version - Bot version",
-        "/clearcache - Admin only: clear cache",
-        "",
-        "Reports & Rankings:",
-        "/report - Latest full report",
-        "/top10 - Top ranked stocks",
-        "/watchlist - Tracked companies",
-        "/defense - Defense rankings",
-        "/reportcheck - Check daily report quality guardrails",
-        "",
-        "Portfolio Views:",
-        "/growth - Growth and AI stocks",
-        "/dividends - Dividend and income stocks",
-        "/portfolio - Smart Money portfolio model",
-        "",
-        "Market Research:",
-        "/quote SYMBOL - Fast market quote",
-        "/market SYMBOL - Real market data",
-        "/earnings SYMBOL - Earnings and profitability summary",
-        "/ticker SYMBOL - Full stock research",
-        "/scorecard SYMBOL - Full Smart Money scorecard",
-        "/risk SYMBOL - Risk profile",
-        "",
-        "Smart Money Intelligence:",
-        "/smartmoney - Smart money signal overview",
-        "/conviction - Highest signal-overlap ideas",
-        "/congress - Congressional trading intelligence",
-        "/insiders - Insider buying intelligence",
-        "",
-        "Screeners:",
-        "/undervalued - Undervalued Smart Money ideas",
-        "",
-        "SEC Research:",
-        "/sec SYMBOL - Latest SEC filings",
-        "/filing SYMBOL - AI summary of latest SEC filing",
-        "",
-        "Admin Cache Commands:",
-        "/clearcache - Clear all cache",
-        "/clearcache market - Clear market data cache",
-        "/clearcache earnings - Clear earnings data cache",
-        "/clearcache health - Clear health check cache",
-        "",
-        "Examples:",
-        "/quote PLTR",
-        "/earnings NVDA",
-        "/scorecard MSFT",
-        "/risk TSLA",
-        "/filing AAPL 10-K",
-    ]
+COMMANDS_TEXT = """
+🤖 Smart Money AI Commands
 
-    await update.message.reply_text("\n".join(lines))
+Core Commands
+/brief - Daily market brief
+/stock SYMBOL - Stock snapshot
+/watch - Watchlist
+/top10 - Top 20 Smart Money ideas
+/macro - Global market context
+/calendar - Weekly macro and earnings calendar
+/quality - Daily report quality check
+
+Daily Report
+/report - Daily report
+/reportcheck - Report quality check
+/testdaily - Test daily report
+/dailycheck - Daily report delivery check
+/senddaily - Send daily report now
+
+Stock Research
+/ticker SYMBOL - Stock snapshot
+/quote SYMBOL - Quote snapshot
+/market SYMBOL - Market context
+/scorecard SYMBOL - Smart Money scorecard
+/risk SYMBOL - Risk view
+/earnings SYMBOL - Earnings view
+/volume SYMBOL - Volume analysis
+/analyst SYMBOL - Analyst view
+
+Themes
+/defense - Defense and AI warfare watch
+/growth - Growth ideas
+/dividends - Dividend ideas
+/portfolio - Portfolio view
+/undervalued - Undervalued screen
+
+Smart Money Intelligence
+/smartmoney - Smart money signals
+/conviction - High-conviction ideas
+/congress - Congressional trading
+/insiders - Insider activity
+/sec - SEC filings
+/filing SYMBOL - Filing lookup
+
+Market Context
+/marketbrief - Market brief
+/global - Global market context
+/headlines - Market headlines
+/weeklycalendar - Weekly macro and earnings calendar
+/weekahead - Week ahead
+/quarterly - Quarterly report
+/quarterlyreport - Quarterly report
+
+Admin / System
+/deploycheck - Deployment health check
+/securitycheck - Security check
+/status - Bot status
+/ping - Ping check
+/diagnostics - Diagnostics
+/health - Health check
+/system - System status
+/version - Version
+/backup - Backup
+/logs - Logs
+/restart - Restart bot
+/clearcache - Clear cache
+
+Aliases
+/brief = /report
+/stock = /ticker
+/calendar = /weeklycalendar
+/quality = /reportcheck
+/watch = /watchlist
+/macro = /global
+
+Research only. Not financial advice.
+""".strip()
+
+
+async def commands_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+
+    await update.message.reply_text(COMMANDS_TEXT)
