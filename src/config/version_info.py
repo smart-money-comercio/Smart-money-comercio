@@ -3,37 +3,24 @@ import subprocess
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
+from src.config.command_catalog import (
+    get_primary_commands,
+    get_version_feature_lines,
+)
 
 
 APP_NAME = "Smart Money AI"
-APP_VERSION = os.getenv("SMART_MONEY_VERSION", "v1.1")
-RELEASE_NAME = os.getenv("SMART_MONEY_RELEASE_NAME", "Adaptive Daily Brief")
+APP_VERSION = os.getenv("SMART_MONEY_VERSION", "v1.2")
+RELEASE_NAME = os.getenv("SMART_MONEY_RELEASE_NAME", "Command Consolidation")
 RELEASE_CHANNEL = os.getenv("SMART_MONEY_RELEASE_CHANNEL", "Production")
 RELEASE_DATE = os.getenv("SMART_MONEY_RELEASE_DATE", "2026-07-28")
 TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
-PRIMARY_COMMANDS = [
-    ("/brief", "Daily market brief"),
-    ("/stock SYMBOL", "Stock snapshot"),
-    ("/watch", "Watchlist"),
-    ("/top10", "Top 20 Smart Money ideas"),
-    ("/macro", "Global market context"),
-    ("/calendar", "Weekly catalysts"),
-    ("/quality", "Report quality check"),
-]
+PRIMARY_COMMANDS = get_primary_commands()
 
 
-VERSION_FEATURES = [
-    "Market memory",
-    "What Changed Today",
-    "Theme Read",
-    "3-line AI Summary",
-    "Optimized Top Opportunities",
-    "Risk and action guardrails",
-    "Report quality enforcement",
-    "Friendly command aliases",
-]
+VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
