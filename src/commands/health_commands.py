@@ -8,6 +8,7 @@ import yfinance as yf
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ContextTypes
+from src.config.version_info import build_version_text
 
 from src.utils.cache import get_cache, set_cache
 
@@ -112,4 +113,7 @@ async def system_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def version(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await system_status(update, context)
+    if not update.message:
+        return
+
+    await update.message.reply_text(build_version_text())
