@@ -21,6 +21,7 @@ from src.commands.daily_report_send_commands import (
 )
 from src.commands.deploycheck_commands import deploycheck_command
 from src.commands.global_commands import global_market
+from src.commands.versionnotes_commands import versionnotes_command
 from src.commands.headlines_commands import headlines
 from src.commands.health_commands import (
     health,
@@ -80,6 +81,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("ping", ping_command))
     app.add_handler(CommandHandler("diagnostics", diagnostics_command))
     app.add_handler(CommandHandler("clearcache", clearcache))
+    app.add_handler(CommandHandler("versionnotes", versionnotes_command))
 
     # Deploy / server checks
     app.add_handler(CommandHandler("deploycheck", deploycheck_command))

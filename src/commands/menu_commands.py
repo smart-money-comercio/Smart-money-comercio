@@ -13,6 +13,7 @@ Core Commands
 /macro - Global market context
 /calendar - Weekly macro and earnings calendar
 /quality - Daily report quality check
+/versionnotes - What changed in Smart Money AI v1.1
 
 Daily Report
 /report - Daily report

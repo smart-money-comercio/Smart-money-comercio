@@ -13,6 +13,7 @@ Start here:
 /macro - Global market context
 /calendar - Weekly macro and earnings calendar
 /quality - Daily report quality check
+/versionnotes - What changed in v1.1
 
 Useful examples:
 /brief
