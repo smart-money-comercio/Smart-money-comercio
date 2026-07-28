@@ -23,6 +23,7 @@ from src.commands.deploycheck_commands import deploycheck_command
 from src.commands.global_commands import global_market
 from src.commands.versionnotes_commands import versionnotes_command
 from src.commands.headlines_commands import headlines
+from src.commands.themes_commands import themes_command
 from src.commands.health_commands import (
     health,
     system_status,
@@ -105,6 +106,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("growth", growth))
     app.add_handler(CommandHandler("dividends", dividends))
     app.add_handler(CommandHandler("portfolio", portfolio))
+    app.add_handler(CommandHandler("themes", themes_command))
     app.add_handler(CommandHandler("undervalued", undervalued))
 
     # Market intelligence
