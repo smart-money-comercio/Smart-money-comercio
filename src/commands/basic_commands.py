@@ -15,6 +15,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🚀 Smart Money AI is online.\n\n"
         "Commands:\n"
         "/report - Latest full report\n"
+        "/brief - Short daily market brief\n"
         "/top10 - Top ranked stocks\n"
         "/congress - Congressional trading intelligence\n"
         "/defense - Defense rankings\n"

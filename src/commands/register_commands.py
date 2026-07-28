@@ -89,8 +89,9 @@ def register_commands(app):
     app.add_handler(CommandHandler("logs", logs_command))
     app.add_handler(CommandHandler("restart", restart_command))
 
-    # Daily report
+   # Daily report
     app.add_handler(CommandHandler("report", report))
+    app.add_handler(CommandHandler("brief", report))
     app.add_handler(CommandHandler("senddaily", senddaily_command))
     app.add_handler(CommandHandler("testdaily", testdaily_command))
     app.add_handler(CommandHandler("dailycheck", dailycheck_command))
