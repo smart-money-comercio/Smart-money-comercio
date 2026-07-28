@@ -263,6 +263,73 @@ def build_tone_change_lines(current: dict, previous: dict) -> list[str]:
 
     return []
 
+def compact_change_line(line: str) -> str:
+    text = clean_text(line, 260)
+
+    replacements = {
+        "moved into today’s brief": "entered the model",
+        "moved into today's brief": "entered the model",
+        "dropped out of today’s top read": "fell out of focus",
+        "dropped out of today's top read": "fell out of focus",
+        "Theme persistence:": "Persistence:",
+        "Top watch changed:": "Leadership:",
+        "Top watch remains": "Leadership:",
+        "Market tone changed from": "Tone shifted from",
+        "Market tone is still": "Tone stayed",
+        "New live-mover focus:": "New mover focus:",
+    }
+
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    return clean_text(text, 165)
+
+
+def change_priority(line: str) -> int:
+    text = str(line or "").lower()
+
+    if "new theme" in text:
+        return 100
+
+    if "top watch changed" in text or "leadership" in text:
+        return 90
+
+    if "market tone changed" in text or "tone shifted" in text:
+        return 80
+
+    if "new live-mover" in text or "new mover" in text:
+        return 70
+
+    if "theme persistence" in text or "persistence" in text:
+        return 60
+
+    if "fading theme" in text:
+        return 50
+
+    if "top watch remains" in text or "tone stayed" in text:
+        return 40
+
+    return 10
+
+def select_top_change_lines(lines: list[str], max_lines: int = 3) -> list[str]:
+    cleaned = []
+
+    for line in lines:
+        compact = compact_change_line(line)
+
+        if not compact:
+            continue
+
+        if compact not in cleaned:
+            cleaned.append(compact)
+
+    ranked = sorted(
+        cleaned,
+        key=change_priority,
+        reverse=True,
+    )
+
+    return ranked[:max_lines]
 
 def build_what_changed_today(
     context: dict,
@@ -289,8 +356,8 @@ def build_what_changed_today(
 
     if not previous:
         return (
-            "This is the first saved market-memory snapshot. Future reports will compare "
-            "today against prior themes, top watches, movers, and market tone."
+            "• Baseline: first market-memory snapshot saved; future reports will compare themes, "
+            "leadership, movers, and tone."
         )
 
     lines = []
@@ -298,10 +365,13 @@ def build_what_changed_today(
     lines.extend(build_watchlist_change_lines(current, previous))
     lines.extend(build_tone_change_lines(current, previous))
 
-    if not lines:
+    selected = select_top_change_lines(lines, max_lines=3)
+
+    if not selected:
         return (
-            "The setup is broadly similar to the prior report. That makes confirmation, "
-            "position sizing, and avoiding repeated headline noise more important today."
+            "• Setup: broadly similar to the prior report.\n"
+            "• Focus: confirmation matters more than repeating yesterday’s headline narrative.\n"
+            "• Action: avoid chasing without price, volume, and theme alignment."
         )
 
-    return "\n".join(f"• {line}" for line in lines[:5])
+    return "\n".join(f"• {line}" for line in selected)
