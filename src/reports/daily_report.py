@@ -83,7 +83,9 @@ MARKET_TIMEZONE = os.getenv("MARKET_TIMEZONE", "America/New_York")
 MAX_TOP_OPPORTUNITIES = 2
 MAX_WATCHLIST_MOVERS = 6
 MAX_RELEVANT_WATCHLIST = 20
-MAX_MORNING_BRIEF_CHARS = 1900
+MAX_MORNING_BRIEF_CHARS = 900
+MAX_THEME_READ_CHARS = 620
+MAX_WHAT_CHANGED_CHARS = 620
 
 # Default back to live movement.
 # Set DAILY_REPORT_LIVE_QUOTES=0 only if you need emergency fast mode.
@@ -1082,7 +1084,7 @@ def category_macro_note(category: str, context: dict) -> str:
 
     if "AI" in category_upper or "SEMICONDUCTOR" in category_upper or "TECH" in category_upper:
         if any("ai" in str(theme).lower() for theme in themes):
-            return "Macro check: AI remains a headline theme; confirm whether leadership is broadening or rotating."
+            return "Macro check: AI remains active; confirm whether leadership is broadening or rotating."
 
         if context["nasdaq"] < -0.75:
             return "Macro check: Nasdaq pressure may weigh on growth and AI names."
@@ -1115,7 +1117,7 @@ def build_global_portfolio_impact(context: dict, top_scores: list[dict]) -> str:
     examples = context.get("headline_examples", [])
     pressure = get_macro_pressure(context)
 
-    theme_text = ", ".join(themes[:4]) if themes else "Refresh cache or run /headlines."
+    theme_text = ", ".join(themes[:4]) if themes else "Refresh cache or run /global."
 
     top_theme_notes = []
 
@@ -1152,7 +1154,7 @@ Themes: {theme_text}
 Portfolio Read:
 {chr(10).join(top_theme_notes)}
 
-Headlines:
+Signal Examples:
 {example_text}
 """.strip()
 
@@ -1275,7 +1277,7 @@ def build_opportunity_why(item: dict, context: dict) -> str:
 
     if is_defense_ai_warfare_category(category) and has_defense_ai_warfare_pressure(context):
         today_filter = (
-            "Geopolitical headlines make this theme more relevant today, especially if volume confirms demand for defense, cyber, ISR, drones, or AI warfare exposure."
+            "Geopolitical pressure makes this theme more relevant today, especially if volume confirms demand for defense, cyber, ISR, drones, or AI warfare exposure."
         )
     elif "AI" in category_upper or "TECH" in category_upper or "SEMICONDUCTOR" in category_upper:
         today_filter = (
@@ -1283,7 +1285,7 @@ def build_opportunity_why(item: dict, context: dict) -> str:
         )
     elif "ENERGY" in category_upper or "OIL" in category_upper or "POWER" in category_upper:
         today_filter = (
-            "This setup is tied to energy, power, inflation, or infrastructure demand, so oil/rates and headline risk matter."
+            "This setup is tied to energy, power, inflation, or infrastructure demand, so oil, rates, and macro confirmation matter."
         )
     elif "DIVIDEND" in category_upper or "UTILITY" in category_upper or "INCOME" in category_upper:
         today_filter = (
@@ -1433,12 +1435,104 @@ def build_portfolio_read(
         )
 
     if themes:
-        notes.append(f"Headline themes to respect today: {', '.join(themes)}.")
+        notes.append(f"Theme focus: {', '.join(themes)}.")
 
     if pressure == "no major macro pressure" and not notes:
         notes.append("No major macro stress is dominating, so stock-specific quality and entry discipline matter most.")
 
     return "\n".join(f"• {note}" for note in notes[:4])
+
+
+def compact_report_block(value: Any, max_lines: int = 4, max_line_length: int = 170) -> str:
+    lines = []
+
+    for raw_line in str(value or "").splitlines():
+        line = " ".join(raw_line.strip().split())
+
+        if not line:
+            continue
+
+        line = line.replace("Action: ", "Watch: ")
+        line = line.replace("require ", "confirm ")
+        line = line.replace("before acting", "before sizing")
+        line = line.replace("headline quality", "signal quality")
+        line = line.replace("headline noise", "market noise")
+
+        if not line.startswith("•"):
+            line = f"• {line}"
+
+        lines.append(clean_text(line, max_line_length))
+
+        if len(lines) >= max_lines:
+            break
+
+    return "\n".join(lines)
+
+
+def build_optimized_theme_read(
+    context: dict,
+    market_tone: str,
+    what_changed_today: str = "",
+) -> str:
+    try:
+        raw_scorecard = build_theme_scorecard(
+            context=context,
+            market_tone=market_tone,
+            what_changed_today=what_changed_today,
+        )
+    except Exception:
+        raw_scorecard = "Theme scorecard unavailable."
+
+    compact = compact_report_block(
+        raw_scorecard,
+        max_lines=3,
+        max_line_length=175,
+    )
+
+    if compact:
+        return compact
+
+    primary_theme = get_primary_theme(context)
+    pressure = get_macro_pressure(context)
+
+    return (
+        f"• Lead theme: {primary_theme}.\n"
+        f"• Pressure: {pressure}.\n"
+        "• Standard: confirm price, volume, and signal quality before sizing."
+    )
+
+
+def build_compact_defense_impact(
+    context: dict,
+    top_scores: list[dict],
+    scores: list[dict],
+) -> str:
+    full_impact = build_defense_ai_warfare_impact(context, top_scores, scores)
+
+    if not full_impact:
+        return ""
+
+    defense_names = [
+        item
+        for item in scores
+        if is_defense_ai_warfare_category(get_category(item))
+    ]
+    names = ", ".join(get_ticker(item) for item in defense_names[:4])
+
+    if not names:
+        names = "no direct scored exposure"
+
+    if any("procurement" in str(theme).lower() or "munitions" in str(theme).lower() for theme in context.get("headline_themes", []) or []):
+        read = "budget-backed munitions/procurement demand"
+    else:
+        read = "defense, ISR, cyber, drones, autonomy, and missile-defense demand"
+
+    return (
+        "Defense / AI Warfare\n"
+        f"• Read: {read}.\n"
+        f"• Names: {names}.\n"
+        "• Standard: confirm contract flow, volume, and direct revenue exposure before sizing."
+    )
 
 
 def build_clean_ai_summary(
@@ -1513,16 +1607,17 @@ def build_daily_report() -> str:
         record=True,
     )
 
-    try:
-        theme_scorecard = build_theme_scorecard(
-            context=global_context,
-            market_tone=market_tone,
-            what_changed_today=what_changed_today,
-        )
-    except Exception:
-        theme_scorecard = "Theme scorecard unavailable."
+    theme_read = build_optimized_theme_read(
+        context=global_context,
+        market_tone=market_tone,
+        what_changed_today=what_changed_today,
+    )
 
-    morning_brief_intro = safe_morning_brief_intro()
+    defense_impact = build_compact_defense_impact(
+        context=global_context,
+        top_scores=top_scores,
+        scores=scores,
+    )
 
     executive_summary = build_executive_summary(
         top_scores=top_scores,
@@ -1537,16 +1632,14 @@ Daily Brief
 Date: {today}
 Generated: {timestamp} {REPORT_TIMEZONE}
 
-{morning_brief_intro}
-
 Executive Summary
 {executive_summary}
 
 What Changed Today
-{what_changed_today}
+{trim_block(what_changed_today, MAX_WHAT_CHANGED_CHARS)}
 
-Theme Scorecard
-{theme_scorecard}
+Theme Read
+{theme_read}
 
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
@@ -1554,7 +1647,7 @@ Market Snapshot
 Portfolio Read
 {build_portfolio_read(global_context, top_scores, scores)}
 
-{build_defense_ai_warfare_impact(global_context, top_scores, scores)}
+{defense_impact}
 
 Watchlist Movers
 {build_watchlist_snapshot(watchlist_symbols, movers)}
@@ -1572,11 +1665,10 @@ Action Checklist
 {build_action_checklist(top_scores, movers, global_context)}
 
 Next Commands
+/scorecard SYMBOL
+/top10
 /weeklycalendar
 /global
-/headlines
-/top10
-/scorecard SYMBOL
 
 Notes
 Informational only. Not financial advice.
