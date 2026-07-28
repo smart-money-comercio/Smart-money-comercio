@@ -1252,60 +1252,70 @@ Signal Mix: {label_text if label_text else "Mixed"}
 """.strip()
 
 
-def build_opportunity_why(item: dict, context: dict) -> str:
-    category = get_category(item)
-    label = translate_smart_money_label(item)
-    action = get_action_label(item)
-    risk = get_risk_label(item)
+def build_opportunity_edge(item: dict, context: dict) -> str:
+    category = str(get_category(item) or "")
+    category_upper = category.upper()
+    themes = " ".join(context.get("headline_themes", []) or []).lower()
 
     raw_strength = item.get("strength") or first_list_text(
         item.get("strengths", []),
         "",
-        140,
-    )
-
-    raw_weakness = item.get("weakness") or first_list_text(
-        item.get("weaknesses") or item.get("risks"),
-        "",
         120,
     )
+    strength = clean_report_language(raw_strength, 120)
 
-    strength = clean_report_language(raw_strength, 140)
-    weakness = clean_report_language(raw_weakness, 120)
+    if is_defense_ai_warfare_category(category):
+        if has_defense_ai_warfare_pressure(context):
+            return (
+                "Defense/AI warfare exposure has current headline support; focus on real demand, "
+                "DoD links, munitions, ISR, cyber, autonomy, or production scale."
+            )
 
-    category_upper = str(category or "").upper()
+        return "Defense exposure can act as portfolio ballast, but it needs a direct catalyst before upgrading."
 
-    if is_defense_ai_warfare_category(category) and has_defense_ai_warfare_pressure(context):
-        today_filter = (
-            "Geopolitical pressure makes this theme more relevant today, especially if volume confirms demand for defense, cyber, ISR, drones, or AI warfare exposure."
-        )
-    elif "AI" in category_upper or "TECH" in category_upper or "SEMICONDUCTOR" in category_upper:
-        today_filter = (
-            "This is tied to the AI/growth trade, so confirmation should come from Nasdaq strength, earnings quality, and volume."
-        )
-    elif "ENERGY" in category_upper or "OIL" in category_upper or "POWER" in category_upper:
-        today_filter = (
-            "This setup is tied to energy, power, inflation, or infrastructure demand, so oil, rates, and macro confirmation matter."
-        )
-    elif "DIVIDEND" in category_upper or "UTILITY" in category_upper or "INCOME" in category_upper:
-        today_filter = (
-            "This is more of a stability or income setup, useful when volatility or rate uncertainty rises."
-        )
-    else:
-        today_filter = category_macro_note(category, context)
+    if "AI" in category_upper or "TECH" in category_upper or "SEMICONDUCTOR" in category_upper:
+        if "ai" in themes or "chips" in themes or "infrastructure" in themes:
+            return "AI/growth leadership has theme support; the setup needs proof through earnings, margins, orders, and volume."
 
-    if not strength or strength.lower() in {"smart money ranking is strong", "quality setup"}:
-        strength = "The name ranks well on the watchlist, but the setup still needs confirmation from price action and volume."
+        return "AI/growth setup ranks well, but it needs Nasdaq, rates, and volume confirmation."
 
-    if not weakness:
-        weakness = "Main risk is chasing before confirmation."
+    if "ENERGY" in category_upper or "OIL" in category_upper or "POWER" in category_upper:
+        return "Energy/power exposure is tied to oil, infrastructure demand, rates, and AI power demand."
 
-    return (
-        f"{label}. {strength} "
-        f"Today’s filter: {today_filter} "
-        f"Risk: {risk} — {weakness} "
-        f"Action: {action}."
-    )
+    if "BANK" in category_upper or "FINANCIAL" in category_upper or "CREDIT" in category_upper:
+        return "Financial setup depends on yields, credit quality, liquidity, and broader risk appetite."
+
+    if "DIVIDEND" in category_upper or "UTILITY" in category_upper or "INCOME" in category_upper:
+        return "Stability/income profile can help if volatility or rate uncertainty rises."
+
+    if strength and strength.lower() not in {"quality setup", "smart money ranking is strong"}:
+        return strength
+
+    return "Ranks well enough to monitor, but the edge still needs confirmation from price action and volume."
+
+
+def build_opportunity_trigger(item: dict, context: dict) -> str:
+    category = str(get_category(item) or "")
+    category_upper = category.upper()
+    macro_pressure = get_macro_pressure(context)
+
+    if is_defense_ai_warfare_category(category):
+        return "Trigger: contract flow, backlog, budget language, volume, or relative strength confirms the defense thesis."
+
+    if "AI" in category_upper or "TECH" in category_upper or "SEMICONDUCTOR" in category_upper:
+        return "Trigger: price strength, volume, Nasdaq support, earnings quality, or AI demand commentary confirms."
+
+    if "ENERGY" in category_upper or "OIL" in category_upper or "POWER" in category_upper:
+        return "Trigger: oil, power demand, rates, or infrastructure headlines confirm the setup."
+
+    if "BANK" in category_upper or "FINANCIAL" in category_upper or "CREDIT" in category_upper:
+        return "Trigger: credit spreads, yields, deposits, or market breadth improve."
+
+    if macro_pressure != "no major macro pressure":
+        return f"Trigger: setup holds despite {macro_pressure}."
+
+    return "Trigger: price, volume, and relative strength confirm before acting."
+
 
 def format_opportunity(index: int, item: dict, context: dict) -> str:
     ticker = get_ticker(item)
@@ -1313,29 +1323,34 @@ def format_opportunity(index: int, item: dict, context: dict) -> str:
     action = get_action_label(item)
     risk = get_risk_label(item)
     category = get_category(item)
-    why = clean_report_language(build_opportunity_why(item, context), 320)
+
+    edge = clean_report_language(build_opportunity_edge(item, context), 190)
+    trigger = clean_report_language(build_opportunity_trigger(item, context), 170)
 
     return (
         f"{index}. {ticker} — {label}\n"
-        f"   Theme: {category} | Risk: {risk} | Action: {action}\n"
-        f"   Why it matters: {why}"
+        f"   Theme: {category}\n"
+        f"   Edge: {edge}\n"
+        f"   {trigger}\n"
+        f"   Risk/Action: {risk} | {action}"
     )
+
 
 def build_top_opportunities(
     top_scores: list[dict],
     context: dict,
     scoring_error: str = "",
 ) -> str:
-    if top_scores:
-        return "\n\n".join(
-            format_opportunity(index, item, context)
-            for index, item in enumerate(top_scores[:MAX_TOP_OPPORTUNITIES], start=1)
-        )
+    if not top_scores:
+        if scoring_error:
+            return f"Scoring unavailable: {scoring_error}"
 
-    if scoring_error:
-        return f"Scoring unavailable: {scoring_error}"
+        return "No scoring opportunities available."
 
-    return "No scoring opportunities available."
+    return "\n\n".join(
+        format_opportunity(index, item, context)
+        for index, item in enumerate(top_scores[:MAX_TOP_OPPORTUNITIES], start=1)
+    )
 
 
 def build_risk_notes(top_scores: list[dict], movers: list[dict], context: dict) -> str:
