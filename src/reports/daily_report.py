@@ -5,6 +5,64 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
+
+try:
+    from src.config.theme_watchlist_universe import build_relevant_watchlist
+except Exception:
+    def build_relevant_watchlist(
+        manual_symbols=None,
+        context=None,
+        scores=None,
+        max_symbols=20,
+    ):
+        symbols = manual_symbols or []
+        return symbols[:max_symbols]
+
+try:
+    from src.intelligence.watchlist_evolution import (
+        build_evolved_watchlist_universe,
+        record_watchlist_evolution_day,
+    )
+except Exception:
+    def build_evolved_watchlist_universe(
+        manual_symbols=None,
+        context=None,
+        scores=None,
+        max_symbols=20,
+    ):
+        try:
+            return build_relevant_watchlist(
+                manual_symbols=manual_symbols,
+                context=context,
+                scores=scores,
+                max_symbols=max_symbols,
+            )
+        except Exception:
+            symbols = manual_symbols or []
+            return symbols[:max_symbols]
+
+    def record_watchlist_evolution_day(
+        watchlist_symbols=None,
+        context=None,
+    ):
+        return None
+
+from src.intelligence.ai_summary_engine import build_evolving_ai_summary
+from src.intelligence.market_memory import build_what_changed_today
+
+try:
+    from src.intelligence.theme_scoring import build_theme_scorecard
+except Exception:
+    def build_theme_scorecard(
+        context=None,
+        market_tone="Quote data unavailable",
+        what_changed_today="",
+    ):
+        themes = []
+        if isinstance(context, dict):
+            themes = context.get("headline_themes") or []
+        theme_text = ", ".join(str(theme) for theme in themes[:5]) if themes else "Theme history is still building."
+        return f"• {theme_text}\n• Market tone: {market_tone}."
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
     get_action_label,
@@ -20,10 +78,12 @@ from src.utils.watchlist_store import load_watchlist
 
 
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
+MARKET_TIMEZONE = os.getenv("MARKET_TIMEZONE", "America/New_York")
 
 MAX_TOP_OPPORTUNITIES = 2
-MAX_WATCHLIST_MOVERS = 3
-MAX_MORNING_BRIEF_CHARS = 950
+MAX_WATCHLIST_MOVERS = 6
+MAX_RELEVANT_WATCHLIST = 20
+MAX_MORNING_BRIEF_CHARS = 1900
 
 # Default back to live movement.
 # Set DAILY_REPORT_LIVE_QUOTES=0 only if you need emergency fast mode.
@@ -41,9 +101,13 @@ HIGH_IMPACT_MACRO_THEMES = {
     "Defense Procurement / Munitions",
     "AI / Chips",
     "AI Infrastructure / Power",
+    "Earnings Season",
     "Inflation / Fed",
     "Banks / Credit",
     "Consumer Stress",
+    "Policy / Regulation",
+    "Automation / Mobility",
+    "Market Breadth / Rotation",
 }
 
 GEOPOLITICAL_PRESSURE_KEYWORDS = [
@@ -126,6 +190,17 @@ DEFENSE_AI_WARFARE_KEYWORDS = [
     "multi-year procurement",
     "defense industrial base",
     "surge production",
+    "air-launched cruise missile",
+    "palletized munitions",
+    "stand-off weapon",
+    "stand-off weapons",
+    "weapons stockpile",
+    "mass missiles",
+    "affordable cruise missile",
+    "barracuda-500",
+    "agm-188",
+    "agm-189",
+    "firm-fixed-price",
 ]
 
 DEFENSE_AI_WARFARE_CATEGORIES = [
@@ -148,6 +223,10 @@ DEFENSE_AI_WARFARE_CATEGORIES = [
     "MISSILES",
     "PROPULSION",
     "SENSORS",
+    "DEFENSE PROCUREMENT",
+    "AIR DEFENSE",
+    "MISSILE DEFENSE",
+    "INDUSTRIAL BASE",
 ]
 
 GENERIC_THEME_LABELS = {
@@ -173,6 +252,24 @@ SMART_MONEY_LABEL_TRANSLATIONS = {
 }
 
 
+def get_market_status_label() -> str:
+    now_et = datetime.now(ZoneInfo(MARKET_TIMEZONE))
+
+    if now_et.weekday() >= 5:
+        return "Closed — weekend. Price moves reflect the last completed regular session."
+
+    market_open = now_et.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+
+    if now_et < market_open:
+        return "Closed — pre-market. Moves may reflect the prior regular session."
+
+    if now_et > market_close:
+        return "Closed — after-hours. Moves reflect the completed regular session."
+
+    return "Open — live session."
+
+
 def normalize_theme_name(theme: str | None) -> str:
     text = " ".join(str(theme or "").split())
 
@@ -182,29 +279,22 @@ def normalize_theme_name(theme: str | None) -> str:
     if text.lower() in GENERIC_THEME_LABELS:
         return ""
 
-    if text == "Oil / Geopolitical Risk":
-        return "Geopolitical / oil risk"
+    aliases = {
+        "Oil / Geopolitical Risk": "Geopolitical / oil risk",
+        "Defense / AI Warfare": "Defense / AI warfare",
+        "Defense Procurement / Munitions": "Defense procurement / munitions",
+        "AI / Chips": "AI / chips",
+        "AI Infrastructure / Power": "AI infrastructure / power",
+        "Earnings Season": "Earnings season",
+        "Inflation / Fed": "Inflation / Fed risk",
+        "Banks / Credit": "Banks / credit",
+        "Consumer Stress": "Consumer pressure",
+        "Policy / Regulation": "Policy / regulation",
+        "Automation / Mobility": "Automation / mobility",
+        "Market Breadth / Rotation": "Market breadth / rotation",
+    }
 
-    if text == "AI / Chips":
-        return "AI / chips"
-
-    if text == "Defense Procurement / Munitions":
-        return "Defense procurement / munitions" 
-       
-    if text == "AI Infrastructure / Power":
-        return "AI infrastructure / power"
-
-    if text == "Inflation / Fed":
-        return "Inflation / Fed risk"
-
-    if text == "Banks / Credit":
-        return "Banks / credit"
-
-    if text == "Consumer Stress":
-        return "Consumer pressure"
-
-    return text
-
+    return aliases.get(text, text)
 
 def get_clean_headline_themes(context: dict, limit: int = 4) -> list[str]:
     themes = []
@@ -540,11 +630,40 @@ def get_quote_change_percent(quote: dict | None):
     )
 
 
-def fetch_watchlist_quotes() -> tuple[list[str], dict]:
+def fetch_watchlist_quotes(context: dict | None = None) -> tuple[list[str], dict]:
     try:
-        symbols = load_watchlist()
+        manual_symbols = load_watchlist()
     except Exception:
-        return [], {}
+        manual_symbols = []
+
+    context = context or {}
+    scores = context.get("scores", []) if isinstance(context, dict) else []
+
+    try:
+        symbols = build_evolved_watchlist_universe(
+            manual_symbols=manual_symbols,
+            context=context,
+            scores=scores,
+            max_symbols=MAX_RELEVANT_WATCHLIST,
+        )
+    except Exception:
+        try:
+            symbols = build_relevant_watchlist(
+                manual_symbols=manual_symbols,
+                context=context,
+                scores=scores,
+                max_symbols=MAX_RELEVANT_WATCHLIST,
+            )
+        except Exception:
+            symbols = manual_symbols[:MAX_RELEVANT_WATCHLIST]
+
+    symbols = [
+        str(symbol).strip().upper()
+        for symbol in symbols or []
+        if str(symbol).strip()
+    ]
+
+    symbols = list(dict.fromkeys(symbols))[:MAX_RELEVANT_WATCHLIST]
 
     if not symbols:
         return [], {}
@@ -623,6 +742,7 @@ def build_market_snapshot(symbols: list[str], movers: list[dict]) -> str:
         quote_status = "Off" if not DAILY_REPORT_LIVE_QUOTES else "Unavailable"
 
         return f"""
+Market Session: {get_market_status_label()}
 Tone: Quote data unavailable
 Watchlist: {len(symbols)} symbols
 Live Quotes: {quote_status}
@@ -638,6 +758,7 @@ Use: /global, /headlines, /watchlist movers, or /ticker SYMBOL for live context.
     weakest = min(movers, key=lambda item: item["change_percent"])
 
     return f"""
+Market Session: {get_market_status_label()}
 Tone: {build_market_tone(movers)}
 Breadth: {positive} up / {negative} down / {len(movers)} live
 Average Move: {format_percent(average)}
@@ -645,19 +766,31 @@ Strongest: {strongest["symbol"]} {format_percent(strongest["change_percent"])}
 Weakest: {weakest["symbol"]} {format_percent(weakest["change_percent"])}
 """.strip()
 
-
 def build_watchlist_snapshot(symbols: list[str], movers: list[dict]) -> str:
     if not symbols:
         return "Watchlist unavailable."
 
-    if not movers:
-        return f"{len(symbols)} symbols loaded, but live movement data is unavailable."
+    universe_text = ", ".join(symbols[:MAX_RELEVANT_WATCHLIST])
 
-    return "\n".join(
+    if not movers:
+        return (
+            f"Relevant research universe: {len(symbols)} symbols\n"
+            f"{universe_text}\n\n"
+            "Live movement data is unavailable."
+        )
+
+    mover_text = "\n".join(
         f"• {item['symbol']}: {format_price(item['price'])} ({format_percent(item['change_percent'])})"
         for item in movers[:MAX_WATCHLIST_MOVERS]
     )
 
+    return f"""
+Relevant research universe: {len(symbols)} symbols
+{universe_text}
+
+Largest live movers:
+{mover_text}
+""".strip()
 
 def safe_morning_brief_intro() -> str:
     try:
@@ -1313,41 +1446,16 @@ def build_clean_ai_summary(
     movers: list[dict],
     market_tone: str,
     context: dict,
+    what_changed_today: str = "",
 ) -> str:
-    best = top_scores[0] if top_scores else None
-    themes = get_clean_headline_themes(context, limit=3)
-    theme_text = ", ".join(themes) if themes else "earnings, rates, and confirmation"
-    pressure = get_macro_pressure(context)
-
-    if not best:
-        return (
-            f"My read: the market tone is {market_tone.lower()} with {pressure}. "
-            f"The main themes are {theme_text}. I would stay patient and wait for a cleaner setup."
-        )
-
-    ticker = get_ticker(best)
-    label = translate_smart_money_label(best)
-
-    summary = (
-        f"My read: today is not just about chasing the biggest mover. "
-        f"The key themes are {theme_text}, and the pressure point is {pressure}. "
-        f"{ticker} is the cleanest watch right now because it has a {label.lower()} profile, "
-        f"but I would still confirm volume, price action, and risk before acting."
+    return build_evolving_ai_summary(
+        top_scores=top_scores,
+        movers=movers,
+        market_tone=market_tone,
+        context=context,
+        what_changed_today=what_changed_today,
+        record_memory=True,
     )
-
-    if has_defense_ai_warfare_pressure(context):
-        summary += (
-            " Defense and AI warfare names deserve extra attention today, but only the names with real exposure and confirmation should move up the priority list."
-        )
-
-    if movers:
-        summary += (
-            f" The biggest live move is {movers[0]['symbol']} at "
-            f"{format_percent(movers[0]['change_percent'])}, so that name should be checked first."
-        )
-
-    return summary
-
 
 def build_action_checklist(
     top_scores: list[dict],
@@ -1387,10 +1495,32 @@ def build_daily_report() -> str:
     scores = normalize_scores(raw_scores)
     top_scores = scores[:MAX_TOP_OPPORTUNITIES]
 
-    watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes()
+    global_context = load_global_context()
+    global_context["scores"] = scores
+
+    watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes(global_context)
+    record_watchlist_evolution_day(watchlist_symbols, global_context)
+
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     market_tone = build_market_tone(movers)
-    global_context = load_global_context()
+
+    what_changed_today = build_what_changed_today(
+        context=global_context,
+        top_scores=top_scores,
+        movers=movers,
+        market_tone=market_tone,
+        watchlist_symbols=watchlist_symbols,
+        record=True,
+    )
+
+    try:
+        theme_scorecard = build_theme_scorecard(
+            context=global_context,
+            market_tone=market_tone,
+            what_changed_today=what_changed_today,
+        )
+    except Exception:
+        theme_scorecard = "Theme scorecard unavailable."
 
     morning_brief_intro = safe_morning_brief_intro()
 
@@ -1412,6 +1542,12 @@ Generated: {timestamp} {REPORT_TIMEZONE}
 Executive Summary
 {executive_summary}
 
+What Changed Today
+{what_changed_today}
+
+Theme Scorecard
+{theme_scorecard}
+
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
 
@@ -1430,7 +1566,7 @@ Risk Notes
 {build_risk_notes(top_scores, movers, global_context)}
 
 AI Summary
-{build_clean_ai_summary(top_scores, movers, market_tone, global_context)}
+{build_clean_ai_summary(top_scores, movers, market_tone, global_context, what_changed_today)}
 
 Action Checklist
 {build_action_checklist(top_scores, movers, global_context)}
