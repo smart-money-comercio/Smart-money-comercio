@@ -131,3 +131,10 @@ def register_commands(app):
     app.add_handler(CommandHandler("insiders", insiders))
     app.add_handler(CommandHandler("sec", sec))
     app.add_handler(CommandHandler("filing", filing))
+
+    # Friendly aliases
+    app.add_handler(CommandHandler("stock", ticker))
+    app.add_handler(CommandHandler("calendar", weeklycalendar_command))
+    app.add_handler(CommandHandler("quality", reportcheck_command))
+    app.add_handler(CommandHandler("watch", watchlist_command))
+    app.add_handler(CommandHandler("macro", global_market))
