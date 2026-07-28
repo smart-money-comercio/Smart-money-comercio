@@ -63,6 +63,7 @@ ADMIN_COMMANDS = PUBLIC_COMMANDS + [
     BotCommand("senddaily", "Send daily report to channel"),
     BotCommand("testdaily", "Send daily report to this chat"),
     BotCommand("dailycheck", "Check daily report system health"),
+    BotCommand("reportcheck", "Check daily report quality guardrails"),
     BotCommand("backup", "Create server backup"),
     BotCommand("logs", "Show recent service logs"),
     BotCommand("restart", "Restart production bot"),

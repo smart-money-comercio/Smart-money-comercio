@@ -20,6 +20,7 @@ async def commands_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/top10 - Top ranked stocks",
         "/watchlist - Tracked companies",
         "/defense - Defense rankings",
+        "/reportcheck - Check daily report quality guardrails",
         "",
         "Portfolio Views:",
         "/growth - Growth and AI stocks",
