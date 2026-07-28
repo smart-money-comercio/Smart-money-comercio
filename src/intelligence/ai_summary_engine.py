@@ -536,6 +536,37 @@ def build_validation_test(
         "Validation test: wait for alignment between headline flow, price action, volume, and market breadth before acting."
     )
 
+def strip_summary_label(value: str, labels: list[str]) -> str:
+    text = " ".join(str(value or "").split())
+
+    for label in labels:
+        prefix = f"{label}:"
+
+        if text.lower().startswith(prefix.lower()):
+            return text[len(prefix):].strip()
+
+    return text
+
+
+def compact_summary_line(value: str, max_length: int = 260) -> str:
+    text = " ".join(str(value or "").split())
+    text = text.replace("Portfolio implication:", "").replace("Validation test:", "")
+    text = text.strip()
+
+    if len(text) <= max_length:
+        return text
+
+    trimmed = text[:max_length].rstrip()
+    split_at = max(
+        trimmed.rfind(". "),
+        trimmed.rfind("; "),
+        trimmed.rfind(", "),
+    )
+
+    if split_at > 120:
+        trimmed = trimmed[: split_at + 1].rstrip()
+
+    return trimmed.rstrip(".") + "."
 
 def build_evolving_ai_summary(
     top_scores: list[dict],
@@ -576,9 +607,28 @@ def build_evolving_ai_summary(
         context=context,
     )
 
-    summary = f"{lead}\n\n{implication}\n\n{validation}"
+    signal_line = compact_summary_line(
+        strip_summary_label(lead, ["Signal"]),
+        max_length=260,
+    )
+
+    implication_line = compact_summary_line(
+        strip_summary_label(implication, ["Portfolio implication", "Implication"]),
+        max_length=260,
+    )
+
+    validation_line = compact_summary_line(
+        strip_summary_label(validation, ["Validation test", "Validation"]),
+        max_length=260,
+    )
+
+    summary = (
+        f"Signal: {signal_line}\n"
+        f"Implication: {implication_line}\n"
+        f"Validation: {validation_line}"
+    )
 
     if record_memory:
         remember_ai_summary(lead, themes, ticker)
 
-    return clean_report_language(summary, MAX_SUMMARY_CHARS)
+    return clean_report_language(summary, 850)
