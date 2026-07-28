@@ -48,6 +48,7 @@ except Exception:
         return None
 
 from src.intelligence.ai_summary_engine import build_evolving_ai_summary
+from src.reports.report_quality import enforce_daily_report_quality
 from src.intelligence.market_memory import build_what_changed_today
 
 try:
@@ -1667,7 +1668,7 @@ def build_daily_report() -> str:
         context=global_context,
     )
 
-    return f"""
+    final_report = f"""
 📊 Smart Money AI Daily Report
 Daily Brief
 Date: {today}
@@ -1714,3 +1715,5 @@ Next Commands
 Notes
 Informational only. Not financial advice.
 """.strip()
+
+    return enforce_daily_report_quality(final_report)
