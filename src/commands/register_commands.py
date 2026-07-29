@@ -23,6 +23,7 @@ from src.commands.deploycheck_commands import deploycheck_command
 from src.commands.global_commands import global_market
 from src.commands.versionnotes_commands import versionnotes_command
 from src.commands.headlines_commands import headlines
+from src.commands.snapshot_commands import snapshot_command 
 from src.commands.themes_commands import themes_command
 from src.commands.health_commands import (
     health,
@@ -95,6 +96,7 @@ def register_commands(app):
    # Daily report
     app.add_handler(CommandHandler("report", report))
     app.add_handler(CommandHandler("brief", report))
+    app.add_handler(CommandHandler("snapshot", snapshot_command))
     app.add_handler(CommandHandler("senddaily", senddaily_command))
     app.add_handler(CommandHandler("testdaily", testdaily_command))
     app.add_handler(CommandHandler("dailycheck", dailycheck_command))

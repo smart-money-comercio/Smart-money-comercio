@@ -10,6 +10,7 @@ CORE_COMMANDS = [
     ("/themes", "Active market themes"),
     ("/calendar", "Weekly macro and earnings calendar"),
     ("/quality", "Report quality check"),
+    ("/snapshot", "Fast one-screen market snapshot"),
 ]
 
 
@@ -18,6 +19,7 @@ DAILY_REPORT_COMMANDS = [
     ("/report", "Daily report legacy alias"),
     ("/quality", "Report quality check"),
     ("/reportcheck", "Report quality check legacy alias"),
+    ("/snapshot", "Fast one-screen market snapshot"),
     ("/testdaily", "Test daily report"),
     ("/dailycheck", "Daily report delivery check"),
     ("/senddaily", "Send daily report now"),

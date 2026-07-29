@@ -35,6 +35,7 @@ RELEASE_NOTES = [
     "/commands — cleaned product menu",
     "/help — quick-start guide",
     "Friendly aliases: /stock, /watch, /macro, /calendar",
+    "/snapshot — fast one-screen market read",
 ]
 
 
@@ -47,10 +48,10 @@ REPORT_INTELLIGENCE = [
 
 
 BEST_DAILY_FLOW = [
+    "/snapshot",
     "/brief",
     "/quality",
     "/stock SYMBOL",
-    "/scorecard SYMBOL",
     "/calendar",
 ]
 
