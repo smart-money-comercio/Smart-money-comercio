@@ -13,7 +13,7 @@ if [ ! -x "$PYTHON_BIN" ]; then
   exit 1
 fi
 
-echo "1/3 Checking required files..."
+echo "1/4 Checking required files..."
 
 required_files=(
   "src/bot.py"
@@ -43,11 +43,15 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-echo "2/3 Compiling Python files..."
+echo "2/4 Compiling Python files..."
 
 "$PYTHON_BIN" -m compileall src scripts
 
-echo "3/3 Checking critical imports..."
+echo "3/4Checking command catalog..."
+
+python scripts/check_command_catalog.py
+
+echo "4/4 Checking critical imports..."
 
 PYTHONPATH="$PROJECT_DIR" "$PYTHON_BIN" - <<'PY'
 import importlib
