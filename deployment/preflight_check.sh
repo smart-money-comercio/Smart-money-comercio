@@ -47,9 +47,9 @@ echo "2/4 Compiling Python files..."
 
 "$PYTHON_BIN" -m compileall src scripts
 
-echo "3/4Checking command catalog..."
+echo "3/4 Checking command catalog..."
 
-python scripts/check_command_catalog.py
+python3 scripts/check_command_catalog.py
 
 echo "4/4 Checking critical imports..."
 
