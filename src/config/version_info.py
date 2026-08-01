@@ -24,6 +24,7 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "Daily report quality preflight protection",
     "/brief — cleaner daily market brief",
     "What Changed Today — market-memory comparison",
     "Theme Read — stronger/fading/actionable themes",
