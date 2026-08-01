@@ -59,7 +59,7 @@ echo "4/5 Checking daily report quality..."
 
 "$PYTHON_BIN" scripts/check_daily_report_quality.py
 
-echo "5/5 Checking critical imports and runtime build..."
+echo "5/5 Checking critical imports and required functions..."
 
 "$PYTHON_BIN" - <<'PY'
 import importlib
@@ -122,47 +122,6 @@ function_checks = [
     ("src.agents.analyst_agent", "run_analyst_agent"),
     ("src.agents.analyst_agent", "analyze_ticker"),
 ]
-
-print("\nChecking daily report runtime build...")
-
-try:
-    from src.reports.daily_report import build_daily_report
-
-    report = build_daily_report()
-
-    if not isinstance(report, str):
-        print("ERROR: build_daily_report() did not return a string")
-        sys.exit(1)
-
-    if len(report.strip()) < 100:
-        print("ERROR: build_daily_report() returned an unexpectedly short report")
-        sys.exit(1)
-
-    required_sections = [
-        "Smart Money AI Daily Report",
-        "Market Snapshot",
-        "Top Opportunities",
-        "Risk Notes",
-        "AI Summary",
-        "Action Checklist",
-    ]
-
-    missing_sections = [
-        section for section in required_sections
-        if section not in report
-    ]
-
-    if missing_sections:
-        print("ERROR: Daily report is missing required section(s):")
-        for section in missing_sections:
-            print(f"- {section}")
-        sys.exit(1)
-
-    print(f"OK: build_daily_report() generated {len(report)} characters")
-
-except Exception as exc:
-    print(f"ERROR: build_daily_report() failed: {type(exc).__name__}: {exc}")
-    sys.exit(1)
 
 for module_name, function_name in function_checks:
     module = importlib.import_module(module_name)
