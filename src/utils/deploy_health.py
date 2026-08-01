@@ -8,6 +8,7 @@ from src.config.version_info import (
     APP_VERSION,
     RELEASE_CHANNEL,
     RELEASE_NAME,
+    RELEASE_STATUS,
     TIMEZONE,
     get_generated_timestamp,
     get_git_branch,
@@ -204,6 +205,7 @@ def build_deploy_health_report() -> str:
 Status: {overall_status}
 Version: {APP_VERSION}
 Release: {RELEASE_NAME}
+Release Status: {RELEASE_STATUS}
 Channel: {RELEASE_CHANNEL}
 Branch: {get_git_branch()}
 Commit: {get_git_commit()}

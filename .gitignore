@@ -50,3 +50,7 @@ Data/ai_summary_memory.json
 Data/daily_market_memory.json
 Data/watchlist_evolution_memory.json
 Data/morning_brief_issue_memory.json
+
+# Runtime ticker intelligence memory
+data/ticker_intelligence_memory.json
+Data/ticker_intelligence_memory.json

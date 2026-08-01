@@ -10,8 +10,9 @@ from src.config.command_catalog import (
 
 
 APP_NAME = "Smart Money AI"
-APP_VERSION = os.getenv("SMART_MONEY_VERSION", "v1.2")
-RELEASE_NAME = os.getenv("SMART_MONEY_RELEASE_NAME", "Command Consolidation")
+APP_VERSION = os.getenv("SMART_MONEY_VERSION", "v1.3")
+RELEASE_NAME = os.getenv("SMART_MONEY_RELEASE_NAME", "Intelligence Quality Upgrade")
+RELEASE_STATUS = os.getenv("SMART_MONEY_RELEASE_STATUS", "In Progress")
 RELEASE_CHANNEL = os.getenv("SMART_MONEY_RELEASE_CHANNEL", "Production")
 RELEASE_DATE = os.getenv("SMART_MONEY_RELEASE_DATE", "2026-08-01")
 TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
@@ -22,6 +23,8 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/stock — evolving ticker intelligence card",
+    "Ticker memory tracks score, risk, action, and signal changes",
     "/snapshot — fast one-screen market read",
     "/themes — active market theme read",
     "/quality — cleaner daily report health card",
@@ -129,6 +132,7 @@ def build_version_text() -> str:
 Version: {APP_VERSION}
 Release: {RELEASE_NAME}
 Channel: {RELEASE_CHANNEL}
+Status: {RELEASE_STATUS}
 Release Date: {RELEASE_DATE}
 
 Build
@@ -153,6 +157,7 @@ def build_version_notes_text() -> str:
 Version: {APP_VERSION}
 Release: {RELEASE_NAME}
 Channel: {RELEASE_CHANNEL}
+Status: {RELEASE_STATUS}
 Release Date: {RELEASE_DATE}
 
 Added
