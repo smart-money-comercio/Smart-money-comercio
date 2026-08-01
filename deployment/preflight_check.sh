@@ -6,12 +6,17 @@ PYTHON_BIN="$PROJECT_DIR/.venv/bin/python"
 
 cd "$PROJECT_DIR"
 
+export PYTHONPATH="$PROJECT_DIR:${PYTHONPATH:-}"
+export DAILY_REPORT_LIVE_QUOTES="${DAILY_REPORT_LIVE_QUOTES:-0}"
+
 echo "Running Smart Money AI preflight checks..."
 
 if [ ! -x "$PYTHON_BIN" ]; then
   echo "ERROR: Python virtual environment not found at $PYTHON_BIN"
   exit 1
 fi
+
+echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
 echo "1/5 Checking required files..."
 
@@ -33,7 +38,6 @@ required_files=(
   "src/reports/portfolio_headline_impact.py"
   "src/commands/headlines_commands.py"
   "src/commands/analyst_commands.py"
-  
 )
 
 for file in "${required_files[@]}"; do
@@ -48,14 +52,16 @@ echo "2/5 Compiling Python files..."
 "$PYTHON_BIN" -m compileall src scripts
 
 echo "3/5 Checking command catalog..."
-python3 scripts/check_command_catalog.py
+
+"$PYTHON_BIN" scripts/check_command_catalog.py
 
 echo "4/5 Checking daily report quality..."
-python3 scripts/check_daily_report_quality.py
 
-echo "5/5 Checking critical imports..."
+"$PYTHON_BIN" scripts/check_daily_report_quality.py
 
-PYTHONPATH="$PROJECT_DIR" "$PYTHON_BIN" - <<'PY'
+echo "5/5 Checking critical imports and runtime build..."
+
+"$PYTHON_BIN" - <<'PY'
 import importlib
 import sys
 
