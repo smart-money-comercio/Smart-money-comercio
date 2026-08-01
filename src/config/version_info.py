@@ -1,8 +1,8 @@
 import os
 import subprocess
 from datetime import datetime
-from typing import Any
 from zoneinfo import ZoneInfo
+
 from src.config.command_catalog import (
     get_primary_commands,
     get_version_feature_lines,
@@ -13,61 +13,63 @@ APP_NAME = "Smart Money AI"
 APP_VERSION = os.getenv("SMART_MONEY_VERSION", "v1.2")
 RELEASE_NAME = os.getenv("SMART_MONEY_RELEASE_NAME", "Command Consolidation")
 RELEASE_CHANNEL = os.getenv("SMART_MONEY_RELEASE_CHANNEL", "Production")
-RELEASE_DATE = os.getenv("SMART_MONEY_RELEASE_DATE", "2026-07-28")
+RELEASE_DATE = os.getenv("SMART_MONEY_RELEASE_DATE", "2026-08-01")
 TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
 PRIMARY_COMMANDS = get_primary_commands()
-
-
 VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
-    "Daily report quality preflight protection",
-    "/brief — cleaner daily market brief",
-    "What Changed Today — market-memory comparison",
-    "Theme Read — stronger/fading/actionable themes",
-    "AI Summary — Signal / Implication / Validation",
-    "Top Opportunities — edge, trigger, risk/action",
-    "Risk Notes — shorter decision-focused risk layer",
-    "Action Checklist — next best commands",
-    "/quality — report guardrail check",
-    "/commands — cleaned product menu",
-    "/help — quick-start guide",
-    "Friendly aliases: /stock, /watch, /macro, /calendar",
     "/snapshot — fast one-screen market read",
+    "/themes — active market theme read",
+    "/quality — cleaner daily report health card",
+    "/deploycheck — upgraded release health summary",
+    "/help — synced with shared command catalog",
+    "/commands — synced with shared command catalog",
+    "/version — synced with release metadata",
+    "Strict command audit enabled in preflight",
+    "Daily report quality preflight protection",
+    "Preflight now uses the bot virtualenv",
+    "Duplicate daily report build removed from preflight",
+    "Admin/security command drift cleaned",
+]
+
+
+PROTECTED_GUARDRAILS = [
+    "Command catalog audit",
+    "Strict command audit mode",
+    "Daily report quality check",
+    "Virtualenv-based preflight",
+    "Required section validation",
+    "AI Summary format validation",
+    "Removed-section regression check",
+    "Telegram command registration drift check",
 ]
 
 
 REPORT_INTELLIGENCE = [
-    "Remembers recent market themes",
-    "Tracks theme persistence and leadership shifts",
-    "Reduces repeated headline noise",
-    "Keeps /brief concise with quality guardrails",
+    "Concise daily brief",
+    "Fast market snapshot",
+    "Theme-specific read",
+    "Adaptive AI Summary",
+    "What Changed Today memory",
+    "Top Opportunities",
+    "Risk Notes",
+    "Action Checklist",
 ]
 
 
 BEST_DAILY_FLOW = [
     "/snapshot",
     "/brief",
+    "/themes",
     "/quality",
     "/stock SYMBOL",
     "/calendar",
+    "/deploycheck",
 ]
-
-
-def clean_text(value: Any, max_length: int = 120) -> str:
-    text = " ".join(str(value or "").split())
-
-    if len(text) <= max_length:
-        return text
-
-    return text[: max_length - 3].rstrip() + "..."
-
-
-def get_generated_timestamp() -> str:
-    return datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def run_git_command(args: list[str]) -> str:
@@ -76,47 +78,60 @@ def run_git_command(args: list[str]) -> str:
             ["git", *args],
             capture_output=True,
             text=True,
-            timeout=2,
-            check=False,
+            timeout=5,
         )
 
         if result.returncode != 0:
-            return ""
+            return "unavailable"
 
-        return clean_text(result.stdout, 80)
+        value = result.stdout.strip()
+
+        return value or "unavailable"
+
     except Exception:
-        return ""
+        return "unavailable"
 
 
 def get_git_commit() -> str:
-    return run_git_command(["rev-parse", "--short", "HEAD"]) or "unavailable"
+    return run_git_command(["rev-parse", "--short", "HEAD"])
 
 
 def get_git_branch() -> str:
-    return run_git_command(["rev-parse", "--abbrev-ref", "HEAD"]) or "unavailable"
+    return run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+
+
+def get_generated_timestamp() -> str:
+    try:
+        now = datetime.now(ZoneInfo(TIMEZONE))
+    except Exception:
+        now = datetime.now()
+
+    return now.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def format_command_lines(commands: list[tuple[str, str]]) -> str:
-    return "\n".join(f"{command} - {description}" for command, description in commands)
+    return "\n".join(
+        f"{command} - {description}"
+        for command, description in commands
+    )
 
 
 def format_bullet_lines(items: list[str]) -> str:
-    return "\n".join(f"• {item}" for item in items)
-
-
-def format_numbered_lines(items: list[str]) -> str:
-    return "\n".join(f"{index}. {item}" for index, item in enumerate(items, start=1))
+    return "\n".join(
+        f"• {item}"
+        for item in items
+    )
 
 
 def build_version_text() -> str:
     return f"""
-🚀 {APP_NAME}
+{APP_NAME}
 Version: {APP_VERSION}
 Release: {RELEASE_NAME}
 Channel: {RELEASE_CHANNEL}
 Release Date: {RELEASE_DATE}
 
-Status: Active ✅
+Build
 Branch: {get_git_branch()}
 Commit: {get_git_commit()}
 Checked: {get_generated_timestamp()} {TIMEZONE}
@@ -124,13 +139,8 @@ Checked: {get_generated_timestamp()} {TIMEZONE}
 Primary Commands
 {format_command_lines(PRIMARY_COMMANDS)}
 
-{APP_VERSION} Intelligence
-{format_bullet_lines(VERSION_FEATURES)}
-
-More:
-/versionnotes - Full release notes
-/commands - Full command menu
-/help - Quick-start guide
+Daily Flow
+{format_bullet_lines(BEST_DAILY_FLOW)}
 
 Research only. Not financial advice.
 """.strip()
@@ -138,23 +148,47 @@ Research only. Not financial advice.
 
 def build_version_notes_text() -> str:
     return f"""
-🚀 {APP_NAME} {APP_VERSION}
-{RELEASE_NAME}
+{APP_NAME} Release Notes
 
-What’s New
-{format_bullet_lines(RELEASE_NOTES)}
+Version: {APP_VERSION}
+Release: {RELEASE_NAME}
+Channel: {RELEASE_CHANNEL}
+Release Date: {RELEASE_DATE}
+
+Added
+• /snapshot — fast one-screen market read
+• /themes — active market theme read
+
+Improved
+• /quality — cleaner daily report health card
+• /deploycheck — release health summary
+• /help — generated from shared command catalog
+• /commands — generated from shared command catalog
+• /version — generated from release metadata
+
+Protected
+{format_bullet_lines(PROTECTED_GUARDRAILS)}
 
 Report Intelligence
 {format_bullet_lines(REPORT_INTELLIGENCE)}
 
 Best Daily Flow
-{format_numbered_lines(BEST_DAILY_FLOW)}
+{format_bullet_lines(BEST_DAILY_FLOW)}
 
-Build Info
-Channel: {RELEASE_CHANNEL}
-Release Date: {RELEASE_DATE}
+Full Change List
+{format_bullet_lines(RELEASE_NOTES)}
+
+Build
 Branch: {get_git_branch()}
 Commit: {get_git_commit()}
+Checked: {get_generated_timestamp()} {TIMEZONE}
+
+Use:
+/snapshot
+/brief
+/themes
+/quality
+/deploycheck
 
 Research only. Not financial advice.
 """.strip()
