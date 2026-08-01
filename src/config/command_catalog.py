@@ -3,6 +3,7 @@ COMMAND_CATALOG_VERSION = "v1.2"
 
 CORE_COMMANDS = [
     ("/brief", "Daily market brief"),
+    ("/snapshot", "Fast one-screen market snapshot"),
     ("/stock SYMBOL", "Stock snapshot"),
     ("/watch", "Watchlist"),
     ("/top10", "Top 20 Smart Money ideas"),
@@ -10,16 +11,15 @@ CORE_COMMANDS = [
     ("/themes", "Active market themes"),
     ("/calendar", "Weekly macro and earnings calendar"),
     ("/quality", "Report quality check"),
-    ("/snapshot", "Fast one-screen market snapshot"),
 ]
 
 
 DAILY_REPORT_COMMANDS = [
     ("/brief", "Daily market brief"),
+    ("/snapshot", "Fast one-screen market snapshot"),
     ("/report", "Daily report legacy alias"),
     ("/quality", "Report quality check"),
     ("/reportcheck", "Report quality check legacy alias"),
-    ("/snapshot", "Fast one-screen market snapshot"),
     ("/testdaily", "Test daily report"),
     ("/dailycheck", "Daily report delivery check"),
     ("/senddaily", "Send daily report now"),
@@ -75,6 +75,7 @@ SMART_MONEY_COMMANDS = [
 ADMIN_COMMANDS = [
     ("/deploycheck", "Deployment health check"),
     ("/securitycheck", "Security check"),
+    ("/security", "Security check alias"),
     ("/status", "Bot status"),
     ("/ping", "Ping check"),
     ("/diagnostics", "Diagnostics"),
@@ -96,6 +97,7 @@ ALIASES = [
     ("/macro", "/global"),
     ("/calendar", "/weeklycalendar"),
     ("/quality", "/reportcheck"),
+    ("/security", "/securitycheck"),
 ]
 
 

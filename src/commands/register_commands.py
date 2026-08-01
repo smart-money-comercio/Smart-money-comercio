@@ -9,6 +9,7 @@ from src.commands.admin_commands import (
 )
 from src.commands.analyst_commands import analyst_command
 from src.commands.backup_commands import backup_command
+from src.commands.restart_commands import restart_command
 from src.commands.basic_commands import (
     defense,
     report,
@@ -55,7 +56,6 @@ from src.commands.portfolio_commands import (
 )
 from src.commands.quarterly_commands import quarterly_command
 from src.commands.reportcheck_commands import reportcheck_command
-from src.commands.restart_commands import restart_command
 from src.commands.screener_commands import undervalued
 from src.commands.sec_commands import (
     filing,
@@ -74,29 +74,29 @@ def register_commands(app):
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("commands", commands_menu))
 
-    # Health / admin
+        # Health / admin
     app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("system", system_status))
     app.add_handler(CommandHandler("version", version))
+    app.add_handler(CommandHandler("versionnotes", versionnotes_command))
     app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("ping", ping_command))
     app.add_handler(CommandHandler("diagnostics", diagnostics_command))
     app.add_handler(CommandHandler("clearcache", clearcache))
-    app.add_handler(CommandHandler("versionnotes", versionnotes_command))
-
-    # Deploy / server checks
     app.add_handler(CommandHandler("deploycheck", deploycheck_command))
-    app.add_handler(CommandHandler("reportcheck", reportcheck_command))
-    app.add_handler(CommandHandler("securitycheck", securitycheck_command))
     app.add_handler(CommandHandler("backup", backup_command))
     app.add_handler(CommandHandler("logs", logs_command))
     app.add_handler(CommandHandler("restart", restart_command))
+    app.add_handler(CommandHandler("securitycheck", securitycheck_command))
+    app.add_handler(CommandHandler("security", securitycheck_command))
 
-   # Daily report
-    app.add_handler(CommandHandler("report", report))
+    # Daily report
     app.add_handler(CommandHandler("brief", report))
+    app.add_handler(CommandHandler("report", report))
     app.add_handler(CommandHandler("snapshot", snapshot_command))
+    app.add_handler(CommandHandler("quality", reportcheck_command))
+    app.add_handler(CommandHandler("reportcheck", reportcheck_command))
     app.add_handler(CommandHandler("senddaily", senddaily_command))
     app.add_handler(CommandHandler("testdaily", testdaily_command))
     app.add_handler(CommandHandler("dailycheck", dailycheck_command))
@@ -141,6 +141,5 @@ def register_commands(app):
     # Friendly aliases
     app.add_handler(CommandHandler("stock", ticker))
     app.add_handler(CommandHandler("calendar", weeklycalendar_command))
-    app.add_handler(CommandHandler("quality", reportcheck_command))
     app.add_handler(CommandHandler("watch", watchlist_command))
     app.add_handler(CommandHandler("macro", global_market))
