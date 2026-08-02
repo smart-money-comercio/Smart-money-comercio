@@ -23,6 +23,7 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/snapshot — now uses Top 20 conviction intelligence",
     "/top10 — added action buckets for faster decision reads",
     "/top10 — added compressed Top 20 summary",
     "/top10 — evolving Top 20 conviction ranking",
@@ -57,6 +58,7 @@ PROTECTED_GUARDRAILS = [
 
 
 REPORT_INTELLIGENCE = [
+    "Snapshot powered by Top 20 conviction ranking",
     "Top 20 action buckets",
     "Evolving Top 20 conviction ranking",
     "Concise daily brief",

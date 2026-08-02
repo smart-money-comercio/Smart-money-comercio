@@ -12,15 +12,13 @@ from src.reports.daily_report import (
     get_clean_headline_themes,
     get_macro_pressure,
     load_global_context,
-    normalize_scores,
-    translate_smart_money_label,
+)
+from src.reports.top10_report import (
+    classify_action_bucket,
+    normalize_stock_items,
+    rank_candidates,
 )
 from src.scoring.scoring_engine import get_stock_scores
-from src.utils.score_display import (
-    get_action_label,
-    get_risk_label,
-    get_ticker,
-)
 
 
 def first_bullets(value: str, limit: int = 2) -> str:
@@ -46,17 +44,97 @@ def first_bullets(value: str, limit: int = 2) -> str:
     return "• No major change signal available."
 
 
-def build_top_watch_line(top_scores: list[dict]) -> str:
-    if not top_scores:
-        return "No top watch available."
+def format_score(score) -> str:
+    try:
+        return f"{float(score):.0f}/100"
+    except Exception:
+        return "N/A"
 
-    best = top_scores[0]
-    ticker = get_ticker(best)
-    label = translate_smart_money_label(best)
-    risk = get_risk_label(best)
-    action = get_action_label(best)
 
-    return f"{ticker} — {label} | Risk: {risk} | Action: {action}"
+def build_top20_candidates(limit: int = 20) -> list[dict]:
+    try:
+        raw_scores = get_stock_scores()
+    except Exception:
+        raw_scores = []
+
+    items = normalize_stock_items(raw_scores)
+    return rank_candidates(items, limit=limit)
+
+
+def get_top_idea(ranked: list[dict]) -> dict | None:
+    if not ranked:
+        return None
+
+    return ranked[0]
+
+
+def build_top_idea_line(top_idea: dict | None) -> str:
+    if not top_idea:
+        return "No top idea available."
+
+    return (
+        f"{top_idea.get('symbol', 'UNKNOWN')} — "
+        f"{top_idea.get('conviction', 'Developing')} | "
+        f"{format_score(top_idea.get('score'))}"
+    )
+
+
+def build_bucket_line(top_idea: dict | None) -> str:
+    if not top_idea:
+        return "Unavailable"
+
+    try:
+        return classify_action_bucket(top_idea)
+    except Exception:
+        return "Unavailable"
+
+
+def build_theme_line(top_idea: dict | None, fallback_themes: list[str]) -> str:
+    category = ""
+
+    if top_idea:
+        category = str(top_idea.get("category") or "").strip()
+
+    if category and category.lower() not in {
+        "unknown",
+        "none",
+        "n/a",
+        "uncategorized",
+    }:
+        return category
+
+    if fallback_themes:
+        return ", ".join(fallback_themes[:3])
+
+    return "No dominant theme detected."
+
+
+def build_top_idea_action(top_idea: dict | None) -> str:
+    if not top_idea:
+        return "Use /top10 to review the current opportunity board."
+
+    symbol = top_idea.get("symbol", "SYMBOL")
+    bucket = build_bucket_line(top_idea)
+    score = top_idea.get("score") or 0
+
+    try:
+        score = float(score)
+    except Exception:
+        score = 0
+
+    if bucket == "Best Setup / Pullback Candidates":
+        return f"Review /stock {symbol}; favor pullbacks or confirmation."
+
+    if bucket == "Watch for Confirmation":
+        return f"Review /stock {symbol}; wait for volume or catalyst confirmation."
+
+    if bucket == "High Risk / Wait":
+        return f"Review /risk {symbol}; elevated risk means patience first."
+
+    if score >= 75:
+        return f"Review /stock {symbol}; keep it high on watch."
+
+    return "Use /top10 to review the broader opportunity board."
 
 
 def build_mover_line(movers: list[dict]) -> str:
@@ -71,48 +149,51 @@ def build_mover_line(movers: list[dict]) -> str:
     )
 
 
-def build_snapshot_actions(top_scores: list[dict], movers: list[dict]) -> str:
+def build_snapshot_actions(top_idea: dict | None, movers: list[dict]) -> str:
     actions = []
-    best = top_scores[0] if top_scores else None
 
-    if best:
-        ticker = get_ticker(best)
-        actions.append(f"/scorecard {ticker}")
-        actions.append(f"/volume {ticker}")
+    if top_idea:
+        symbol = top_idea.get("symbol", "").strip()
+
+        if symbol:
+            actions.append(f"/stock {symbol}")
+            actions.append(f"/scorecard {symbol}")
     else:
         actions.append("/top10")
 
     if movers:
         actions.append(f"/stock {movers[0]['symbol']}")
 
+    actions.append("/top10")
     actions.append("/calendar")
 
-    return "\n".join(f"• {action}" for action in actions[:4])
+    deduped = []
+
+    for action in actions:
+        if action not in deduped:
+            deduped.append(action)
+
+    return "\n".join(f"• {action}" for action in deduped[:4])
 
 
 def build_snapshot_report() -> str:
-    try:
-        raw_scores = get_stock_scores()
-    except Exception:
-        raw_scores = []
-
-    scores = normalize_scores(raw_scores)
-    top_scores = scores[:1]
+    ranked = build_top20_candidates(limit=20)
+    top_idea = get_top_idea(ranked)
 
     global_context = load_global_context()
-    global_context["scores"] = scores
+    global_context["scores"] = ranked
 
     watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes(global_context)
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     market_tone = build_market_tone(movers)
 
     themes = get_clean_headline_themes(global_context, limit=3)
-    theme_text = ", ".join(themes) if themes else "No active theme detected."
+    theme_text = build_theme_line(top_idea, themes)
     pressure = get_macro_pressure(global_context)
 
     what_changed_today = build_what_changed_today(
         context=global_context,
-        top_scores=top_scores,
+        top_scores=ranked[:1],
         movers=movers,
         market_tone=market_tone,
         watchlist_symbols=watchlist_symbols,
@@ -125,14 +206,17 @@ def build_snapshot_report() -> str:
 Tone
 {market_tone}
 
-Main Theme
+Top Idea
+{build_top_idea_line(top_idea)}
+
+Best Bucket
+{build_bucket_line(top_idea)}
+
+Top Theme
 {theme_text}
 
 Macro Pressure
 {pressure}
-
-Top Watch
-{build_top_watch_line(top_scores)}
 
 Live Tape
 {build_mover_line(movers)}
@@ -140,8 +224,11 @@ Live Tape
 What Changed
 {first_bullets(what_changed_today, limit=2)}
 
+Action Read
+{build_top_idea_action(top_idea)}
+
 Next Actions
-{build_snapshot_actions(top_scores, movers)}
+{build_snapshot_actions(top_idea, movers)}
 
 Use /brief for the full daily read.
 Research only. Not financial advice.
@@ -153,7 +240,7 @@ async def snapshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     loading_message = await update.message.reply_text(
-        "📌 Building market snapshot..."
+        "📌 Building smarter market snapshot..."
     )
 
     try:
@@ -164,5 +251,5 @@ async def snapshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await loading_message.edit_text(
             "Smart Money AI Snapshot\n"
             "Status: unavailable right now.\n\n"
-            f"Error: {type(error).__name__}"
+            f"Error: {type(error).__name__}: {error}"
         )
