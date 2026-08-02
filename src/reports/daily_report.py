@@ -48,6 +48,13 @@ except Exception:
         return None
 
 from src.intelligence.ai_summary_engine import build_evolving_ai_summary
+from src.reports.top10_report import (
+    build_action_line,
+    build_watch_line,
+    build_why_line,
+    classify_action_bucket,
+    rank_candidates,
+)
 from src.reports.report_quality import enforce_daily_report_quality
 from src.intelligence.market_memory import build_what_changed_today
 
@@ -712,6 +719,64 @@ def collect_watchlist_movers(symbols: list[str], quotes: dict) -> list[dict]:
 
     return movers
 
+def build_v13_top_opportunities(scores: list[dict], limit: int = 2) -> str:
+    try:
+        ranked = rank_candidates(scores, limit=limit)
+    except Exception:
+        ranked = []
+
+    if not ranked:
+        return "No top opportunities available right now."
+
+    blocks = []
+
+    for index, item in enumerate(ranked[:limit], start=1):
+        symbol = item.get("symbol", "UNKNOWN")
+        score = item.get("score", 0)
+        conviction = item.get("conviction", "Developing")
+        label = item.get("label", "Signal developing")
+        signal = item.get("signal", label)
+        risk = item.get("risk", "Unknown")
+        action = item.get("action", "Watch")
+        category = item.get("category", "Uncategorized")
+
+        try:
+            score_text = f"{float(score):.0f}/100"
+        except Exception:
+            score_text = "N/A"
+
+        try:
+            bucket = classify_action_bucket(item)
+        except Exception:
+            bucket = "Watch for Confirmation"
+
+        try:
+            why = build_why_line(symbol, float(score or 0), label, category, signal)
+        except Exception:
+            why = f"{symbol} has a developing Smart Money signal."
+
+        try:
+            watch = build_watch_line(risk, action)
+        except Exception:
+            watch = f"Risk: {risk}. Action: {action}."
+
+        try:
+            action_read = build_action_line(float(score or 0), risk, action)
+        except Exception:
+            action_read = action or "Watch for confirmation."
+
+        blocks.append(
+            f"""
+{index}. {symbol} — {conviction} | {score_text}
+Bucket: {bucket}
+Why: {why}
+Watch: {watch}
+Action: {action_read}
+Command: /stock {symbol}
+""".strip()
+        )
+
+    return "\n\n".join(blocks)
 
 def build_market_tone(movers: list[dict]) -> str:
     if not movers:
@@ -1621,15 +1686,28 @@ def build_daily_report() -> str:
     today = now.strftime("%B %d, %Y")
     timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
+    raw_scores = []
+    scores = []
+    top_scores = []
+    scoring_error = ""
+
     try:
         raw_scores = get_stock_scores()
-        scoring_error = ""
+        scores = normalize_scores(raw_scores)
+        top_scores = scores[:MAX_TOP_OPPORTUNITIES]
     except Exception as exc:
-        raw_scores = []
         scoring_error = type(exc).__name__
+        raw_scores = []
+        scores = []
+        top_scores = []
 
-    scores = normalize_scores(raw_scores)
-    top_scores = scores[:MAX_TOP_OPPORTUNITIES]
+    if scoring_error:
+        top_opportunities = f"Scoring unavailable: {scoring_error}"
+    else:
+        top_opportunities = build_v13_top_opportunities(
+            scores,
+            limit=MAX_TOP_OPPORTUNITIES,
+        )
 
     global_context = load_global_context()
     global_context["scores"] = scores
@@ -1695,7 +1773,7 @@ Watchlist Movers
 {build_watchlist_snapshot(watchlist_symbols, movers)}
 
 Top Opportunities
-{build_top_opportunities(top_scores, global_context, scoring_error)}
+{top_opportunities}
 
 Risk Notes
 {build_risk_notes(top_scores, movers, global_context)}
