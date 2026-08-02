@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from src.reports.top10_report import build_top10_report
 from src.scoring.scoring_engine import get_stock_scores
+from src.utils.telegram_messages import edit_or_reply_long_message
 
 
 MAX_TOP_RESULTS = 20
@@ -15,16 +16,22 @@ async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     loading_message = await update.message.reply_text(
-        "🏆 Building Smart Money AI Top 20..."
+        "🏆 Building Top 20 Smart Money ideas..."
     )
 
     try:
-        stocks = await asyncio.to_thread(get_stock_scores)
-        message = build_top10_report(stocks, limit=MAX_TOP_RESULTS)
-        await loading_message.edit_text(message)
+        scores = await asyncio.to_thread(get_stock_scores)
+        report = await asyncio.to_thread(
+            build_top10_report,
+            scores,
+            MAX_TOP_RESULTS,
+        )
+
+        await edit_or_reply_long_message(loading_message, report)
 
     except Exception as error:
         await loading_message.edit_text(
-            "Unable to build Smart Money AI Top 20 right now.\n\n"
-            f"Error:\n{type(error).__name__}"
+            "Top 20 Smart Money Ideas\n"
+            "Status: unavailable right now.\n\n"
+            f"Error: {type(error).__name__}: {error}"
         )
