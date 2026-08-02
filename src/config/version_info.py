@@ -23,6 +23,7 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/top10 — added compressed Top 20 summary",
     "/top10 — evolving Top 20 conviction ranking",
     "Top 20 memory tracks new entrants, risers, fallers, and names that fell out",
     "/stock — evolving ticker intelligence card",

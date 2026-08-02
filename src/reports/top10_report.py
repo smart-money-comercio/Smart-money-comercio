@@ -1,168 +1,346 @@
+from collections import Counter
 from typing import Any
 
+from src.intelligence.top10_evolution import (
+    build_top10_change_summary,
+    format_change_summary,
+    record_top10_ranking,
+    safe_float,
+)
 from src.utils.score_display import (
     get_action_label,
     get_category,
-    get_portfolio_fit,
+    get_risk_label,
     get_signal_strength,
     get_smart_money_label,
     get_ticker,
-    get_volume_label,
 )
 
 
-SMART_MONEY_LABEL_TRANSLATIONS = {
-    "Core Smart Money Quality": "Quality setup",
-    "Core Smart Money quality": "Quality setup",
-    "Prime Opportunity": "Top-ranked setup",
-    "High Conviction": "High-conviction setup",
-    "Strong Watch": "Strong watchlist candidate",
-    "Developing Watch": "Developing setup",
-    "Early Watch": "Early-stage setup",
-    "Neutral": "Neutral setup",
-    "Weak Signal": "Weak signal",
-}
+def normalize_stock_items(stocks: Any) -> list[dict]:
+    if isinstance(stocks, list):
+        return [item for item in stocks if isinstance(item, dict)]
 
+    if isinstance(stocks, dict):
+        if "scores" in stocks and isinstance(stocks["scores"], list):
+            return [item for item in stocks["scores"] if isinstance(item, dict)]
 
-REPORT_PHRASE_REPLACEMENTS = {
-    "Core Smart Money quality is strong": "Smart Money ranking is strong",
-    "core smart money quality is strong": "Smart Money ranking is strong",
-    "Core Smart Money Quality": "Quality setup",
-    "core smart money quality": "quality setup",
-}
+        items = []
 
+        for key, value in stocks.items():
+            if isinstance(value, dict):
+                copy = dict(value)
+                copy.setdefault("ticker", key)
+                copy.setdefault("symbol", key)
+                items.append(copy)
 
-def clean_text(value: Any, max_length: int = 140) -> str:
-    text = " ".join(str(value or "").split())
+        return items
 
-    for old, new in REPORT_PHRASE_REPLACEMENTS.items():
-        text = text.replace(old, new)
-
-    if len(text) <= max_length:
-        return text
-
-    return text[: max_length - 3].rstrip() + "..."
-
-
-def safe_number(value: Any) -> float:
-    try:
-        if value is None:
-            return 0.0
-
-        return float(value)
-    except Exception:
-        return 0.0
+    return []
 
 
 def get_score_value(stock: dict) -> float:
-    return safe_number(
-        stock.get("final_score")
-        or stock.get("score")
-        or stock.get("smart_money_score")
-        or stock.get("total_score")
-        or stock.get("rating_score")
-    )
+    for key in [
+        "score",
+        "total_score",
+        "smart_money_score",
+        "overall_score",
+        "final_score",
+        "composite_score",
+    ]:
+        value = safe_float(stock.get(key))
+
+        if value is not None:
+            return value
+
+    return 0.0
 
 
-def translate_label(stock: dict) -> str:
-    raw_label = get_smart_money_label(stock)
-    return SMART_MONEY_LABEL_TRANSLATIONS.get(raw_label, raw_label)
+def normalize_symbol(stock: dict) -> str:
+    symbol = get_ticker(stock) or stock.get("symbol") or stock.get("ticker")
+    return str(symbol or "UNKNOWN").upper().replace("$", "").strip()
 
 
-def first_text(value: Any, fallback: str, max_length: int = 130) -> str:
-    if isinstance(value, list):
-        for item in value:
-            text = clean_text(item, max_length)
+def conviction_label(score: float, signal: str, risk: str) -> str:
+    risk_lower = str(risk or "").lower()
 
-            if text:
-                return text
+    if score >= 85 and "high" not in risk_lower:
+        return "High Conviction"
 
-        return fallback
+    if score >= 80:
+        return "Strong Watch"
 
-    if isinstance(value, tuple):
-        return first_text(list(value), fallback, max_length)
+    if score >= 70:
+        return "Constructive Watch"
 
-    if isinstance(value, str) and value.strip():
-        return clean_text(value, max_length)
-
-    return fallback
+    return "Developing"
 
 
-def get_thesis(stock: dict) -> str:
-    return first_text(
-        stock.get("strengths")
-        or stock.get("reason")
-        or stock.get("thesis")
-        or stock.get("bull_case")
-        or stock.get("pros"),
-        "Setup ranks well, but the thesis still needs price and volume confirmation.",
-        max_length=135,
-    )
+def compact_text(value: str, max_chars: int = 90) -> str:
+    text = " ".join(str(value or "").split())
+
+    if len(text) <= max_chars:
+        return text
+
+    return text[: max_chars - 3].rstrip() + "..."
 
 
-def get_watch_reason(stock: dict) -> str:
-    category = str(get_category(stock) or "").upper()
-    action = get_action_label(stock)
+def build_why_line(symbol: str, score: float, label: str, category: str, signal: str) -> str:
+    category_clean = str(category or "").strip()
 
-    if "AI" in category or "SEMICONDUCTOR" in category or "TECH" in category:
-        return f"AI/growth setup; confirm Nasdaq, earnings quality, and volume before acting. Action: {action}."
+    if category_clean and category_clean.lower() not in {
+        "unknown",
+        "none",
+        "n/a",
+        "uncategorized",
+    }:
+        return compact_text(f"{category_clean} setup; {label}; {signal}.", 95)
 
-    if "DEFENSE" in category or "AEROSPACE" in category or "DRONE" in category or "MISSILE" in category:
-        return f"Defense theme exposure; prioritize real DoD, munitions, cyber, ISR, or autonomous-systems demand. Action: {action}."
-
-    if "ENERGY" in category or "OIL" in category or "POWER" in category or "UTILITY" in category:
-        return f"Macro-sensitive setup; watch oil, rates, power demand, and infrastructure confirmation. Action: {action}."
-
-    if "BANK" in category or "FINANCIAL" in category or "CREDIT" in category:
-        return f"Financial conditions matter; confirm credit quality, yields, and market risk appetite. Action: {action}."
-
-    return f"Strong enough to monitor, but still needs confirmation before sizing. Action: {action}."
+    return compact_text(f"{label}; {signal}; score {score:.0f}/100.", 95)
 
 
-def sort_stocks(stocks: list[dict]) -> list[dict]:
-    return sorted(
-        stocks or [],
-        key=get_score_value,
+def build_watch_line(risk: str, action: str) -> str:
+    risk_clean = str(risk or "Unknown").strip()
+    action_clean = str(action or "Watch").strip()
+
+    return compact_text(f"Risk: {risk_clean}. Action: {action_clean}.", 95)
+
+
+def build_action_line(score: float, risk: str, action: str) -> str:
+    risk_lower = str(risk or "").lower()
+    action_clean = str(action or "").strip()
+
+    if score >= 85 and "high" not in risk_lower:
+        return "Favor pullbacks or confirmation."
+
+    if score >= 75:
+        return "Watch for volume/catalyst confirmation."
+
+    if "high" in risk_lower:
+        return "Use caution; risk is elevated."
+
+    return action_clean or "Keep on watch."
+
+
+def enrich_stock(stock: dict) -> dict:
+    score = get_score_value(stock)
+    symbol = normalize_symbol(stock)
+
+    try:
+        label = get_smart_money_label(stock)
+    except Exception:
+        label = "Signal developing"
+
+    try:
+        signal = get_signal_strength(stock)
+    except Exception:
+        signal = label
+
+    try:
+        risk = get_risk_label(stock)
+    except Exception:
+        risk = "Unknown"
+
+    try:
+        action = get_action_label(stock)
+    except Exception:
+        action = "Watch"
+
+    try:
+        category = get_category(stock)
+    except Exception:
+        category = "Uncategorized"
+
+    return {
+        "symbol": symbol,
+        "score": score,
+        "label": label,
+        "signal": signal,
+        "risk": risk,
+        "action": action,
+        "category": category,
+        "conviction": conviction_label(score, signal, risk),
+    }
+
+
+def rank_candidates(stocks: list[dict], limit: int = 20) -> list[dict]:
+    enriched = [enrich_stock(stock) for stock in stocks]
+
+    enriched.sort(
+        key=lambda item: (
+            item["score"],
+            1 if "high" not in str(item["risk"]).lower() else 0,
+            item["symbol"],
+        ),
         reverse=True,
     )
 
+    return enriched[:limit]
 
-def build_top10_report(stocks: list[dict], limit: int = 20) -> str:
-    if not stocks:
-        return "No Smart Money ideas are available right now."
 
-    limit = max(1, int(limit or 20))
-    ranked_stocks = sort_stocks(stocks)
-    top_stocks = ranked_stocks[:limit]
+def is_high_risk(item: dict) -> bool:
+    risk = str(item.get("risk") or "").lower()
 
-    lines = [
-        f"🔥 Top {limit} Smart Money Ideas",
-        "",
-        "Ranked research list based on Smart Money AI scoring, theme fit, signal strength, portfolio fit, and confirmation needs.",
-        "",
-    ]
+    return any(
+        phrase in risk
+        for phrase in [
+            "high",
+            "elevated",
+            "aggressive",
+            "speculative",
+            "volatile",
+        ]
+    )
 
-    for index, stock in enumerate(top_stocks, start=1):
-        ticker = get_ticker(stock)
-        label = translate_label(stock)
-        signal = get_signal_strength(stock)
-        fit = get_portfolio_fit(stock)
-        volume = get_volume_label(stock)
-        action = get_action_label(stock)
-        category = get_category(stock)
-        score = get_score_value(stock)
-        thesis = get_thesis(stock)
-        watch_reason = get_watch_reason(stock)
 
-        lines.append(
-            f"{index}. {ticker} — {label}"
-            f"\n   Score: {score:.1f} | Signal: {signal} | Fit: {fit}"
-            f"\n   Theme: {category} | Volume: {volume}"
-            f"\n   Why it matters: {thesis}"
-            f"\n   My read: {watch_reason}"
+def clean_category(category: str) -> str:
+    value = str(category or "").strip()
+
+    if not value:
+        return ""
+
+    if value.lower() in {"unknown", "none", "n/a", "uncategorized"}:
+        return ""
+
+    return value
+
+
+def build_top20_summary(ranked: list[dict]) -> str:
+    if not ranked:
+        return "No ranked ideas available."
+
+    conviction_counts = Counter(item.get("conviction") or "Developing" for item in ranked)
+    categories = [clean_category(item.get("category")) for item in ranked]
+    categories = [category for category in categories if category]
+    category_counts = Counter(categories)
+
+    high_conviction = conviction_counts.get("High Conviction", 0)
+    strong_watch = conviction_counts.get("Strong Watch", 0)
+    constructive = conviction_counts.get("Constructive Watch", 0)
+
+    top_idea = ranked[0]
+    top_symbol = top_idea.get("symbol", "UNKNOWN")
+    top_score = top_idea.get("score", 0)
+
+    highest_risk = [item["symbol"] for item in ranked if is_high_risk(item)]
+    highest_risk_text = ", ".join(highest_risk[:4]) if highest_risk else "None flagged"
+
+    most_common_theme = "Mixed"
+    if category_counts:
+        most_common_theme = category_counts.most_common(1)[0][0]
+
+    if high_conviction:
+        best_action = "Review the top 3 with /stock and wait for confirmation."
+    elif strong_watch:
+        best_action = "Track the strongest watches for volume or catalyst confirmation."
+    else:
+        best_action = "Use this as a watchlist, not an action list."
+
+    return f"""
+Top 20 Summary
+• Top idea: {top_symbol} — {top_score:.0f}/100
+• High Conviction: {high_conviction}
+• Strong Watch: {strong_watch}
+• Constructive Watch: {constructive}
+• Most common theme: {most_common_theme}
+• Highest risk names: {highest_risk_text}
+• Best next action: {best_action}
+""".strip()
+
+
+def format_candidate(index: int, item: dict) -> str:
+    symbol = item["symbol"]
+    score = item["score"]
+    label = item["label"]
+    signal = item["signal"]
+    risk = item["risk"]
+    action = item["action"]
+    category = item["category"]
+
+    return f"""
+{index}. {symbol} — {item["conviction"]} | {score:.0f}/100
+Why: {build_why_line(symbol, score, label, category, signal)}
+Watch: {build_watch_line(risk, action)}
+Action: {build_action_line(score, risk, action)}
+""".strip()
+
+
+def trim_change_text(change_text: str, max_chars: int = 850) -> str:
+    text = str(change_text or "").strip()
+
+    if len(text) <= max_chars:
+        return text
+
+    lines = []
+    total = 0
+
+    for line in text.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if total + len(line) + 1 > max_chars:
+            break
+
+        lines.append(line)
+        total += len(line) + 1
+
+    if not lines:
+        return compact_text(text, max_chars)
+
+    return "\n".join(lines)
+
+
+def build_top10_report(stocks, limit: int = 20, record_memory: bool = True) -> str:
+    items = normalize_stock_items(stocks)
+
+    if not items:
+        return """
+Top 20 Smart Money Ideas
+
+Status: No scoring data available right now.
+
+Use:
+/brief
+/snapshot
+/stock SYMBOL
+""".strip()
+
+    ranked = rank_candidates(items, limit=limit)
+    summary = build_top20_summary(ranked)
+
+    if record_memory:
+        evolution = record_top10_ranking(ranked, limit=limit)
+        changes = build_top10_change_summary(
+            evolution.get("previous"),
+            evolution.get("current"),
         )
+        change_text = trim_change_text(format_change_summary(changes))
+    else:
+        change_text = "Ranking memory disabled for this run."
 
-    lines.append("")
-    lines.append("Note: Research only. Not financial advice.")
+    body = "\n\n".join(
+        format_candidate(index, item)
+        for index, item in enumerate(ranked, start=1)
+    )
 
-    return "\n\n".join(lines)
+    return f"""
+🏆 Top {limit} Smart Money Ideas
+
+{summary}
+
+Ranking Changes
+{change_text}
+
+Ideas
+{body}
+
+Use:
+/snapshot
+/brief
+/stock SYMBOL
+/scorecard SYMBOL
+
+Research only. Not financial advice.
+""".strip()
