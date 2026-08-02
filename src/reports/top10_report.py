@@ -247,6 +247,81 @@ Top 20 Summary
 • Best next action: {best_action}
 """.strip()
 
+def classify_action_bucket(item: dict) -> str:
+    score = item.get("score") or 0
+    risk = str(item.get("risk") or "").lower()
+    action = str(item.get("action") or "").lower()
+    conviction = str(item.get("conviction") or "").lower()
+
+    weak_action_terms = [
+        "avoid",
+        "sell",
+        "reduce",
+        "weak",
+        "caution",
+        "no action",
+    ]
+
+    high_risk_terms = [
+        "high",
+        "elevated",
+        "aggressive",
+        "speculative",
+        "volatile",
+    ]
+
+    if any(term in action for term in weak_action_terms) and score < 75:
+        return "Weak / Avoid"
+
+    if any(term in risk for term in high_risk_terms):
+        return "High Risk / Wait"
+
+    if score >= 85 or "high conviction" in conviction:
+        return "Best Setup / Pullback Candidates"
+
+    if score >= 75 or "strong watch" in conviction:
+        return "Watch for Confirmation"
+
+    return "Developing / Watchlist Only"
+
+
+def build_action_buckets(ranked: list[dict]) -> str:
+    bucket_order = [
+        "Best Setup / Pullback Candidates",
+        "Watch for Confirmation",
+        "High Risk / Wait",
+        "Developing / Watchlist Only",
+        "Weak / Avoid",
+    ]
+
+    buckets = {bucket: [] for bucket in bucket_order}
+
+    for item in ranked:
+        bucket = classify_action_bucket(item)
+        symbol = item.get("symbol")
+
+        if symbol:
+            buckets.setdefault(bucket, []).append(symbol)
+
+    lines = ["Action Buckets"]
+
+    for bucket in bucket_order:
+        symbols = buckets.get(bucket) or []
+
+        if not symbols:
+            continue
+
+        symbol_text = ", ".join(symbols[:8])
+
+        if len(symbols) > 8:
+            symbol_text += f", +{len(symbols) - 8} more"
+
+        lines.append(f"{bucket}:\n• {symbol_text}")
+
+    if len(lines) == 1:
+        return "Action Buckets\n• No clear action buckets available."
+
+    return "\n\n".join(lines)
 
 def format_candidate(index: int, item: dict) -> str:
     symbol = item["symbol"]
@@ -309,6 +384,7 @@ Use:
 
     ranked = rank_candidates(items, limit=limit)
     summary = build_top20_summary(ranked)
+    action_buckets = build_action_buckets(ranked)
 
     if record_memory:
         evolution = record_top10_ranking(ranked, limit=limit)
@@ -329,6 +405,8 @@ Use:
 🏆 Top {limit} Smart Money Ideas
 
 {summary}
+
+{action_buckets}
 
 Ranking Changes
 {change_text}

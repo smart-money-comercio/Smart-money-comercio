@@ -23,6 +23,7 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/top10 — added action buckets for faster decision reads",
     "/top10 — added compressed Top 20 summary",
     "/top10 — evolving Top 20 conviction ranking",
     "Top 20 memory tracks new entrants, risers, fallers, and names that fell out",
@@ -56,6 +57,7 @@ PROTECTED_GUARDRAILS = [
 
 
 REPORT_INTELLIGENCE = [
+    "Top 20 action buckets",
     "Evolving Top 20 conviction ranking",
     "Concise daily brief",
     "Fast market snapshot",
