@@ -241,6 +241,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
     from src.reports.earnings_intelligence_report import build_earnings_intelligence_report
     from src.reports.analyst_intelligence_report import build_analyst_intelligence_report
     from src.reports.risk_intelligence_report import build_risk_intelligence_report
+    from src.reports.portfolio_intelligence_report import build_portfolio_intelligence_report
     from src.reports.scorecard_intelligence_report import build_scorecard_intelligence_report
     from src.reports.stock_intelligence_report import build_stock_intelligence_report
     from src.reports.volume_intelligence_report import build_volume_intelligence_report
@@ -351,6 +352,25 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
                 "Evolving Analysis",
                 "Filing Action",
             ],
+        )
+    )
+
+    results.append(
+        check_evolving_report(
+            name="/portfolio",
+            builder=build_portfolio_intelligence_report,
+            required_sections=[
+                "Portfolio Intelligence",
+                "Portfolio Read",
+                "Best Current Opportunities",
+                "Highest-Risk Names",
+                "Confirmation Queue",
+                "Theme Exposure",
+                "What Changed",
+                "Evolving Analysis",
+                "Portfolio Action",
+            ],
+            max_chars=12000,
         )
     )
     

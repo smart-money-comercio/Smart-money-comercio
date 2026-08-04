@@ -1,0 +1,65 @@
+{
+  "records": [
+    {
+      "action_bias": "Require confirmation from /volume, /earnings, /analyst, and /filing before sizing.",
+      "average_score": 75.405,
+      "checked_at": "2026-08-04 13:33:42",
+      "confirmation_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "AVGO",
+        "ITA",
+        "CRWD",
+        "VOO"
+      ],
+      "elevated_risk_count": 0,
+      "high_conviction_count": 2,
+      "high_risk_symbols": [],
+      "portfolio_stance": "Watchlist-heavy / confirmation needed",
+      "top_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "AVGO",
+        "ITA",
+        "CRWD",
+        "VOO"
+      ],
+      "top_theme": "ETF / Semiconductor / AI Infrastructure"
+    },
+    {
+      "action_bias": "Require confirmation from /volume, /earnings, /analyst, and /filing before sizing.",
+      "average_score": 75.405,
+      "checked_at": "2026-08-04 13:33:51",
+      "confirmation_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "AVGO",
+        "ITA",
+        "CRWD",
+        "VOO"
+      ],
+      "elevated_risk_count": 0,
+      "high_conviction_count": 2,
+      "high_risk_symbols": [],
+      "portfolio_stance": "Watchlist-heavy / confirmation needed",
+      "top_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "AVGO",
+        "ITA",
+        "CRWD",
+        "VOO"
+      ],
+      "top_theme": "ETF / Semiconductor / AI Infrastructure"
+    }
+  ],
+  "updated_at": "2026-08-04 13:33:51"
+}

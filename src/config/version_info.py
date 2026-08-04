@@ -23,6 +23,8 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/portfolio — upgraded into evolving portfolio-level intelligence",
+    "Portfolio memory tracks stance, top ideas, high-risk names, confirmation queue, and theme exposure",
     "/sec and /filing — upgraded into evolving SEC disclosure and portfolio-impact intelligence",
     "Filing memory tracks disclosure status, filing risk, thesis effect, and portfolio impact changes",
     "/analyst — upgraded into evolving Wall Street consensus intelligence",
@@ -66,6 +68,7 @@ PROTECTED_GUARDRAILS = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving portfolio intelligence and portfolio-impact analysis",
     "Evolving SEC filing and portfolio-impact analysis",
     "Evolving analyst consensus and Smart Money alignment analysis",
     "Evolving earnings and catalyst intelligence",
