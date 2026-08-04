@@ -239,6 +239,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
 
     from src.reports.daily_report import build_daily_report
     from src.reports.earnings_intelligence_report import build_earnings_intelligence_report
+    from src.reports.analyst_intelligence_report import build_analyst_intelligence_report
     from src.reports.risk_intelligence_report import build_risk_intelligence_report
     from src.reports.scorecard_intelligence_report import build_scorecard_intelligence_report
     from src.reports.stock_intelligence_report import build_stock_intelligence_report
@@ -315,6 +316,22 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
                 "Evolving Analysis",
                 "What Would Confirm The Thesis",
                 "Catalyst Action",
+            ],
+        )
+    )
+
+    results.append(
+        check_evolving_report(
+            name="/analyst",
+            builder=lambda: build_analyst_intelligence_report(symbol),
+            required_sections=[
+                "Analyst Consensus Intelligence",
+                "Analyst Targets",
+                "Consensus Read",
+                "Smart Money vs Wall Street",
+                "What Changed",
+                "Evolving Analysis",
+                "Analyst Action",
             ],
         )
     )

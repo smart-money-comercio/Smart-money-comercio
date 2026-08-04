@@ -1,0 +1,33 @@
+{
+  "tickers": {
+    "NVDA": [
+      {
+        "action": "Watch Closely",
+        "alignment": "Smart Money ahead of Street",
+        "analyst_risk": "Medium",
+        "checked_at": "2026-08-04 12:46:37",
+        "consensus": "Mixed / unclear",
+        "price_target": null,
+        "risk": "Balanced",
+        "score": 87.0,
+        "signal": "Improving",
+        "symbol": "NVDA",
+        "upside_percent": null
+      },
+      {
+        "action": "Watch Closely",
+        "alignment": "Smart Money ahead of Street",
+        "analyst_risk": "Medium",
+        "checked_at": "2026-08-04 12:46:50",
+        "consensus": "Mixed / unclear",
+        "price_target": null,
+        "risk": "Balanced",
+        "score": 87.0,
+        "signal": "Improving",
+        "symbol": "NVDA",
+        "upside_percent": null
+      }
+    ]
+  },
+  "updated_at": "2026-08-04 12:46:50"
+}

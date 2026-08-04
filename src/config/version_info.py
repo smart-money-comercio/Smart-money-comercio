@@ -23,6 +23,8 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/analyst — upgraded into evolving Wall Street consensus intelligence",
+    "Analyst memory tracks consensus, alignment, analyst risk, targets, and Smart Money disconnects",
     "/earnings — upgraded into evolving catalyst intelligence",
     "Earnings memory tracks catalyst status, risk, score, timing, and action changes",
     "/risk — upgraded into downside and validation intelligence",
@@ -62,6 +64,7 @@ PROTECTED_GUARDRAILS = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving analyst consensus and Smart Money alignment analysis",
     "Evolving earnings and catalyst intelligence",
     "Risk intelligence with reducers and trigger warnings",
     "Brief Top Opportunities powered by conviction ranking",
