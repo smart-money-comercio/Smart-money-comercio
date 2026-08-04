@@ -18,7 +18,7 @@ fi
 
 echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
-echo "1/5 Checking required files..."
+echo "1/6 Checking required files..."
 
 required_files=(
   "src/bot.py"
@@ -47,19 +47,23 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-echo "2/5 Compiling Python files..."
+echo "2/6 Compiling Python files..."
 
 "$PYTHON_BIN" -m compileall src scripts
 
-echo "3/5 Checking command catalog..."
+echo "3/6 Checking command catalog..."
 
 "$PYTHON_BIN" scripts/check_command_catalog.py
 
-echo "4/5 Checking daily report quality..."
+echo "4/6 Checking daily report quality..."
 
 "$PYTHON_BIN" scripts/check_daily_report_quality.py
 
-echo "5/5 Checking critical imports and required functions..."
+echo "5/6 Checking intelligence quality..."
+
+"$PYTHON_BIN" scripts/check_intelligence_quality.py
+
+echo "6/6 Checking critical imports and required functions..."
 
 "$PYTHON_BIN" - <<'PY'
 import importlib
@@ -135,4 +139,4 @@ for module_name, function_name in function_checks:
 print("\nPreflight checks passed.")
 PY
 
-echo "Smart Money AI preflight passed."
+echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py
