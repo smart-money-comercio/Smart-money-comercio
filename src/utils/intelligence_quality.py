@@ -246,6 +246,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
     from src.reports.stock_intelligence_report import build_stock_intelligence_report
     from src.reports.defense_intelligence_report import build_defense_intelligence_report
     from src.reports.volume_intelligence_report import build_volume_intelligence_report
+    from src.reports.global_intelligence_report import build_global_intelligence_report
     from src.reports.filing_intelligence_report import build_filing_intelligence_report
     from src.scoring.scoring_engine import get_stock_scores
 
@@ -393,7 +394,26 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
             max_chars=12000,
         )
     )
-    
+
+    results.append(
+        check_evolving_report(
+            name="/global",
+            builder=lambda: build_global_intelligence_report(force_refresh=False),
+            required_sections=[
+                "Global Macro Intelligence",
+                "Market Tape",
+                "Official-Source Themes",
+                "Official-Source Data Points",
+                "Macro Pressure",
+                "Portfolio Read",
+                "What Changed",
+                "Evolving Analysis",
+                "Global Action",
+            ],
+            max_chars=12000,
+        )
+    )
+
     results.append(
         check_standard_report(
             name="/top10",

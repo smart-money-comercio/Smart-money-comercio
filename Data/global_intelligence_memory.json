@@ -1,0 +1,21 @@
+{
+  "records": [
+    {
+      "checked_at": "2026-08-04 14:31:50",
+      "dollar_move": -1.5220433869839005,
+      "macro_regime": "Cautious / validation-first with Fed / Rates pressure",
+      "nasdaq_move": 7.035467829404851,
+      "oil_move": -3.946385592165321,
+      "portfolio_impact": "Be selective with growth and AI names; require volume and catalyst confirmation.",
+      "pressure_count": 4,
+      "risk_regime": "Cautious / validation-first",
+      "source_error_count": 2,
+      "source_item_count": 28,
+      "sp500_move": 4.300302337665136,
+      "tlt_move": -1.7153371320037907,
+      "top_theme": "Fed / Rates",
+      "vix_move": -20.280735721200394
+    }
+  ],
+  "updated_at": "2026-08-04 14:31:50"
+}

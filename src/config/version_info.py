@@ -23,6 +23,8 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/global — upgraded into live-source-aware Global Macro Intelligence",
+    "Global intelligence scans Fed, Treasury, White House, EIA, Defense.gov, market tape, and geopolitical context",
     "/defense — upgraded into live-source-aware Defense / AI Warfare Portfolio Intelligence",
     "Defense intelligence scans White House, Defense.gov, contracts, Congress/NDAA context, and scored defense names",
     "/portfolio — upgraded into evolving portfolio-level intelligence",
@@ -70,6 +72,7 @@ PROTECTED_GUARDRAILS = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving global macro, policy, rates, oil, dollar, geopolitical, and portfolio-regime analysis",
     "Evolving defense, AI warfare, procurement, munitions, cyber, ISR, and geopolitical portfolio analysis",
     "Evolving portfolio intelligence and portfolio-impact analysis",
     "Evolving SEC filing and portfolio-impact analysis",
