@@ -244,6 +244,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
     from src.reports.scorecard_intelligence_report import build_scorecard_intelligence_report
     from src.reports.stock_intelligence_report import build_stock_intelligence_report
     from src.reports.volume_intelligence_report import build_volume_intelligence_report
+    from src.reports.filing_intelligence_report import build_filing_intelligence_report
     from src.scoring.scoring_engine import get_stock_scores
 
     results = []
@@ -336,6 +337,23 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
         )
     )
 
+    results.append(
+        check_evolving_report(
+            name="/filing",
+            builder=lambda: build_filing_intelligence_report(symbol),
+            required_sections=[
+                "SEC / Filing Intelligence",
+                "Filing Context",
+                "Filing Read",
+                "Disclosure Signals",
+                "Portfolio Impact",
+                "What Changed",
+                "Evolving Analysis",
+                "Filing Action",
+            ],
+        )
+    )
+    
     results.append(
         check_standard_report(
             name="/top10",

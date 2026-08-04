@@ -16,6 +16,7 @@ os.environ.setdefault("DAILY_REPORT_LIVE_QUOTES", "0")
 # Redirect runtime memory so the guardrail does not pollute production memory.
 os.environ["TICKER_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "ticker_intelligence_memory.json")
 os.environ["TOP10_EVOLUTION_MEMORY_FILE"] = str(TEMP_DIR / "top10_evolution_memory.json")
+os.environ["FILING_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "filing_intelligence_memory.json")
 os.environ["VOLUME_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "volume_intelligence_memory.json")
 os.environ["ANALYST_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "analyst_intelligence_memory.json")
 os.environ["EARNINGS_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "earnings_intelligence_memory.json")

@@ -1,0 +1,37 @@
+{
+  "tickers": {
+    "NVDA": [
+      {
+        "action": "Watch Closely",
+        "category": "Growth / AI Infrastructure",
+        "checked_at": "2026-08-04 13:20:08",
+        "disclosure_status": "No obvious filing conflict detected",
+        "filing_date": "Unavailable",
+        "filing_risk": "Medium",
+        "filing_type": "Unavailable",
+        "portfolio_impact": "Hold as monitored core candidate",
+        "risk": "Balanced",
+        "score": 87.0,
+        "signal": "Improving",
+        "symbol": "NVDA",
+        "thesis_effect": "No major filing conflict"
+      },
+      {
+        "action": "Watch Closely",
+        "category": "Growth / AI Infrastructure",
+        "checked_at": "2026-08-04 13:20:19",
+        "disclosure_status": "No obvious filing conflict detected",
+        "filing_date": "Unavailable",
+        "filing_risk": "Medium",
+        "filing_type": "Unavailable",
+        "portfolio_impact": "Hold as monitored core candidate",
+        "risk": "Balanced",
+        "score": 87.0,
+        "signal": "Improving",
+        "symbol": "NVDA",
+        "thesis_effect": "No major filing conflict"
+      }
+    ]
+  },
+  "updated_at": "2026-08-04 13:20:19"
+}

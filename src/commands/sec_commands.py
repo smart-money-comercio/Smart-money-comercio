@@ -1,101 +1,98 @@
+import asyncio
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.sec.sec_data import get_sec_filings
-from src.sec.sec_summary import summarize_sec_filing
+from src.reports.filing_intelligence_report import build_filing_intelligence_report
+from src.utils.telegram_messages import edit_or_reply_long_message
 
 
-async def sec(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def clean_symbol(value: str) -> str:
+    return str(value or "").strip().upper().replace("$", "")
+
+
+async def sec_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+
     if not context.args:
-        await update.message.reply_text("Usage: /sec PLTR")
+        await update.message.reply_text("Usage: /sec SYMBOL", parse_mode=None)
         return
 
-    symbol = context.args[0].upper()
+    symbol = clean_symbol(context.args[0])
 
-    try:
-        data = get_sec_filings(symbol, limit=5)
-    except Exception as error:
-        await update.message.reply_text(
-            f"SEC data error for {symbol}:\n{error}"
-        )
-        return
-
-    if not data["found"]:
-        await update.message.reply_text(
-            f"SEC filings not found for {symbol}.\n"
-            f"Error: {data.get('error', 'Unknown error')}"
-        )
-        return
-
-    text = f"📄 SEC FILINGS: {data['ticker']}\n\n"
-    text += f"Company: {data['company_name']}\n"
-    text += f"CIK: {data['cik']}\n\n"
-
-    for filing in data["filings"]:
-        text += (
-            f"{filing['form']}\n"
-            f"Filed: {filing['filing_date']}\n"
-            f"Report Date: {filing['report_date']}\n"
-            f"Document: {filing['document']}\n"
-            f"{filing['url']}\n\n"
-        )
-
-    text += (
-        "Note: SEC filings are official regulatory documents. "
-        "Review the full filing before making investment decisions."
-    )
-
-    await update.message.reply_text(text)
-
-
-async def filing(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /filing PLTR or /filing PLTR 10-K")
-        return
-
-    symbol = context.args[0].upper()
-
-    form_filter = None
-    if len(context.args) > 1:
-        form_filter = context.args[1].upper()
-
-    await update.message.reply_text(
-        f"📄 Summarizing SEC filing for {symbol}..."
+    loading_message = await update.message.reply_text(
+        f"📄 Building {symbol} SEC disclosure intelligence...",
+        parse_mode=None,
     )
 
     try:
-        result = summarize_sec_filing(symbol, form_filter)
+        message = await asyncio.to_thread(
+            build_filing_intelligence_report,
+            symbol,
+            "sec",
+        )
+
+        await edit_or_reply_long_message(
+            update=update,
+            loading_message=loading_message,
+            text=message,
+            title=f"📄 SEC Disclosure Intelligence: {symbol}",
+            parse_mode=None,
+        )
+
     except Exception as error:
-        await update.message.reply_text(
-            f"Filing summary error for {symbol}:\n{error}"
+        await loading_message.edit_text(
+            f"{symbol} SEC Disclosure Intelligence\n"
+            "Status: unavailable right now.\n\n"
+            f"Error: {type(error).__name__}: {error}",
+            parse_mode=None,
         )
+
+
+async def filing_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
         return
 
-    if not result["found"]:
-        await update.message.reply_text(
-            f"Could not summarize filing for {symbol}.\n"
-            f"Error: {result.get('error', 'Unknown error')}"
-        )
+    if not context.args:
+        await update.message.reply_text("Usage: /filing SYMBOL", parse_mode=None)
         return
 
-    message = f"""
-📄 AI SEC FILING SUMMARY: {result['ticker']}
+    symbol = clean_symbol(context.args[0])
 
-Company:
-{result['company_name']}
+    loading_message = await update.message.reply_text(
+        f"📄 Building {symbol} filing portfolio-impact read...",
+        parse_mode=None,
+    )
 
-Form:
-{result['form']}
+    try:
+        message = await asyncio.to_thread(
+            build_filing_intelligence_report,
+            symbol,
+            "filing",
+        )
 
-Filed:
-{result['filing_date']}
+        await edit_or_reply_long_message(
+            update=update,
+            loading_message=loading_message,
+            text=message,
+            title=f"📄 Filing Intelligence: {symbol}",
+            parse_mode=None,
+        )
 
-Report Date:
-{result['report_date']}
+    except Exception as error:
+        await loading_message.edit_text(
+            f"{symbol} Filing Intelligence\n"
+            "Status: unavailable right now.\n\n"
+            f"Error: {type(error).__name__}: {error}",
+            parse_mode=None,
+        )
 
-🧠 SUMMARY
 
-{result['summary']}
-"""
+# Compatibility aliases in case register_commands.py imports these names.
+async def sec(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await sec_command(update, context)
 
-    await update.message.reply_text(message)
+
+async def filing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await filing_command(update, context)
