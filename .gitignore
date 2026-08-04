@@ -66,3 +66,22 @@ Data/volume_intelligence_memory.json
 # Runtime earnings intelligence memory
 data/earnings_intelligence_memory.json
 Data/earnings_intelligence_memory.json
+
+# Runtime analyst intelligence memory
+data/analyst_intelligence_memory.json
+Data/analyst_intelligence_memory.json
+
+# Runtime filing intelligence memory
+data/filing_intelligence_memory.json
+Data/filing_intelligence_memory.json
+
+# Runtime portfolio intelligence memory
+data/portfolio_intelligence_memory.json
+Data/portfolio_intelligence_memory.json
+
+# Runtime defense intelligence memory/cache
+data/defense_intelligence_memory.json
+data/defense_live_source_cache.json
+
+Data/defense_intelligence_memory.json
+Data/defense_live_source_cache.json

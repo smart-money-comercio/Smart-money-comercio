@@ -244,6 +244,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
     from src.reports.portfolio_intelligence_report import build_portfolio_intelligence_report
     from src.reports.scorecard_intelligence_report import build_scorecard_intelligence_report
     from src.reports.stock_intelligence_report import build_stock_intelligence_report
+    from src.reports.defense_intelligence_report import build_defense_intelligence_report
     from src.reports.volume_intelligence_report import build_volume_intelligence_report
     from src.reports.filing_intelligence_report import build_filing_intelligence_report
     from src.scoring.scoring_engine import get_stock_scores
@@ -369,6 +370,25 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
                 "What Changed",
                 "Evolving Analysis",
                 "Portfolio Action",
+            ],
+            max_chars=12000,
+        )
+    )
+
+    results.append(
+        check_evolving_report(
+            name="/defense",
+            builder=lambda: build_defense_intelligence_report(force_refresh=False),
+            required_sections=[
+                "Defense / AI Warfare Intelligence",
+                "Portfolio Read",
+                "Official-Source Themes",
+                "Official-Source Data Points",
+                "Why This Matters",
+                "Best Defense / AI Warfare Names",
+                "What Changed",
+                "Evolving Analysis",
+                "Defense Action",
             ],
             max_chars=12000,
         )

@@ -23,6 +23,8 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/defense — upgraded into live-source-aware Defense / AI Warfare Portfolio Intelligence",
+    "Defense intelligence scans White House, Defense.gov, contracts, Congress/NDAA context, and scored defense names",
     "/portfolio — upgraded into evolving portfolio-level intelligence",
     "Portfolio memory tracks stance, top ideas, high-risk names, confirmation queue, and theme exposure",
     "/sec and /filing — upgraded into evolving SEC disclosure and portfolio-impact intelligence",
@@ -68,6 +70,7 @@ PROTECTED_GUARDRAILS = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving defense, AI warfare, procurement, munitions, cyber, ISR, and geopolitical portfolio analysis",
     "Evolving portfolio intelligence and portfolio-impact analysis",
     "Evolving SEC filing and portfolio-impact analysis",
     "Evolving analyst consensus and Smart Money alignment analysis",
