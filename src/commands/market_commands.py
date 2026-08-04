@@ -7,10 +7,13 @@ from src.agents.analyst_agent import analyze_stock
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
 from src.reports.ticker_report import build_ticker_report
 from src.market.earnings_data import get_earnings_data, summarize_earnings
+from src.reports.earnings_intelligence_report import build_earnings_intelligence_report
 from src.market.market_data import get_market_data, format_number, format_percent
 from src.reports.market_report import build_market_report
+from src.reports.stock_intelligence_report import build_stock_intelligence_report
 from src.reports.quote_report import build_quote_report
 from src.reports.earnings_report import build_earnings_report
+from src.reports.risk_intelligence_report import build_risk_intelligence_report
 from src.reports.risk_report import build_risk_report
 from src.reports.scorecard import (
     build_scorecard,
@@ -61,92 +64,60 @@ async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message)
 
 
-async def earnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /earnings SYMBOL\n\nExample: /earnings NVDA")
+async def earnings(update, context):
+    if not update.message:
         return
 
-    symbol = context.args[0].upper().replace("$", "")
+    if not context.args:
+        await update.message.reply_text("Usage: /earnings SYMBOL")
+        return
 
-    await update.message.reply_text(
-        f"Building Smart Money AI earnings snapshot for {symbol}..."
+    symbol = context.args[0].upper().replace("$", "").strip()
+
+    loading_message = await update.message.reply_text(
+        f"🗓️ Building {symbol} earnings catalyst read..."
     )
 
-    data = get_earnings_data(symbol)
-
-    if not data["found"]:
-        await update.message.reply_text(
-            f"Earnings data not found for {symbol}.\n"
-            f"Error: {data.get('error', 'Unknown error')}"
-        )
-        return
-
     try:
-        ai_summary = summarize_earnings(data)
+        message = await asyncio.to_thread(
+            build_earnings_intelligence_report,
+            symbol,
+        )
+
+        await loading_message.edit_text(message)
+
     except Exception as error:
-        ai_summary = f"AI summary unavailable: {error}"
-
-    message = build_earnings_report(
-        symbol=symbol,
-        data=data,
-        ai_summary=ai_summary,
-    )
-
-    await update.message.reply_text(message)
+        await loading_message.edit_text(
+            f"{symbol} Earnings / Catalyst Intelligence\n"
+            "Status: unavailable right now.\n\n"
+            f"Error: {type(error).__name__}: {error}"
+        )
 
 
-async def ticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /ticker SYMBOL\n\nExample: /ticker NVDA")
+async def ticker(update, context):
+    if not update.message:
         return
 
-    symbol = context.args[0].upper().replace("$", "")
+    if not context.args:
+        await update.message.reply_text("Usage: /stock SYMBOL")
+        return
 
-    await update.message.reply_text(
-        f"Building Smart Money AI ticker snapshot for {symbol}..."
+    symbol = context.args[0].upper().replace("$", "").strip()
+
+    loading_message = await update.message.reply_text(
+        f"📈 Building {symbol} intelligence read..."
     )
-
-    stock = get_stock(symbol)
 
     try:
-        market_data = get_market_data(symbol)
-    except Exception:
-        market_data = {"found": False, "error": "Market data unavailable"}
+        message = await asyncio.to_thread(build_stock_intelligence_report, symbol)
+        await loading_message.edit_text(message)
 
-    if not stock and not market_data.get("found"):
-        await update.message.reply_text(
-            f"{symbol} was not found in the watchlist and market data is unavailable."
+    except Exception as error:
+        await loading_message.edit_text(
+            f"{symbol} Stock Intelligence\n"
+            "Status: unavailable right now.\n\n"
+            f"Error: {type(error).__name__}: {error}"
         )
-        return
-
-    if stock:
-        try:
-            risk_profile = get_risk_profile(stock)
-        except Exception:
-            risk_profile = None
-
-        try:
-            analysis = analyze_stock(stock)
-        except Exception as error:
-            analysis = f"AI analysis unavailable: {error}"
-    else:
-        risk_profile = None
-        analysis = (
-            f"{symbol} is not currently in the Smart Money AI watchlist. "
-            f"Market data is available, but watchlist score, final score, and custom AI thesis are unavailable. "
-            f"Add {symbol} to the watchlist if you want full scoring."
-        )
-
-    message = build_ticker_report(
-        symbol=symbol,
-        stock=stock,
-        risk_profile=risk_profile,
-        market_data=market_data,
-        analysis=analysis,
-    )
-
-    await update.message.reply_text(message)
-
 
 async def scorecard(update, context):
     if not context.args:
@@ -177,34 +148,33 @@ async def scorecard(update, context):
     message = build_scorecard(symbol, score_item, quote_data)
     await update.message.reply_text(message)
 
-async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /risk SYMBOL\n\nExample: /risk NVDA")
+async def risk(update, context):
+    if not update.message:
         return
 
-    symbol = context.args[0].upper().replace("$", "")
+    if not context.args:
+        await update.message.reply_text("Usage: /risk SYMBOL")
+        return
 
-    await update.message.reply_text(
-        f"Building Smart Money AI risk report for {symbol}..."
+    symbol = context.args[0].upper().replace("$", "").strip()
+
+    loading_message = await update.message.reply_text(
+        f"⚠️ Building {symbol} risk read..."
     )
 
-    stock = get_stock(symbol)
-    market_data = get_market_data(symbol)
-
-    if stock:
-        try:
-            risk_profile = get_risk_profile(stock)
-        except Exception:
-            risk_profile = None
-    else:
-        risk_profile = None
-
-    if not stock and not market_data.get("found"):
-        await update.message.reply_text(
-            f"Risk data not found for {symbol}.\n"
-            f"Error: {market_data.get('error', 'Unknown error')}"
+    try:
+        message = await asyncio.to_thread(
+            build_risk_intelligence_report,
+            symbol,
         )
-        return
+        await loading_message.edit_text(message)
+
+    except Exception as error:
+        await loading_message.edit_text(
+            f"{symbol} Risk Intelligence\n"
+            "Status: unavailable right now.\n\n"
+            f"Error: {type(error).__name__}: {error}"
+        )
 
     message = build_risk_report(
         symbol=symbol,

@@ -23,6 +23,9 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/earnings — upgraded into evolving catalyst intelligence",
+    "Earnings memory tracks catalyst status, risk, score, timing, and action changes",
+    "/risk — upgraded into downside and validation intelligence",
     "/brief — Top Opportunities now use v1.3 conviction buckets",
     "/snapshot — now uses Top 20 conviction intelligence",
     "/top10 — added action buckets for faster decision reads",
@@ -59,6 +62,8 @@ PROTECTED_GUARDRAILS = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving earnings and catalyst intelligence",
+    "Risk intelligence with reducers and trigger warnings",
     "Brief Top Opportunities powered by conviction ranking",
     "Snapshot powered by Top 20 conviction ranking",
     "Top 20 action buckets",
