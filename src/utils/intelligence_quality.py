@@ -244,6 +244,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
     from src.reports.portfolio_intelligence_report import build_portfolio_intelligence_report
     from src.reports.scorecard_intelligence_report import build_scorecard_intelligence_report
     from src.reports.stock_intelligence_report import build_stock_intelligence_report
+    from src.reports.smartmoney_command_center_report import build_smartmoney_command_center_report
     from src.reports.defense_intelligence_report import build_defense_intelligence_report
     from src.reports.volume_intelligence_report import build_volume_intelligence_report
     from src.reports.global_intelligence_report import build_global_intelligence_report
@@ -414,6 +415,28 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
         )
     )
 
+    results.append(
+        check_evolving_report(
+            name="/smartmoney",
+            builder=lambda: build_smartmoney_command_center_report(force_refresh=False),
+            required_sections=[
+                "Smart Money Command Center",
+                "Executive Read",
+                "Signal Summary",
+                "Global Macro Overlay",
+                "Macro Pressure",
+                "Strongest Smart Money Signals",
+                "Highest-Risk Names",
+                "Validation Queue",
+                "Defense / Policy Overlay",
+                "What Changed",
+                "Evolving Analysis",
+                "Smart Money Action",
+            ],
+            max_chars=14000,
+        )
+    )
+    
     results.append(
         check_standard_report(
             name="/top10",

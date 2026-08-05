@@ -5,7 +5,6 @@ import time
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.reports.smartmoney_report import build_smartmoney_report
 from src.congress.congress_data import get_congress_trades as get_live_congress_trades
 from src.reports.conviction_report import build_conviction_report
 from src.congress.congress_scoring import get_congress_score
@@ -15,6 +14,8 @@ from src.insiders.insider_scoring import get_insider_score
 from src.reports.insider_report import build_insider_report
 from src.scoring.risk_engine import get_risk_profile
 from src.scoring.scoring_engine import get_stock_scores
+from src.reports.smartmoney_command_center_report import build_smartmoney_command_center_report
+from src.utils.telegram_messages import edit_or_reply_long_message
 
 
 TELEGRAM_MESSAGE_LIMIT = 3900
@@ -362,38 +363,51 @@ async def insiders(update, context):
         )
 
 
-async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def should_force_smartmoney_refresh(args) -> bool:
+    args = [str(arg or "").lower().strip() for arg in args or []]
+
+    return any(arg in {"refresh", "live", "force"} for arg in args)
+
+
+async def smartmoney(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
 
-    symbol = None
-
-    if context.args:
-        symbol = context.args[0].upper().replace("$", "")
+    force_refresh = should_force_smartmoney_refresh(context.args)
 
     loading_message = await update.message.reply_text(
-        "🧠 Building Smart Money AI overlap report..."
-        if not symbol
-        else f"🧠 Building Smart Money AI overlap report for {symbol}..."
+        "🧠 Building live Smart Money Command Center..."
+        if force_refresh
+        else "🧠 Building Smart Money Command Center...",
+        parse_mode=None,
     )
 
     try:
-        stocks = await asyncio.to_thread(get_stock_scores)
-
-        message = build_smartmoney_report(
-            stocks=stocks,
-            symbol=symbol,
-            limit=10,
+        message = await asyncio.to_thread(
+            build_smartmoney_command_center_report,
+            force_refresh,
         )
 
-        await send_split_message(update, message, loading_message)
+        await edit_or_reply_long_message(
+            update=update,
+            loading_message=loading_message,
+            text=message,
+            title="🧠 Smart Money Command Center",
+            parse_mode=None,
+        )
 
     except Exception as error:
         await loading_message.edit_text(
-            "Unable to build Smart Money AI signal report right now.\n\n"
-            f"Error:\n{type(error).__name__}"
+            "Smart Money Command Center\n"
+            "Status: unavailable right now.\n\n"
+            f"Error: {type(error).__name__}: {error}",
+            parse_mode=None,
         )
 
+
+# Compatibility alias in case register_commands.py imports smartmoney_command.
+async def smartmoney_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await smartmoney(update, context)
 
 async def conviction(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:

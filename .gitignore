@@ -85,3 +85,14 @@ data/defense_live_source_cache.json
 
 Data/defense_intelligence_memory.json
 Data/defense_live_source_cache.json
+
+# Runtime global macro intelligence memory/cache
+data/global_intelligence_memory.json
+data/global_live_source_cache.json
+
+Data/global_intelligence_memory.json
+Data/global_live_source_cache.json
+
+# Runtime Smart Money command center memory
+data/smartmoney_intelligence_memory.json
+Data/smartmoney_intelligence_memory.json
