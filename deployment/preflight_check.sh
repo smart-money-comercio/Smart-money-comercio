@@ -59,13 +59,13 @@ echo "4/7 Checking daily report quality..."
 
 "$PYTHON_BIN" scripts/check_daily_report_quality.py
 
-echo "5/7 Checking critical imports and required functions..."
-
-"$PYTHON_BIN" scripts/check_v13_release.py
-
-echo "6/7 Checking intelligence quality..."
+echo "5/7 Checking intelligence quality..."
 
 "$PYTHON_BIN" scripts/check_intelligence_quality.py
+
+echo "6/7 Checking critical imports and required functions..."
+
+"$PYTHON_BIN" scripts/check_v14_monitoring.py
 
 echo "7/7 Checking critical imports and required functions..."
 
