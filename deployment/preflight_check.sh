@@ -18,7 +18,7 @@ fi
 
 echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
-echo "1/6 Checking required files..."
+echo "1/7 Checking required files..."
 
 required_files=(
   "src/bot.py"
@@ -47,23 +47,27 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-echo "2/6 Compiling Python files..."
+echo "2/7 Compiling Python files..."
 
 "$PYTHON_BIN" -m compileall src scripts
 
-echo "3/6 Checking command catalog..."
+echo "3/7 Checking command catalog..."
 
 "$PYTHON_BIN" scripts/check_command_catalog.py
 
-echo "4/6 Checking daily report quality..."
+echo "4/7 Checking daily report quality..."
 
 "$PYTHON_BIN" scripts/check_daily_report_quality.py
 
-echo "5/6 Checking intelligence quality..."
+echo "5/7 Checking critical imports and required functions..."
+
+"$PYTHON_BIN" scripts/check_v13_release.py
+
+echo "6/7 Checking intelligence quality..."
 
 "$PYTHON_BIN" scripts/check_intelligence_quality.py
 
-echo "6/6 Checking critical imports and required functions..."
+echo "7/7 Checking critical imports and required functions..."
 
 "$PYTHON_BIN" - <<'PY'
 import importlib
