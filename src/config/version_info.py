@@ -3,15 +3,16 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 
-APP_VERSION = os.getenv("SMART_MONEY_VERSION", "v1.3")
-RELEASE_NAME = os.getenv("SMART_MONEY_RELEASE_NAME", "Intelligence Quality Upgrade")
+APP_VERSION = os.getenv("SMART_MONEY_VERSION", "v1.4")
+RELEASE_NAME = os.getenv("SMART_MONEY_RELEASE_NAME", "Automation, Alerts, and Monitoring")
+RELEASE_STATUS = os.getenv("SMART_MONEY_RELEASE_STATUS", "In Progress")
 RELEASE_CHANNEL = os.getenv("SMART_MONEY_RELEASE_CHANNEL", "Production")
-RELEASE_STATUS = "Stable"
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
 V13_COMMAND_STACK = [
     "/smartmoney",
+    "/alerts",
     "/conviction",
     "/global",
     "/portfolio",
@@ -31,6 +32,8 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "/alerts — added Alert Monitor for conviction, risk, macro, filing, catalyst, and validation changes",
+    "Alert memory tracks priority symbols, deteriorating names, validation queue, risk queue, and alert regime",
     "/smartmoney — upgraded into the Smart Money Command Center",
     "/conviction — upgraded into the Conviction Command Center",
     "/global — upgraded into live-source-aware Global Macro Intelligence",
@@ -52,6 +55,7 @@ RELEASE_NOTES = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving alert monitor for priority changes, risk deterioration, validation needs, and macro/theme alerts",
     "Executive Smart Money command center",
     "Strict conviction overlap engine",
     "Global macro regime and policy analysis",

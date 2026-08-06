@@ -65,6 +65,7 @@ MARKET_CONTEXT_COMMANDS = [
 SMART_MONEY_COMMANDS = [
     ("/smartmoney", "Smart money signals"),
     ("/conviction", "High-conviction ideas"),
+    ("/alerts", "Alert monitor for conviction, risk, macro, filing, catalyst, and validation changes"),
     ("/congress", "Congressional trading"),
     ("/insiders", "Insider activity"),
     ("/sec", "SEC filings"),

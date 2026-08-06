@@ -96,3 +96,11 @@ Data/global_live_source_cache.json
 # Runtime Smart Money command center memory
 data/smartmoney_intelligence_memory.json
 Data/smartmoney_intelligence_memory.json
+
+# Runtime conviction command center memory
+data/conviction_intelligence_memory.json
+Data/conviction_intelligence_memory.json
+
+# Runtime v1.4 alert monitor memory
+data/alert_monitor_memory.json
+Data/alert_monitor_memory.json
