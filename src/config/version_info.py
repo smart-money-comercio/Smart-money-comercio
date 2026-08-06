@@ -1,235 +1,136 @@
 import os
-import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from src.config.command_catalog import (
-    get_primary_commands,
-    get_version_feature_lines,
-)
 
-
-APP_NAME = "Smart Money AI"
 APP_VERSION = os.getenv("SMART_MONEY_VERSION", "v1.3")
 RELEASE_NAME = os.getenv("SMART_MONEY_RELEASE_NAME", "Intelligence Quality Upgrade")
-RELEASE_STATUS = os.getenv("SMART_MONEY_RELEASE_STATUS", "In Progress")
 RELEASE_CHANNEL = os.getenv("SMART_MONEY_RELEASE_CHANNEL", "Production")
-RELEASE_DATE = os.getenv("SMART_MONEY_RELEASE_DATE", "2026-08-01")
-TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
+RELEASE_STATUS = "Stable"
+REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
-PRIMARY_COMMANDS = get_primary_commands()
-VERSION_FEATURES = get_version_feature_lines()
-
-
-RELEASE_NOTES = [
-    "/conviction — upgraded into the Conviction Command Center",
-    "Conviction now ranks names by overlapping score, risk, volume, catalyst, analyst, filing, Congress, insider, macro, and defense signals",
-    "/smartmoney — upgraded into the Smart Money Command Center",
-    "Command center combines global macro, portfolio stance, defense overlay, top ideas, risks, validation queue, and evolving action plan",
-    "/global — upgraded into live-source-aware Global Macro Intelligence",
-    "Global intelligence scans Fed, Treasury, White House, EIA, Defense.gov, market tape, and geopolitical context",
-    "/defense — upgraded into live-source-aware Defense / AI Warfare Portfolio Intelligence",
-    "Defense intelligence scans White House, Defense.gov, contracts, Congress/NDAA context, and scored defense names",
-    "/portfolio — upgraded into evolving portfolio-level intelligence",
-    "Portfolio memory tracks stance, top ideas, high-risk names, confirmation queue, and theme exposure",
-    "/sec and /filing — upgraded into evolving SEC disclosure and portfolio-impact intelligence",
-    "Filing memory tracks disclosure status, filing risk, thesis effect, and portfolio impact changes",
-    "/analyst — upgraded into evolving Wall Street consensus intelligence",
-    "Analyst memory tracks consensus, alignment, analyst risk, targets, and Smart Money disconnects",
-    "/earnings — upgraded into evolving catalyst intelligence",
-    "Earnings memory tracks catalyst status, risk, score, timing, and action changes",
-    "/risk — upgraded into downside and validation intelligence",
-    "/brief — Top Opportunities now use v1.3 conviction buckets",
-    "/snapshot — now uses Top 20 conviction intelligence",
-    "/top10 — added action buckets for faster decision reads",
-    "/top10 — added compressed Top 20 summary",
-    "/top10 — evolving Top 20 conviction ranking",
-    "Top 20 memory tracks new entrants, risers, fallers, and names that fell out",
-    "/stock — evolving ticker intelligence card",
-    "Ticker memory tracks score, risk, action, and signal changes",
-    "/snapshot — fast one-screen market read",
-    "/themes — active market theme read",
-    "/quality — cleaner daily report health card",
-    "/deploycheck — upgraded release health summary",
-    "/help — synced with shared command catalog",
-    "/commands — synced with shared command catalog",
-    "/version — synced with release metadata",
-    "Strict command audit enabled in preflight",
-    "Daily report quality preflight protection",
-    "Preflight now uses the bot virtualenv",
-    "Duplicate daily report build removed from preflight",
-    "Admin/security command drift cleaned",
+V13_COMMAND_STACK = [
+    "/smartmoney",
+    "/conviction",
+    "/global",
+    "/portfolio",
+    "/defense",
+    "/snapshot",
+    "/top10",
+    "/brief",
+    "/stock SYMBOL",
+    "/scorecard SYMBOL",
+    "/risk SYMBOL",
+    "/volume SYMBOL",
+    "/earnings SYMBOL",
+    "/analyst SYMBOL",
+    "/sec SYMBOL",
+    "/filing SYMBOL",
 ]
 
 
-PROTECTED_GUARDRAILS = [
-    "Command catalog audit",
-    "Strict command audit mode",
-    "Daily report quality check",
-    "Virtualenv-based preflight",
-    "Required section validation",
-    "AI Summary format validation",
-    "Removed-section regression check",
-    "Telegram command registration drift check",
+RELEASE_NOTES = [
+    "/smartmoney — upgraded into the Smart Money Command Center",
+    "/conviction — upgraded into the Conviction Command Center",
+    "/global — upgraded into live-source-aware Global Macro Intelligence",
+    "/portfolio — upgraded into evolving portfolio-level intelligence",
+    "/defense — upgraded into live-source-aware Defense / AI Warfare Intelligence",
+    "/top10 — upgraded into Top 20 Smart Money opportunity ranking",
+    "/snapshot — upgraded to use Top 20 intelligence",
+    "/brief — upgraded with v1.3 Top Opportunities logic",
+    "/stock — upgraded into evolving single-name intelligence",
+    "/scorecard — upgraded into score-driver intelligence",
+    "/risk — upgraded into risk intelligence",
+    "/volume — upgraded into evolving money-flow intelligence",
+    "/earnings — upgraded into evolving catalyst intelligence",
+    "/analyst — upgraded into evolving Wall Street consensus intelligence",
+    "/sec and /filing — upgraded into SEC filing and portfolio-impact intelligence",
+    "Command catalog and daily report quality guardrails remain active",
+    "Intelligence quality guardrail now validates the v1.3 report stack",
 ]
 
 
 REPORT_INTELLIGENCE = [
-    "Evolving conviction overlap engine across Smart Money score, risk, volume, catalysts, filings, analysts, Congress, insiders, macro, and defense themes",
-    "Evolving Smart Money executive dashboard across macro, portfolio, defense, catalysts, filings, analysts, volume, and risk",
-    "Evolving global macro, policy, rates, oil, dollar, geopolitical, and portfolio-regime analysis",
-    "Evolving defense, AI warfare, procurement, munitions, cyber, ISR, and geopolitical portfolio analysis",
-    "Evolving portfolio intelligence and portfolio-impact analysis",
-    "Evolving SEC filing and portfolio-impact analysis",
-    "Evolving analyst consensus and Smart Money alignment analysis",
-    "Evolving earnings and catalyst intelligence",
-    "Risk intelligence with reducers and trigger warnings",
-    "Brief Top Opportunities powered by conviction ranking",
-    "Snapshot powered by Top 20 conviction ranking",
-    "Top 20 action buckets",
-    "Evolving Top 20 conviction ranking",
-    "Concise daily brief",
-    "Fast market snapshot",
-    "Theme-specific read",
-    "Adaptive AI Summary",
-    "What Changed Today memory",
-    "Top Opportunities",
-    "Risk Notes",
-    "Action Checklist",
+    "Executive Smart Money command center",
+    "Strict conviction overlap engine",
+    "Global macro regime and policy analysis",
+    "Portfolio stance and exposure intelligence",
+    "Defense, AI warfare, procurement, and geopolitical intelligence",
+    "Top-ranked opportunity engine",
+    "Single-stock evolving memory",
+    "Scorecard, risk, volume, catalyst, analyst, and filing validation layers",
+    "Deployment and report-quality guardrails",
 ]
 
 
-BEST_DAILY_FLOW = [
-    "/snapshot",
-    "/brief",
-    "/themes",
-    "/quality",
-    "/stock SYMBOL",
-    "/calendar",
-    "/deploycheck",
-]
-
-
-def run_git_command(args: list[str]) -> str:
+def now_text() -> str:
     try:
-        result = subprocess.run(
-            ["git", *args],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-
-        if result.returncode != 0:
-            return "unavailable"
-
-        value = result.stdout.strip()
-
-        return value or "unavailable"
-
+        current = datetime.now(ZoneInfo(REPORT_TIMEZONE))
     except Exception:
-        return "unavailable"
+        current = datetime.now()
+
+    return current.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def get_git_commit() -> str:
-    return run_git_command(["rev-parse", "--short", "HEAD"])
-
-
-def get_git_branch() -> str:
-    return run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
-
-
-def get_generated_timestamp() -> str:
-    try:
-        now = datetime.now(ZoneInfo(TIMEZONE))
-    except Exception:
-        now = datetime.now()
-
-    return now.strftime("%Y-%m-%d %H:%M:%S")
-
-
-def format_command_lines(commands: list[tuple[str, str]]) -> str:
-    return "\n".join(
-        f"{command} - {description}"
-        for command, description in commands
+def build_version_header() -> str:
+    return (
+        f"Smart Money AI Bot {APP_VERSION}\n"
+        f"Release: {RELEASE_NAME}\n"
+        f"Channel: {RELEASE_CHANNEL}\n"
+        f"Status: {RELEASE_STATUS}\n"
+        f"Updated: {now_text()}"
     )
-
-
-def format_bullet_lines(items: list[str]) -> str:
-    return "\n".join(
-        f"• {item}"
-        for item in items
-    )
-
-
-def build_version_text() -> str:
-    return f"""
-{APP_NAME}
-Version: {APP_VERSION}
-Release: {RELEASE_NAME}
-Channel: {RELEASE_CHANNEL}
-Status: {RELEASE_STATUS}
-Release Date: {RELEASE_DATE}
-
-Build
-Branch: {get_git_branch()}
-Commit: {get_git_commit()}
-Checked: {get_generated_timestamp()} {TIMEZONE}
-
-Primary Commands
-{format_command_lines(PRIMARY_COMMANDS)}
-
-Daily Flow
-{format_bullet_lines(BEST_DAILY_FLOW)}
-
-Research only. Not financial advice.
-""".strip()
 
 
 def build_version_notes_text() -> str:
     return f"""
-{APP_NAME} Release Notes
+🧾 Smart Money AI Version Notes
 
-Version: {APP_VERSION}
-Release: {RELEASE_NAME}
-Channel: {RELEASE_CHANNEL}
-Status: {RELEASE_STATUS}
-Release Date: {RELEASE_DATE}
+{build_version_header()}
 
-Added
-• /snapshot — fast one-screen market read
-• /themes — active market theme read
+v1.3 Command Stack
+{chr(10).join(f"• {command}" for command in V13_COMMAND_STACK)}
 
-Improved
-• /quality — cleaner daily report health card
-• /deploycheck — release health summary
-• /help — generated from shared command catalog
-• /commands — generated from shared command catalog
-• /version — generated from release metadata
+Release Notes
+{chr(10).join(f"• {note}" for note in RELEASE_NOTES)}
 
-Protected
-{format_bullet_lines(PROTECTED_GUARDRAILS)}
+Intelligence Coverage
+{chr(10).join(f"• {item}" for item in REPORT_INTELLIGENCE)}
 
-Report Intelligence
-{format_bullet_lines(REPORT_INTELLIGENCE)}
-
-Best Daily Flow
-{format_bullet_lines(BEST_DAILY_FLOW)}
-
-Full Change List
-{format_bullet_lines(RELEASE_NOTES)}
-
-Build
-Branch: {get_git_branch()}
-Commit: {get_git_commit()}
-Checked: {get_generated_timestamp()} {TIMEZONE}
-
-Use:
-/snapshot
-/brief
-/themes
-/quality
-/deploycheck
+Production Readiness
+• /deploycheck validates deployment health.
+• /quality validates the daily report.
+• Intelligence guardrails validate the v1.3 report stack.
+• Runtime memory/cache files are ignored by git.
 
 Research only. Not financial advice.
 """.strip()
+
+
+def build_version_text() -> str:
+    return f"""
+🤖 Smart Money AI
+
+{build_version_header()}
+
+Primary Commands
+• /smartmoney — command center
+• /conviction — strict signal overlap
+• /global — macro regime
+• /portfolio — exposure/action plan
+• /defense — policy/procurement overlay
+• /top10 — ranked opportunities
+• /brief — daily report
+
+Validation
+• /deploycheck
+• /quality
+• /versionnotes
+""".strip()
+
+
+# Compatibility aliases for older imports.
+VERSION = APP_VERSION
+VERSION_NAME = RELEASE_NAME
+STATUS = RELEASE_STATUS
