@@ -134,3 +134,76 @@ Validation
 VERSION = APP_VERSION
 VERSION_NAME = RELEASE_NAME
 STATUS = RELEASE_STATUS
+TIMEZONE = REPORT_TIMEZONE
+
+
+def get_generated_timestamp() -> str:
+    return now_text()
+
+
+def _run_git_command(args: list[str]) -> str:
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+
+        output = (result.stdout or "").strip()
+
+        if output:
+            return output
+
+    except Exception:
+        pass
+
+    return "unknown"
+
+
+def get_git_branch() -> str:
+    return _run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+
+
+def get_git_commit() -> str:
+    return _run_git_command(["rev-parse", "HEAD"])
+
+
+def get_git_commit_short() -> str:
+    commit = get_git_commit()
+
+    if commit == "unknown":
+        return commit
+
+    return commit[:7]
+
+
+def get_version_metadata() -> dict:
+    return {
+        "app_version": APP_VERSION,
+        "version": APP_VERSION,
+        "release_name": RELEASE_NAME,
+        "release_channel": RELEASE_CHANNEL,
+        "release_status": RELEASE_STATUS,
+        "status": RELEASE_STATUS,
+        "timezone": REPORT_TIMEZONE,
+        "generated_at": get_generated_timestamp(),
+        "git_branch": get_git_branch(),
+        "git_commit": get_git_commit(),
+        "git_commit_short": get_git_commit_short(),
+    }
+
+
+def get_version_notes() -> list[str]:
+    return RELEASE_NOTES
+
+
+def get_release_notes() -> list[str]:
+    return RELEASE_NOTES
+
+
+def get_report_intelligence() -> list[str]:
+    return REPORT_INTELLIGENCE
