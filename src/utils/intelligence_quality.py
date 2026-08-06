@@ -246,6 +246,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
     from src.reports.stock_intelligence_report import build_stock_intelligence_report
     from src.reports.smartmoney_command_center_report import build_smartmoney_command_center_report
     from src.reports.defense_intelligence_report import build_defense_intelligence_report
+    from src.reports.conviction_command_center_report import build_conviction_command_center_report
     from src.reports.volume_intelligence_report import build_volume_intelligence_report
     from src.reports.global_intelligence_report import build_global_intelligence_report
     from src.reports.filing_intelligence_report import build_filing_intelligence_report
@@ -432,6 +433,29 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
                 "What Changed",
                 "Evolving Analysis",
                 "Smart Money Action",
+            ],
+            max_chars=14000,
+        )
+    )
+
+    results.append(
+        check_evolving_report(
+            name="/conviction",
+            builder=lambda: build_conviction_command_center_report(force_refresh=False),
+            required_sections=[
+                "Conviction Command Center",
+                "Executive Read",
+                "Signal Summary",
+                "Confirmed / Actionable Candidates",
+                "Highest Conviction Watchlist",
+                "Validation Queue",
+                "Risk-Control Names",
+                "Signal Overlap Matrix",
+                "Macro / Defense Fit",
+                "Congress / Insider Overlay",
+                "What Changed",
+                "Evolving Analysis",
+                "Conviction Action",
             ],
             max_chars=14000,
         )

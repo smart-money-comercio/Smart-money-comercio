@@ -23,6 +23,8 @@ VERSION_FEATURES = get_version_feature_lines()
 
 
 RELEASE_NOTES = [
+    "/conviction — upgraded into the Conviction Command Center",
+    "Conviction now ranks names by overlapping score, risk, volume, catalyst, analyst, filing, Congress, insider, macro, and defense signals",
     "/smartmoney — upgraded into the Smart Money Command Center",
     "Command center combines global macro, portfolio stance, defense overlay, top ideas, risks, validation queue, and evolving action plan",
     "/global — upgraded into live-source-aware Global Macro Intelligence",
@@ -74,6 +76,7 @@ PROTECTED_GUARDRAILS = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving conviction overlap engine across Smart Money score, risk, volume, catalysts, filings, analysts, Congress, insiders, macro, and defense themes",
     "Evolving Smart Money executive dashboard across macro, portfolio, defense, catalysts, filings, analysts, volume, and risk",
     "Evolving global macro, policy, rates, oil, dollar, geopolitical, and portfolio-regime analysis",
     "Evolving defense, AI warfare, procurement, munitions, cyber, ISR, and geopolitical portfolio analysis",
