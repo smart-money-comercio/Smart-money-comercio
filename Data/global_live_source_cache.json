@@ -1,7 +1,7 @@
 {
   "cache_status": "refreshed",
-  "fetched_at": 1785988520.2517827,
-  "item_count": 27,
+  "fetched_at": 1786219272.4241614,
+  "item_count": 29,
   "items": [
     {
       "headline": "Offices of Foreign Banks Financial Accounts Financial Accounts of the United States - Z.1 Household Finance Consumer Credit - G.19 Household Debt Service Ratios Mortgage Debt Outstanding...",
@@ -110,7 +110,7 @@
     },
     {
       "headline": "Mint News Enter Search Term(s): Advanced Search News Featured Stories June 23, 2026 Achieving our Objectives, Supporting our Stakeholders: OFAC-OFSI Enhanced Partnership Exchange 2026 Feb...",
-      "score": 5,
+      "score": 7,
       "source": "U.S. Treasury Daily Rates",
       "source_type": "Treasury",
       "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"
@@ -152,7 +152,14 @@
     },
     {
       "headline": "Trump First Lady Melania Trump Vice President JD Vance Second Lady Usha Vance The Cabinet Executive Office of The President Office of Management and Budget Office of Science and Technolog...",
-      "score": 4,
+      "score": 2,
+      "source": "White House News",
+      "source_type": "White House",
+      "url": "https://www.whitehouse.gov/news/"
+    },
+    {
+      "headline": "Supply Chains by Imposing Tariffs on Polysilicon and its Derivatives Fact Sheets August 6, 2026 Adjusting Imports of Polysilicon and its Derivatives into the United States Presidential Ac...",
+      "score": 1,
       "source": "White House News",
       "source_type": "White House",
       "url": "https://www.whitehouse.gov/news/"
@@ -160,6 +167,13 @@
     {
       "headline": "Trump First Lady Melania Trump Vice President JD Vance Second Lady Usha Vance The Cabinet Executive Office of The President Office of Management and Budget Office of Science and Technolog...",
       "score": 2,
+      "source": "White House Fact Sheets",
+      "source_type": "White House",
+      "url": "https://www.whitehouse.gov/fact-sheets/"
+    },
+    {
+      "headline": "Supply Chains by Imposing Tariffs on Polysilicon and its Derivatives Fact Sheets August 6, 2026 Fact Sheet: President Donald J.",
+      "score": 1,
       "source": "White House Fact Sheets",
       "source_type": "White House",
       "url": "https://www.whitehouse.gov/fact-sheets/"
@@ -186,7 +200,7 @@
       "url": "https://www.whitehouse.gov/fact-sheets/"
     },
     {
-      "headline": "Trump Secures America\u2019s Defense Supply Chains and Ensures Domestic Acquisition of Critical Materials Fact Sheets July 20, 2026 Fact Sheet: President Donald J.",
+      "headline": "Trump Secures America\u2019s Defense Supply Chains and Ensures Domestic Acquisition of Critical Materials Fact Sheets July 20, 2026 1 2 3 \u2026 34 Next About Administration Contact Internships Sta...",
       "score": 1,
       "source": "White House Fact Sheets",
       "source_type": "White House",

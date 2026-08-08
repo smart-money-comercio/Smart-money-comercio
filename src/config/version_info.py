@@ -10,7 +10,7 @@ RELEASE_CHANNEL = os.getenv("SMART_MONEY_RELEASE_CHANNEL", "Production")
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
-V14_COMMAND_STACK = [
+V13_COMMAND_STACK = [
     "/smartmoney",
     "/alerts",
     "/dailyalerts",

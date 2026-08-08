@@ -247,7 +247,131 @@
         "FTNT",
         "LMT"
       ]
+    },
+    {
+      "action": "No fully confirmed setup yet. Begin validation with /volume NVDA, /earnings NVDA, /analyst NVDA, and /filing NVDA.",
+      "average_conviction_score": 59.79,
+      "checked_at": "2026-08-05 23:09:35",
+      "confirmed_symbols": [],
+      "conviction_regime": "Watchlist-heavy / needs proof",
+      "macro_regime": "Cautious / validation-first with Fed / Rates pressure",
+      "risk_regime": "Cautious / validation-first",
+      "risk_symbols": [],
+      "top_conviction_score": 63.8,
+      "top_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "ITA",
+        "CRWD",
+        "FTNT",
+        "LMT"
+      ],
+      "validation_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "ITA",
+        "CRWD",
+        "FTNT",
+        "LMT"
+      ]
+    },
+    {
+      "action": "No fully confirmed setup yet. Begin validation with /volume NVDA, /earnings NVDA, /analyst NVDA, and /filing NVDA.",
+      "average_conviction_score": 59.79,
+      "checked_at": "2026-08-05 23:09:56",
+      "confirmed_symbols": [],
+      "conviction_regime": "Watchlist-heavy / needs proof",
+      "macro_regime": "Cautious / validation-first with Fed / Rates pressure",
+      "risk_regime": "Cautious / validation-first",
+      "risk_symbols": [],
+      "top_conviction_score": 63.8,
+      "top_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "ITA",
+        "CRWD",
+        "FTNT",
+        "LMT"
+      ],
+      "validation_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "ITA",
+        "CRWD",
+        "FTNT",
+        "LMT"
+      ]
+    },
+    {
+      "action": "No fully confirmed setup yet. Begin validation with /volume NVDA, /earnings NVDA, /analyst NVDA, and /filing NVDA.",
+      "average_conviction_score": 59.79,
+      "checked_at": "2026-08-08 15:12:13",
+      "confirmed_symbols": [],
+      "conviction_regime": "Watchlist-heavy / needs proof",
+      "macro_regime": "Cautious / validation-first with Fed / Rates pressure",
+      "risk_regime": "Cautious / validation-first",
+      "risk_symbols": [],
+      "top_conviction_score": 63.8,
+      "top_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "ITA",
+        "CRWD",
+        "FTNT",
+        "LMT"
+      ],
+      "validation_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "ITA",
+        "CRWD",
+        "FTNT",
+        "LMT"
+      ]
+    },
+    {
+      "action": "No fully confirmed setup yet. Begin validation with /volume NVDA, /earnings NVDA, /analyst NVDA, and /filing NVDA.",
+      "average_conviction_score": 59.79,
+      "checked_at": "2026-08-08 15:12:34",
+      "confirmed_symbols": [],
+      "conviction_regime": "Watchlist-heavy / needs proof",
+      "macro_regime": "Cautious / validation-first with Fed / Rates pressure",
+      "risk_regime": "Cautious / validation-first",
+      "risk_symbols": [],
+      "top_conviction_score": 63.8,
+      "top_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "ITA",
+        "CRWD",
+        "FTNT",
+        "LMT"
+      ],
+      "validation_symbols": [
+        "NVDA",
+        "MSFT",
+        "AAPL",
+        "PLTR",
+        "ITA",
+        "CRWD",
+        "FTNT",
+        "LMT"
+      ]
     }
   ],
-  "updated_at": "2026-08-05 22:26:43"
+  "updated_at": "2026-08-08 15:12:34"
 }
