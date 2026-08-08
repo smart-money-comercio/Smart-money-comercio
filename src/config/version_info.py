@@ -10,9 +10,10 @@ RELEASE_CHANNEL = os.getenv("SMART_MONEY_RELEASE_CHANNEL", "Production")
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
-V13_COMMAND_STACK = [
+V14_COMMAND_STACK = [
     "/smartmoney",
     "/alerts",
+    "/dailyalerts",
     "/conviction",
     "/global",
     "/portfolio",
@@ -32,6 +33,8 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "/dailyalerts — added compressed Daily Alert Digest for quick review",
+    "Daily alert digest reuses the /alerts engine and summarizes critical changes, warnings, macro/theme alerts, and first action",
     "/alerts — added Alert Monitor for conviction, risk, macro, filing, catalyst, and validation changes",
     "Alert memory tracks priority symbols, deteriorating names, validation queue, risk queue, and alert regime",
     "/smartmoney — upgraded into the Smart Money Command Center",
@@ -55,6 +58,7 @@ RELEASE_NOTES = [
 
 
 REPORT_INTELLIGENCE = [
+    "Daily alert digest for short-form monitoring and review",
     "Evolving alert monitor for priority changes, risk deterioration, validation needs, and macro/theme alerts",
     "Executive Smart Money command center",
     "Strict conviction overlap engine",

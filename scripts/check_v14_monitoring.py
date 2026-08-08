@@ -21,12 +21,14 @@ REQUIRED_REPORT_BUILDERS = [
     ("src.reports.conviction_command_center_report", "build_conviction_command_center_report"),
     ("src.reports.global_intelligence_report", "build_global_intelligence_report"),
     ("src.reports.portfolio_intelligence_report", "build_portfolio_intelligence_report"),
+    ("src.reports.daily_alert_digest_report", "build_daily_alert_digest_report"),
     ("src.reports.defense_intelligence_report", "build_defense_intelligence_report"),
 ]
 
 
 REQUIRED_COMMANDS = [
     "/alerts",
+    "/dailyalerts",
     "/smartmoney",
     "/conviction",
     "/global",

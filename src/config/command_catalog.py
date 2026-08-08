@@ -66,6 +66,7 @@ SMART_MONEY_COMMANDS = [
     ("/smartmoney", "Smart money signals"),
     ("/conviction", "High-conviction ideas"),
     ("/alerts", "Alert monitor for conviction, risk, macro, filing, catalyst, and validation changes"),
+    ("/dailyalerts", "Compressed daily alert digest for critical changes, warnings, macro alerts, and first action"),
     ("/congress", "Congressional trading"),
     ("/insiders", "Insider activity"),
     ("/sec", "SEC filings"),
