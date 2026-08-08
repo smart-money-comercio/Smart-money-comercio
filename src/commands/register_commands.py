@@ -66,6 +66,7 @@ from src.commands.top10_commands import top10
 from src.commands.volume_commands import volume
 from src.commands.watchlist_commands import watchlist_command
 from src.commands.alerts_commands import alerts_command
+from src.commands.dailyalerts_commands import dailyalerts_command
 from src.commands.weekly_calendar_commands import weeklycalendar_command
 
 
@@ -135,6 +136,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("conviction", conviction))
     app.add_handler(CommandHandler("smartmoney", smartmoney))
     app.add_handler(CommandHandler("alerts", alerts_command))
+    app.add_handler(CommandHandler("dailyalerts", dailyalerts_command))
     app.add_handler(CommandHandler("congress", congress))
     app.add_handler(CommandHandler("insiders", insiders))
     app.add_handler(CommandHandler("sec", sec))
