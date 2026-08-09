@@ -92,6 +92,8 @@ MARKET_CONTEXT_COMMANDS = [
 SMART_MONEY_COMMANDS = [
     ("/smartmoney", "Smart Money command center"),
     ("/conviction", "High-conviction overlap candidates"),
+    ("/alertstatus", "Current alert monitor state, queues, and latest scan"),
+    ("/alertrules", "Visible alert thresholds and environment overrides"),
     ("/alerts", "Full alert monitor for conviction, risk, macro, filing, catalyst, and validation changes"),
     ("/dailyalerts", "Compressed daily alert digest for critical changes, warnings, macro alerts, and first action"),
     ("/congress", "Congressional trading"),

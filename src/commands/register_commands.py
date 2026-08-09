@@ -67,6 +67,7 @@ from src.commands.volume_commands import volume
 from src.commands.watchlist_commands import watchlist_command
 from src.commands.alerts_commands import alerts_command
 from src.commands.dailyalerts_commands import dailyalerts_command
+from src.commands.alertstatus_commands import alertstatus_command, alertrules_command
 from src.commands.weekly_calendar_commands import weeklycalendar_command
 
 
@@ -76,7 +77,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("commands", commands_menu))
 
-        # Health / admin
+    # Health / admin
     app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("system", system_status))
     app.add_handler(CommandHandler("version", version))
@@ -137,6 +138,8 @@ def register_commands(app):
     app.add_handler(CommandHandler("smartmoney", smartmoney))
     app.add_handler(CommandHandler("alerts", alerts_command))
     app.add_handler(CommandHandler("dailyalerts", dailyalerts_command))
+    app.add_handler(CommandHandler("alertstatus", alertstatus_command))
+    app.add_handler(CommandHandler("alertrules", alertrules_command))
     app.add_handler(CommandHandler("congress", congress))
     app.add_handler(CommandHandler("insiders", insiders))
     app.add_handler(CommandHandler("sec", sec))

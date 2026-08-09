@@ -11,6 +11,8 @@ REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
 V13_COMMAND_STACK = [
+    "/alertstatus",
+    "/alertrules",
     "/smartmoney",
     "/alerts",
     "/dailyalerts",
@@ -33,6 +35,9 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "/alertstatus — added current alert monitor state and queue visibility",
+    "/alertrules — added visible alert thresholds and environment override documentation",
+    "Alert thresholds moved into src/config/alert_rules.py for safer v1.4 monitoring control",
     "/dailyalerts — added compressed Daily Alert Digest for quick review",
     "Daily alert digest reuses the /alerts engine and summarizes critical changes, warnings, macro/theme alerts, and first action",
     "/alerts — added Alert Monitor for conviction, risk, macro, filing, catalyst, and validation changes",
@@ -58,6 +63,7 @@ RELEASE_NOTES = [
 
 
 REPORT_INTELLIGENCE = [
+    "Configurable alert rules for priority scores, validation ranges, score moves, and warning terms",
     "Daily alert digest for short-form monitoring and review",
     "Evolving alert monitor for priority changes, risk deterioration, validation needs, and macro/theme alerts",
     "Executive Smart Money command center",

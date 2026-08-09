@@ -19,6 +19,8 @@ REQUIRED_REPORT_BUILDERS = [
     ("src.reports.alert_monitor_report", "build_alert_monitor_report"),
     ("src.reports.smartmoney_command_center_report", "build_smartmoney_command_center_report"),
     ("src.reports.conviction_command_center_report", "build_conviction_command_center_report"),
+    ("src.reports.alert_rules_report", "build_alertstatus_report"),
+    ("src.reports.alert_rules_report", "build_alertrules_report"),
     ("src.reports.global_intelligence_report", "build_global_intelligence_report"),
     ("src.reports.portfolio_intelligence_report", "build_portfolio_intelligence_report"),
     ("src.reports.daily_alert_digest_report", "build_daily_alert_digest_report"),
@@ -27,6 +29,8 @@ REQUIRED_REPORT_BUILDERS = [
 
 
 REQUIRED_COMMANDS = [
+    "/alertstatus",
+    "/alertrules",
     "/alerts",
     "/dailyalerts",
     "/smartmoney",
