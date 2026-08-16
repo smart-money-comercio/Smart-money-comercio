@@ -48,6 +48,7 @@ DAILY_REPORT_COMMANDS = [
 STOCK_RESEARCH_COMMANDS = [
     ("/stock SYMBOL", "Stock intelligence"),
     ("/ticker SYMBOL", "Stock intelligence legacy alias"),
+    ("/stockdata SYMBOL", "StockAnalysis fundamentals, valuation, financials, balance sheet, and cash-flow snapshot"),
     ("/quote SYMBOL", "Quote snapshot"),
     ("/market SYMBOL", "Market context"),
     ("/scorecard SYMBOL", "Smart Money scorecard"),
