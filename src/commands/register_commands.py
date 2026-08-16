@@ -68,6 +68,7 @@ from src.commands.watchlist_commands import watchlist_command
 from src.commands.alerts_commands import alerts_command
 from src.commands.dailyalerts_commands import dailyalerts_command
 from src.commands.alertstatus_commands import alertstatus_command, alertrules_command
+from src.commands.stockanalysis_commands import stockdata_command
 from src.commands.weekly_calendar_commands import weeklycalendar_command
 
 
@@ -125,6 +126,7 @@ def register_commands(app):
 
     # Ticker tools
     app.add_handler(CommandHandler("ticker", ticker))
+    app.add_handler(CommandHandler("stockdata", stockdata_command))
     app.add_handler(CommandHandler("quote", quote))
     app.add_handler(CommandHandler("market", market))
     app.add_handler(CommandHandler("earnings", earnings))
