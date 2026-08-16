@@ -5,12 +5,19 @@ from telegram.ext import ContextTypes
 
 from src.agents.analyst_agent import build_analyst_summary
 from src.reports.analyst_intelligence_report import build_analyst_intelligence_report
+from src.reports.analyst_stockanalysis_bridge import build_stockanalysis_analyst_overlay
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.telegram_messages import edit_or_reply_long_message
 
 
 def clean_symbol(value: str) -> str:
     return str(value or "").strip().upper().replace("$", "")
+
+
+def should_force_stockanalysis_refresh(args) -> bool:
+    args = [str(arg or "").lower().strip() for arg in args or []]
+
+    return any(arg in {"refresh", "live", "force"} for arg in args)
 
 
 async def analyst_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -32,16 +39,29 @@ async def analyst_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 build_analyst_intelligence_report,
                 symbol,
             )
+
+            force_refresh = should_force_stockanalysis_refresh(context.args[1:])
+
+            stockanalysis_overlay = await asyncio.to_thread(
+                build_stockanalysis_analyst_overlay,
+                symbol,
+                message,
+                force_refresh,
+            )
+
+            message = f"{message}\n\n{stockanalysis_overlay}"
             title = f"🧠 Analyst Consensus Intelligence: {symbol}"
 
         else:
             scores = await asyncio.to_thread(get_stock_scores)
+
             message = await asyncio.to_thread(
                 build_analyst_summary,
                 scores,
                 None,
                 5,
             )
+
             title = "🧠 Smart Money AI Analyst Summary"
 
         await edit_or_reply_long_message(
@@ -58,3 +78,8 @@ async def analyst_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"Error:\n{type(error).__name__}: {error}",
             parse_mode=None,
         )
+
+
+# Compatibility alias.
+async def analyst(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await analyst_command(update, context)
