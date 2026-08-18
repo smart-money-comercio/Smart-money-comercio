@@ -35,6 +35,10 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "/analyst SYMBOL — enriched with StockAnalysis analyst consensus, Buy/Hold/Sell mix, price target, and Smart Money cross-check",
+    "StockAnalysis analyst overlay now flags conflicts between external Wall Street consensus and internal Smart Money risk/action reads",
+    "/stockdata — added dedicated StockAnalysis fundamentals and analyst rating command",
+    "StockAnalysis data integration now includes valuation, financials, balance-sheet, cash-flow, and Buy/Hold/Sell consensus readout",
     "/alertstatus — added current alert monitor state and queue visibility",
     "/alertrules — added visible alert thresholds and environment override documentation",
     "Alert thresholds moved into src/config/alert_rules.py for safer v1.4 monitoring control",
@@ -63,6 +67,8 @@ RELEASE_NOTES = [
 
 
 REPORT_INTELLIGENCE = [
+    "StockAnalysis analyst consensus overlay with Buy/Hold/Sell mix and Smart Money conflict detection",
+    "Dedicated StockAnalysis data command for source-specific fundamentals and analyst consensus review",
     "Configurable alert rules for priority scores, validation ranges, score moves, and warning terms",
     "Daily alert digest for short-form monitoring and review",
     "Evolving alert monitor for priority changes, risk deterioration, validation needs, and macro/theme alerts",
