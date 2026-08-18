@@ -367,7 +367,39 @@
       "tlt_move": -0.8699855002416611,
       "top_theme": "Fed / Rates",
       "vix_move": -7.826649417852528
+    },
+    {
+      "checked_at": "2026-08-17 19:38:07",
+      "dollar_move": -0.14214641080312418,
+      "macro_regime": "Risk-off / defensive with Fed / Rates pressure",
+      "nasdaq_move": 0.1486542561348513,
+      "oil_move": 3.470457433290971,
+      "portfolio_impact": "Reduce chase behavior, require confirmation, and prioritize risk control.",
+      "pressure_count": 6,
+      "risk_regime": "Risk-off / defensive",
+      "source_error_count": 2,
+      "source_item_count": 27,
+      "sp500_move": -0.103829302047814,
+      "tlt_move": -0.8652205703144138,
+      "top_theme": "Fed / Rates",
+      "vix_move": -0.5890052356020933
+    },
+    {
+      "checked_at": "2026-08-17 19:38:28",
+      "dollar_move": -0.14214641080312418,
+      "macro_regime": "Risk-off / defensive with Fed / Rates pressure",
+      "nasdaq_move": 0.1486542561348513,
+      "oil_move": 3.470457433290971,
+      "portfolio_impact": "Reduce chase behavior, require confirmation, and prioritize risk control.",
+      "pressure_count": 6,
+      "risk_regime": "Risk-off / defensive",
+      "source_error_count": 2,
+      "source_item_count": 27,
+      "sp500_move": -0.103829302047814,
+      "tlt_move": -0.8652205703144138,
+      "top_theme": "Fed / Rates",
+      "vix_move": -0.5890052356020933
     }
   ],
-  "updated_at": "2026-08-16 18:03:43"
+  "updated_at": "2026-08-17 19:38:28"
 }

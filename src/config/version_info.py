@@ -35,6 +35,7 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "StockAnalysis quality guardrail now verifies analyst consensus, price target, Buy/Hold/Sell mix, fundamentals, and report overlays without live network dependency",
     "/analyst SYMBOL — enriched with StockAnalysis analyst consensus, Buy/Hold/Sell mix, price target, and Smart Money cross-check",
     "StockAnalysis analyst overlay now flags conflicts between external Wall Street consensus and internal Smart Money risk/action reads",
     "/stockdata — added dedicated StockAnalysis fundamentals and analyst rating command",
@@ -67,6 +68,7 @@ RELEASE_NOTES = [
 
 
 REPORT_INTELLIGENCE = [
+    "Network-safe StockAnalysis parser guardrail for forecast ratings, valuation, fundamentals, and report overlays",
     "StockAnalysis analyst consensus overlay with Buy/Hold/Sell mix and Smart Money conflict detection",
     "Dedicated StockAnalysis data command for source-specific fundamentals and analyst consensus review",
     "Configurable alert rules for priority scores, validation ranges, score moves, and warning terms",
