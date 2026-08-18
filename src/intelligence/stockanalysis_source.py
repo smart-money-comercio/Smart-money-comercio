@@ -474,9 +474,19 @@ def first_match(text: str, patterns: list[str]) -> str:
 
     return ""
 
+def clean_extracted_number(value: str) -> str:
+    value = normalize_label(value)
+    value = value.strip()
+
+    # Regex patterns can capture sentence punctuation after a number:
+    # "$302.83," -> "$302.83"
+    value = value.rstrip(".,;:)")
+
+    return value
+
 
 def normalize_percent(value: str) -> str:
-    value = normalize_label(value)
+    value = clean_extracted_number(value)
 
     if not value:
         return ""
@@ -488,7 +498,7 @@ def normalize_percent(value: str) -> str:
 
 
 def normalize_money(value: str) -> str:
-    value = normalize_label(value)
+    value = clean_extracted_number(value)
 
     if not value:
         return ""
