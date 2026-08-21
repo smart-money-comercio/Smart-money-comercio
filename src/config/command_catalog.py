@@ -11,6 +11,8 @@ CORE_COMMANDS = [
     ("/brief", "Daily market brief"),
     ("/dailyalerts", "Daily alert digest"),
     ("/alerts", "Full alert monitor"),
+    ("/alertsettings", "Current alert thresholds, environment overrides, and detected preset"),
+    ("/alertpreset MODE", "Show conservative, balanced, or aggressive alert preset overrides"),
     ("/smartmoney", "Smart Money command center"),
     ("/conviction", "High-conviction ideas"),
     ("/snapshot", "Fast one-screen market snapshot"),

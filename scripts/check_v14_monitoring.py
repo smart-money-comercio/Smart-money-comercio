@@ -23,6 +23,8 @@ REQUIRED_REPORT_BUILDERS = [
     ("src.reports.stockanalysis_data_report", "build_stockanalysis_data_report"),
     ("src.reports.alert_rules_report", "build_alertstatus_report"),
     ("src.reports.alert_rules_report", "build_alertrules_report"),
+    ("src.reports.alert_settings_report", "build_alertsettings_report"),
+    ("src.reports.alert_settings_report", "build_alertpreset_report"),
     ("src.reports.global_intelligence_report", "build_global_intelligence_report"),
     ("src.reports.portfolio_intelligence_report", "build_portfolio_intelligence_report"),
     ("src.reports.daily_alert_digest_report", "build_daily_alert_digest_report"),
@@ -31,6 +33,8 @@ REQUIRED_REPORT_BUILDERS = [
 
 
 REQUIRED_COMMANDS = [
+    "/alertsettings",
+    "/alertpreset",
     "/alertstatus",
     "/alertrules",
     "/stockdata",

@@ -11,6 +11,8 @@ REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
 V13_COMMAND_STACK = [
+    "/alertsettings",
+    "/alertpreset MODE",
     "/alertstatus",
     "/alertrules",
     "/smartmoney",
@@ -35,6 +37,9 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "/alertsettings — added active alert threshold and environment override readout",
+    "/alertpreset — added conservative, balanced, and aggressive alert preset recipes",
+    "Alert presets are read-only from Telegram for safer production control",
     "StockAnalysis quality guardrail now verifies analyst consensus, price target, Buy/Hold/Sell mix, fundamentals, and report overlays without live network dependency",
     "/analyst SYMBOL — enriched with StockAnalysis analyst consensus, Buy/Hold/Sell mix, price target, and Smart Money cross-check",
     "StockAnalysis analyst overlay now flags conflicts between external Wall Street consensus and internal Smart Money risk/action reads",
@@ -68,6 +73,7 @@ RELEASE_NOTES = [
 
 
 REPORT_INTELLIGENCE = [
+    "Alert settings and preset readouts for conservative, balanced, and aggressive monitoring modes",
     "Network-safe StockAnalysis parser guardrail for forecast ratings, valuation, fundamentals, and report overlays",
     "StockAnalysis analyst consensus overlay with Buy/Hold/Sell mix and Smart Money conflict detection",
     "Dedicated StockAnalysis data command for source-specific fundamentals and analyst consensus review",

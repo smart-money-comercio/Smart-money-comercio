@@ -25,6 +25,7 @@ from src.commands.global_commands import global_market
 from src.commands.versionnotes_commands import versionnotes_command
 from src.commands.headlines_commands import headlines
 from src.commands.snapshot_commands import snapshot_command 
+from src.commands.alertsettings_commands import alertpreset_command, alertsettings_command
 from src.commands.themes_commands import themes_command
 from src.commands.health_commands import (
     health,
@@ -142,6 +143,8 @@ def register_commands(app):
     app.add_handler(CommandHandler("dailyalerts", dailyalerts_command))
     app.add_handler(CommandHandler("alertstatus", alertstatus_command))
     app.add_handler(CommandHandler("alertrules", alertrules_command))
+    app.add_handler(CommandHandler("alertsettings", alertsettings_command))
+    app.add_handler(CommandHandler("alertpreset", alertpreset_command))
     app.add_handler(CommandHandler("congress", congress))
     app.add_handler(CommandHandler("insiders", insiders))
     app.add_handler(CommandHandler("sec", sec))
