@@ -108,3 +108,9 @@ Data/alert_monitor_memory.json
 # Runtime StockAnalysis cache
 data/stockanalysis_cache.json
 Data/stockanalysis_cache.json
+
+# Runtime news intelligence memory/cache
+data/news_live_source_cache.json
+data/news_intelligence_memory.json
+Data/news_live_source_cache.json
+Data/news_intelligence_memory.json

@@ -71,6 +71,12 @@ from src.commands.dailyalerts_commands import dailyalerts_command
 from src.commands.alertstatus_commands import alertstatus_command, alertrules_command
 from src.commands.stockanalysis_commands import stockdata_command
 from src.commands.weekly_calendar_commands import weeklycalendar_command
+from src.commands.newsintel_commands import (
+    macronews_command,
+    newsintel_command,
+    newsmemory_command,
+    tickernews_command,
+)
 
 
 def register_commands(app):
@@ -119,6 +125,10 @@ def register_commands(app):
     # Market intelligence
     app.add_handler(CommandHandler("global", global_market))
     app.add_handler(CommandHandler("headlines", headlines))
+    app.add_handler(CommandHandler("newsintel", newsintel_command))
+    app.add_handler(CommandHandler("macronews", macronews_command))
+    app.add_handler(CommandHandler("tickernews", tickernews_command))
+    app.add_handler(CommandHandler("newsmemory", newsmemory_command))
     app.add_handler(CommandHandler("marketbrief", marketbrief_command))
     app.add_handler(CommandHandler("weeklycalendar", weeklycalendar_command))
     app.add_handler(CommandHandler("weekahead", weeklycalendar_command))

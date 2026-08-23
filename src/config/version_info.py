@@ -11,6 +11,10 @@ REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 
 V13_COMMAND_STACK = [
+    "/newsintel",
+    "/macronews",
+    "/tickernews SYMBOL",
+    "/newsmemory",
     "/alertsettings",
     "/alertpreset MODE",
     "/alertstatus",
@@ -37,6 +41,12 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "/headlines — upgraded to shared live market-news source layer",
+    "/newsintel — added evolving market-news intelligence with memory",
+    "/macronews — added macro-only news intelligence",
+    "/tickernews SYMBOL — added stock-specific news intelligence",
+    "/newsmemory — added persistent news theme memory",
+    "News intelligence now tracks recurring themes, new themes, fading themes, ticker clusters, portfolio impact, and alert triggers",
     "/alertsettings — added active alert threshold and environment override readout",
     "/alertpreset — added conservative, balanced, and aggressive alert preset recipes",
     "Alert presets are read-only from Telegram for safer production control",
@@ -73,6 +83,7 @@ RELEASE_NOTES = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving market-news intelligence layer with shared headline source, memory, macro impact, ticker clusters, and alert triggers",
     "Alert settings and preset readouts for conservative, balanced, and aggressive monitoring modes",
     "Network-safe StockAnalysis parser guardrail for forecast ratings, valuation, fundamentals, and report overlays",
     "StockAnalysis analyst consensus overlay with Buy/Hold/Sell mix and Smart Money conflict detection",

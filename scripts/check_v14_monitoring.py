@@ -16,6 +16,11 @@ os.environ.setdefault("STRICT_COMMAND_AUDIT", "1")
 
 
 REQUIRED_REPORT_BUILDERS = [
+    ("src.reports.news_intelligence_report", "build_headlines_report"),
+    ("src.reports.news_intelligence_report", "build_news_intelligence_report"),
+    ("src.reports.news_intelligence_report", "build_macro_news_report"),
+    ("src.reports.news_intelligence_report", "build_ticker_news_report"),
+    ("src.reports.news_intelligence_report", "build_newsmemory_report"),
     ("src.reports.analyst_stockanalysis_bridge", "build_stockanalysis_analyst_overlay"),
     ("src.reports.alert_monitor_report", "build_alert_monitor_report"),
     ("src.reports.smartmoney_command_center_report", "build_smartmoney_command_center_report"),
@@ -33,6 +38,10 @@ REQUIRED_REPORT_BUILDERS = [
 
 
 REQUIRED_COMMANDS = [
+    "/newsintel",
+    "/macronews",
+    "/tickernews",
+    "/newsmemory",
     "/alertsettings",
     "/alertpreset",
     "/alertstatus",
