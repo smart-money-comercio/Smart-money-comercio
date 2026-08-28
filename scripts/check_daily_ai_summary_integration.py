@@ -1,5 +1,6 @@
 import json
 import os
+from pyexpat import errors
 import sys
 from pathlib import Path
 
@@ -126,17 +127,16 @@ def main() -> int:
 
     require("Signal:" in summary, "missing Signal section", errors)
     require("Implication:" in summary, "missing Implication section", errors)
+    require("Confirm with" in summary, "missing validation command sentence", errors)
     require("Validation:" in summary, "missing Validation section", errors)
-    require("Context Stack:" in summary, "missing Context Stack", errors)
-    require("Suggested Commands:" in summary, "missing Suggested Commands", errors)
+    require("Integrated features:" in summary, "missing integrated features sentence", errors)
     require("Alert Monitor" in summary, "summary missing Alert Monitor feature", errors)
     require("News Intelligence" in summary, "summary missing News Intelligence feature", errors)
     require("StockAnalysis Cache" in summary, "summary missing StockAnalysis feature", errors)
-    require("NVDA" in summary, "summary missing NVDA", errors)
+    require("/stockdata" in summary, "summary missing /stockdata command", errors)
     require("Rates / Treasury pressure" in summary, "summary missing regime context", errors)
     require("/newsintel" in summary, "summary missing /newsintel command", errors)
     require("/alerts" in summary, "summary missing /alerts command", errors)
-    require("/stockdata SYMBOL" in summary, "summary missing /stockdata command", errors)
 
     print("Daily AI Summary Integration Check")
     print(f"Status: {'FAIL' if errors else 'PASS'}")

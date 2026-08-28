@@ -229,7 +229,122 @@
         "NVDA",
         "QQQ"
       ]
+    },
+    {
+      "alert_triggers": [
+        "Macro alert: risk regime is cautious or risk-off.",
+        "Theme alert: rates/yields pressure active.",
+        "Theme alert: oil/geopolitical pressure active."
+      ],
+      "checked_at": "2026-08-28 10:54:13",
+      "fingerprint": "fixture-news-001",
+      "headline_count": 4,
+      "mode": "all",
+      "news_regime": "Rates / Treasury pressure",
+      "portfolio_impact": "Risk-control watch; require confirmation for high-multiple growth.",
+      "risk_regime": "Risk-off / macro pressure",
+      "symbol": "",
+      "theme_counts": {
+        "AI / Semiconductors": 1,
+        "China / Trade": 1,
+        "Geopolitical Risk": 2,
+        "Mega-Cap Tech": 1,
+        "Oil / Energy": 1,
+        "Rates / Yields": 2,
+        "Treasury / Debt": 1
+      },
+      "ticker_counts": {
+        "NVDA": 1,
+        "QQQ": 1,
+        "TLT": 1,
+        "USO": 1
+      },
+      "top_themes": [
+        "Rates / Yields",
+        "Geopolitical Risk",
+        "Treasury / Debt",
+        "Oil / Energy",
+        "AI / Semiconductors",
+        "Mega-Cap Tech",
+        "China / Trade"
+      ],
+      "top_tickers": [
+        "TLT",
+        "USO",
+        "NVDA",
+        "QQQ"
+      ]
+    },
+    {
+      "alert_triggers": [
+        "Macro alert: risk regime is cautious or risk-off.",
+        "Theme alert: rates/yields pressure active.",
+        "Theme alert: oil/geopolitical pressure active."
+      ],
+      "checked_at": "2026-08-28 10:54:13",
+      "fingerprint": "fixture-news-001",
+      "headline_count": 4,
+      "mode": "macro",
+      "news_regime": "Rates / Treasury pressure",
+      "portfolio_impact": "Risk-control watch; require confirmation for high-multiple growth.",
+      "risk_regime": "Risk-off / macro pressure",
+      "symbol": "",
+      "theme_counts": {
+        "China / Trade": 1,
+        "Geopolitical Risk": 2,
+        "Oil / Energy": 1,
+        "Rates / Yields": 2,
+        "Treasury / Debt": 1
+      },
+      "ticker_counts": {
+        "NVDA": 1,
+        "QQQ": 1,
+        "TLT": 1,
+        "USO": 1
+      },
+      "top_themes": [
+        "Rates / Yields",
+        "Geopolitical Risk",
+        "Treasury / Debt",
+        "Oil / Energy",
+        "China / Trade"
+      ],
+      "top_tickers": [
+        "TLT",
+        "USO",
+        "NVDA",
+        "QQQ"
+      ]
+    },
+    {
+      "alert_triggers": [],
+      "checked_at": "2026-08-28 10:54:13",
+      "fingerprint": "fixture-news-001",
+      "headline_count": 1,
+      "mode": "ticker",
+      "news_regime": "AI / Semiconductors",
+      "portfolio_impact": "Balanced posture; use /portfolio and /alerts for positioning confirmation.",
+      "risk_regime": "Balanced / mixed",
+      "symbol": "NVDA",
+      "theme_counts": {
+        "AI / Semiconductors": 1,
+        "Mega-Cap Tech": 1,
+        "Rates / Yields": 1
+      },
+      "ticker_counts": {
+        "NVDA": 1,
+        "QQQ": 1
+      },
+      "top_themes": [
+        "AI / Semiconductors",
+        "Mega-Cap Tech",
+        "Rates / Yields"
+      ],
+      "top_tickers": [
+        "NVDA",
+        "QQQ"
+      ]
     }
   ],
-  "updated_at": "2026-08-28 10:23:02"
+  "updated_at": "2026-08-28 10:54:13"
 }

@@ -143,37 +143,60 @@ def comma_list(items: list[str], fallback: str = "None") -> str:
     return ", ".join(items)
 
 
+def compact_sentence(value: str, max_chars: int = 240) -> str:
+    text = " ".join(str(value or "").split())
+
+    if len(text) <= max_chars:
+        return text
+
+    return text[: max_chars - 3].rstrip() + "..."
+
+
 def build_integrated_summary_from_blocks(blocks: list[IntelligenceContextBlock]) -> str:
     if not blocks:
-        return """
-Signal:
-No integrated intelligence memory is available yet.
-
-Implication:
-Run /newsintel, /alerts, and relevant ticker commands to build the daily context.
-
-Validation:
-Use /newsintel refresh, /alerts refresh, /stock SYMBOL, /tickernews SYMBOL, and /stockdata SYMBOL.
-""".strip()
+        return (
+            "Signal: No integrated intelligence memory is available yet.\n"
+            "Implication: Run news and alert scans before relying on the daily read.\n"
+            "Validation: Use /newsintel refresh, /alerts refresh, and /stock SYMBOL."
+        )
 
     summary = summarize_blocks(blocks)
 
-    return f"""
-Signal:
-{format_bullets(summary["signals"], "No dominant integrated signal detected.")}
+    features = comma_list(summary["features"][:4])
+    themes = comma_list(summary["themes"][:4])
+    symbols = comma_list(summary["symbols"][:5])
+    risks = comma_list(summary["risks"][:3])
 
-Implication:
-{format_bullets(summary["implications"], "No major integrated implication detected.")}
+    signal_source = " ".join(summary["signals"][:2]).strip()
+    implication_source = " ".join(summary["implications"][:2]).strip()
+    validation_source = " ".join(summary["validations"][:2]).strip()
 
-Validation:
-{format_bullets(summary["validations"], "No validation path detected.")}
+    if not signal_source:
+        signal_source = "No dominant integrated signal detected."
 
-Context Stack:
-• Features: {comma_list(summary["features"])}
-• Themes: {comma_list(summary["themes"])}
-• Symbols: {comma_list(summary["symbols"])}
-• Risks: {comma_list(summary["risks"])}
+    if not implication_source:
+        implication_source = "No major integrated implication detected."
 
-Suggested Commands:
-{format_bullets(summary["commands"], "/newsintel\n• /alerts\n• /portfolio")}
-""".strip()
+    if not validation_source:
+        validation_source = "No validation path detected."
+
+    signal_text = compact_sentence(
+        signal_source,
+        max_chars=230,
+    )
+
+    implication_text = compact_sentence(
+        f"{implication_source} Integrated features: {features}. Themes: {themes}. Symbols: {symbols}. Risks: {risks}.",
+        max_chars=330,
+    )
+
+    validation_text = compact_sentence(
+        f"{validation_source} Confirm with /alerts, /newsintel, /stock, /risk, /volume, and /stockdata.",
+        max_chars=300,
+    )
+
+    return (
+        f"Signal: {signal_text}\n"
+        f"Implication: {implication_text}\n"
+        f"Validation: {validation_text}"
+    )
