@@ -1,0 +1,9 @@
+{
+  "https://stockanalysis.com/stocks/nvda/forecast/": {
+    "symbol": "NVDA",
+    "metrics": {
+      "analyst_consensus": "Strong Buy",
+      "price_target": "$302.83"
+    }
+  }
+}

@@ -16,6 +16,9 @@ os.environ.setdefault("STRICT_COMMAND_AUDIT", "1")
 
 
 REQUIRED_REPORT_BUILDERS = [
+    ("src.intelligence.intelligence_context_registry", "collect_intelligence_context"),
+    ("src.intelligence.intelligence_context_registry", "build_integrated_summary_from_blocks"),
+    ("src.intelligence.daily_ai_summary_context", "build_integrated_daily_ai_summary"),
     ("src.reports.news_intelligence_report", "build_headlines_report"),
     ("src.reports.news_intelligence_report", "build_news_intelligence_report"),
     ("src.reports.news_intelligence_report", "build_macro_news_report"),

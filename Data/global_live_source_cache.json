@@ -1,6 +1,6 @@
 {
   "cache_status": "refreshed",
-  "fetched_at": 1787013487.7950823,
+  "fetched_at": 1787930713.648889,
   "item_count": 27,
   "items": [
     {
@@ -109,8 +109,8 @@
       "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"
     },
     {
-      "headline": "Mint News Enter Search Term(s): Advanced Search News Featured Stories June 23, 2026 Achieving our Objectives, Supporting our Stakeholders: OFAC-OFSI Enhanced Partnership Exchange 2026 Feb...",
-      "score": 7,
+      "headline": "Treasury Proposes Common Sense and Low-Cost Investment Rules for Trump Accounts View All Press Releases Remarks and Statements August 10, 2026 Remarks from Secretary of the Treasury Scott...",
+      "score": 5,
       "source": "U.S. Treasury Daily Rates",
       "source_type": "Treasury",
       "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"
@@ -124,6 +124,13 @@
     },
     {
       "headline": "Lost or Expired Check Direct Express Card Non-Benefit Federal Payments Electronic Federal Benefit Payments - GoDirect Currency and Coins Shop for Coin Products Shop for Currency Products...",
+      "score": 2,
+      "source": "U.S. Treasury Daily Rates",
+      "source_type": "Treasury",
+      "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"
+    },
+    {
+      "headline": "Mint News Enter Search Term(s): Advanced Search News Featured Stories June 23, 2026 Achieving our Objectives, Supporting our Stakeholders: OFAC-OFSI Enhanced Partnership Exchange 2026 Feb...",
       "score": 2,
       "source": "U.S. Treasury Daily Rates",
       "source_type": "Treasury",
@@ -144,13 +151,6 @@
       "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"
     },
     {
-      "headline": "International Reserve Position Troubled Assets Relief Program Reports Office of the Chief Data Officer Federal CDO Council Data.gov Treasury Open Data Evidence Act H.R.4174 Datafoundation...",
-      "score": 1,
-      "source": "U.S. Treasury Daily Rates",
-      "source_type": "Treasury",
-      "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"
-    },
-    {
       "headline": "Trump First Lady Melania Trump Vice President JD Vance Second Lady Usha Vance The Cabinet Executive Office of The President Office of Management and Budget Office of Science and Technolog...",
       "score": 3,
       "source": "White House News",
@@ -158,7 +158,7 @@
       "url": "https://www.whitehouse.gov/news/"
     },
     {
-      "headline": "Supply Chains by Imposing Tariffs on Drones and Their Parts and Components Fact Sheets August 13, 2026 Adjusting Imports of Unmanned Aircraft Systems and Unmanned Aircraft Systems Compone...",
+      "headline": "Trump Further Ensures Affordable Beef for the American Consumer Fact Sheets August 26, 2026 Further Ensuring Affordable Beef for the American Consumer Presidential Actions , Proclamations...",
       "score": 1,
       "source": "White House News",
       "source_type": "White House",
@@ -172,6 +172,13 @@
       "url": "https://www.whitehouse.gov/fact-sheets/"
     },
     {
+      "headline": "Trump Further Ensures Affordable Beef for the American Consumer Fact Sheets August 26, 2026 Fact Sheet: President Donald J.",
+      "score": 1,
+      "source": "White House Fact Sheets",
+      "source_type": "White House",
+      "url": "https://www.whitehouse.gov/fact-sheets/"
+    },
+    {
       "headline": "Supply Chains by Imposing Tariffs on Drones and Their Parts and Components Fact Sheets August 13, 2026 Fact Sheet: President Donald J.",
       "score": 1,
       "source": "White House Fact Sheets",
@@ -179,14 +186,7 @@
       "url": "https://www.whitehouse.gov/fact-sheets/"
     },
     {
-      "headline": "Supply Chains by Imposing Tariffs on Polysilicon and its Derivatives Fact Sheets August 6, 2026 Fact Sheet: President Donald J.",
-      "score": 1,
-      "source": "White House Fact Sheets",
-      "source_type": "White House",
-      "url": "https://www.whitehouse.gov/fact-sheets/"
-    },
-    {
-      "headline": "Trump Delegates Defense Production Act Authority with Respect to Recoverable Critical Minerals and Materials That Are Essential to Our National Defense Fact Sheets July 30, 2026 Fact Shee...",
+      "headline": "Supply Chains by Imposing Tariffs on Polysilicon and its Derivatives Fact Sheets August 6, 2026 1 2 3 \u2026 35 Next About Administration Contact Internships Stay Informed Privacy Policy Media...",
       "score": 1,
       "source": "White House Fact Sheets",
       "source_type": "White House",
@@ -238,13 +238,6 @@
       ],
       "score": 1,
       "theme": "Geopolitical Risk"
-    },
-    {
-      "hits": [
-        "defense"
-      ],
-      "score": 1,
-      "theme": "Defense / Policy"
     },
     {
       "hits": [

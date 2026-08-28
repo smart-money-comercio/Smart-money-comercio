@@ -57,6 +57,7 @@ from src.reports.top10_report import (
 )
 from src.reports.report_quality import enforce_daily_report_quality
 from src.intelligence.market_memory import build_what_changed_today
+from src.intelligence.daily_ai_summary_context import build_integrated_daily_ai_summary
 
 try:
     from src.intelligence.theme_scoring import build_theme_scorecard
@@ -1635,7 +1636,7 @@ def build_clean_ai_summary(
     context: dict,
     what_changed_today: str = "",
 ) -> str:
-    return build_evolving_ai_summary(
+    base_summary = build_evolving_ai_summary(
         top_scores=top_scores,
         movers=movers,
         market_tone=market_tone,
@@ -1643,6 +1644,8 @@ def build_clean_ai_summary(
         what_changed_today=what_changed_today,
         record_memory=True,
     )
+
+    return build_integrated_daily_ai_summary(base_summary=base_summary)
 
 def build_action_checklist(
     top_scores: list[dict],
