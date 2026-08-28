@@ -41,6 +41,10 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "/alerts — added evolving news-intelligence overlay",
+    "/dailyalerts — added compressed news-regime context",
+    "/alertstatus — added latest news intelligence status",
+    "Alert engine now factors in persistent news themes, macro pressure, ticker headline clusters, and news-regime risk",
     "/headlines — upgraded to shared live market-news source layer",
     "/newsintel — added evolving market-news intelligence with memory",
     "/macronews — added macro-only news intelligence",
@@ -83,6 +87,7 @@ RELEASE_NOTES = [
 
 
 REPORT_INTELLIGENCE = [
+    "Evolving news intelligence is now connected to alerts, daily alert digest, and alert status reports",
     "Evolving market-news intelligence layer with shared headline source, memory, macro impact, ticker clusters, and alert triggers",
     "Alert settings and preset readouts for conservative, balanced, and aggressive monitoring modes",
     "Network-safe StockAnalysis parser guardrail for forecast ratings, valuation, fundamentals, and report overlays",

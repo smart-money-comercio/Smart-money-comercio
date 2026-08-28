@@ -18,7 +18,7 @@ fi
 
 echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
-echo "1/9 Checking required files..."
+echo "1/10 Checking required files..."
 
 required_files=(
   "src/bot.py"
@@ -47,27 +47,27 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-echo "2/9 Compiling Python files..."
+echo "2/10 Compiling Python files..."
 
 "$PYTHON_BIN" -m compileall src scripts
 
-echo "3/9 Checking command catalog..."
+echo "3/10 Checking command catalog..."
 
 "$PYTHON_BIN" scripts/check_command_catalog.py
 
-echo "4/9 Checking daily report quality..."
+echo "4/10 Checking daily report quality..."
 
 "$PYTHON_BIN" scripts/check_daily_report_quality.py
 
-echo "5/9 Checking intelligence quality..."
+echo "5/10 Checking intelligence quality..."
 
 "$PYTHON_BIN" scripts/check_intelligence_quality.py
 
-echo "6/9 Checking critical imports and required functions..."
+echo "6/10 Checking critical imports and required functions..."
 
 "$PYTHON_BIN" scripts/check_v14_monitoring.py
 
-echo "7/9 Checking critical imports and required functions..."
+echo "7/10 Checking critical imports and required functions..."
 
 "$PYTHON_BIN" - <<'PY'
 import importlib
@@ -143,12 +143,16 @@ for module_name, function_name in function_checks:
 print("\nPreflight checks passed.")
 PY
 
-echo "8/9 Checking critical imports and required functions..."
+echo "8/10 Checking critical imports and required functions..."
 
 "$PYTHON_BIN" scripts/check_stockanalysis_quality.py
 
-echo "9/9 Checking news intelligence quality..."
+echo "9/10 Checking news intelligence quality..."
 
 "$PYTHON_BIN" scripts/check_news_intelligence_quality.py
+
+echo "10/10 Checking news intelligence quality..."
+
+"$PYTHON_BIN" scripts/check_alert_news_bridge_quality.py
 
 echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py

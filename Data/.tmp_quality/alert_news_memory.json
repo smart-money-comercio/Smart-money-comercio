@@ -1,0 +1,43 @@
+{
+  "records": [
+    {
+      "alert_triggers": [
+        "Theme alert: rates/yields pressure active.",
+        "Ticker alert: NVDA headline cluster active."
+      ],
+      "checked_at": "2026-08-27 20:37:37",
+      "fingerprint": "alert-news-bridge-fixture-001",
+      "headline_count": 4,
+      "mode": "all",
+      "news_regime": "Rates / Treasury pressure",
+      "portfolio_impact": "Risk-control watch; require confirmation for high-multiple growth.",
+      "risk_regime": "Cautious",
+      "symbol": "",
+      "theme_counts": {
+        "AI / Semiconductors": 2,
+        "Geopolitical Risk": 2,
+        "Oil / Energy": 1,
+        "Rates / Yields": 3,
+        "Treasury / Debt": 2
+      },
+      "ticker_counts": {
+        "NVDA": 2,
+        "TLT": 2,
+        "USO": 1
+      },
+      "top_themes": [
+        "Rates / Yields",
+        "Treasury / Debt",
+        "Geopolitical Risk",
+        "AI / Semiconductors",
+        "Oil / Energy"
+      ],
+      "top_tickers": [
+        "NVDA",
+        "TLT",
+        "USO"
+      ]
+    }
+  ],
+  "updated_at": "2026-08-27 20:37:37"
+}

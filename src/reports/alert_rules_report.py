@@ -4,6 +4,7 @@ from src.config.alert_rules import (
     get_alert_rules,
 )
 from src.intelligence.alert_evolution import load_alert_memory
+from src.reports.alert_news_bridge import build_alertstatus_news_summary
 
 
 def latest_record() -> dict:
@@ -27,6 +28,7 @@ def format_symbol_list(items, fallback: str = "None") -> str:
 
 def build_alertstatus_report() -> str:
     record = latest_record()
+    news_summary = build_alertstatus_news_summary()
     rules = get_alert_rules()
 
     if not record:
@@ -35,6 +37,9 @@ def build_alertstatus_report() -> str:
 
 Status: No alert scan recorded yet.
 Rules Version: {rules.get("version", "unknown")}
+
+News Intelligence
+{news_summary}
 
 Run:
 /alerts
@@ -53,6 +58,9 @@ Last Scan: {record.get("checked_at", "unknown")}
 Alert Regime: {record.get("alert_regime", "unknown")}
 Macro Regime: {record.get("macro_regime", "unknown")}
 Risk Regime: {record.get("risk_regime", "unknown")}
+
+News Intelligence
+{news_summary}
 
 Alert Counts
 Total Alerts: {record.get("alert_count", 0)}
@@ -83,8 +91,13 @@ Research only. Not financial advice.
 
 
 def build_alertrules_report() -> str:
+    news_summary = build_alertstatus_news_summary()
+
     return f"""
 ⚙️ Alert Rules
+
+News Intelligence
+{news_summary}
 
 {build_alert_rules_summary()}
 

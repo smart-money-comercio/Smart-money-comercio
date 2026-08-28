@@ -1,6 +1,7 @@
 from typing import Any
 
 from src.reports.alert_monitor_report import build_alert_monitor_report
+from src.reports.alert_news_bridge import build_daily_alert_news_digest
 
 
 SECTION_TITLES = [
@@ -95,6 +96,7 @@ def select_action(section: str) -> str:
 
 def build_daily_alert_digest_report(force_refresh: bool = False) -> str:
     full_report = build_alert_monitor_report(force_refresh=force_refresh)
+    news_digest = build_daily_alert_news_digest(force_refresh=force_refresh)
 
     executive = extract_section(full_report, "Executive Read")
     critical = extract_section(full_report, "Critical Alerts")
@@ -126,6 +128,9 @@ Risk-Control Queue: {risk_count}
 
 Critical Changes
 {select_digest_lines(critical, limit=4)}
+
+News Intelligence
+{news_digest}
 
 Warnings
 {select_digest_lines(warnings, limit=4)}

@@ -9,6 +9,7 @@ from src.intelligence.alert_evolution import (
     safe_float,
 )
 from src.intelligence.defense_live_sources import fetch_defense_live_context
+from src.reports.alert_news_bridge import build_alert_news_overlay
 from src.intelligence.global_live_sources import fetch_global_live_context
 from src.reports.global_intelligence_report import (
     MACRO_SYMBOLS,
@@ -19,6 +20,7 @@ from src.reports.global_intelligence_report import (
     top_theme as global_top_theme,
 )
 from src.reports.top10_report import classify_action_bucket, rank_candidates
+from src.config.alert_rules import get_alert_rules
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.score_display import (
     get_action_label,
@@ -168,17 +170,26 @@ def get_ranked_items(scores: list[dict]) -> list[dict]:
 
 
 def is_high_priority(item: dict) -> bool:
+    rules = get_alert_rules()
+
+    priority_score = safe_float(rules.get("priority_score"), 82) or 82
+    strong_priority_score = safe_float(rules.get("strong_priority_score"), 88) or 88
+
     score = safe_float(item.get("score"), 0) or 0
     risk = str(item.get("risk") or "").lower()
     bucket = str(item.get("bucket") or "").lower()
     label = str(item.get("label") or "").lower()
 
+    risk_terms = rules.get("risk_terms", ["high", "elevated", "speculative"])
+
+    has_risk_blocker = any(str(term).lower() in risk for term in risk_terms)
+
     return (
-        score >= 82
+        score >= priority_score
         and "high risk" not in bucket
-        and not any(term in risk for term in ["high", "elevated", "speculative"])
+        and not has_risk_blocker
         and (
-            score >= 88
+            score >= strong_priority_score
             or "high" in label
             or "prime" in label
             or "best setup" in bucket
@@ -187,34 +198,55 @@ def is_high_priority(item: dict) -> bool:
 
 
 def is_risk_alert(item: dict) -> bool:
+    rules = get_alert_rules()
+
     risk = str(item.get("risk") or "").lower()
     bucket = str(item.get("bucket") or "").lower()
     action = str(item.get("action") or "").lower()
 
+    risk_terms = rules.get("risk_terms", ["high", "elevated", "speculative", "volatile"])
+    action_terms = rules.get("action_caution_terms", ["avoid", "reduce", "caution"])
+
     return (
-        any(term in risk for term in ["high", "elevated", "speculative", "volatile"])
+        any(str(term).lower() in risk for term in risk_terms)
         or "high risk" in bucket
-        or any(term in action for term in ["avoid", "reduce", "caution"])
+        or any(str(term).lower() in action for term in action_terms)
     )
 
 
 def needs_validation(item: dict) -> bool:
+    rules = get_alert_rules()
+
+    validation_min = safe_float(rules.get("validation_min_score"), 65) or 65
+    validation_max = safe_float(rules.get("validation_max_score"), 82) or 82
+
     score = safe_float(item.get("score"), 0) or 0
     volume = str(item.get("volume") or "").lower()
     signal = str(item.get("signal") or "").lower()
     bucket = str(item.get("bucket") or "").lower()
     action = str(item.get("action") or "").lower()
 
+    volume_terms = rules.get(
+        "validation_volume_terms",
+        ["weak", "unconfirmed", "thin", "low", "needs"],
+    )
+    signal_terms = rules.get(
+        "validation_signal_terms",
+        ["developing", "early", "weak"],
+    )
+
     return (
-        65 <= score < 82
+        validation_min <= score < validation_max
         or "confirmation" in bucket
         or "watch" in action
-        or any(term in volume for term in ["weak", "unconfirmed", "thin", "low", "needs"])
-        or any(term in signal for term in ["developing", "early", "weak"])
+        or any(str(term).lower() in volume for term in volume_terms)
+        or any(str(term).lower() in signal for term in signal_terms)
     )
 
 
 def warning_text(item: dict) -> str:
+    rules = get_alert_rules()
+
     text = " ".join(
         [
             str(item.get("filing_context", "")),
@@ -232,16 +264,21 @@ def warning_text(item: dict) -> str:
 
     warnings = []
 
-    if any(term in text for term in ["going concern", "dilution", "offering", "restatement", "material weakness", "investigation"]):
+    filing_terms = rules.get("filing_warning_terms", [])
+    catalyst_terms = rules.get("catalyst_warning_terms", [])
+    volume_terms = rules.get("validation_volume_terms", [])
+    analyst_terms = rules.get("analyst_warning_terms", [])
+
+    if any(str(term).lower() in text for term in filing_terms):
         warnings.append("filing/disclosure warning")
 
-    if any(term in text for term in ["miss", "cut", "lowered", "weak", "delay", "negative"]):
+    if any(str(term).lower() in text for term in catalyst_terms):
         warnings.append("catalyst warning")
 
-    if any(term in text for term in ["weak", "unconfirmed", "low volume", "thin"]):
+    if any(str(term).lower() in text for term in volume_terms):
         warnings.append("volume warning")
 
-    if any(term in text for term in ["downgrade", "sell", "underperform", "negative"]):
+    if any(str(term).lower() in text for term in analyst_terms):
         warnings.append("analyst warning")
 
     return ", ".join(warnings)
@@ -285,6 +322,11 @@ def score_delta(symbol: str, previous_state: dict[str, dict], current_item: dict
 
 
 def detect_alerts(items: list[dict], previous_state: dict[str, dict]) -> list[dict]:
+    rules = get_alert_rules()
+
+    jump_threshold = safe_float(rules.get("score_jump_threshold"), 5) or 5
+    drop_threshold = safe_float(rules.get("score_drop_threshold"), 5) or 5
+
     alerts = []
 
     for item in items:
@@ -300,11 +342,11 @@ def detect_alerts(items: list[dict], previous_state: dict[str, dict]) -> list[di
             severity = "critical"
             reasons.append("new high-priority setup")
 
-        if delta is not None and delta >= 5:
+        if delta is not None and delta >= jump_threshold:
             severity = "critical" if severity != "critical" else severity
             reasons.append(f"score improved {format_delta(delta)}")
 
-        if delta is not None and delta <= -5:
+        if delta is not None and delta <= -drop_threshold:
             severity = "warning"
             reasons.append(f"score deteriorated {format_delta(delta)}")
 
@@ -389,13 +431,18 @@ def build_macro_alerts(risk_regime: str, macro_regime: str, macro_notes: list[st
 
 
 def build_alert_regime(critical_count: int, warning_count: int, risk_regime: str) -> str:
-    if critical_count >= 3:
+    rules = get_alert_rules()
+
+    critical_threshold = int(rules.get("critical_alert_count_threshold", 3) or 3)
+    warning_threshold = int(rules.get("warning_alert_count_threshold", 5) or 5)
+
+    if critical_count >= critical_threshold:
         return "Action required / multiple critical alerts"
 
     if critical_count >= 1:
         return "Priority review"
 
-    if warning_count >= 5:
+    if warning_count >= warning_threshold:
         return "Risk-control watch"
 
     if "risk-off" in str(risk_regime or "").lower():
@@ -519,6 +566,7 @@ def build_alert_monitor_report(force_refresh: bool = False) -> str:
 
     global_context = fetch_global_live_context(force_refresh=force_refresh)
     defense_context = fetch_defense_live_context(force_refresh=force_refresh)
+    news_overlay = build_alert_news_overlay(force_refresh=force_refresh)
 
     quotes = get_quote_data(list(MACRO_SYMBOLS.keys()))
     risk_regime = build_risk_regime(quotes, global_context)
@@ -603,6 +651,9 @@ Critical Alerts
 
 Warning Alerts
 {format_alerts(alerts, severity="warning")}
+
+News Intelligence
+{news_overlay}
 
 Macro / Theme Alerts
 {bullet_lines(macro_alerts)}
