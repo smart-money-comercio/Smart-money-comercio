@@ -5,7 +5,14 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-from telegram import Bot, BotCommand
+from telegram import (
+    Bot,
+    BotCommand,
+    BotCommandScopeAllChatAdministrators,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeDefault,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -75,12 +82,21 @@ def collect_commands() -> list[BotCommand]:
                 )
             )
 
-    # Telegram supports up to 100 commands.
     return commands[:MAX_COMMANDS]
 
 
+async def show_scope(bot: Bot, scope, label: str) -> None:
+    commands = await bot.get_my_commands(scope=scope)
+    names = [f"/{command.command}" for command in commands]
+
+    print("")
+    print(f"{label}: {len(commands)} commands")
+    for target in ["/newsintel", "/newsmemory", "/alerts", "/dailyalerts", "/alertstatus", "/macronews", "/tickernews"]:
+        print(f"  {target}: {'FOUND' if target in names else 'MISSING'}")
+
+
 async def main() -> int:
-    token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
+    token = (os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
 
     if not token:
         print("Telegram command sync failed.")
@@ -90,13 +106,33 @@ async def main() -> int:
     commands = collect_commands()
 
     bot = Bot(token=token)
-    await bot.set_my_commands(commands)
+    me = await bot.get_me()
+
+    scopes = [
+        ("Default", BotCommandScopeDefault()),
+        ("All private chats", BotCommandScopeAllPrivateChats()),
+        ("All group chats", BotCommandScopeAllGroupChats()),
+        ("All chat administrators", BotCommandScopeAllChatAdministrators()),
+    ]
 
     print("Telegram command dropdown sync")
-    print("Status: PASS")
-    print(f"Commands Synced: {len(commands)}")
+    print(f"Bot: @{me.username}")
+    print(f"Commands Prepared: {len(commands)}")
+
+    for label, scope in scopes:
+        await bot.delete_my_commands(scope=scope)
+        await bot.set_my_commands(commands, scope=scope)
+        print(f"Synced scope: {label}")
+
     print("")
-    print("Synced commands:")
+    print("Status: PASS")
+    print(f"Commands Synced Per Scope: {len(commands)}")
+
+    for label, scope in scopes:
+        await show_scope(bot, scope, label)
+
+    print("")
+    print("Synced command names:")
     for command in commands:
         print(f"/{command.command} - {command.description}")
 
