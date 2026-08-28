@@ -32,7 +32,7 @@ from src.commands.health_commands import (
     system_status,
     version,
 )
-from src.commands.help_commands import help_command
+from src.commands.help_commands import admin_command, commands_command, help_command
 from src.commands.intelligence_commands import (
     congress,
     conviction,
@@ -83,7 +83,8 @@ def register_commands(app):
     # Core
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("commands", commands_menu))
+    app.add_handler(CommandHandler("commands", commands_command))
+    app.add_handler(CommandHandler("command", commands_command))
 
     # Health / admin
     app.add_handler(CommandHandler("health", health))
