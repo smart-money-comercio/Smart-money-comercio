@@ -1,5 +1,6 @@
 COMMAND_CATALOG_VERSION = "v1.4"
 
+
 START_COMMANDS = [
     ("/start", "Start bot"),
     ("/help", "Help menu"),
@@ -7,10 +8,15 @@ START_COMMANDS = [
     ("/admin", "Admin menu"),
 ]
 
+
 CORE_COMMANDS = [
     ("/brief", "Daily market brief"),
+    ("/headlines", "Fast market headline tape"),
+    ("/newsintel", "Evolving market-news intelligence"),
+    ("/newsmemory", "What the news engine has learned"),
     ("/dailyalerts", "Daily alert digest"),
     ("/alerts", "Full alert monitor"),
+    ("/alertstatus", "Latest recorded alert state"),
     ("/alertsettings", "Current alert thresholds, environment overrides, and detected preset"),
     ("/alertpreset MODE", "Show conservative, balanced, or aggressive alert preset overrides"),
     ("/smartmoney", "Smart Money command center"),
@@ -25,18 +31,12 @@ CORE_COMMANDS = [
 ]
 
 
-START_COMMANDS = [
-    ("/start", "Start bot"),
-    ("/help", "Help menu"),
-    ("/commands", "Full command menu"),
-    ("/admin", "Admin menu"),
-]
-
-
 DAILY_REPORT_COMMANDS = [
     ("/brief", "Daily market brief"),
     ("/report", "Daily report legacy alias"),
     ("/snapshot", "Fast one-screen market snapshot"),
+    ("/headlines", "Fast market headline tape"),
+    ("/newsintel", "Evolving market-news intelligence"),
     ("/dailyalerts", "Compressed daily alert digest"),
     ("/alerts", "Full alert monitor"),
     ("/quality", "Report quality check"),
@@ -51,6 +51,7 @@ STOCK_RESEARCH_COMMANDS = [
     ("/stock SYMBOL", "Stock intelligence"),
     ("/stockdata SYMBOL", "StockAnalysis fundamentals, valuation, financials, balance sheet, cash-flow, and analyst rating snapshot"),
     ("/ticker SYMBOL", "Stock intelligence legacy alias"),
+    ("/tickernews SYMBOL", "Ticker-specific news intelligence"),
     ("/quote SYMBOL", "Quote snapshot"),
     ("/market SYMBOL", "Market context"),
     ("/scorecard SYMBOL", "Smart Money scorecard"),
@@ -82,7 +83,7 @@ THEME_COMMANDS = [
 MARKET_CONTEXT_COMMANDS = [
     ("/global", "Global macro intelligence"),
     ("/macro", "Global macro legacy alias"),
-    ("/headlines", "Market headlines"),
+    ("/headlines", "Fast market headline tape"),
     ("/newsintel", "Evolving market-news intelligence"),
     ("/macronews", "Macro-only news intelligence"),
     ("/tickernews SYMBOL", "Ticker-specific news intelligence"),
@@ -98,17 +99,18 @@ MARKET_CONTEXT_COMMANDS = [
 
 SMART_MONEY_COMMANDS = [
     ("/smartmoney", "Smart Money command center"),
-    ("/conviction", "High-conviction overlap candidates"),
+    ("/conviction", "Highest conviction opportunities"),
+    ("/undervalued", "Undervalued opportunities"),
+    ("/congress", "Congress trading intelligence"),
+    ("/insiders", "Insider trading intelligence"),
+    ("/sec", "SEC filing intelligence"),
+    ("/filing SYMBOL", "Ticker SEC filing intelligence"),
     ("/alerts", "Full Smart Money AI alert monitor"),
     ("/dailyalerts", "Compressed daily alert digest"),
     ("/alertstatus", "Latest recorded alert state"),
     ("/alertrules", "Alert rule thresholds and environment settings"),
     ("/alertsettings", "Current alert thresholds, environment overrides, and detected preset"),
     ("/alertpreset MODE", "Show conservative, balanced, or aggressive alert preset overrides"),
-    ("/congress", "Congressional trading"),
-    ("/insiders", "Insider activity"),
-    ("/sec SYMBOL", "SEC disclosure intelligence"),
-    ("/filing SYMBOL", "Filing lookup and thesis impact"),
 ]
 
 
@@ -141,6 +143,19 @@ ALIASES = [
 ]
 
 
+COMMAND_GROUPS = [
+    ("Core Commands", CORE_COMMANDS),
+    ("Start / Menu", START_COMMANDS),
+    ("Daily Report / Alerts", DAILY_REPORT_COMMANDS),
+    ("Stock Research", STOCK_RESEARCH_COMMANDS),
+    ("Watchlist", WATCHLIST_COMMANDS),
+    ("Themes / Portfolio", THEME_COMMANDS),
+    ("Smart Money Intelligence", SMART_MONEY_COMMANDS),
+    ("Market Context", MARKET_CONTEXT_COMMANDS),
+    ("Admin / System", ADMIN_COMMANDS),
+]
+
+
 def format_command_group(title: str, commands: list[tuple[str, str]]) -> str:
     lines = [title]
 
@@ -160,51 +175,15 @@ def format_aliases() -> str:
 
 
 def build_commands_menu_text() -> str:
-    return """
+    sections = ["🤖 Smart Money AI Commands"]
 
-🤖 Smart Money AI Commands
+    for title, commands in COMMAND_GROUPS:
+        sections.append(format_command_group(title, commands))
 
-{core}
+    sections.append(format_aliases())
+    sections.append("Research only. Not financial advice.")
 
-Start / Menu
-{start}
-
-Daily Report / Alerts
-{daily}
-
-Stock Research
-{stock}
-
-Watchlist
-{watchlist}
-
-Themes / Portfolio
-{themes}
-
-Smart Money Intelligence
-{smart_money}
-
-Market Context
-{market}
-
-Admin / System
-{admin}
-
-{aliases}
-
-Research only. Not financial advice.
-""".format(
-        core=format_command_group("Core Commands", CORE_COMMANDS),
-        start="\n".join(f"{cmd} - {desc}" for cmd, desc in START_COMMANDS),
-        daily="\n".join(f"{cmd} - {desc}" for cmd, desc in DAILY_REPORT_COMMANDS),
-        stock="\n".join(f"{cmd} - {desc}" for cmd, desc in STOCK_RESEARCH_COMMANDS),
-        watchlist="\n".join(f"{cmd} - {desc}" for cmd, desc in WATCHLIST_COMMANDS),
-        themes="\n".join(f"{cmd} - {desc}" for cmd, desc in THEME_COMMANDS),
-        smart_money="\n".join(f"{cmd} - {desc}" for cmd, desc in SMART_MONEY_COMMANDS),
-        market="\n".join(f"{cmd} - {desc}" for cmd, desc in MARKET_CONTEXT_COMMANDS),
-        admin="\n".join(f"{cmd} - {desc}" for cmd, desc in ADMIN_COMMANDS),
-        aliases=format_aliases(),
-    ).strip()
+    return "\n\n".join(sections).strip()
 
 
 def build_help_text() -> str:
@@ -223,12 +202,17 @@ Start here:
 /commands - Full command menu
 
 Useful examples:
+/headlines
+/newsintel
+/newsmemory
 /dailyalerts
 /alerts
+/alertstatus
 /smartmoney
 /conviction
 /brief
 /stock NVDA
+/tickernews NVDA
 /scorecard PLTR
 /volume AMD
 /calendar
@@ -242,11 +226,41 @@ def get_primary_commands() -> list[tuple[str, str]]:
     return CORE_COMMANDS
 
 
+def get_all_command_groups() -> list[tuple[str, list[tuple[str, str]]]]:
+    return COMMAND_GROUPS
+
+
+def get_all_commands() -> list[tuple[str, str]]:
+    commands = []
+    seen = set()
+
+    for _title, group in COMMAND_GROUPS:
+        for command, description in group:
+            command_key = command.split()[0].lower()
+
+            if command_key in seen:
+                continue
+
+            seen.add(command_key)
+            commands.append((command, description))
+
+    return commands
+
+
 def get_version_feature_lines() -> list[str]:
     return [
         "v1.4 alert monitoring foundation",
         "/alerts full alert monitor",
         "/dailyalerts compressed daily alert digest",
+        "/alertstatus latest alert state",
+        "/alertsettings active alert settings readout",
+        "/alertpreset conservative, balanced, and aggressive alert recipes",
+        "/headlines upgraded fast market headline tape",
+        "/newsintel evolving market-news intelligence",
+        "/macronews macro-only news intelligence",
+        "/tickernews SYMBOL ticker-specific news intelligence",
+        "/newsmemory persistent news intelligence memory",
+        "StockAnalysis integration preserved",
         "v1.3 intelligence command centers preserved",
         "Primary command catalog refreshed",
         "Legacy aliases preserved",
