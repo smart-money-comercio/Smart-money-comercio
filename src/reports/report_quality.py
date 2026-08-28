@@ -13,7 +13,7 @@ REQUIRED_HEADERS = [
     "Watchlist Movers",
     "Top Opportunities",
     "Risk Notes",
-    "AI Summary",
+    "Smart Money Summary",
     "Action Checklist",
     "Next Commands",
     "Notes",
@@ -41,7 +41,7 @@ SECTION_LINE_LIMITS = {
     "Watchlist Movers": 8,
     "Top Opportunities": 13,
     "Risk Notes": 4,
-    "AI Summary": 4,              # header + Signal / Implication / Validation
+    "Smart Money Summary": 4,              # header + Signal / Implication / Validation
     "Action Checklist": 5,
     "Next Commands": 6,
 }
@@ -131,7 +131,7 @@ def trim_section_lines(report: str) -> str:
         if limit and len(lines) > limit:
             kept = lines[:limit]
 
-            if header not in {"What Changed Today", "Theme Read", "AI Summary"}:
+            if header not in {"What Changed Today", "Theme Read", "Smart Money Summary"}:
                 kept.append("Briefly trimmed to keep /report focused.")
 
             lines = kept
@@ -176,7 +176,7 @@ def enforce_ai_summary_shape(report: str) -> str:
     output_lines = []
 
     for header, lines in sections:
-        if header != "AI Summary":
+        if header != "Smart Money Summary":
             output_lines.extend(lines)
             output_lines.append("")
             continue
@@ -191,7 +191,7 @@ def enforce_ai_summary_shape(report: str) -> str:
         else:
             output_lines.extend(
                 [
-                    "AI Summary",
+                    "Smart Money Summary",
                     "Signal: Daily signal unavailable; use What Changed Today and Theme Read as the primary briefing layer.",
                     "Implication: Keep sizing disciplined until price, volume, and theme confirmation align.",
                     "Validation: Run /scorecard and /volume on the top-ranked idea before acting.",

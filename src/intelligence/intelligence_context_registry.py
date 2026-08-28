@@ -143,13 +143,161 @@ def comma_list(items: list[str], fallback: str = "None") -> str:
     return ", ".join(items)
 
 
-def compact_sentence(value: str, max_chars: int = 240) -> str:
+def compact_sentence(value: str, max_chars: int = 260) -> str:
     text = " ".join(str(value or "").split())
 
     if len(text) <= max_chars:
         return text
 
     return text[: max_chars - 3].rstrip() + "..."
+
+
+def human_list(items: list[str], limit: int = 4, fallback: str = "none") -> str:
+    cleaned = unique_values(
+        [str(item or "").strip() for item in items if str(item or "").strip()],
+        limit=limit,
+    )
+
+    if not cleaned:
+        return fallback
+
+    if len(cleaned) == 1:
+        return cleaned[0]
+
+    if len(cleaned) == 2:
+        return f"{cleaned[0]} and {cleaned[1]}"
+
+    return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
+
+
+def find_context_block(
+    blocks: list[IntelligenceContextBlock],
+    feature_name: str,
+) -> IntelligenceContextBlock | None:
+    target = str(feature_name or "").strip().lower()
+
+    for block in blocks:
+        if str(block.feature or "").strip().lower() == target:
+            return block
+
+    return None
+
+
+def infer_daily_posture(themes: list[str], risks: list[str]) -> str:
+    combined = " ".join(themes + risks).lower()
+
+    if "risk-off" in combined:
+        return "defensive"
+
+    if "cautious" in combined:
+        return "cautious and selective"
+
+    if "rates" in combined or "treasury" in combined or "yields" in combined:
+        return "rate-sensitive"
+
+    if "china" in combined or "trade" in combined:
+        return "macro-sensitive"
+
+    if "ai" in combined or "semiconductor" in combined:
+        return "constructive but selective"
+
+    return "balanced"
+
+
+def build_alert_phrase(alert_block: IntelligenceContextBlock | None) -> str:
+    if not alert_block:
+        return "the alert queue has not been refreshed yet"
+
+    critical_count = alert_block.metadata.get("critical_count", 0)
+    warning_count = alert_block.metadata.get("warning_count", 0)
+
+    try:
+        critical_count = int(critical_count or 0)
+        warning_count = int(warning_count or 0)
+    except Exception:
+        critical_count = 0
+        warning_count = 0
+
+    if critical_count == 0 and warning_count == 0:
+        return "the alert queue is quiet"
+
+    if critical_count > 0:
+        return f"the alert queue shows {critical_count} critical and {warning_count} warning signals"
+
+    return f"the alert queue shows {warning_count} warning signals"
+
+
+def build_professional_signal(
+    blocks: list[IntelligenceContextBlock],
+    summary: dict,
+) -> str:
+    alert_block = find_context_block(blocks, "Alert Monitor")
+    news_block = find_context_block(blocks, "News Intelligence")
+
+    themes = summary.get("themes", [])
+    risks = summary.get("risks", [])
+
+    posture = infer_daily_posture(themes, risks)
+    theme_text = human_list(themes, limit=3, fallback="the broader market tape")
+    alert_phrase = build_alert_phrase(alert_block)
+
+    if news_block:
+        return compact_sentence(
+            f"The daily read is {posture}. {theme_text} are driving the market context, while {alert_phrase}.",
+            max_chars=260,
+        )
+
+    return compact_sentence(
+        f"The daily read is {posture}. {alert_phrase}, so the focus should stay on confirmed setups rather than broad risk-taking.",
+        max_chars=260,
+    )
+
+
+def build_professional_implication(summary: dict) -> str:
+    symbols = summary.get("symbols", [])
+    themes = summary.get("themes", [])
+
+    symbol_text = human_list(symbols, limit=5, fallback="")
+    theme_text = human_list(themes, limit=3, fallback="the current macro setup")
+
+    if symbol_text:
+        return compact_sentence(
+            f"Focus first on {symbol_text}. Treat headlines, alert signals, and external ratings as confirmation inputs, not stand-alone buy signals.",
+            max_chars=330,
+        )
+
+    return compact_sentence(
+        f"Stay selective and let {theme_text} guide positioning. Prioritize quality setups with confirmed price action, volume, and risk control.",
+        max_chars=330,
+    )
+
+
+def build_professional_validation(summary: dict) -> str:
+    commands = summary.get("commands", [])
+
+    preferred_commands = [
+        "/alerts",
+        "/newsintel",
+        "/stock",
+        "/risk",
+        "/volume",
+        "/stockdata",
+    ]
+
+    available = []
+
+    command_text = " ".join(commands)
+
+    for command in preferred_commands:
+        if command in command_text or command in preferred_commands:
+            available.append(command)
+
+    command_list = human_list(available, limit=6, fallback="/alerts, /newsintel, /stock, /risk, /volume, and /stockdata")
+
+    return compact_sentence(
+        f"Before acting, confirm the setup with {command_list}. Upgrade conviction only when the score, news context, volume, risk, and external validation agree.",
+        max_chars=330,
+    )
 
 
 def build_integrated_summary_from_blocks(blocks: list[IntelligenceContextBlock]) -> str:
@@ -162,38 +310,9 @@ def build_integrated_summary_from_blocks(blocks: list[IntelligenceContextBlock])
 
     summary = summarize_blocks(blocks)
 
-    features = comma_list(summary["features"][:4])
-    themes = comma_list(summary["themes"][:4])
-    symbols = comma_list(summary["symbols"][:5])
-    risks = comma_list(summary["risks"][:3])
-
-    signal_source = " ".join(summary["signals"][:2]).strip()
-    implication_source = " ".join(summary["implications"][:2]).strip()
-    validation_source = " ".join(summary["validations"][:2]).strip()
-
-    if not signal_source:
-        signal_source = "No dominant integrated signal detected."
-
-    if not implication_source:
-        implication_source = "No major integrated implication detected."
-
-    if not validation_source:
-        validation_source = "No validation path detected."
-
-    signal_text = compact_sentence(
-        signal_source,
-        max_chars=230,
-    )
-
-    implication_text = compact_sentence(
-        f"{implication_source} Integrated features: {features}. Themes: {themes}. Symbols: {symbols}. Risks: {risks}.",
-        max_chars=330,
-    )
-
-    validation_text = compact_sentence(
-        f"{validation_source} Confirm with /alerts, /newsintel, /stock, /risk, /volume, and /stockdata.",
-        max_chars=300,
-    )
+    signal_text = build_professional_signal(blocks, summary)
+    implication_text = build_professional_implication(summary)
+    validation_text = build_professional_validation(summary)
 
     return (
         f"Signal: {signal_text}\n"

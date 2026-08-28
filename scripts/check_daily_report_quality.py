@@ -18,6 +18,9 @@ from src.reports.daily_report import build_daily_report
 from src.reports.report_quality import validate_daily_report_quality
 
 
+SUMMARY_LABEL = "Smart Money Summary"
+
+
 def format_list(items) -> str:
     if not items:
         return "None"
@@ -72,8 +75,12 @@ def format_quality_report(result: dict) -> str:
         default="unknown",
     )
 
-    ai_summary_ok = get_validation_value(
+    # Keep backward-compatible result keys from report_quality.py.
+    # Only the printed label changes.
+    summary_ok = get_validation_value(
         result,
+        "smart_money_summary_ok",
+        "smart_money_summary_valid",
         "ai_summary_ok",
         "ai_summary_valid",
         default="unknown",
@@ -87,7 +94,7 @@ Status: {status}
 
 Characters: {chars}
 What Changed Bullets: {what_changed_bullets}
-AI Summary Format OK: {ai_summary_ok}
+{SUMMARY_LABEL} Format OK: {summary_ok}
 
 Missing Required Headers: {format_list(missing)}
 Duplicate Headers: {format_list(duplicates)}

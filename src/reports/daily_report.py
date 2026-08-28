@@ -1781,7 +1781,7 @@ Top Opportunities
 Risk Notes
 {build_risk_notes(top_scores, movers, global_context)}
 
-AI Summary
+Smart Money Summary
 {build_clean_ai_summary(top_scores, movers, market_tone, global_context, what_changed_today)}
 
 Action Checklist

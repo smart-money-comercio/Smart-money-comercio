@@ -1,6 +1,5 @@
 import json
 import os
-from pyexpat import errors
 import sys
 from pathlib import Path
 
@@ -108,7 +107,7 @@ def main() -> int:
 
         blocks = collect_intelligence_context()
         summary = build_integrated_daily_ai_summary(
-            base_summary="Signal:\nBase fallback.\n\nImplication:\nBase.\n\nValidation:\nBase."
+            base_summary="Signal: Base fallback.\nImplication: Base.\nValidation: Base."
         )
 
     except Exception as error:
@@ -120,23 +119,40 @@ def main() -> int:
 
     block_features = [block.feature for block in blocks]
 
+    # Provider checks: these verify the evolving registry is loaded.
     require("Alert Monitor" in block_features, "missing Alert Monitor provider", errors)
     require("News Intelligence" in block_features, "missing News Intelligence provider", errors)
     require("StockAnalysis Cache" in block_features, "missing StockAnalysis Cache provider", errors)
     require("Alert Settings" in block_features, "missing Alert Settings provider", errors)
 
+    # Format checks: daily quality requires the compact three-line format.
     require("Signal:" in summary, "missing Signal section", errors)
     require("Implication:" in summary, "missing Implication section", errors)
-    require("Confirm with" in summary, "missing validation command sentence", errors)
     require("Validation:" in summary, "missing Validation section", errors)
-    require("Integrated features:" in summary, "missing integrated features sentence", errors)
-    require("Alert Monitor" in summary, "summary missing Alert Monitor feature", errors)
-    require("News Intelligence" in summary, "summary missing News Intelligence feature", errors)
-    require("StockAnalysis Cache" in summary, "summary missing StockAnalysis feature", errors)
-    require("/stockdata" in summary, "summary missing /stockdata command", errors)
-    require("Rates / Treasury pressure" in summary, "summary missing regime context", errors)
-    require("/newsintel" in summary, "summary missing /newsintel command", errors)
-    require("/alerts" in summary, "summary missing /alerts command", errors)
+
+    # Readability checks: the summary should sound professional, not diagnostic.
+    require("The daily read is" in summary, "summary missing professional signal language", errors)
+    require(
+        "Focus first on" in summary or "Stay selective" in summary,
+        "summary missing professional implication language",
+        errors,
+    )
+    require(
+        "Before acting, confirm" in summary,
+        "summary missing professional validation language",
+        errors,
+    )
+
+    # Regression checks: avoid technical/internal wording in the user-facing summary.
+    require("Integrated features:" not in summary, "summary still contains technical integrated-features wording", errors)
+    require("Integrated context includes" not in summary, "summary still contains technical integrated-context wording", errors)
+    require("Context Stack:" not in summary, "summary still contains Context Stack wording", errors)
+    require("Suggested Commands:" not in summary, "summary still contains Suggested Commands wording", errors)
+
+    # Signal-source checks: make sure the important intelligence still appears in plain language.
+    require("Rates / Treasury pressure" in summary, "summary missing market regime context", errors)
+    require("NVDA" in summary, "summary missing priority symbol context", errors)
+    require("/stockdata" in summary, "summary missing StockAnalysis validation command", errors)
 
     print("Daily AI Summary Integration Check")
     print(f"Status: {'FAIL' if errors else 'PASS'}")
