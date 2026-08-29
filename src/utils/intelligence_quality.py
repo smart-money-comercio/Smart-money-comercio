@@ -484,7 +484,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
                 "Smart Money AI Daily Report",
                 "Executive Summary",
                 "Top Opportunities",
-                "AI Summary",
+                "Smart Money Summary",
                 "Action Checklist",
             ],
             max_chars=BRIEF_SAFE_CHARS,

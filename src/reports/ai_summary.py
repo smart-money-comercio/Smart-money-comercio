@@ -245,7 +245,7 @@ def build_ai_summary(stocks: list[dict] | None = None, quotes: Any = None, max_i
 
     if not ranked:
         return (
-            "AI Summary\n"
+            "Smart Money Summary\n"
             "Today’s report does not have enough ranked scoring data to build a strong read. "
             "Refresh market, Congress, and insider data, then rerun /report."
         )
@@ -257,7 +257,7 @@ def build_ai_summary(stocks: list[dict] | None = None, quotes: Any = None, max_i
     )
 
     return f"""
-AI Summary
+Smart Money Summary
 Today’s Read: {build_top_idea_sentence(stocks)}
 
 Market Tone: {build_breadth_sentence(stocks)}

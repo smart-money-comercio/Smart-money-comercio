@@ -157,7 +157,7 @@ async def dailycheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "Watchlist Movers",
         "Top Opportunities",
         "Risk Notes",
-        "AI Summary",
+        "Smart Money Summary",
         "Action Checklist",
         "Next Commands",
         "Notes",

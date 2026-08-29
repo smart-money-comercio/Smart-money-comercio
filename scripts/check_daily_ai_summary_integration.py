@@ -111,7 +111,7 @@ def main() -> int:
         )
 
     except Exception as error:
-        print("Daily AI Summary Integration Check")
+        print("Daily Smart Money Summary Integration Check")
         print("Status: FAIL")
         print("")
         print(f"Import/build failed: {type(error).__name__}: {error}")
@@ -154,7 +154,7 @@ def main() -> int:
     require("NVDA" in summary, "summary missing priority symbol context", errors)
     require("/stockdata" in summary, "summary missing StockAnalysis validation command", errors)
 
-    print("Daily AI Summary Integration Check")
+    print("Daily Smart Money Summary Integration Check")
     print(f"Status: {'FAIL' if errors else 'PASS'}")
     print("")
     print("Providers Loaded:")

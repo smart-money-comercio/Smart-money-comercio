@@ -21,7 +21,13 @@ os.environ["VOLUME_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "volume_intellige
 os.environ["PORTFOLIO_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "portfolio_intelligence_memory.json")
 os.environ["ANALYST_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "analyst_intelligence_memory.json")
 os.environ["EARNINGS_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "earnings_intelligence_memory.json")
+os.environ["DEFENSE_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "defense_intelligence_memory.json")
+os.environ["DEFENSE_LIVE_SOURCE_CACHE_FILE"] = str(TEMP_DIR / "defense_live_source_cache.json")
 os.environ["AI_SUMMARY_MEMORY_FILE"] = str(TEMP_DIR / "ai_summary_memory.json")
+os.environ["SMARTMONEY_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "smartmoney_intelligence_memory.json")
+os.environ["GLOBAL_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "global_intelligence_memory.json")
+os.environ["CONVICTION_INTELLIGENCE_MEMORY_FILE"] = str(TEMP_DIR / "conviction_intelligence_memory.json")
+os.environ["GLOBAL_LIVE_SOURCE_CACHE_FILE"] = str(TEMP_DIR / "global_live_source_cache.json")
 os.environ["MARKET_MEMORY_FILE"] = str(TEMP_DIR / "daily_market_memory.json")
 os.environ["WATCHLIST_EVOLUTION_MEMORY_FILE"] = str(TEMP_DIR / "watchlist_evolution_memory.json")
 

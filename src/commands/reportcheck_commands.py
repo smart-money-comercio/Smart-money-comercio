@@ -121,7 +121,7 @@ Checks
 Required Sections: {status_label(required_ok)}
 Duplicate Sections: {status_label(duplicates_ok)}
 Removed Sections: {status_label(removed_ok)}
-AI Summary: {status_label(ai_summary_ok)}
+Smart Money Summary: {status_label(ai_summary_ok)}
 What Changed: {status_label(what_changed_ok)} — {what_changed_bullets} bullets
 Length: {status_label(length_ok)}
 

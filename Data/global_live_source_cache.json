@@ -1,6 +1,6 @@
 {
   "cache_status": "refreshed",
-  "fetched_at": 1787932589.4692717,
+  "fetched_at": 1787980513.0170476,
   "item_count": 27,
   "items": [
     {
@@ -152,7 +152,14 @@
     },
     {
       "headline": "Trump First Lady Melania Trump Vice President JD Vance Second Lady Usha Vance The Cabinet Executive Office of The President Office of Management and Budget Office of Science and Technolog...",
-      "score": 3,
+      "score": 2,
+      "source": "White House News",
+      "source_type": "White House",
+      "url": "https://www.whitehouse.gov/news/"
+    },
+    {
+      "headline": "Trump Establishes a Commission to Design the United States Space Academy Fact Sheets August 28, 2026 Establishing the United States Space Academy Presidential Actions , Proclamations Augu...",
+      "score": 1,
       "source": "White House News",
       "source_type": "White House",
       "url": "https://www.whitehouse.gov/news/"
@@ -180,13 +187,6 @@
     },
     {
       "headline": "Supply Chains by Imposing Tariffs on Drones and Their Parts and Components Fact Sheets August 13, 2026 Fact Sheet: President Donald J.",
-      "score": 1,
-      "source": "White House Fact Sheets",
-      "source_type": "White House",
-      "url": "https://www.whitehouse.gov/fact-sheets/"
-    },
-    {
-      "headline": "Supply Chains by Imposing Tariffs on Polysilicon and its Derivatives Fact Sheets August 6, 2026 1 2 3 \u2026 35 Next About Administration Contact Internships Stay Informed Privacy Policy Media...",
       "score": 1,
       "source": "White House Fact Sheets",
       "source_type": "White House",

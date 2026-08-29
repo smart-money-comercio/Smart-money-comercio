@@ -805,7 +805,69 @@
         "RTX",
         "NOC"
       ]
+    },
+    {
+      "action": "No fully confirmed setup yet. Begin validation with /volume PLTR, /earnings PLTR, /analyst PLTR, and /filing PLTR.",
+      "average_conviction_score": 58.75666666666667,
+      "checked_at": "2026-08-29 00:16:37",
+      "confirmed_symbols": [],
+      "conviction_regime": "Strict validation / risk-first",
+      "macro_regime": "Risk-off / defensive with Fed / Rates pressure",
+      "risk_regime": "Risk-off / defensive",
+      "risk_symbols": [],
+      "top_conviction_score": 62.1,
+      "top_symbols": [
+        "PLTR",
+        "NVDA",
+        "ITA",
+        "MSFT",
+        "LMT",
+        "CACI",
+        "RTX",
+        "NOC"
+      ],
+      "validation_symbols": [
+        "PLTR",
+        "NVDA",
+        "ITA",
+        "MSFT",
+        "LMT",
+        "CACI",
+        "RTX",
+        "NOC"
+      ]
+    },
+    {
+      "action": "No fully confirmed setup yet. Begin validation with /volume PLTR, /earnings PLTR, /analyst PLTR, and /filing PLTR.",
+      "average_conviction_score": 58.75666666666667,
+      "checked_at": "2026-08-29 00:16:58",
+      "confirmed_symbols": [],
+      "conviction_regime": "Strict validation / risk-first",
+      "macro_regime": "Risk-off / defensive with Fed / Rates pressure",
+      "risk_regime": "Risk-off / defensive",
+      "risk_symbols": [],
+      "top_conviction_score": 62.1,
+      "top_symbols": [
+        "PLTR",
+        "NVDA",
+        "ITA",
+        "MSFT",
+        "LMT",
+        "CACI",
+        "RTX",
+        "NOC"
+      ],
+      "validation_symbols": [
+        "PLTR",
+        "NVDA",
+        "ITA",
+        "MSFT",
+        "LMT",
+        "CACI",
+        "RTX",
+        "NOC"
+      ]
     }
   ],
-  "updated_at": "2026-08-28 10:58:14"
+  "updated_at": "2026-08-29 00:16:58"
 }
