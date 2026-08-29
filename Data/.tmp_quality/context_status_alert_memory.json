@@ -1,0 +1,28 @@
+{
+  "records": [
+    {
+      "checked_at": "2026-08-28 00:00:00",
+      "alert_regime": "Selective Opportunity / Risk-Control Watch",
+      "macro_regime": "Rates / Treasury pressure",
+      "risk_regime": "Cautious",
+      "critical_count": 2,
+      "warning_count": 4,
+      "highest_priority_symbols": [
+        "NVDA",
+        "PLTR"
+      ],
+      "new_priority_symbols": [
+        "AVGO"
+      ],
+      "deteriorating_symbols": [
+        "TSLA"
+      ],
+      "validation_symbols": [
+        "AMD"
+      ],
+      "risk_symbols": [
+        "TLT"
+      ]
+    }
+  ]
+}

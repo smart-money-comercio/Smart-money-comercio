@@ -23,6 +23,7 @@ from src.commands.daily_report_send_commands import (
 from src.commands.deploycheck_commands import deploycheck_command
 from src.commands.global_commands import global_market
 from src.commands.versionnotes_commands import versionnotes_command
+from src.commands.contextstatus_commands import contextstatus_command, summarypreview_command
 from src.commands.headlines_commands import headlines
 from src.commands.snapshot_commands import snapshot_command 
 from src.commands.alertsettings_commands import alertpreset_command, alertsettings_command
@@ -127,6 +128,8 @@ def register_commands(app):
     app.add_handler(CommandHandler("global", global_market))
     app.add_handler(CommandHandler("headlines", headlines))
     app.add_handler(CommandHandler("newsintel", newsintel_command))
+    app.add_handler(CommandHandler("contextstatus", contextstatus_command))
+    app.add_handler(CommandHandler("summarypreview", summarypreview_command))
     app.add_handler(CommandHandler("macronews", macronews_command))
     app.add_handler(CommandHandler("tickernews", tickernews_command))
     app.add_handler(CommandHandler("newsmemory", newsmemory_command))

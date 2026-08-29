@@ -28,6 +28,8 @@ CORE_COMMANDS = [
     ("/portfolio", "Portfolio intelligence"),
     ("/global", "Global macro intelligence"),
     ("/quality", "Report quality check"),
+    ("/contextstatus", "Provider status for the Smart Money Summary"),
+    ("/summarypreview", "Preview the current Smart Money Summary"),
 ]
 
 
@@ -81,6 +83,8 @@ THEME_COMMANDS = [
 
 
 MARKET_CONTEXT_COMMANDS = [
+    ("/contextstatus", "Provider status for the Smart Money Summary"),
+    ("/summarypreview", "Preview the current Smart Money Summary"),
     ("/global", "Global macro intelligence"),
     ("/macro", "Global macro legacy alias"),
     ("/headlines", "Fast market headline tape"),

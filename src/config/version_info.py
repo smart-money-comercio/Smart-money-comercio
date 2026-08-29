@@ -41,6 +41,9 @@ V13_COMMAND_STACK = [
 
 
 RELEASE_NOTES = [
+    "/contextstatus — added provider status for the Smart Money Summary",
+    "/summarypreview — added standalone Smart Money Summary preview",
+    "Smart Money Summary provider health can now be checked without generating the full daily report",
     "/alerts — added evolving news-intelligence overlay",
     "/dailyalerts — added compressed news-regime context",
     "/alertstatus — added latest news intelligence status",

@@ -18,7 +18,7 @@ fi
 
 echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
-echo "1/11 Checking required files..."
+echo "Checking required files..."
 
 required_files=(
   "src/bot.py"
@@ -47,27 +47,27 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-echo "2/11 Compiling Python files..."
+echo "Compiling Python files..."
 
 "$PYTHON_BIN" -m compileall src scripts
 
-echo "3/11 Checking command catalog..."
+echo "Checking command catalog..."
 
 "$PYTHON_BIN" scripts/check_command_catalog.py
 
-echo "4/11 Checking daily report quality..."
+echo "Checking daily report quality..."
 
 "$PYTHON_BIN" scripts/check_daily_report_quality.py
 
-echo "5/11 Checking intelligence quality..."
+echo "Checking intelligence quality..."
 
 "$PYTHON_BIN" scripts/check_intelligence_quality.py
 
-echo "6/11 Checking critical imports and required functions..."
+echo "Checking critical imports and required functions..."
 
 "$PYTHON_BIN" scripts/check_v14_monitoring.py
 
-echo "7/11 Checking critical imports and required functions..."
+echo "Checking critical imports and required functions..."
 
 "$PYTHON_BIN" - <<'PY'
 import importlib
@@ -143,20 +143,24 @@ for module_name, function_name in function_checks:
 print("\nPreflight checks passed.")
 PY
 
-echo "8/11 Checking critical imports and required functions..."
+echo "Checking critical imports and required functions..."
 
 "$PYTHON_BIN" scripts/check_stockanalysis_quality.py
 
-echo "9/11 Checking news intelligence quality..."
+echo "Checking news intelligence quality..."
 
 "$PYTHON_BIN" scripts/check_news_intelligence_quality.py
 
-echo "10/11 Checking alert news brige quality..."
+echo "Checking alert news brige quality..."
 
 "$PYTHON_BIN" scripts/check_alert_news_bridge_quality.py
 
-echo "10/11 Checking daily AI summary integration..."
+echo "Checking daily AI summary integration..."
 
 "$PYTHON_BIN" scripts/check_daily_ai_summary_integration.py
+
+echo " Checking context status..."
+
+"$PYTHON_BIN" scripts/check_context_status_quality.py
 
 echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py

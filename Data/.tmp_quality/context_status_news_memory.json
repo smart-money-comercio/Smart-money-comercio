@@ -1,0 +1,21 @@
+{
+  "records": [
+    {
+      "checked_at": "2026-08-28 00:00:00",
+      "news_regime": "Rates / Treasury pressure",
+      "risk_regime": "Cautious",
+      "portfolio_impact": "Risk-control watch; require confirmation for high-multiple growth.",
+      "top_themes": [
+        "Rates / Yields",
+        "Treasury / Debt",
+        "AI / Semiconductors"
+      ],
+      "top_tickers": [
+        "NVDA",
+        "TLT",
+        "QQQ"
+      ],
+      "headline_count": 12
+    }
+  ]
+}
