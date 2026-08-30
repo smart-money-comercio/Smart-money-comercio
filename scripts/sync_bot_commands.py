@@ -3,132 +3,190 @@ import os
 import sys
 from pathlib import Path
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
 from dotenv import load_dotenv
 from telegram import (
     Bot,
     BotCommand,
-    BotCommandScopeChat,
+    BotCommandScopeAllChatAdministrators,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllPrivateChats,
     BotCommandScopeDefault,
+    MenuButtonCommands,
 )
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
-
-load_dotenv(PROJECT_ROOT / ".env")
-
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+try:
+    from telegram import BotCommandScopeChat
+except Exception:
+    BotCommandScopeChat = None
 
 
-PUBLIC_COMMANDS = [
-    BotCommand("start", "Start the bot"),
-    BotCommand("help", "Show help menu"),
-    BotCommand("commands", "Show command list"),
-    BotCommand("report", "Generate market report"),
-    BotCommand("top10", "Show top ranked opportunities"),
-    BotCommand("quote", "Get stock quote"),
-    BotCommand("market", "Get market data"),
-    BotCommand("marketbrief", "On-demand market overview"),
-    BotCommand("ticker", "Quick ticker lookup"),
-    BotCommand("scorecard", "Show stock scorecard"),
-    BotCommand("analyst", "Smart Money AI analyst read"),
-    BotCommand("risk", "Show risk profile"),
-    BotCommand("earnings", "Show earnings data"),
-    BotCommand("watchlist", "Manage watchlist"),
-    BotCommand("defense", "Defense sector opportunities"),
-    BotCommand("growth", "Growth stock opportunities"),
-    BotCommand("volume", "Check or refresh volume signal"),
-    BotCommand("dividends", "Dividend opportunities"),
-    BotCommand("portfolio", "Portfolio summary"),
-    BotCommand("global", "Global market and headline risk"),
-    BotCommand("headlines", "Market headlines by impact"),
-    BotCommand("congress", "Congressional trading signals"),
-    BotCommand("insiders", "Insider trading signals"),
-    BotCommand("smartmoney", "Smart money summary"),
-    BotCommand("conviction", "High conviction opportunities"),
-    BotCommand("undervalued", "Undervalued opportunities"),
-    BotCommand("sec", "SEC filing summary"),
-    BotCommand("filing", "Latest filing lookup"),
-]
+from src.config.command_catalog import get_all_commands
 
 
-ADMIN_COMMANDS = PUBLIC_COMMANDS + [
-    BotCommand("deploycheck", "Production health check"),
-    BotCommand("status", "Bot status"),
-    BotCommand("ping", "Bot ping test"),
-    BotCommand("diagnostics", "Environment diagnostics"),
-    BotCommand("health", "Health check"),
-    BotCommand("system", "System info"),
-    BotCommand("version", "Bot version"),
-    BotCommand("senddaily", "Send daily report to channel"),
-    BotCommand("testdaily", "Send daily report to this chat"),
-    BotCommand("dailycheck", "Check daily report system health"),
-    BotCommand("reportcheck", "Check daily report quality guardrails"),
-    BotCommand("backup", "Create server backup"),
-    BotCommand("logs", "Show recent service logs"),
-    BotCommand("restart", "Restart production bot"),
-    BotCommand("clearcache", "Clear loaded caches"),
-    BotCommand("securitycheck", "Check server security status"),
-    BotCommand("admin", "Show admin chat info"),
-]
+LANGUAGE_CODES = [None, "en", "es"]
 
 
-def parse_admin_chat_ids(raw_value: str | None) -> list[int | str]:
-    if not raw_value:
+def get_token() -> str:
+    load_dotenv(PROJECT_ROOT / ".env")
+
+    token = (
+        os.getenv("TELEGRAM_BOT_TOKEN")
+        or os.getenv("BOT_TOKEN")
+        or ""
+    ).strip()
+
+    if not token:
+        raise RuntimeError("Missing TELEGRAM_BOT_TOKEN or BOT_TOKEN in .env")
+
+    return token
+
+
+def clean_description(description: str) -> str:
+    text = " ".join(str(description or "").split())
+
+    if not text:
+        return "Smart Money AI command"
+
+    if len(text) > 256:
+        return text[:253].rstrip() + "..."
+
+    return text
+
+
+def build_bot_commands() -> list[BotCommand]:
+    commands: list[BotCommand] = []
+    seen: set[str] = set()
+
+    for raw_command, raw_description in get_all_commands():
+        command_name = str(raw_command or "").strip().split()[0].lstrip("/").lower()
+
+        if not command_name:
+            continue
+
+        if command_name in seen:
+            continue
+
+        seen.add(command_name)
+
+        commands.append(
+            BotCommand(
+                command=command_name,
+                description=clean_description(raw_description),
+            )
+        )
+
+    if len(commands) > 100:
+        raise RuntimeError(f"Telegram allows at most 100 bot commands. Prepared: {len(commands)}")
+
+    return commands
+
+
+def base_scopes():
+    return [
+        ("Default", BotCommandScopeDefault()),
+        ("All private chats", BotCommandScopeAllPrivateChats()),
+        ("All group chats", BotCommandScopeAllGroupChats()),
+        ("All chat administrators", BotCommandScopeAllChatAdministrators()),
+    ]
+
+
+def chat_scopes_from_env():
+    raw_chat_ids = (
+        os.getenv("TELEGRAM_COMMAND_CHAT_ID")
+        or os.getenv("TELEGRAM_CHAT_ID")
+        or ""
+    ).strip()
+
+    if not raw_chat_ids or BotCommandScopeChat is None:
         return []
 
-    chat_ids: list[int | str] = []
+    scopes = []
 
-    for item in raw_value.split(","):
-        cleaned = item.strip()
+    for raw_chat_id in raw_chat_ids.split(","):
+        chat_id = raw_chat_id.strip()
 
-        if not cleaned:
+        if not chat_id:
             continue
 
-        if cleaned.startswith("@"):
-            chat_ids.append(cleaned)
-            continue
+        scopes.append((f"Exact chat {chat_id}", BotCommandScopeChat(chat_id=chat_id)))
 
-        try:
-            chat_ids.append(int(cleaned))
-        except ValueError:
-            print(f"Skipping invalid admin chat ID: {cleaned}")
-
-    return chat_ids
+    return scopes
 
 
-async def sync_commands() -> None:
-    if not BOT_TOKEN:
-        raise ValueError("TELEGRAM_BOT_TOKEN is missing from .env")
+async def reset_scope(bot: Bot, scope_name: str, scope, commands: list[BotCommand], language_code):
+    label = language_code or "default"
 
-    admin_chat_ids = parse_admin_chat_ids(os.getenv("TELEGRAM_ADMIN_CHAT_ID"))
+    await bot.delete_my_commands(scope=scope, language_code=language_code)
+    await bot.set_my_commands(commands=commands, scope=scope, language_code=language_code)
 
-    bot = Bot(token=BOT_TOKEN)
+    current = await bot.get_my_commands(scope=scope, language_code=language_code)
+    current_names = {command.command for command in current}
 
-    print("Syncing public Telegram command menu...")
-    await bot.set_my_commands(
-        commands=PUBLIC_COMMANDS,
-        scope=BotCommandScopeDefault(),
-    )
-    print(f"Public commands synced: {len(PUBLIC_COMMANDS)}")
+    context_found = "contextstatus" in current_names
+    preview_found = "summarypreview" in current_names
 
-    if not admin_chat_ids:
-        print("No admin chat IDs found. Skipping admin command scope.")
-        return
+    print(f"Synced scope: {scope_name} | language: {label} | commands: {len(current)}")
+    print(f"  /contextstatus: {'FOUND' if context_found else 'MISSING'}")
+    print(f"  /summarypreview: {'FOUND' if preview_found else 'MISSING'}")
 
-    for chat_id in admin_chat_ids:
-        try:
-            print(f"Syncing admin command menu for chat: {chat_id}")
-            await bot.set_my_commands(
-                commands=ADMIN_COMMANDS,
-                scope=BotCommandScopeChat(chat_id=chat_id),
+    return context_found and preview_found and len(current) == len(commands)
+
+
+async def set_menu_button(bot: Bot):
+    try:
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        print("Default menu button set to commands.")
+    except Exception as error:
+        print(f"Menu button update skipped: {type(error).__name__}: {error}")
+
+
+async def main() -> int:
+    token = get_token()
+    commands = build_bot_commands()
+    bot = Bot(token=token)
+
+    me = await bot.get_me()
+
+    print("Telegram command dropdown sync")
+    print(f"Bot: @{me.username}")
+    print(f"Commands Prepared: {len(commands)}")
+    print("Languages: default, en, es")
+    print("")
+
+    await set_menu_button(bot)
+
+    all_ok = True
+    scopes = base_scopes() + chat_scopes_from_env()
+
+    for scope_name, scope in scopes:
+        for language_code in LANGUAGE_CODES:
+            ok = await reset_scope(
+                bot=bot,
+                scope_name=scope_name,
+                scope=scope,
+                commands=commands,
+                language_code=language_code,
             )
-            print(f"Admin commands synced for {chat_id}: {len(ADMIN_COMMANDS)}")
-        except Exception as exc:
-            print(f"Failed to sync admin commands for {chat_id}: {exc}")
+            all_ok = all_ok and ok
 
-    print("Telegram command menu sync complete.")
+    print("")
+    print(f"Status: {'PASS' if all_ok else 'FAIL'}")
+    print(f"Commands Synced Per Scope: {len(commands)}")
+    print("")
+
+    print("Synced command names:")
+    for command in commands:
+        print(f"/{command.command} - {command.description}")
+
+    return 0 if all_ok else 1
 
 
 if __name__ == "__main__":
-    asyncio.run(sync_commands())
+    raise SystemExit(asyncio.run(main()))

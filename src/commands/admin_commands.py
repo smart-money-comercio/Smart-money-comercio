@@ -3,6 +3,7 @@ import sys
 import time
 import platform
 from datetime import datetime
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -12,6 +13,20 @@ BOT_START_TIME = datetime.now()
 
 def get_admin_chat_ids() -> set[str]:
     raw_ids = os.getenv("TELEGRAM_ADMIN_CHAT_ID", "")
+
+    return {
+        chat_id.strip()
+        for chat_id in raw_ids.split(",")
+        if chat_id.strip()
+    }
+
+
+def get_command_chat_ids() -> set[str]:
+    raw_ids = (
+        os.getenv("TELEGRAM_COMMAND_CHAT_ID")
+        or os.getenv("TELEGRAM_CHAT_ID")
+        or ""
+    )
 
     return {
         chat_id.strip()
@@ -144,6 +159,36 @@ def clear_loaded_caches() -> list[str]:
     return cleared_items
 
 
+def get_registered_command_count() -> int | str:
+    try:
+        from src.config.command_catalog import get_all_commands
+
+        return len(get_all_commands())
+    except Exception:
+        return "unknown"
+
+
+def get_command_scope_status(update: Update) -> str:
+    current_chat_id = get_current_chat_id(update)
+    command_chat_ids = get_command_chat_ids()
+
+    if not command_chat_ids:
+        return (
+            "Telegram command exact-chat scope: Missing\n"
+            f"Current chat ID: {current_chat_id}\n"
+            "Dropdown fix: add this chat ID to TELEGRAM_COMMAND_CHAT_ID if the menu still shows an old command count."
+        )
+
+    current_scope_loaded = current_chat_id in command_chat_ids
+
+    return (
+        "Telegram command exact-chat scope: Loaded\n"
+        f"Current chat ID: {current_chat_id}\n"
+        f"Configured command chat IDs: {', '.join(sorted(command_chat_ids))}\n"
+        f"Current chat has exact command scope: {'Yes' if current_scope_loaded else 'No'}"
+    )
+
+
 async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
@@ -153,13 +198,14 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not is_admin(update):
         await update.message.reply_text(
             "Unauthorized: admin only\n\n"
-            f"Current chat ID:\n{current_chat_id}"
+            f"Current chat ID:\n{current_chat_id}",
+            parse_mode=None,
         )
         return
 
     start_time = time.perf_counter()
 
-    sent_message = await update.message.reply_text("🏓 Pong...")
+    sent_message = await update.message.reply_text("🏓 Pong...", parse_mode=None)
 
     latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
@@ -167,7 +213,8 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🏓 Pong\n\n"
         f"Telegram response latency: {latency_ms} ms\n"
         f"Bot uptime: {format_uptime()}\n"
-        "Status: Online"
+        "Status: Online",
+        parse_mode=None,
     )
 
 
@@ -177,12 +224,14 @@ async def diagnostics_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     current_chat_id = get_current_chat_id(update)
     admin_chat_ids = get_admin_chat_ids()
+    command_chat_ids = get_command_chat_ids()
     cache_count, cache_item_count = get_cache_summary()
 
     if not is_admin(update):
         await update.message.reply_text(
             "Unauthorized: admin only\n\n"
-            f"Current chat ID:\n{current_chat_id}"
+            f"Current chat ID:\n{current_chat_id}",
+            parse_mode=None,
         )
         return
 
@@ -194,31 +243,39 @@ async def diagnostics_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     chat_id_ok = current_chat_id != "UNKNOWN"
     project_path_ok = bool(os.getcwd())
     python_ok = bool(platform.python_version())
+    command_catalog_count = get_registered_command_count()
 
     await update.message.reply_text(
         "🧪 Smart Money AI Diagnostics\n\n"
-        "Core checks:\n"
+        "Core Checks\n"
         f"{pass_fail(chat_id_ok)} Telegram chat detected\n"
         f"{pass_fail(admin_ids_ok)} Admin IDs loaded\n"
         f"{pass_fail(admin_authorized_ok)} Current chat authorized\n"
         f"{pass_fail(telegram_token_ok)} Telegram token loaded\n"
         f"{pass_fail(openai_key_ok)} OpenAI key loaded\n"
         f"{pass_fail(sec_user_agent_ok)} SEC user agent loaded\n\n"
-        "Runtime checks:\n"
+        "Command Menu Checks\n"
+        f"{info_status()} Command catalog count: {command_catalog_count}\n"
+        f"{info_status()} TELEGRAM_COMMAND_CHAT_ID loaded: {'Yes' if command_chat_ids else 'No'}\n"
+        f"{info_status()} Current chat in exact command scope: {'Yes' if current_chat_id in command_chat_ids else 'No'}\n\n"
+        "Runtime Checks\n"
         f"{pass_fail(python_ok)} Python runtime available\n"
         f"{pass_fail(project_path_ok)} Project path detected\n"
         f"{info_status()} Python version: {platform.python_version()}\n"
         f"{info_status()} Platform: {platform.system()} {platform.release()}\n"
         f"{info_status()} Project path: {os.getcwd()}\n"
         f"{info_status()} Uptime: {format_uptime()}\n\n"
-        "Cache checks:\n"
+        "Cache Checks\n"
         f"{info_status()} Loaded cache objects: {cache_count}\n"
         f"{info_status()} Cached items detected: {cache_item_count}\n\n"
-        "Admin context:\n"
+        "Admin Context\n"
         f"{info_status()} Current chat ID: {current_chat_id}\n"
         f"{info_status()} Authorized admin ID count: {len(admin_chat_ids)}\n\n"
-        "Result:\n"
-        "Diagnostics completed."
+        "Dropdown Troubleshooting\n"
+        f"{get_command_scope_status(update)}\n\n"
+        "Result\n"
+        "Diagnostics completed.",
+        parse_mode=None,
     )
 
 
@@ -231,7 +288,8 @@ async def clearcache(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not is_admin(update):
         await update.message.reply_text(
             "Unauthorized: admin only\n\n"
-            f"Current chat ID:\n{current_chat_id}"
+            f"Current chat ID:\n{current_chat_id}",
+            parse_mode=None,
         )
         return
 
@@ -242,12 +300,14 @@ async def clearcache(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         await update.message.reply_text(
             "✅ Cache cleared successfully.\n\n"
-            f"Cleared:\n{cleared_display}"
+            f"Cleared:\n{cleared_display}",
+            parse_mode=None,
         )
     else:
         await update.message.reply_text(
             "✅ Cache clear command completed.\n\n"
-            "No loaded cache dictionaries or lru_cache functions were found to clear."
+            "No loaded cache dictionaries or lru_cache functions were found to clear.",
+            parse_mode=None,
         )
 
 
@@ -257,40 +317,54 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     current_chat_id = get_current_chat_id(update)
     admin_chat_ids = get_admin_chat_ids()
+    command_chat_ids = get_command_chat_ids()
     cache_count, cache_item_count = get_cache_summary()
+    command_catalog_count = get_registered_command_count()
 
     if not is_admin(update):
         await update.message.reply_text(
             "Unauthorized: admin only\n\n"
-            f"Current chat ID:\n{current_chat_id}"
+            f"Current chat ID:\n{current_chat_id}",
+            parse_mode=None,
         )
         return
 
     await update.message.reply_text(
         "📊 Smart Money AI Status\n\n"
-        "Bot online: Yes\n"
+        "Bot\n"
+        "Online: Yes\n"
         "Admin authorized: Yes\n"
         f"Current chat ID: {current_chat_id}\n"
         f"Authorized admin IDs loaded: {'Yes' if admin_chat_ids else 'No'}\n"
         f"Authorized admin ID count: {len(admin_chat_ids)}\n\n"
-        "Environment:\n"
+        "Environment\n"
         f"Telegram token: {env_loaded('TELEGRAM_BOT_TOKEN')}\n"
         f"OpenAI key: {env_loaded('OPENAI_API_KEY')}\n"
         f"SEC user agent: {env_loaded_any(['SEC_USER_AGENT', 'SEC_API_USER_AGENT'])}\n"
-        f"Telegram admin IDs: {env_loaded('TELEGRAM_ADMIN_CHAT_ID')}\n\n"
-        "Runtime:\n"
+        f"Telegram admin IDs: {env_loaded('TELEGRAM_ADMIN_CHAT_ID')}\n"
+        f"Telegram exact command chat IDs: {'Loaded' if command_chat_ids else 'Missing'}\n\n"
+        "Command Menu\n"
+        f"Command catalog count: {command_catalog_count}\n"
+        f"Current chat exact command scope: {'Yes' if current_chat_id in command_chat_ids else 'No'}\n"
+        "Manual command routing: Working if commands respond when typed manually\n"
+        "Dropdown source: Telegram Bot API command scopes/cache\n\n"
+        "Runtime\n"
         f"Python version: {platform.python_version()}\n"
         f"Platform: {platform.system()} {platform.release()}\n"
         f"Project path: {os.getcwd()}\n"
         f"Uptime: {format_uptime()}\n\n"
-        "Cache:\n"
+        "Cache\n"
         f"Loaded cache objects: {cache_count}\n"
         f"Cached items detected: {cache_item_count}\n\n"
-        "Maintenance:\n"
+        "Smart Money Summary\n"
+        "/contextstatus - Provider status for the Smart Money Summary\n"
+        "/summarypreview - Preview the current Smart Money Summary\n\n"
+        "Maintenance\n"
         "/ping - Test bot responsiveness\n"
         "/diagnostics - Run admin diagnostics\n"
         "/clearcache - Clear loaded caches\n"
-        "/admin - Show admin tools"
+        "/admin - Show admin tools",
+        parse_mode=None,
     )
 
 
@@ -300,52 +374,86 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     current_chat_id = get_current_chat_id(update)
     admin_chat_ids = get_admin_chat_ids()
+    command_chat_ids = get_command_chat_ids()
+    command_catalog_count = get_registered_command_count()
 
     if not is_admin(update):
         await update.message.reply_text(
             "Unauthorized: admin only\n\n"
             f"Current chat ID:\n{current_chat_id}\n\n"
-            "To authorize this chat, add this ID to TELEGRAM_ADMIN_CHAT_ID in your .env file."
+            "To authorize this chat, add this ID to TELEGRAM_ADMIN_CHAT_ID in your .env file.",
+            parse_mode=None,
         )
         return
 
     authorized_ids_display = ", ".join(sorted(admin_chat_ids)) if admin_chat_ids else "None configured"
+    command_ids_display = ", ".join(sorted(command_chat_ids)) if command_chat_ids else "None configured"
 
     await update.message.reply_text(
         "🛠 Smart Money AI Admin Panel\n\n"
-        "Admin status: Authorized\n\n"
-        f"Current chat ID:\n{current_chat_id}\n\n"
-        f"Authorized admin chat IDs:\n{authorized_ids_display}\n\n"
-        "Quick maintenance commands:\n"
+        "Admin Status\n"
+        "Status: Authorized\n"
+        f"Current chat ID: {current_chat_id}\n"
+        f"Authorized admin chat IDs: {authorized_ids_display}\n\n"
+        "Telegram Dropdown Status\n"
+        f"Command catalog count: {command_catalog_count}\n"
+        f"Exact command chat IDs: {command_ids_display}\n"
+        f"Current chat exact command scope: {'Yes' if current_chat_id in command_chat_ids else 'No'}\n\n"
+        "If the dropdown still shows 44 commands but manual commands work:\n"
+        "1. Add the Current chat ID above to TELEGRAM_COMMAND_CHAT_ID in .env.\n"
+        "2. Rerun scripts/sync_telegram_commands.py on the server.\n"
+        "3. Fully close and reopen Telegram.\n\n"
+        "Smart Money Summary Commands\n"
+        "/contextstatus - Provider status for the Smart Money Summary\n"
+        "/summarypreview - Preview the current Smart Money Summary\n\n"
+        "Quick Maintenance\n"
         "/ping - Test bot responsiveness\n"
         "/status - Show bot status dashboard\n"
         "/diagnostics - Run admin diagnostics\n"
         "/health - Check bot health\n"
         "/system - Show system information\n"
         "/version - Show bot version\n"
-        "/commands - Show available commands\n"
+        "/commands - Show full command list\n"
         "/clearcache - Clear loaded caches\n\n"
-        "Market commands:\n"
+        "Market Intelligence\n"
+        "/brief\n"
         "/report\n"
         "/top10\n"
-        "/watchlist\n"
-        "/defense\n"
-        "/growth\n"
-        "/dividends\n"
-        "/portfolio\n\n"
-        "Symbol commands:\n"
+        "/snapshot\n"
+        "/headlines\n"
+        "/newsintel\n"
+        "/macronews\n"
+        "/tickernews SYMBOL\n"
+        "/global\n"
+        "/calendar\n\n"
+        "Alerts\n"
+        "/alerts\n"
+        "/dailyalerts\n"
+        "/alertstatus\n"
+        "/alertrules\n"
+        "/alertsettings\n"
+        "/alertpreset balanced\n\n"
+        "Stock Research\n"
+        "/stock SYMBOL\n"
+        "/stockdata SYMBOL\n"
         "/quote SYMBOL\n"
         "/market SYMBOL\n"
-        "/earnings SYMBOL\n"
-        "/ticker SYMBOL\n"
         "/scorecard SYMBOL\n"
+        "/analyst SYMBOL\n"
         "/risk SYMBOL\n"
+        "/earnings SYMBOL\n"
+        "/volume SYMBOL\n"
         "/sec SYMBOL\n"
         "/filing SYMBOL\n\n"
-        "Smart money commands:\n"
-        "/congress\n"
-        "/insiders\n"
+        "Smart Money Intelligence\n"
         "/smartmoney\n"
         "/conviction\n"
-        "/undervalued"
+        "/congress\n"
+        "/insiders\n"
+        "/defense\n"
+        "/portfolio\n"
+        "/growth\n"
+        "/dividends\n"
+        "/undervalued",
+        parse_mode=None,
     )

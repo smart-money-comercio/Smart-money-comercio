@@ -1,54 +1,94 @@
+import asyncio
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.reports.daily_report import build_daily_report
+from src.reports.defense_intelligence_report import build_defense_intelligence_report
 from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
 from src.scoring.scoring_engine import get_stock_scores
 from src.utils.telegram_messages import edit_or_reply_long_message
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+START_MESSAGE = """
+🚀 Smart Money AI is online.
+
+Main Commands
+/report - Latest full report
+/brief - Short daily market brief
+/top10 - Top ranked Smart Money ideas
+/smartmoney - Smart Money command center
+/conviction - Highest signal-overlap ideas
+/watchlist - Tracked companies
+
+Stock Research
+/stock SYMBOL - Full stock intelligence
+/ticker SYMBOL - Stock intelligence legacy alias
+/quote SYMBOL - Fast market quote
+/stockdata SYMBOL - StockAnalysis fundamentals and analyst rating
+/scorecard SYMBOL - Full Smart Money scorecard
+/analyst SYMBOL - Analyst consensus intelligence
+/risk SYMBOL - Risk profile
+/earnings SYMBOL - Earnings catalyst intelligence
+/volume SYMBOL - Volume and money-flow intelligence
+
+Market Intelligence
+/headlines - Fast market headline tape
+/newsintel - Evolving market-news intelligence
+/macronews - Macro-only news intelligence
+/tickernews SYMBOL - Ticker-specific news intelligence
+/newsmemory - What the news engine has learned
+/global - Global macro intelligence
+/themes - Active market themes
+/calendar - Weekly macro and earnings calendar
+
+Alerts
+/alerts - Full alert monitor
+/dailyalerts - Daily alert digest
+/alertstatus - Latest recorded alert state
+/alertsettings - Current alert thresholds
+/alertpreset balanced - Show alert preset overrides
+
+Smart Money Summary
+/contextstatus - Provider status for the Smart Money Summary
+/summarypreview - Preview the current Smart Money Summary
+
+Specialty Intelligence
+/defense - Defense and AI warfare intelligence
+/congress - Congress trading intelligence
+/insiders - Insider trading intelligence
+/sec SYMBOL - Latest SEC filings
+/filing SYMBOL - AI summary of latest SEC filing
+/portfolio - Portfolio intelligence
+/growth - Growth ideas
+/dividends - Dividend ideas
+/undervalued - Undervalued screen
+
+System
+/help - Help
+/commands - Full command list
+/quality - Report quality check
+/deploycheck - Deployment health check
+/status - Bot status
+/version - Version
+""".strip()
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
 
     await update.message.reply_text(
-        "🚀 Smart Money AI is online.\n\n"
-        "Commands:\n"
-        "/report - Latest full report\n"
-        "/brief - Short daily market brief\n"
-        "/top10 - Top ranked stocks\n"
-        "/congress - Congressional trading intelligence\n"
-        "/defense - Defense rankings\n"
-        "/watchlist - Tracked companies\n"
-        "/ticker SYMBOL - Full stock research\n"
-        "/quote SYMBOL - Fast market quote\n"
-        "/market SYMBOL - Real market data\n"
-        "/earnings SYMBOL - Earnings and profitability summary\n"
-        "/scorecard SYMBOL - Full Smart Money research scorecard\n"
-        "/analyst SYMBOL - Smart Money AI analyst read\n"
-        "/risk SYMBOL - Risk profile\n"
-        "/smartmoney - Smart money signals\n"
-        "/conviction - Highest signal-overlap ideas\n"
-        "/growth - Growth and AI stocks\n"
-        "/dividends - Dividend and high-income stocks\n"
-        "/portfolio - Smart Money portfolio model\n"
-        "/undervalued - Screen for undervalued Smart Money ideas\n"
-        "/insiders - Insider buying intelligence\n"
-        "/sec SYMBOL - Latest SEC filings\n"
-        "/filing SYMBOL - AI summary of latest SEC filing\n"
-        "/weeklycalendar - Full macro and earnings calendar\n"
-        "/global - Global market context\n"
-        "/headlines - Market headlines\n"
-        "/help - Command list",
+        START_MESSAGE,
         parse_mode=None,
     )
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await start(update, context)
 
 
-async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
 
@@ -62,7 +102,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # build_daily_report() stays cache-only so deploycheck/preflight remain fast.
         ensure_morning_brief_cache_is_fresh(max_age_minutes=360)
 
-        report_text = build_daily_report()
+        report_text = await asyncio.to_thread(build_daily_report)
 
         await edit_or_reply_long_message(
             update=update,
@@ -75,12 +115,12 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as error:
         await loading_message.edit_text(
             "Unable to build daily report right now.\n\n"
-            f"Error:\n{type(error).__name__}",
+            f"Error: {type(error).__name__}: {error}",
             parse_mode=None,
         )
 
 
-async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
 
@@ -90,15 +130,16 @@ async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        scores = get_stock_scores()
+        scores = await asyncio.to_thread(get_stock_scores)
+
         text = "🔥 TOP 10 SMART MONEY PICKS\n\n"
 
-        for i, stock in enumerate(scores[:10], start=1):
+        for index, stock in enumerate(scores[:10], start=1):
             ticker = stock.get("ticker", "UNKNOWN")
             final_score = stock.get("final_score", stock.get("score", "N/A"))
             category = stock.get("category", "N/A")
 
-            text += f"{i}. {ticker} - {final_score} ({category})\n"
+            text += f"{index}. {ticker} - {final_score} ({category})\n"
 
         await edit_or_reply_long_message(
             update=update,
@@ -111,12 +152,12 @@ async def top10(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as error:
         await loading_message.edit_text(
             "Unable to build Top 10 right now.\n\n"
-            f"Error:\n{type(error).__name__}",
+            f"Error: {type(error).__name__}: {error}",
             parse_mode=None,
         )
 
 
-async def watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
 
@@ -126,7 +167,8 @@ async def watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        scores = get_stock_scores()
+        scores = await asyncio.to_thread(get_stock_scores)
+
         text = "📋 SMART MONEY WATCHLIST\n\n"
 
         for stock in scores:
@@ -145,51 +187,48 @@ async def watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as error:
         await loading_message.edit_text(
             "Unable to build watchlist right now.\n\n"
-            f"Error:\n{type(error).__name__}",
+            f"Error: {type(error).__name__}: {error}",
             parse_mode=None,
         )
 
 
-async def defense(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def should_force_defense_refresh(args) -> bool:
+    cleaned_args = [str(arg or "").lower().strip() for arg in args or []]
+
+    return any(arg in {"refresh", "live", "force"} for arg in cleaned_args)
+
+
+async def defense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
 
+    force_refresh = should_force_defense_refresh(context.args)
+
     loading_message = await update.message.reply_text(
-        "🛡️ Building defense intelligence rankings...",
+        "🛡️ Building live defense / AI warfare intelligence..."
+        if force_refresh
+        else "🛡️ Building defense / AI warfare intelligence...",
         parse_mode=None,
     )
 
     try:
-        scores = sorted(
-            get_stock_scores(),
-            key=lambda stock: stock.get("defense_score", 0),
-            reverse=True,
+        message = await asyncio.to_thread(
+            build_defense_intelligence_report,
+            force_refresh,
         )
-
-        text = "🛡️ DEFENSE INTELLIGENCE RANKINGS\n\n"
-
-        for i, stock in enumerate(scores[:10], start=1):
-            ticker = stock.get("ticker", "UNKNOWN")
-            defense_score = stock.get("defense_score", "N/A")
-            category = stock.get("category", "N/A")
-
-            text += (
-                f"{i}. {ticker} - "
-                f"Defense Score: {defense_score} "
-                f"({category})\n"
-            )
 
         await edit_or_reply_long_message(
             update=update,
             loading_message=loading_message,
-            text=text,
-            title="🛡️ Defense Intelligence Rankings",
+            text=message,
+            title="🛡️ Defense / AI Warfare Intelligence",
             parse_mode=None,
         )
 
     except Exception as error:
         await loading_message.edit_text(
-            "Unable to build defense rankings right now.\n\n"
-            f"Error:\n{type(error).__name__}",
+            "Defense / AI Warfare Intelligence\n"
+            "Status: unavailable right now.\n\n"
+            f"Error: {type(error).__name__}: {error}",
             parse_mode=None,
         )
