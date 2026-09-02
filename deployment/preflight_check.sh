@@ -163,4 +163,8 @@ echo " Checking context status..."
 
 "$PYTHON_BIN" scripts/check_context_status_quality.py
 
+echo " Checking tradeplan quality..."
+
+"$PYTHON_BIN" scripts/check_tradeplan_quality.py
+
 echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py

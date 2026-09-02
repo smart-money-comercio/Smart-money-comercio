@@ -58,6 +58,7 @@ from src.commands.portfolio_commands import (
 )
 from src.commands.quarterly_commands import quarterly_command
 from src.commands.reportcheck_commands import reportcheck_command
+from src.commands.tradeplan_commands import tradeplan_command
 from src.commands.screener_commands import undervalued
 from src.commands.sec_commands import (
     filing,
@@ -140,6 +141,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("quarterlyreport", quarterly_command))
 
     # Ticker tools
+    app.add_handler(CommandHandler("tradeplan", tradeplan_command))
     app.add_handler(CommandHandler("ticker", ticker))
     app.add_handler(CommandHandler("stockdata", stockdata_command))
     app.add_handler(CommandHandler("quote", quote))

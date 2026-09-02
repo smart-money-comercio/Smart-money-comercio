@@ -16,6 +16,7 @@ os.environ.setdefault("STRICT_COMMAND_AUDIT", "1")
 
 
 REQUIRED_REPORT_BUILDERS = [
+    ("src.reports.tradeplan_report", "build_tradeplan_report"),
     ("src.reports.context_status_report", "build_contextstatus_report"),
     ("src.reports.context_status_report", "build_summarypreview_report"),
     ("src.intelligence.intelligence_context_registry", "collect_intelligence_context"),
@@ -43,6 +44,7 @@ REQUIRED_REPORT_BUILDERS = [
 
 
 REQUIRED_COMMANDS = [
+    "/tradeplan",
     "/contextstatus",
     "/summarypreview",
     "/newsintel",

@@ -50,6 +50,7 @@ DAILY_REPORT_COMMANDS = [
 
 
 STOCK_RESEARCH_COMMANDS = [
+    ("/tradeplan SYMBOL", "Smart Money action plan with entry, confirmation, risk, and verdict"),
     ("/stock SYMBOL", "Stock intelligence"),
     ("/stockdata SYMBOL", "StockAnalysis fundamentals, valuation, financials, balance sheet, cash-flow, and analyst rating snapshot"),
     ("/ticker SYMBOL", "Stock intelligence legacy alias"),
