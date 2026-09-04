@@ -483,6 +483,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
             required_sections=[
                 "Smart Money AI Daily Report",
                 "Executive Summary",
+                "Trade Plan Snapshot",
                 "Top Opportunities",
                 "Smart Money Summary",
                 "Action Checklist",

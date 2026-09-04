@@ -179,4 +179,8 @@ echo " Checking top10-tradeplan integration..."
 
 "$PYTHON_BIN" scripts/check_top10_tradeplan_integration.py
 
+echo " Checking brief-tradeplan integration..."
+
+"$PYTHON_BIN" scripts/check_brief_tradeplan_integration.py
+
 echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py

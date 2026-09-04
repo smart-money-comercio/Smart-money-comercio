@@ -16,6 +16,7 @@ os.environ.setdefault("STRICT_COMMAND_AUDIT", "1")
 
 
 REQUIRED_REPORT_BUILDERS = [
+    ("src.reports.daily_tradeplan_bridge", "build_daily_tradeplan_snapshot_section"),
     ("src.reports.top10_tradeplan_bridge", "build_top10_tradeplan_snapshot_section"),
     ("src.reports.tradeplan_snapshot_report", "build_tradeplan_snapshot_section"),
     ("src.reports.tradeplans_report", "build_tradeplans_report"),

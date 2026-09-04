@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.reports.daily_tradeplan_bridge import build_daily_tradeplan_snapshot_section
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
 
 try:
@@ -1704,14 +1705,6 @@ def build_daily_report() -> str:
         scores = []
         top_scores = []
 
-    if scoring_error:
-        top_opportunities = f"Scoring unavailable: {scoring_error}"
-    else:
-        top_opportunities = build_v13_top_opportunities(
-            scores,
-            limit=MAX_TOP_OPPORTUNITIES,
-        )
-
     global_context = load_global_context()
     global_context["scores"] = scores
 
@@ -1749,6 +1742,18 @@ def build_daily_report() -> str:
         context=global_context,
     )
 
+    if scoring_error:
+        top_opportunities = f"Scoring unavailable: {scoring_error}"
+    else:
+        top_opportunities = build_v13_top_opportunities(
+            scores,
+            limit=MAX_TOP_OPPORTUNITIES,
+        )
+
+    # Build this AFTER scores/top_scores are loaded.
+    # Use the full ranked score list so the daily report gets the best available trade-plan candidates.
+    tradeplan_snapshot = build_daily_tradeplan_snapshot_section(scores, limit=3)
+
     final_report = f"""
 📊 Smart Money AI Daily Report
 Daily Brief
@@ -1784,17 +1789,23 @@ Risk Notes
 Smart Money Summary
 {build_clean_ai_summary(top_scores, movers, market_tone, global_context, what_changed_today)}
 
+{tradeplan_snapshot}
+
 Action Checklist
 {build_action_checklist(top_scores, movers, global_context)}
 
 Next Commands
+/tradeplans
+/tradeplan SYMBOL
 /scorecard SYMBOL
 /top10
 /weeklycalendar
 /global
+/contextstatus
+/summarypreview
 
 Notes
-Informational only. Not financial advice.
+Research only. Not financial advice.
 """.strip()
 
     return enforce_daily_report_quality(final_report)
