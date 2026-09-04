@@ -72,6 +72,7 @@ from src.commands.alerts_commands import alerts_command
 from src.commands.dailyalerts_commands import dailyalerts_command
 from src.commands.alertstatus_commands import alertstatus_command, alertrules_command
 from src.commands.stockanalysis_commands import stockdata_command
+from src.commands.tradeplans_commands import tradeplans_command
 from src.commands.weekly_calendar_commands import weeklycalendar_command
 from src.commands.newsintel_commands import (
     macronews_command,
@@ -142,6 +143,7 @@ def register_commands(app):
 
     # Ticker tools
     app.add_handler(CommandHandler("tradeplan", tradeplan_command))
+    app.add_handler(CommandHandler("tradeplans", tradeplans_command))
     app.add_handler(CommandHandler("ticker", ticker))
     app.add_handler(CommandHandler("stockdata", stockdata_command))
     app.add_handler(CommandHandler("quote", quote))

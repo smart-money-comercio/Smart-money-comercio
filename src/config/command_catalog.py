@@ -103,6 +103,7 @@ MARKET_CONTEXT_COMMANDS = [
 
 
 SMART_MONEY_COMMANDS = [
+    ("/tradeplans", "Top Smart Money trade-plan snapshots"),
     ("/smartmoney", "Smart Money command center"),
     ("/conviction", "Highest conviction opportunities"),
     ("/undervalued", "Undervalued opportunities"),

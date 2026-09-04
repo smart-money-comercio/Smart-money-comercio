@@ -167,4 +167,8 @@ echo " Checking tradeplan quality..."
 
 "$PYTHON_BIN" scripts/check_tradeplan_quality.py
 
+echo " Checking tradeplans quality..."
+
+"$PYTHON_BIN" scripts/check_tradeplans_quality.py
+
 echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py

@@ -22,7 +22,8 @@ Main Commands
 /watchlist - Tracked companies
 
 Stock Research
-/tradeplan SYMBOL - Smart Money trade plan
+/tradeplans - Top Smart Money trade-plan snapshots
+/tradeplan SYMBOL - Full Smart Money trade plan
 /stock SYMBOL - Full stock intelligence
 /ticker SYMBOL - Stock intelligence legacy alias
 /quote SYMBOL - Fast market quote
