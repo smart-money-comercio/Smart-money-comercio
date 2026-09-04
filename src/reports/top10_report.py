@@ -1,6 +1,7 @@
 from collections import Counter
 from typing import Any
 
+from src.reports.top10_tradeplan_bridge import build_top10_tradeplan_snapshot_section
 from src.intelligence.top10_evolution import (
     build_top10_change_summary,
     format_change_summary,
@@ -369,7 +370,7 @@ def trim_change_text(change_text: str, max_chars: int = 850) -> str:
 
 def build_top10_report(stocks, limit: int = 20, record_memory: bool = True) -> str:
     items = normalize_stock_items(stocks)
-
+    tradeplan_snapshot = build_top10_tradeplan_snapshot_section(limit=5)
     if not items:
         return """
 Top 20 Smart Money Ideas
@@ -414,11 +415,14 @@ Ranking Changes
 Ideas
 {body}
 
+
 Use:
 /snapshot
 /brief
 /stock SYMBOL
 /scorecard SYMBOL
+
+{tradeplan_snapshot}
 
 Research only. Not financial advice.
 """.strip()

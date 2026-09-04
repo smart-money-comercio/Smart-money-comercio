@@ -165,7 +165,173 @@
           "symbol": "SOXX"
         }
       ]
+    },
+    {
+      "checked_at": "2026-09-04 16:22:44",
+      "limit": 20,
+      "rankings": [
+        {
+          "action": "Watch Closely",
+          "label": "High Conviction",
+          "rank": 1,
+          "risk": "Balanced",
+          "score": 87.0,
+          "symbol": "NVDA"
+        },
+        {
+          "action": "Review First",
+          "label": "High Conviction",
+          "rank": 2,
+          "risk": "Controlled",
+          "score": 86.5,
+          "symbol": "MSFT"
+        },
+        {
+          "action": "Watch Closely",
+          "label": "Strong Watch",
+          "rank": 3,
+          "risk": "Balanced",
+          "score": 82.6,
+          "symbol": "AAPL"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 4,
+          "risk": "Balanced",
+          "score": 76.6,
+          "symbol": "PLTR"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 5,
+          "risk": "Balanced",
+          "score": 76.2,
+          "symbol": "AVGO"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 6,
+          "risk": "Balanced",
+          "score": 74.9,
+          "symbol": "ITA"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 7,
+          "risk": "Balanced",
+          "score": 74.4,
+          "symbol": "CRWD"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 8,
+          "risk": "Balanced",
+          "score": 74.1,
+          "symbol": "VOO"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 9,
+          "risk": "Balanced",
+          "score": 74.0,
+          "symbol": "FTNT"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 10,
+          "risk": "Balanced",
+          "score": 73.9,
+          "symbol": "LMT"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 11,
+          "risk": "Balanced",
+          "score": 73.9,
+          "symbol": "CACI"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 12,
+          "risk": "Balanced",
+          "score": 73.5,
+          "symbol": "RTX"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 13,
+          "risk": "Balanced",
+          "score": 73.4,
+          "symbol": "NOC"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 14,
+          "risk": "Balanced",
+          "score": 72.9,
+          "symbol": "TSM"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 15,
+          "risk": "Balanced",
+          "score": 72.7,
+          "symbol": "SMH"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 16,
+          "risk": "Balanced",
+          "score": 72.6,
+          "symbol": "SCHD"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 17,
+          "risk": "Balanced",
+          "score": 72.5,
+          "symbol": "CIBR"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 18,
+          "risk": "Balanced",
+          "score": 72.4,
+          "symbol": "PANW"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 19,
+          "risk": "Balanced",
+          "score": 72.2,
+          "symbol": "GD"
+        },
+        {
+          "action": "Monitor",
+          "label": "Developing Watch",
+          "rank": 20,
+          "risk": "Balanced",
+          "score": 71.8,
+          "symbol": "SOXX"
+        }
+      ]
     }
   ],
-  "updated_at": "2026-08-02 00:12:57"
+  "updated_at": "2026-09-04 16:22:44"
 }
