@@ -8,6 +8,11 @@ from src.intelligence.ticker_evolution import (
     safe_float,
 )
 from src.scoring.scoring_engine import get_stock_scores
+from src.reports.tradeplan_snapshot_report import build_tradeplan_snapshot_section
+from src.intelligence.stockanalysis_source import (
+    build_stockanalysis_rating_section,
+    fetch_stockanalysis_data,
+)
 from src.utils.score_display import (
     get_action_label,
     get_category,
@@ -54,12 +59,12 @@ def normalize_score_items(raw_scores: Any) -> list[dict]:
 
 def get_score_value(score_data: dict) -> float | None:
     for key in [
-        "score",
+        "final_score",
+        "composite_score",
         "total_score",
         "smart_money_score",
         "overall_score",
-        "final_score",
-        "composite_score",
+        "score",
     ]:
         value = safe_float(score_data.get(key))
 
@@ -152,7 +157,10 @@ def build_why_it_matters(symbol: str, score_data: dict, label: str, category: st
     if category and category.lower() not in {"unknown", "n/a", "none"}:
         return f"{symbol} is currently classified as {category}, with a {label.lower()} setup."
 
-    return f"{symbol} has enough signal to monitor, but the edge needs confirmation from score, volume, and catalyst behavior."
+    return (
+        f"{symbol} has enough signal to monitor, but the edge needs confirmation from "
+        "score, volume, and catalyst behavior."
+    )
 
 
 def build_watch_items(symbol: str, score_data: dict, score: float | None, risk: str, action: str) -> list[str]:
@@ -197,12 +205,112 @@ def build_action_read(score: float | None, label: str, risk: str, action: str) -
 
 def build_related_commands(symbol: str) -> str:
     return f"""
+/tradeplan {symbol}
+/tradeplans
 /scorecard {symbol}
 /volume {symbol}
 /earnings {symbol}
 /risk {symbol}
+/stockdata {symbol}
+/tickernews {symbol}
 /brief
 """.strip()
+
+
+def build_stockanalysis_fundamentals_section(symbol: str) -> str:
+    try:
+        data = fetch_stockanalysis_data(symbol, force_refresh=False)
+    except Exception:
+        return (
+            "StockAnalysis Fundamentals\n"
+            "• Supplemental fundamentals unavailable."
+        )
+
+    metrics = data.get("metrics", {})
+
+    if not data.get("available") or not metrics:
+        return (
+            "StockAnalysis Fundamentals\n"
+            "• Supplemental fundamentals unavailable."
+        )
+
+    def line(key: str, label: str) -> str:
+        value = metrics.get(key)
+
+        if not value:
+            return ""
+
+        return f"• {label}: {value}"
+
+    lines = [
+        "StockAnalysis Fundamentals",
+        line("market_cap", "Market Cap"),
+        line("pe_ratio", "P/E"),
+        line("forward_pe", "Forward P/E"),
+        line("revenue", "Revenue"),
+        line("net_income", "Net Income"),
+        line("free_cash_flow", "Free Cash Flow"),
+        line("total_debt", "Total Debt"),
+        line("cash_and_equivalents", "Cash & Equivalents"),
+    ]
+
+    clean_lines = [item for item in lines if str(item or "").strip()]
+
+    if len(clean_lines) <= 1:
+        clean_lines.append("• Supplemental fundamentals unavailable.")
+
+    return "\n".join(clean_lines)
+
+
+def build_stockanalysis_rating_read(symbol: str) -> str:
+    try:
+        section = build_stockanalysis_rating_section(symbol, force_refresh=False)
+    except Exception:
+        return (
+            "StockAnalysis Analyst Rating\n"
+            "• External analyst consensus unavailable."
+        )
+
+    lines = section.splitlines()
+    selected = []
+
+    keep_headers = {
+        "External Analyst Consensus",
+        "Buy / Hold / Sell Mix",
+        "Interpretation",
+    }
+
+    for line in lines:
+        clean = line.strip()
+
+        if clean in keep_headers:
+            selected.append(line)
+        elif clean.startswith("• Consensus:"):
+            selected.append(line)
+        elif clean.startswith("• Price Target:"):
+            selected.append(line)
+        elif clean.startswith("• Implied"):
+            selected.append(line)
+        elif clean.startswith("• Strong Buy:"):
+            selected.append(line)
+        elif clean.startswith("• Buy:"):
+            selected.append(line)
+        elif clean.startswith("• Hold:"):
+            selected.append(line)
+        elif clean.startswith("• Sell:"):
+            selected.append(line)
+        elif clean.startswith("• Strong Sell:"):
+            selected.append(line)
+        elif clean.startswith("• Analyst setup"):
+            selected.append(line)
+
+    if not selected:
+        return (
+            "StockAnalysis Analyst Rating\n"
+            "• External analyst consensus unavailable."
+        )
+
+    return "StockAnalysis Analyst Rating\n" + "\n".join(selected)
 
 
 def build_stock_intelligence_report(symbol: str) -> str:
@@ -294,6 +402,10 @@ def build_stock_intelligence_report(symbol: str) -> str:
     action_read = build_action_read(score, label, risk, action)
     memory_summary = build_memory_summary(symbol)
 
+    stockanalysis_fundamentals = build_stockanalysis_fundamentals_section(symbol)
+    stockanalysis_rating = build_stockanalysis_rating_read(symbol)
+    tradeplan_snapshot = build_tradeplan_snapshot_section(symbol)
+
     return f"""
 📈 {symbol} Stock Intelligence
 
@@ -307,6 +419,10 @@ Portfolio Fit: {fit}
 Live Tape
 Price: {format_price(price)}
 Change: {format_change(change_percent)}
+
+{stockanalysis_fundamentals}
+
+{stockanalysis_rating}
 
 Why It Matters
 {why_it_matters}
@@ -322,6 +438,8 @@ What Smart Money Should Watch
 
 Action Read
 {action_read}
+
+{tradeplan_snapshot}
 
 Related Commands:
 {build_related_commands(symbol)}
