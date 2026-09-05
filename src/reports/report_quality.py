@@ -5,6 +5,8 @@ from typing import Any
 MAX_DAILY_REPORT_CHARS = int(os.getenv("DAILY_REPORT_MAX_CHARS", "6200"))
 
 REQUIRED_HEADERS = [
+    "Intelligence Used Today",
+    "Trade Plan Snapshot",
     "Executive Summary",
     "What Changed Today",
     "Theme Read",
@@ -14,7 +16,6 @@ REQUIRED_HEADERS = [
     "Top Opportunities",
     "Risk Notes",
     "Smart Money Summary",
-    "Trade Plan Snapshot",
     "Action Checklist",
     "Next Commands",
     "Notes",
@@ -42,10 +43,11 @@ SECTION_LINE_LIMITS = {
     "Watchlist Movers": 8,
     "Top Opportunities": 13,
     "Risk Notes": 4,
-    "Smart Money Summary": 4,
-    "Trade Plan Snapshot": 7,              # header + Signal / Implication / Validation
+    "Smart Money Summary": 4,              # header + Signal / Implication / Validation
     "Action Checklist": 5,
-    "Next Commands": 6,
+    "Next Commands": 10,
+    "Trade Plan Snapshot": 6,
+    "Intelligence Used Today": 2,
 }
 
 
@@ -133,7 +135,7 @@ def trim_section_lines(report: str) -> str:
         if limit and len(lines) > limit:
             kept = lines[:limit]
 
-            if header not in {"What Changed Today", "Theme Read", "Smart Money Summary", "Trade Plan Snapshot"}:
+            if header not in {"What Changed Today", "Theme Read", "Smart Money Summary"}:
                 kept.append("Briefly trimmed to keep /report focused.")
 
             lines = kept
@@ -194,7 +196,6 @@ def enforce_ai_summary_shape(report: str) -> str:
             output_lines.extend(
                 [
                     "Smart Money Summary",
-    "Trade Plan Snapshot",
                     "Signal: Daily signal unavailable; use What Changed Today and Theme Read as the primary briefing layer.",
                     "Implication: Keep sizing disciplined until price, volume, and theme confirmation align.",
                     "Validation: Run /scorecard and /volume on the top-ranked idea before acting.",

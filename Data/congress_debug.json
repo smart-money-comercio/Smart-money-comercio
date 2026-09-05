@@ -1,7 +1,7 @@
 {
   "provider": {
     "requested_provider": "auto",
-    "timestamp": 1788556862.4351761,
+    "timestamp": 1788641639.6839724,
     "order": "auto = fmp, then stockwatcher"
   },
   "fmp": {

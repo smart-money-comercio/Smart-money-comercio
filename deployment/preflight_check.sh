@@ -187,4 +187,8 @@ echo " Checking tradeplan language consistency..."
 
 "$PYTHON_BIN" scripts/check_tradeplan_language_consistency.py
 
+echo " Checking daily intelligence integration..."
+
+"$PYTHON_BIN" scripts/check_daily_intelligence_integration.py
+
 echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py

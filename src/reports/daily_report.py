@@ -5,6 +5,10 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.reports.daily_tradeplan_bridge import build_daily_tradeplan_snapshot_section
+from src.reports.daily_intelligence_sources import (
+    build_daily_intelligence_sources_section,
+    build_daily_intelligence_stack_line,
+)
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
 
 try:
@@ -1477,23 +1481,25 @@ def build_executive_summary(
     market_moves = build_market_moves_line(context, movers)
 
     lines = [
-        f"• Main theme: {primary_theme}.",
-        f"• Market tone: {market_tone}; macro pressure: {pressure}.",
-        f"• Market moves: {market_moves}",
+        f"- Main theme: {primary_theme}.",
+        f"- Market tone: {market_tone}; macro pressure: {pressure}.",
+        f"- Market moves: {market_moves}",
+        f"- Intelligence stack: {build_daily_intelligence_stack_line()}",
     ]
 
     if best:
         lines.append(
-            f"• Best watch: {get_ticker(best)} — {translate_smart_money_label(best)}. "
+            f"- Best watch: {get_ticker(best)} - {translate_smart_money_label(best)}. "
             f"Next step: /scorecard {get_ticker(best)}."
         )
 
     if has_defense_ai_warfare_pressure(context):
         lines.append(
-            "• Defense read: escalation is a theme confirmation signal for defense, cyber, drones, ISR, and AI warfare names — not an automatic chase signal."
+            "- Defense read: escalation is a theme confirmation signal for defense, cyber, drones, ISR, and AI warfare names - not an automatic chase signal."
         )
 
     return "\n".join(lines)
+
 
 def build_portfolio_read(
     context: dict,
@@ -1740,6 +1746,7 @@ def build_daily_report() -> str:
         movers=movers,
         market_tone=market_tone,
         context=global_context,
+        
     )
 
     if scoring_error:
@@ -1749,10 +1756,12 @@ def build_daily_report() -> str:
             scores,
             limit=MAX_TOP_OPPORTUNITIES,
         )
-
+  
     # Build this AFTER scores/top_scores are loaded.
     # Use the full ranked score list so the daily report gets the best available trade-plan candidates.
     tradeplan_snapshot = build_daily_tradeplan_snapshot_section(scores, limit=3)
+
+    intelligence_used = build_daily_intelligence_sources_section()
 
     final_report = f"""
 📊 Smart Money AI Daily Report
@@ -1762,6 +1771,9 @@ Generated: {timestamp} {REPORT_TIMEZONE}
 
 Executive Summary
 {executive_summary}
+
+Intelligence Used Today
+{intelligence_used}
 
 What Changed Today
 {trim_block(what_changed_today, MAX_WHAT_CHANGED_CHARS)}
