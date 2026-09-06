@@ -5,6 +5,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.reports.daily_tradeplan_bridge import build_daily_tradeplan_snapshot_section
+from src.reports.allocation_report import build_allocation_snapshot_section
 from src.reports.daily_intelligence_sources import (
     build_daily_intelligence_sources_section,
     build_daily_intelligence_stack_line,
@@ -1720,6 +1721,12 @@ def build_daily_report() -> str:
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     market_tone = build_market_tone(movers)
 
+    allocation_snapshot = build_allocation_snapshot_section(
+    scores=scores,
+    market_tone=market_tone,
+    macro_pressure=get_macro_pressure(global_context),
+)
+
     what_changed_today = build_what_changed_today(
         context=global_context,
         top_scores=top_scores,
@@ -1787,6 +1794,8 @@ Market Snapshot
 Portfolio Read
 {build_portfolio_read(global_context, top_scores, scores)}
 
+{allocation_snapshot}
+
 {defense_impact}
 
 Watchlist Movers
@@ -1815,6 +1824,7 @@ Next Commands
 /global
 /contextstatus
 /summarypreview
+/allocation
 
 Notes
 Research only. Not financial advice.

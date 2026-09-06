@@ -5,6 +5,7 @@ from typing import Any
 MAX_DAILY_REPORT_CHARS = int(os.getenv("DAILY_REPORT_MAX_CHARS", "6200"))
 
 REQUIRED_HEADERS = [
+    "Portfolio Allocation Snapshot",
     "Intelligence Used Today",
     "Trade Plan Snapshot",
     "Executive Summary",
@@ -48,6 +49,7 @@ SECTION_LINE_LIMITS = {
     "Next Commands": 10,
     "Trade Plan Snapshot": 6,
     "Intelligence Used Today": 2,
+    "Portfolio Allocation Snapshot": 4,
 }
 
 

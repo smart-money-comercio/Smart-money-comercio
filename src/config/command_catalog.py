@@ -78,6 +78,7 @@ THEME_COMMANDS = [
     ("/defense", "Defense and AI warfare intelligence"),
     ("/growth", "Growth ideas"),
     ("/dividends", "Dividend ideas"),
+    ("/allocation", "Portfolio allocation posture and suggested risk tilt"),
     ("/portfolio", "Portfolio intelligence"),
     ("/undervalued", "Undervalued screen"),
 ]

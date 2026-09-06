@@ -487,6 +487,7 @@ def run_intelligence_quality_check(symbol: str = DEFAULT_SYMBOL) -> dict:
                 "Top Opportunities",
                 "Smart Money Summary",
                 "Action Checklist",
+                "Portfolio Allocation Snapshot",
             ],
             max_chars=BRIEF_SAFE_CHARS,
         )

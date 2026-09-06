@@ -21,6 +21,7 @@ from src.commands.daily_report_send_commands import (
     testdaily_command,
 )
 from src.commands.deploycheck_commands import deploycheck_command
+from src.commands.allocation_commands import allocation_command
 from src.commands.global_commands import global_market
 from src.commands.versionnotes_commands import versionnotes_command
 from src.commands.contextstatus_commands import contextstatus_command, summarypreview_command
@@ -112,6 +113,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("snapshot", snapshot_command))
     app.add_handler(CommandHandler("quality", reportcheck_command))
     app.add_handler(CommandHandler("reportcheck", reportcheck_command))
+    app.add_handler(CommandHandler("allocation", allocation_command))
     app.add_handler(CommandHandler("senddaily", senddaily_command))
     app.add_handler(CommandHandler("testdaily", testdaily_command))
     app.add_handler(CommandHandler("dailycheck", dailycheck_command))

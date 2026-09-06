@@ -16,6 +16,8 @@ os.environ.setdefault("STRICT_COMMAND_AUDIT", "1")
 
 
 REQUIRED_REPORT_BUILDERS = [
+    ("src.reports.allocation_report", "build_allocation_report"),
+    ("src.reports.allocation_report", "build_allocation_snapshot_section"),
     ("src.reports.tradeplan_language", "build_tradeplan_snapshot_card"),
     ("src.reports.daily_tradeplan_bridge", "build_daily_tradeplan_snapshot_section"),
     ("src.reports.top10_tradeplan_bridge", "build_top10_tradeplan_snapshot_section"),
@@ -52,6 +54,7 @@ REQUIRED_REPORT_BUILDERS = [
 
 
 REQUIRED_COMMANDS = [
+    "/allocation",
     "/tradeplans",
     "/tradeplan",
     "/contextstatus",

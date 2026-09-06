@@ -191,4 +191,8 @@ echo " Checking daily intelligence integration..."
 
 "$PYTHON_BIN" scripts/check_daily_intelligence_integration.py
 
+echo " Checking allocation quality..."
+
+"$PYTHON_BIN" scripts/check_allocation_quality.py
+
 echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py
