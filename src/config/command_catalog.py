@@ -80,6 +80,7 @@ THEME_COMMANDS = [
     ("/dividends", "Dividend ideas"),
     ("/allocation", "Portfolio allocation posture and suggested risk tilt"),
     ("/agentstatus", "Latest Smart Money Daily Agent run status"),
+    ("/agentlog", "Daily agent run log and reliability dashboard"),
     ("/rundailyagent", "Run the full Smart Money Daily Agent workflow"),
     ("/portfolio", "Portfolio intelligence"),
     ("/undervalued", "Undervalued screen"),

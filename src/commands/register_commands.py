@@ -84,6 +84,8 @@ macronews_command,
 )
 
 
+from src.commands.agentlog_commands import agentlog_command
+
 def register_commands(app):
     # Core
     app.add_handler(CommandHandler("start", start))
@@ -116,6 +118,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("reportcheck", reportcheck_command))
     app.add_handler(CommandHandler("allocation", allocation_command))
     app.add_handler(CommandHandler("agentstatus", agentstatus_command))
+    app.add_handler(CommandHandler("agentlog", agentlog_command))
     app.add_handler(CommandHandler("rundailyagent", rundailyagent_command))
 
     app.add_handler(CommandHandler("senddaily", senddaily_command))
