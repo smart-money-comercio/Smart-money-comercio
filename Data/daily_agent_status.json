@@ -1,0 +1,59 @@
+{
+  "success": true,
+  "last_run": "2026-09-06T05:37:35Z",
+  "completed_at": "2026-09-06T05:37:36Z",
+  "dry_run": true,
+  "report_characters": 5438,
+  "message": "Daily agent completed successfully.",
+  "steps": [
+    {
+      "name": "News Intelligence",
+      "status": "skip",
+      "detail": "Skipped during dry run.",
+      "critical": false,
+      "time": "2026-09-06T05:37:35Z"
+    },
+    {
+      "name": "Alert Monitor",
+      "status": "skip",
+      "detail": "Skipped during dry run.",
+      "critical": false,
+      "time": "2026-09-06T05:37:35Z"
+    },
+    {
+      "name": "StockAnalysis Refresh",
+      "status": "skip",
+      "detail": "Skipped during dry run.",
+      "critical": false,
+      "time": "2026-09-06T05:37:35Z"
+    },
+    {
+      "name": "Trade Plans",
+      "status": "pass",
+      "detail": "Trade plans built (2526 chars).",
+      "critical": false,
+      "time": "2026-09-06T05:37:36Z"
+    },
+    {
+      "name": "Portfolio Allocation",
+      "status": "pass",
+      "detail": "Allocation snapshot built (986 chars).",
+      "critical": false,
+      "time": "2026-09-06T05:37:36Z"
+    },
+    {
+      "name": "Daily Report Build",
+      "status": "pass",
+      "detail": "\ud83d\udcca Smart Money AI Daily Report\n\nDaily Brief\nDate: September 06, 2026\nGenerated: 2026-09-06 00:37:36 America/Lima\n\nExecutive Summary\n- Main theme: AI / chips.\n- Market tone: Quote data unavailable; macro pressure: Hormuz/Iran geopolitical shipping risk, defense/AI warfare demand signal, consumer stress risk, growth pressure.\n- Market moves: S&P -0.10%, Nasdaq -1.04%, Russell -0.17%, VIX +2.78%, Oil -8.57%, TLT +0.64%\n- Intelligence stack: Smart Money Summary, Trade Plan Snapshot, News Intelligence, Alert Monitor, StockAnalysis, Alert Settings, Watchlist Evolution, and Market Memory are feeding today's report.\n- Best watch: NVDA - High-conviction setup. Next step: /scorecard NVDA.\n- Defense read: escalation is a theme confirmation signal for defense, cyber, drones, ISR, and AI warfare names - not an automatic chase signal.\n\nIntelligence Used Today\n\nWhat Changed Today\n\u2022 Leadership: NVDA; confirmation still matters more than chasing.\n\u2022 Tone shifted from constructive / mildly bullish to quote data unavailable.\n\u2022 Persistence: AI / chips appeared 5 of the last 5 reports; Earnings season appeared 5 of the last 5 reports.\n\nTheme Read\n\u2022 AI / chips: Persistent theme \u2014 appeared 5 of the last 5 reports. Watch: confirm earnings quality, margin durability, order visibility, and volume confirmation.\n\u2022 Earnings season: Persistent theme \u2014 appeared 5 of the last 5 reports. Watch: prioritize guidance, backlog, margin commentary, and forward demand over headline EPS.\n\u2022 Geopolitical / oil risk: Persistent theme \u2014 appeared 5 of the last 5 reports. Watch: confirm price, volume, signal quality, and watchlist confirmation before sizing.\n\nMarket Snapshot\nMarket Session: Closed \u2014 weekend. Price moves reflect the last completed regular session.\nTone: Quote data unavailable\nWatchlist: 16 symbols\nLive Quotes: Off\nUse: /global, /headlines, /watchlist movers, or /ticker SYMBOL for live context.\n\nPortfolio Read\n\u2022 Geopolitical risk is two-sided: it can pressure broad risk appetite through oil, shipping, and inflation, while increasing attention on defense and security exposure.\n\u2022 Defense/AI warfare watchlist exposure detected: PLTR, ITA, CRWD, FTNT, LMT.\n\u2022 NVDA is the cleanest ranked setup today, but it still needs price/volume confirmation before action.\n\u2022 Theme focus: AI / chips, Earnings season, Geopolitical / oil risk.\n\nPortfolio Allocation Snapshot\nPosture: Cautious / Watchlist\nSuggested Tilt: Growth / AI 30%, Defense / Cyber / AI Warfare 20%, Quality Dividend / Income 20%, Cash / Short-Term Defense 20%, Speculative / Tactical 10%.\nAction: Watch more than act. Use /tradeplans and /risk before sizing any new position.\nBriefly trimmed to keep /report focused.\n\nWatchlist Movers\nRelevant research universe: 16 symbols\nNVDA, MSFT, AVGO, META, AMZN, AAPL, GOOGL, QQQ, TSLA, SPY, SPCX, PLTR, TSM, ASML, AMD, GOOG\n\nLive movement data is unavailable.\n\nTop Opportunities\n1. NVDA \u2014 High Conviction | 87/100\nBucket: Best Setup / Pullback Candidates\nWhy: Growth / AI Infrastructure setup; High Conviction; Improving.\nWatch: Risk: Balanced. Action: Watch Closely.\nAction: Favor pullbacks or confirmation.\nCommand: /stock NVDA\n\n2. MSFT \u2014 High Conviction | 86/100\nBucket: Best Setup / Pullback Candidates\nWhy: Growth / AI / Cloud / Government setup; High Conviction; Strong.\nWatch: Risk: Controlled. Action: Review First.\nAction: Favor pullbacks or confirmation.\nBriefly trimmed to keep /report focused.\n\nRisk Notes\n\u2022 Main risk: Hormuz/Iran geopolitical shipping risk, defense/AI warfare demand signal, consumer stress risk, growth pressure.\n\u2022 Theme risk: defense headlines need contract, backlog, budget, or volume confirmation.\n\nSmart Money Summary\nSignal: The daily read is cautious and selective. Cautious / validation-first with Fed / Rates pressure, Cautious / validation-first, and AI / Semiconductors are driving the market context, while the alert queue is quiet.\nImplication: Focus first on NVDA, MSFT, AAPL, PLTR, and AVGO. Treat headlines, alert signals, and external ratings as confirmation inputs, not stand-alone buy signals.\nValidation: Before acting, confirm the setup with /alerts, /newsintel, /stock, /risk, /volume, and /stockdata. Upgrade conviction only when the score, news context, volume, risk, and external validation agree.\n\nTrade Plan Snapshot\nTop action reads from today\u2019s Smart Money list:\n\n1. NVDA \u2014 Medium-High conviction, 87/100, Medium-High risk. Action: Constructive \u2014 favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan NVDA\n2. MSFT \u2014 Medium-High conviction, 86.5/100, Medium-High risk. Action: Constructive \u2014 favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan MSFT\n3. AAPL \u2014 Medium-High conviction, 82.6/100, Medium-High risk. Action: Constructive \u2014 favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan AAPL\nBriefly trimmed to keep /report focused.\n\nAction Checklist\n\u2022 /scorecard NVDA \u2014 validate the top-ranked setup.\n\u2022 /volume NVDA \u2014 confirm whether money flow supports the score.\n\u2022 /weeklycalendar \u2014 check upcoming catalysts before sizing.\n\u2022 /defense \u2014 review defense/AI warfare exposure separately.\nBriefly trimmed to keep /report focused.\n\nNext Commands\n/tradeplans\n/tradeplan SYMBOL\n/scorecard SYMBOL\n/top10\n/weeklycalendar\n/global\n/contextstatus\n/summarypreview\n/allocation\nBriefly trimmed to keep /report focused.\n\nNotes\nResearch only. Not financial advice.",
+      "critical": true,
+      "time": "2026-09-06T05:37:36Z"
+    },
+    {
+      "name": "Quality Review",
+      "status": "pass",
+      "detail": "Daily report quality validation passed.",
+      "critical": true,
+      "time": "2026-09-06T05:37:36Z"
+    }
+  ]
+}

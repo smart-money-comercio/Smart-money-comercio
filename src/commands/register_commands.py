@@ -1,3 +1,4 @@
+from src.commands.daily_agent_commands import agentstatus_command, rundailyagent_command
 from telegram.ext import CommandHandler
 
 from src.commands.admin_commands import (
@@ -76,8 +77,7 @@ from src.commands.stockanalysis_commands import stockdata_command
 from src.commands.tradeplans_commands import tradeplans_command
 from src.commands.weekly_calendar_commands import weeklycalendar_command
 from src.commands.newsintel_commands import (
-from src.commands.daily_agent_commands import agentstatus_command, rundailyagent_command
-    macronews_command,
+macronews_command,
     newsintel_command,
     newsmemory_command,
     tickernews_command,
