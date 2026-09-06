@@ -76,6 +76,7 @@ from src.commands.stockanalysis_commands import stockdata_command
 from src.commands.tradeplans_commands import tradeplans_command
 from src.commands.weekly_calendar_commands import weeklycalendar_command
 from src.commands.newsintel_commands import (
+from src.commands.daily_agent_commands import agentstatus_command, rundailyagent_command
     macronews_command,
     newsintel_command,
     newsmemory_command,
@@ -114,6 +115,9 @@ def register_commands(app):
     app.add_handler(CommandHandler("quality", reportcheck_command))
     app.add_handler(CommandHandler("reportcheck", reportcheck_command))
     app.add_handler(CommandHandler("allocation", allocation_command))
+    app.add_handler(CommandHandler("agentstatus", agentstatus_command))
+    app.add_handler(CommandHandler("rundailyagent", rundailyagent_command))
+
     app.add_handler(CommandHandler("senddaily", senddaily_command))
     app.add_handler(CommandHandler("testdaily", testdaily_command))
     app.add_handler(CommandHandler("dailycheck", dailycheck_command))

@@ -79,6 +79,8 @@ THEME_COMMANDS = [
     ("/growth", "Growth ideas"),
     ("/dividends", "Dividend ideas"),
     ("/allocation", "Portfolio allocation posture and suggested risk tilt"),
+    ("/agentstatus", "Latest Smart Money Daily Agent run status"),
+    ("/rundailyagent", "Run the full Smart Money Daily Agent workflow"),
     ("/portfolio", "Portfolio intelligence"),
     ("/undervalued", "Undervalued screen"),
 ]
