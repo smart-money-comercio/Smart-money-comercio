@@ -87,6 +87,7 @@ macronews_command,
 from src.commands.agentlog_commands import agentlog_command
 
 from src.commands.watchdog_commands import watchdog_command
+from src.commands.sourcehealth_commands import sourcehealth_command
 
 def register_commands(app):
     # Core
@@ -122,6 +123,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("agentstatus", agentstatus_command))
     app.add_handler(CommandHandler("agentlog", agentlog_command))
     app.add_handler(CommandHandler("watchdog", watchdog_command))
+    app.add_handler(CommandHandler("sourcehealth", sourcehealth_command))
     app.add_handler(CommandHandler("rundailyagent", rundailyagent_command))
 
     app.add_handler(CommandHandler("senddaily", senddaily_command))
