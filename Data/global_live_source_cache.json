@@ -1,7 +1,7 @@
 {
   "cache_status": "refreshed",
-  "fetched_at": 1787980513.0170476,
-  "item_count": 27,
+  "fetched_at": 1788902854.338972,
+  "item_count": 28,
   "items": [
     {
       "headline": "Offices of Foreign Banks Financial Accounts Financial Accounts of the United States - Z.1 Household Finance Consumer Credit - G.19 Household Debt Service Ratios Mortgage Debt Outstanding...",
@@ -158,15 +158,15 @@
       "url": "https://www.whitehouse.gov/news/"
     },
     {
-      "headline": "Trump Establishes a Commission to Design the United States Space Academy Fact Sheets August 28, 2026 Establishing the United States Space Academy Presidential Actions , Proclamations Augu...",
-      "score": 1,
+      "headline": "Trump Accelerates Veterans\u2019 Access to Benefits and Employment Opportunities Fact Sheets September 8, 2026 Accelerating Access To Veterans\u2019 Benefits And Employment Opportunities Presidenti...",
+      "score": 2,
       "source": "White House News",
       "source_type": "White House",
       "url": "https://www.whitehouse.gov/news/"
     },
     {
-      "headline": "Trump Further Ensures Affordable Beef for the American Consumer Fact Sheets August 26, 2026 Further Ensuring Affordable Beef for the American Consumer Presidential Actions , Proclamations...",
-      "score": 1,
+      "headline": "Trump Promotes Fair Competition in Livestock Markets and Expands Market Access for American Meat Producers Fact Sheets September 4, 2026 Made in America: Manufacturing, Private Hiring Pow...",
+      "score": 2,
       "source": "White House News",
       "source_type": "White House",
       "url": "https://www.whitehouse.gov/news/"
@@ -179,14 +179,21 @@
       "url": "https://www.whitehouse.gov/fact-sheets/"
     },
     {
-      "headline": "Trump Further Ensures Affordable Beef for the American Consumer Fact Sheets August 26, 2026 Fact Sheet: President Donald J.",
+      "headline": "Trump Announces Historic Oil Agreement to Secure American Energy Dominance and Drive Venezuela\u2019s Economic Recovery Fact Sheets August 31, 2026 Fact Sheet: President Donald J.",
+      "score": 2,
+      "source": "White House Fact Sheets",
+      "source_type": "White House",
+      "url": "https://www.whitehouse.gov/fact-sheets/"
+    },
+    {
+      "headline": "Trump Accelerates Veterans\u2019 Access to Benefits and Employment Opportunities Fact Sheets September 8, 2026 Fact Sheet: President Donald J.",
       "score": 1,
       "source": "White House Fact Sheets",
       "source_type": "White House",
       "url": "https://www.whitehouse.gov/fact-sheets/"
     },
     {
-      "headline": "Supply Chains by Imposing Tariffs on Drones and Their Parts and Components Fact Sheets August 13, 2026 Fact Sheet: President Donald J.",
+      "headline": "Trump Further Ensures Affordable Beef for the American Consumer Fact Sheets August 26, 2026 Fact Sheet: President Donald J.",
       "score": 1,
       "source": "White House Fact Sheets",
       "source_type": "White House",
@@ -227,24 +234,20 @@
     },
     {
       "hits": [
-        "supply"
+        "employment",
+        "consumer",
+        "manufacturing"
       ],
-      "score": 1,
-      "theme": "Inflation / Energy"
-    },
-    {
-      "hits": [
-        "tariff"
-      ],
-      "score": 1,
-      "theme": "Geopolitical Risk"
-    },
-    {
-      "hits": [
-        "consumer"
-      ],
-      "score": 1,
+      "score": 3,
       "theme": "Growth / Consumer"
+    },
+    {
+      "hits": [
+        "oil",
+        "energy"
+      ],
+      "score": 2,
+      "theme": "Inflation / Energy"
     }
   ]
 }

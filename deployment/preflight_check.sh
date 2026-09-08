@@ -198,5 +198,6 @@ echo " Checking allocation quality..."
 "$PYTHON_BIN" scripts/check_agentlog_quality.py
 "$PYTHON_BIN" scripts/check_watchdog_quality.py
 "$PYTHON_BIN" scripts/check_sourcehealth_quality.py
+"$PYTHON_BIN" scripts/check_source_refresh_quality.py
 
 echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py
