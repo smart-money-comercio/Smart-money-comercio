@@ -1,8 +1,8 @@
 {
   "success": true,
   "overall_status": "PASS",
-  "last_run": "2026-09-08T21:31:22Z",
-  "completed_at": "2026-09-08T21:31:56Z",
+  "last_run": "2026-09-09T21:23:20Z",
+  "completed_at": "2026-09-09T21:23:55Z",
   "dry_run": true,
   "message": "Source refresh completed successfully.",
   "steps": [
@@ -11,42 +11,42 @@
       "status": "pass",
       "detail": "Cron/source log files already exist.",
       "critical": true,
-      "time": "2026-09-08T21:31:22Z"
+      "time": "2026-09-09T21:23:20Z"
     },
     {
       "name": "News Intelligence",
       "status": "pass",
-      "detail": "News Intelligence checked (3114 chars).",
+      "detail": "News Intelligence checked (3345 chars).",
       "critical": false,
-      "time": "2026-09-08T21:31:35Z"
+      "time": "2026-09-09T21:23:33Z"
     },
     {
       "name": "Alert Monitor",
       "status": "pass",
-      "detail": "Alert Monitor checked (4100 chars).",
+      "detail": "Alert Monitor checked (4142 chars).",
       "critical": false,
-      "time": "2026-09-08T21:31:56Z"
+      "time": "2026-09-09T21:23:55Z"
     },
     {
       "name": "Context Providers",
       "status": "pass",
       "detail": "Context providers loaded: Alert Monitor, News Intelligence, StockAnalysis Cache, Alert Settings",
       "critical": true,
-      "time": "2026-09-08T21:31:56Z"
+      "time": "2026-09-09T21:23:55Z"
     },
     {
       "name": "StockAnalysis Refresh",
       "status": "skip",
       "detail": "Skipped during dry run.",
       "critical": false,
-      "time": "2026-09-08T21:31:56Z"
+      "time": "2026-09-09T21:23:55Z"
     },
     {
       "name": "Source Health Recheck",
       "status": "pass",
-      "detail": "Source health rebuilt. Status: PASS. Report length: 1656 chars.",
+      "detail": "Source health rebuilt. Status: PASS. Report length: 1666 chars.",
       "critical": true,
-      "time": "2026-09-08T21:31:56Z"
+      "time": "2026-09-09T21:23:55Z"
     }
   ]
 }
