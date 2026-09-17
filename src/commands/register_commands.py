@@ -91,6 +91,8 @@ from src.commands.sourcehealth_commands import sourcehealth_command
 
 from src.commands.source_refresh_commands import refreshsources_command
 
+from src.commands.commandcenter_commands import commandcenter_command
+
 def register_commands(app):
     # Core
     app.add_handler(CommandHandler("start", start))
@@ -127,6 +129,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("watchdog", watchdog_command))
     app.add_handler(CommandHandler("sourcehealth", sourcehealth_command))
     app.add_handler(CommandHandler("refreshsources", refreshsources_command))
+    app.add_handler(CommandHandler("commandcenter", commandcenter_command))
     app.add_handler(CommandHandler("rundailyagent", rundailyagent_command))
 
     app.add_handler(CommandHandler("senddaily", senddaily_command))

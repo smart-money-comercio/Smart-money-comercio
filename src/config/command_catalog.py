@@ -84,6 +84,7 @@ THEME_COMMANDS = [
     ("/watchdog", "Daily agent failure watchdog and alert check"),
     ("/sourcehealth", "Data source freshness and provider health dashboard"),
     ("/refreshsources", "Refresh data sources and recheck source health"),
+    ("/commandcenter", "Full Smart Money AI operations dashboard"),
     ("/rundailyagent", "Run the full Smart Money Daily Agent workflow"),
     ("/portfolio", "Portfolio intelligence"),
     ("/undervalued", "Undervalued screen"),

@@ -1,6 +1,6 @@
 {
   "cache_status": "refreshed",
-  "fetched_at": 1788988938.7077088,
+  "fetched_at": 1789601432.6612906,
   "item_count": 27,
   "items": [
     {
@@ -158,8 +158,8 @@
       "url": "https://www.whitehouse.gov/news/"
     },
     {
-      "headline": "Trump Accelerates Veterans\u2019 Access to Benefits and Employment Opportunities Fact Sheets September 8, 2026 Accelerating Access To Veterans\u2019 Benefits And Employment Opportunities Presidenti...",
-      "score": 2,
+      "headline": "Trump Restores Reciprocity in Government Procurement Fact Sheets September 16, 2026 Restoring Reciprocity in Government Procurement Presidential Actions , Presidential Memoranda September...",
+      "score": 1,
       "source": "White House News",
       "source_type": "White House",
       "url": "https://www.whitehouse.gov/news/"
@@ -179,14 +179,14 @@
       "url": "https://www.whitehouse.gov/fact-sheets/"
     },
     {
-      "headline": "Trump Accelerates Veterans\u2019 Access to Benefits and Employment Opportunities Fact Sheets September 8, 2026 Fact Sheet: President Donald J.",
+      "headline": "Trump Restores Reciprocity in Government Procurement Fact Sheets September 16, 2026 Fact Sheet: President Donald J.",
       "score": 1,
       "source": "White House Fact Sheets",
       "source_type": "White House",
       "url": "https://www.whitehouse.gov/fact-sheets/"
     },
     {
-      "headline": "Trump Further Ensures Affordable Beef for the American Consumer Fact Sheets August 26, 2026 Fact Sheet: President Donald J.",
+      "headline": "Trump Accelerates Veterans\u2019 Access to Benefits and Employment Opportunities Fact Sheets September 8, 2026 Fact Sheet: President Donald J.",
       "score": 1,
       "source": "White House Fact Sheets",
       "source_type": "White House",
@@ -240,6 +240,13 @@
       ],
       "score": 2,
       "theme": "Growth / Consumer"
+    },
+    {
+      "hits": [
+        "procurement"
+      ],
+      "score": 1,
+      "theme": "Defense / Policy"
     }
   ]
 }
