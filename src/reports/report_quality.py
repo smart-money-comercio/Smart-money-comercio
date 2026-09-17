@@ -15,6 +15,7 @@ REQUIRED_HEADERS = [
     "Portfolio Read",
     "Watchlist Movers",
     "Top Opportunities",
+    "Fastest-Rising Opportunities",
     "Risk Notes",
     "Smart Money Summary",
     "Action Checklist",
@@ -42,7 +43,8 @@ SECTION_LINE_LIMITS = {
     "What Changed Today": 4,      # header + 3 bullets
     "Theme Read": 4,              # header + 3 bullets
     "Watchlist Movers": 8,
-    "Top Opportunities": 13,
+    "Top Opportunities": 18,
+    "Fastest-Rising Opportunities": 6,
     "Risk Notes": 4,
     "Smart Money Summary": 4,              # header + Signal / Implication / Validation
     "Action Checklist": 5,

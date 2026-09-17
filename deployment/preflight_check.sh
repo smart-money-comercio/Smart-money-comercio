@@ -190,6 +190,7 @@ echo " Checking tradeplan language consistency..."
 echo " Checking daily intelligence integration..."
 
 "$PYTHON_BIN" scripts/check_daily_intelligence_integration.py
+"$PYTHON_BIN" scripts/check_opportunity_ranking_quality.py
 
 echo " Checking allocation quality..."
 

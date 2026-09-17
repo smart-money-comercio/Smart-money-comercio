@@ -79,6 +79,11 @@ except Exception:
         theme_text = ", ".join(str(theme) for theme in themes[:5]) if themes else "Theme history is still building."
         return f"• {theme_text}\n• Market tone: {market_tone}."
 from src.scoring.scoring_engine import get_stock_scores
+from src.intelligence.opportunity_ranker import (
+    build_fastest_rising_section,
+    build_top_opportunities_section,
+    rank_daily_opportunities,
+)
 from src.utils.score_display import (
     get_action_label,
     get_category,
@@ -95,7 +100,7 @@ from src.utils.watchlist_store import load_watchlist
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 MARKET_TIMEZONE = os.getenv("MARKET_TIMEZONE", "America/New_York")
 
-MAX_TOP_OPPORTUNITIES = 2
+MAX_TOP_OPPORTUNITIES = 3
 MAX_WATCHLIST_MOVERS = 6
 MAX_RELEVANT_WATCHLIST = 20
 MAX_MORNING_BRIEF_CHARS = 900
@@ -1721,6 +1726,24 @@ def build_daily_report() -> str:
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     market_tone = build_market_tone(movers)
 
+    # Daily opportunity ranking combines structural conviction with
+    # live price movement, ticker-news activity, volume confirmation,
+    # risk, and change versus the prior report.
+    opportunity_scores = rank_daily_opportunities(
+        scores=scores,
+        movers=movers,
+        context=global_context,
+        record_memory=True,
+    )
+
+    if opportunity_scores:
+        top_scores = opportunity_scores[:MAX_TOP_OPPORTUNITIES]
+    else:
+        opportunity_scores = scores
+        top_scores = scores[:MAX_TOP_OPPORTUNITIES]
+
+    global_context["opportunity_scores"] = opportunity_scores
+
     allocation_snapshot = build_allocation_snapshot_section(
     scores=scores,
     market_tone=market_tone,
@@ -1758,10 +1781,15 @@ def build_daily_report() -> str:
 
     if scoring_error:
         top_opportunities = f"Scoring unavailable: {scoring_error}"
+        fastest_rising = "Opportunity change unavailable because scoring failed."
     else:
-        top_opportunities = build_v13_top_opportunities(
-            scores,
+        top_opportunities = build_top_opportunities_section(
+            opportunity_scores,
             limit=MAX_TOP_OPPORTUNITIES,
+        )
+        fastest_rising = build_fastest_rising_section(
+            opportunity_scores,
+            limit=4,
         )
   
     # Build this AFTER scores/top_scores are loaded.
@@ -1803,6 +1831,9 @@ Watchlist Movers
 
 Top Opportunities
 {top_opportunities}
+
+Fastest-Rising Opportunities
+{fastest_rising}
 
 Risk Notes
 {build_risk_notes(top_scores, movers, global_context)}
