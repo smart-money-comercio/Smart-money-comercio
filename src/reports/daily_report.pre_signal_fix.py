@@ -1795,7 +1795,7 @@ def build_daily_report() -> str:
     # Use the full ranked score list so the daily report gets the best available trade-plan candidates.
     tradeplan_snapshot = build_daily_tradeplan_snapshot_section(scores, limit=3)
 
-    intelligence_used = f"- {build_daily_intelligence_stack_line()}"
+    intelligence_used = f"? {build_daily_intelligence_stack_line()}"
 
     final_report = f"""
 📊 Smart Money AI Daily Report
@@ -1944,118 +1944,6 @@ Research only. Not financial advice.
         signal_start = (
             summary_pos
             + len(summary_marker)
-        )
-
-        if final_report.startswith(
-            "Signal:",
-            signal_start,
-        ):
-            signal_end = final_report.find(
-                "\n",
-                signal_start,
-            )
-
-            if signal_end == -1:
-                signal_end = len(final_report)
-
-            final_report = (
-                final_report[:signal_start]
-                + polished_signal
-                + final_report[signal_end:]
-            )
-
-    # DAILY_REPORT_SIGNAL_ALIGNMENT_V1
-    #
-    # Keep the visible Smart Money Signal aligned with the same
-    # live market state shown in Market Snapshot.
-
-    signal_parts = []
-
-    if market_tone:
-        signal_parts.append(
-            f"market tone is {market_tone.lower()}"
-        )
-
-    current_pressure = get_macro_pressure(global_context)
-
-    if (
-        current_pressure
-        and current_pressure.lower()
-        != "no major macro pressure"
-    ):
-        signal_parts.append(
-            "macro pressure includes "
-            + current_pressure.rstrip(".")
-        )
-
-    if movers:
-        up_count = sum(
-            1
-            for item in movers
-            if (
-                safe_float(
-                    item.get("change_percent")
-                ) or 0.0
-            ) > 0
-        )
-
-        down_count = sum(
-            1
-            for item in movers
-            if (
-                safe_float(
-                    item.get("change_percent")
-                ) or 0.0
-            ) < 0
-        )
-
-        strongest = max(
-            movers,
-            key=lambda item: (
-                safe_float(
-                    item.get("change_percent")
-                ) or 0.0
-            ),
-        )
-
-        strongest_symbol = str(
-            strongest.get("symbol") or "UNKNOWN"
-        ).upper()
-
-        strongest_change = safe_float(
-            strongest.get("change_percent")
-        )
-
-        signal_parts.append(
-            f"watchlist breadth is "
-            f"{up_count} up / {down_count} down"
-        )
-
-        signal_parts.append(
-            f"strongest live move is "
-            f"{strongest_symbol} "
-            f"{format_percent(strongest_change)}"
-        )
-
-    if signal_parts:
-        polished_signal = (
-            "Signal: "
-            + "; ".join(signal_parts)
-            + "."
-        )
-    else:
-        polished_signal = (
-            "Signal: Current signals are mixed and "
-            "require additional confirmation."
-        )
-
-    summary_header = "Smart Money Summary\n"
-    summary_pos = final_report.find(summary_header)
-
-    if summary_pos >= 0:
-        signal_start = (
-            summary_pos
-            + len(summary_header)
         )
 
         if final_report.startswith(

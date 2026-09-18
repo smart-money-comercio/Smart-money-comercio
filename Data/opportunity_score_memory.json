@@ -1,6 +1,325 @@
 {
-  "current_date": "2026-09-16",
+  "current_date": "2026-09-17",
   "current": {
+    "MSFT": {
+      "structural_score": 86.5,
+      "opportunity_score": 89.2
+    },
+    "NVDA": {
+      "structural_score": 87.0,
+      "opportunity_score": 87.0
+    },
+    "AAPL": {
+      "structural_score": 82.6,
+      "opportunity_score": 84.6
+    },
+    "PLTR": {
+      "structural_score": 76.6,
+      "opportunity_score": 75.1
+    },
+    "ITA": {
+      "structural_score": 74.9,
+      "opportunity_score": 74.9
+    },
+    "CRWD": {
+      "structural_score": 74.4,
+      "opportunity_score": 74.4
+    },
+    "AVGO": {
+      "structural_score": 76.2,
+      "opportunity_score": 74.2
+    },
+    "VOO": {
+      "structural_score": 74.1,
+      "opportunity_score": 74.1
+    },
+    "FTNT": {
+      "structural_score": 74.0,
+      "opportunity_score": 74.0
+    },
+    "LMT": {
+      "structural_score": 73.9,
+      "opportunity_score": 73.9
+    },
+    "CACI": {
+      "structural_score": 73.9,
+      "opportunity_score": 73.9
+    },
+    "RTX": {
+      "structural_score": 73.5,
+      "opportunity_score": 73.5
+    },
+    "NOC": {
+      "structural_score": 73.4,
+      "opportunity_score": 73.4
+    },
+    "TSM": {
+      "structural_score": 72.9,
+      "opportunity_score": 72.9
+    },
+    "SMH": {
+      "structural_score": 72.7,
+      "opportunity_score": 72.7
+    },
+    "SCHD": {
+      "structural_score": 72.6,
+      "opportunity_score": 72.6
+    },
+    "CIBR": {
+      "structural_score": 72.5,
+      "opportunity_score": 72.5
+    },
+    "PANW": {
+      "structural_score": 72.4,
+      "opportunity_score": 72.4
+    },
+    "GD": {
+      "structural_score": 72.2,
+      "opportunity_score": 72.2
+    },
+    "ASML": {
+      "structural_score": 71.8,
+      "opportunity_score": 71.8
+    },
+    "SOXX": {
+      "structural_score": 71.8,
+      "opportunity_score": 71.8
+    },
+    "GOOGL": {
+      "structural_score": 70.8,
+      "opportunity_score": 71.8
+    },
+    "META": {
+      "structural_score": 70.5,
+      "opportunity_score": 71.5
+    },
+    "VYM": {
+      "structural_score": 71.3,
+      "opportunity_score": 71.3
+    },
+    "COST": {
+      "structural_score": 71.1,
+      "opportunity_score": 71.1
+    },
+    "QQQ": {
+      "structural_score": 69.0,
+      "opportunity_score": 71.0
+    },
+    "AVAV": {
+      "structural_score": 70.9,
+      "opportunity_score": 70.9
+    },
+    "ETN": {
+      "structural_score": 70.4,
+      "opportunity_score": 70.4
+    },
+    "AMZN": {
+      "structural_score": 70.4,
+      "opportunity_score": 70.4
+    },
+    "CVX": {
+      "structural_score": 70.2,
+      "opportunity_score": 70.2
+    },
+    "ANET": {
+      "structural_score": 70.1,
+      "opportunity_score": 70.1
+    },
+    "WMT": {
+      "structural_score": 69.9,
+      "opportunity_score": 69.9
+    },
+    "TDG": {
+      "structural_score": 69.8,
+      "opportunity_score": 69.8
+    },
+    "JNJ": {
+      "structural_score": 69.6,
+      "opportunity_score": 69.6
+    },
+    "LHX": {
+      "structural_score": 69.5,
+      "opportunity_score": 69.5
+    },
+    "PWR": {
+      "structural_score": 69.1,
+      "opportunity_score": 69.1
+    },
+    "PG": {
+      "structural_score": 69.0,
+      "opportunity_score": 69.0
+    },
+    "CEG": {
+      "structural_score": 69.0,
+      "opportunity_score": 69.0
+    },
+    "HII": {
+      "structural_score": 68.9,
+      "opportunity_score": 68.9
+    },
+    "AXON": {
+      "structural_score": 68.9,
+      "opportunity_score": 68.9
+    },
+    "XLK": {
+      "structural_score": 68.5,
+      "opportunity_score": 68.5
+    },
+    "GEV": {
+      "structural_score": 68.3,
+      "opportunity_score": 68.3
+    },
+    "PEP": {
+      "structural_score": 68.2,
+      "opportunity_score": 68.2
+    },
+    "VST": {
+      "structural_score": 69.6,
+      "opportunity_score": 68.1
+    },
+    "CAT": {
+      "structural_score": 67.1,
+      "opportunity_score": 67.1
+    },
+    "LDOS": {
+      "structural_score": 67.0,
+      "opportunity_score": 67.0
+    },
+    "MU": {
+      "structural_score": 68.2,
+      "opportunity_score": 66.7
+    },
+    "AMD": {
+      "structural_score": 69.6,
+      "opportunity_score": 66.6
+    },
+    "KTOS": {
+      "structural_score": 67.9,
+      "opportunity_score": 66.4
+    },
+    "MCD": {
+      "structural_score": 66.1,
+      "opportunity_score": 66.1
+    },
+    "JPM": {
+      "structural_score": 66.0,
+      "opportunity_score": 66.0
+    },
+    "ZS": {
+      "structural_score": 67.3,
+      "opportunity_score": 65.8
+    },
+    "DDOG": {
+      "structural_score": 67.2,
+      "opportunity_score": 65.7
+    },
+    "ARM": {
+      "structural_score": 67.1,
+      "opportunity_score": 65.6
+    },
+    "KO": {
+      "structural_score": 65.6,
+      "opportunity_score": 65.6
+    },
+    "XLU": {
+      "structural_score": 65.5,
+      "opportunity_score": 65.5
+    },
+    "NET": {
+      "structural_score": 66.9,
+      "opportunity_score": 65.4
+    },
+    "ABBV": {
+      "structural_score": 65.2,
+      "opportunity_score": 65.2
+    },
+    "BLK": {
+      "structural_score": 65.2,
+      "opportunity_score": 65.2
+    },
+    "XOM": {
+      "structural_score": 64.7,
+      "opportunity_score": 64.7
+    },
+    "TXT": {
+      "structural_score": 64.7,
+      "opportunity_score": 64.7
+    },
+    "DELL": {
+      "structural_score": 65.6,
+      "opportunity_score": 64.1
+    },
+    "HD": {
+      "structural_score": 63.7,
+      "opportunity_score": 63.7
+    },
+    "NEE": {
+      "structural_score": 63.0,
+      "opportunity_score": 63.0
+    },
+    "INTC": {
+      "structural_score": 64.3,
+      "opportunity_score": 62.8
+    },
+    "O": {
+      "structural_score": 61.1,
+      "opportunity_score": 61.1
+    },
+    "VZ": {
+      "structural_score": 61.6,
+      "opportunity_score": 60.1
+    },
+    "NFLX": {
+      "structural_score": 61.5,
+      "opportunity_score": 60.0
+    },
+    "OKTA": {
+      "structural_score": 60.3,
+      "opportunity_score": 58.8
+    },
+    "UNH": {
+      "structural_score": 58.8,
+      "opportunity_score": 58.8
+    },
+    "MDB": {
+      "structural_score": 59.7,
+      "opportunity_score": 58.2
+    },
+    "MO": {
+      "structural_score": 57.4,
+      "opportunity_score": 55.9
+    },
+    "T": {
+      "structural_score": 55.9,
+      "opportunity_score": 54.4
+    },
+    "TSLA": {
+      "structural_score": 51.3,
+      "opportunity_score": 49.3
+    },
+    "SHOP": {
+      "structural_score": 51.0,
+      "opportunity_score": 49.0
+    },
+    "S": {
+      "structural_score": 50.8,
+      "opportunity_score": 48.8
+    },
+    "SMCI": {
+      "structural_score": 48.7,
+      "opportunity_score": 46.7
+    },
+    "RKLB": {
+      "structural_score": 47.8,
+      "opportunity_score": 45.8
+    },
+    "ONDS": {
+      "structural_score": 42.4,
+      "opportunity_score": 40.4
+    }
+  },
+  "previous_date": "2026-09-16",
+  "previous": {
     "MSFT": {
       "structural_score": 86.5,
       "opportunity_score": 87.2
@@ -317,7 +636,5 @@
       "structural_score": 42.4,
       "opportunity_score": 40.4
     }
-  },
-  "previous_date": "",
-  "previous": {}
+  }
 }

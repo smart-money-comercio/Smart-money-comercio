@@ -97,7 +97,7 @@ from src.utils.score_display import (
 from src.utils.watchlist_store import load_watchlist
 
 
-REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/New_York")
+REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 MARKET_TIMEZONE = os.getenv("MARKET_TIMEZONE", "America/New_York")
 
 MAX_TOP_OPPORTUNITIES = 3
@@ -1490,6 +1490,7 @@ def build_executive_summary(
         f"- Main theme: {primary_theme}.",
         f"- Market tone: {market_tone}; macro pressure: {pressure}.",
         f"- Market moves: {market_moves}",
+        f"- Intelligence stack: {build_daily_intelligence_stack_line()}",
     ]
 
     if best:
@@ -1795,15 +1796,13 @@ def build_daily_report() -> str:
     # Use the full ranked score list so the daily report gets the best available trade-plan candidates.
     tradeplan_snapshot = build_daily_tradeplan_snapshot_section(scores, limit=3)
 
-    intelligence_used = f"- {build_daily_intelligence_stack_line()}"
+    intelligence_used = build_daily_intelligence_sources_section()
 
     final_report = f"""
 📊 Smart Money AI Daily Report
 Daily Brief
 Date: {today}
 Generated: {timestamp} {REPORT_TIMEZONE}
-
-Good morning.
 
 Executive Summary
 {executive_summary}
@@ -1862,247 +1861,4 @@ Notes
 Research only. Not financial advice.
 """.strip()
 
-    final_report = enforce_daily_report_quality(final_report)
-
-    # Build a cleaner professional Signal line.
-    signal_parts = []
-
-    if market_tone:
-        signal_parts.append(
-            f"Market tone is {market_tone.lower()}"
-        )
-
-    macro_pressure = get_macro_pressure(global_context)
-
-    if (
-        macro_pressure
-        and macro_pressure.lower()
-        != "no major macro pressure"
-    ):
-        signal_parts.append(
-            "macro pressure remains "
-            + macro_pressure.rstrip(".")
-        )
-
-    if movers:
-        up_count = sum(
-            1
-            for item in movers
-            if (safe_float(
-                item.get("change_percent")
-            ) or 0.0) > 0
-        )
-
-        down_count = sum(
-            1
-            for item in movers
-            if (safe_float(
-                item.get("change_percent")
-            ) or 0.0) < 0
-        )
-
-        strongest = max(
-            movers,
-            key=lambda item: (
-                safe_float(
-                    item.get("change_percent")
-                ) or 0.0
-            ),
-        )
-
-        strongest_symbol = str(
-            strongest.get("symbol") or "UNKNOWN"
-        ).upper()
-
-        strongest_change = safe_float(
-            strongest.get("change_percent")
-        )
-
-        signal_parts.append(
-            f"watchlist breadth is "
-            f"{up_count} up / {down_count} down"
-        )
-
-        signal_parts.append(
-            f"strongest live move is "
-            f"{strongest_symbol} "
-            f"{format_percent(strongest_change)}"
-        )
-
-    polished_signal = (
-        "Signal: "
-        + "; ".join(signal_parts)
-        + "."
-    )
-
-    summary_marker = "Smart Money Summary\n"
-    summary_pos = final_report.find(
-        summary_marker
-    )
-
-    if summary_pos >= 0:
-        signal_start = (
-            summary_pos
-            + len(summary_marker)
-        )
-
-        if final_report.startswith(
-            "Signal:",
-            signal_start,
-        ):
-            signal_end = final_report.find(
-                "\n",
-                signal_start,
-            )
-
-            if signal_end == -1:
-                signal_end = len(final_report)
-
-            final_report = (
-                final_report[:signal_start]
-                + polished_signal
-                + final_report[signal_end:]
-            )
-
-    # DAILY_REPORT_SIGNAL_ALIGNMENT_V1
-    #
-    # Keep the visible Smart Money Signal aligned with the same
-    # live market state shown in Market Snapshot.
-
-    signal_parts = []
-
-    if market_tone:
-        signal_parts.append(
-            f"market tone is {market_tone.lower()}"
-        )
-
-    current_pressure = get_macro_pressure(global_context)
-
-    if (
-        current_pressure
-        and current_pressure.lower()
-        != "no major macro pressure"
-    ):
-        signal_parts.append(
-            "macro pressure includes "
-            + current_pressure.rstrip(".")
-        )
-
-    if movers:
-        up_count = sum(
-            1
-            for item in movers
-            if (
-                safe_float(
-                    item.get("change_percent")
-                ) or 0.0
-            ) > 0
-        )
-
-        down_count = sum(
-            1
-            for item in movers
-            if (
-                safe_float(
-                    item.get("change_percent")
-                ) or 0.0
-            ) < 0
-        )
-
-        strongest = max(
-            movers,
-            key=lambda item: (
-                safe_float(
-                    item.get("change_percent")
-                ) or 0.0
-            ),
-        )
-
-        strongest_symbol = str(
-            strongest.get("symbol") or "UNKNOWN"
-        ).upper()
-
-        strongest_change = safe_float(
-            strongest.get("change_percent")
-        )
-
-        signal_parts.append(
-            f"watchlist breadth is "
-            f"{up_count} up / {down_count} down"
-        )
-
-        signal_parts.append(
-            f"strongest live move is "
-            f"{strongest_symbol} "
-            f"{format_percent(strongest_change)}"
-        )
-
-    if signal_parts:
-        polished_signal = (
-            "Signal: "
-            + "; ".join(signal_parts)
-            + "."
-        )
-    else:
-        polished_signal = (
-            "Signal: Current signals are mixed and "
-            "require additional confirmation."
-        )
-
-    summary_header = "Smart Money Summary\n"
-    summary_pos = final_report.find(summary_header)
-
-    if summary_pos >= 0:
-        signal_start = (
-            summary_pos
-            + len(summary_header)
-        )
-
-        if final_report.startswith(
-            "Signal:",
-            signal_start,
-        ):
-            signal_end = final_report.find(
-                "\n",
-                signal_start,
-            )
-
-            if signal_end == -1:
-                signal_end = len(final_report)
-
-            final_report = (
-                final_report[:signal_start]
-                + polished_signal
-                + final_report[signal_end:]
-            )
-
-    # Hide internal trimming/editorial notices from Telegram output.
-    final_report = final_report.replace(
-        "Briefly trimmed to keep /report focused.",
-        "",
-    )
-
-    # Safety fallback: quality enforcement should never leave this
-    # dedicated section visibly empty.
-    if "Intelligence Used Today\n\nWhat Changed Today" in final_report:
-        final_report = final_report.replace(
-            "Intelligence Used Today\n\nWhat Changed Today",
-            (
-                "Intelligence Used Today\n"
-                "? Smart Money Summary, Trade Plan Snapshot, "
-                "News Intelligence, Alert Monitor, StockAnalysis, "
-                "Alert Settings, Watchlist Evolution, and Market "
-                "Memory are feeding today's report.\n\n"
-                "What Changed Today"
-            ),
-            1,
-        )
-
-    # Collapse blank lines left behind by removed trim notices.
-    while "\n\n\n" in final_report:
-        final_report = final_report.replace(
-            "\n\n\n",
-            "\n\n",
-        )
-
-    return final_report.strip()
+    return enforce_daily_report_quality(final_report)
