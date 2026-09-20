@@ -11,7 +11,7 @@ from src.reports.report_quality import validate_daily_report_quality
 try:
     from src.reports.report_quality import MAX_DAILY_REPORT_CHARS
 except Exception:
-    MAX_DAILY_REPORT_CHARS = int(os.getenv("DAILY_REPORT_MAX_CHARS", "6200"))
+    MAX_DAILY_REPORT_CHARS = int(os.getenv("DAILY_REPORT_MAX_CHARS", "7600"))
 
 
 def get_validation_value(result: dict, *keys, default=None):

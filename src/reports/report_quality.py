@@ -2,7 +2,7 @@ import os
 from typing import Any
 
 
-MAX_DAILY_REPORT_CHARS = int(os.getenv("DAILY_REPORT_MAX_CHARS", "6200"))
+MAX_DAILY_REPORT_CHARS = int(os.getenv("DAILY_REPORT_MAX_CHARS", "7600"))
 
 REQUIRED_HEADERS = [
     "Portfolio Allocation Snapshot",
@@ -12,6 +12,7 @@ REQUIRED_HEADERS = [
     "What Changed Today",
     "Theme Read",
     "Market Snapshot",
+    "Earnings & Economic Calendar",
     "Portfolio Read",
     "Watchlist Movers",
     "Top Opportunities",

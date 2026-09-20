@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from typing import Callable
 
 
+from src.reports.report_quality import MAX_DAILY_REPORT_CHARS
 DEFAULT_SYMBOL = "NVDA"
 TELEGRAM_SAFE_CHARS = 3900
 TOP10_SAFE_CHARS = 12000
-BRIEF_SAFE_CHARS = 6200
+BRIEF_SAFE_CHARS = MAX_DAILY_REPORT_CHARS
 
 
 @dataclass

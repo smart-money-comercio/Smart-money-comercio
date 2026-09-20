@@ -97,6 +97,8 @@ from src.utils.score_display import (
 from src.utils.watchlist_store import load_watchlist
 
 
+from src.reports.live_market_calendar import build_compact_market_calendar
+
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/New_York")
 MARKET_TIMEZONE = os.getenv("MARKET_TIMEZONE", "America/New_York")
 
@@ -1819,6 +1821,8 @@ Theme Read
 
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
+
+{build_compact_market_calendar(watchlist_symbols)}
 
 Portfolio Read
 {build_portfolio_read(global_context, top_scores, scores)}
