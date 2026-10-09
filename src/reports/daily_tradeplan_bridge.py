@@ -1,4 +1,5 @@
 from src.reports.tradeplan_language import build_tradeplan_daily_line
+from src.utils.report_consistency import RISK_LABEL_GUIDE
 
 
 def build_daily_tradeplan_snapshot_section(
@@ -22,7 +23,7 @@ No trade-plan candidates available yet. Run /top10 or /tradeplans after the scor
 
     return f"""
 Trade Plan Snapshot
-Top action reads from today’s Smart Money list:
+Top action reads from today's leading opportunities. {RISK_LABEL_GUIDE}
 
 {chr(10).join(lines)}
 

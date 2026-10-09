@@ -1,3 +1,6 @@
+from src.utils.report_consistency import RISK_LABEL_GUIDE, score_risk_label
+
+
 def clean_symbol(value) -> str:
     return str(value or "UNKNOWN").strip().upper().replace("$", "")
 
@@ -166,6 +169,7 @@ def plain_tradeplan_read(stock: dict) -> dict:
         "category": category,
         "conviction": conviction_level(score),
         "action_bias": action_bias(score),
+        "score_risk": score_risk_label(stock),
         "risk": risk_level(score, category),
         "entry_style": entry_style(score),
         "validation_focus": validation_focus(score, category),
@@ -179,7 +183,9 @@ def build_tradeplan_snapshot_card(stock: dict, index: int) -> str:
 {index}. {read["ticker"]} — {read["conviction"]} conviction | {read["score_text"]}/100
 Theme: {read["category"]}
 Action Bias: {read["action_bias"]}
-Risk: {read["risk"]}
+Score Risk: {read["score_risk"]}
+Setup Risk: {read["risk"]}
+{RISK_LABEL_GUIDE}
 Entry Style: {read["entry_style"]}
 Validation Focus: {read["validation_focus"]}
 Full Plan: /tradeplan {read["ticker"]}
@@ -191,8 +197,8 @@ def build_tradeplan_daily_line(stock: dict, index: int) -> str:
 
     return (
         f"{index}. {read['ticker']} — {read['conviction']} conviction, "
-        f"{read['score_text']}/100, {read['risk']} risk. "
-        f"Action: {read['action_bias']} "
+        f"{read['score_text']}/100 | Score Risk: {read['score_risk']} | "
+        f"Setup Risk: {read['risk']} | Action: {read['action_bias']} "
         f"Entry: {read['entry_style']} "
         f"Full plan: /tradeplan {read['ticker']}"
     )
@@ -203,7 +209,8 @@ def build_tradeplan_short_line(stock: dict, index: int) -> str:
 
     return (
         f"{index}. {read['ticker']} — {read['conviction']} conviction | "
-        f"{read['score_text']}/100 | {read['risk']} risk | "
+        f"{read['score_text']}/100 | Score Risk: {read['score_risk']} | "
+        f"Setup Risk: {read['risk']} | "
         f"{read['action_bias']} | /tradeplan {read['ticker']}"
     )
 

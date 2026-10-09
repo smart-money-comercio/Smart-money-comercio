@@ -99,6 +99,8 @@ def build_daily_report_quality_card() -> str:
         length_ok = True
 
     overall_ok = bool(result.get("passes"))
+    risk_errors = result.get("risk_consistency_errors", [])
+    greeting_errors = result.get("greeting_errors", [])
 
     details = ""
 
@@ -109,6 +111,8 @@ Details
 Missing Required Sections: {format_items(missing)}
 Duplicate Sections: {format_items(duplicates)}
 Removed Sections Present: {format_items(removed)}
+Risk Consistency: {format_items(risk_errors)}
+Greeting: {format_items(greeting_errors)}
 """.rstrip()
 
     return f"""
@@ -124,6 +128,8 @@ Removed Sections: {status_label(removed_ok)}
 Smart Money Summary: {status_label(ai_summary_ok)}
 What Changed: {status_label(what_changed_ok)} — {what_changed_bullets} bullets
 Length: {status_label(length_ok)}
+Risk Consistency: {status_label(not risk_errors)}
+Greeting: {status_label(not greeting_errors)}
 
 Use:
 /brief

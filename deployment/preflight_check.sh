@@ -59,6 +59,10 @@ echo "Checking daily report quality..."
 
 "$PYTHON_BIN" scripts/check_daily_report_quality.py
 
+echo "Checking report risk and greeting consistency..."
+
+"$PYTHON_BIN" scripts/check_report_consistency.py
+
 echo "Checking intelligence quality..."
 
 "$PYTHON_BIN" scripts/check_intelligence_quality.py
@@ -202,4 +206,4 @@ echo " Checking allocation quality..."
 "$PYTHON_BIN" scripts/check_source_refresh_quality.py
 "$PYTHON_BIN" scripts/check_commandcenter_quality.py
 
-echo "Smart Money AI preflight passed."python .\scripts\check_command_catalog.py
+echo "Smart Money AI preflight passed."

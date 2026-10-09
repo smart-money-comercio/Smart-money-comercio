@@ -12,6 +12,7 @@ from src.reports.tradeplan_language import (
     risk_level,
     validation_focus,
 )
+from src.utils.report_consistency import RISK_LABEL_GUIDE, score_risk_label
 
 
 def entry_style(score: float) -> str:
@@ -62,7 +63,8 @@ Full Plan: /tradeplan SYMBOL
 Trade Plan Snapshot
 Action Bias: Not enough internal score data
 Conviction: Low
-Risk Level: Unknown
+Score Risk: Unavailable
+Setup Risk: Unavailable
 Entry Style: Research first. Do not force a setup without score coverage.
 Validation Focus: Confirm with /stockdata {ticker}, /tickernews {ticker}, and /quote {ticker}.
 Full Plan: /tradeplan {ticker}
@@ -75,7 +77,9 @@ Full Plan: /tradeplan {ticker}
 Trade Plan Snapshot
 Action Bias: {action_bias(score)}
 Conviction: {conviction_level(score)}
-Risk Level: {risk_level(score, category)}
+Score Risk: {score_risk_label(stock)}
+Setup Risk: {risk_level(score, category)}
+{RISK_LABEL_GUIDE}
 Entry Style: {entry_style(score)}
 Validation Focus: {validation_focus(score, category)}
 Full Plan: /tradeplan {ticker}

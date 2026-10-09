@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.utils.report_consistency import score_risk_label
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
@@ -265,15 +267,15 @@ def risk_adjustment(stock: dict) -> tuple[float, str]:
     label = str(stock.get("risk_label") or "").lower()
 
     if "speculative" in label:
-        return -2.0, "speculative risk profile"
+        return -2.0, "speculative Score Risk"
 
     if "high risk" in label or "elevated" in label:
-        return -1.5, "elevated risk profile"
+        return -1.5, "elevated Score Risk"
 
     if "controlled" in label:
-        return 0.75, "controlled risk profile"
+        return 0.75, "controlled Score Risk"
 
-    return 0.0, "balanced risk profile"
+    return 0.0, "balanced Score Risk"
 
 
 def structural_change_adjustment(
@@ -518,7 +520,7 @@ def build_top_opportunities_section(
             f"Structural {structural:.1f}/100 | {direction_text(delta)}\n"
             f"   Price: {price_text} | News signals: {int(item.get('news_count') or 0)}\n"
             f"   Why now: {driver_text}\n"
-            f"   Risk: {item.get('risk_label') or 'Balanced'} | "
+            f"   Score Risk: {score_risk_label(item)} | "
             f"Action: {item.get('action_label') or 'Watch Closely'}\n"
             f"   Full review: /tradeplan {symbol}"
         )

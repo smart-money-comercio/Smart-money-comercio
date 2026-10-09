@@ -1,11 +1,12 @@
 from typing import Any
 
 from src.scoring.scoring_engine import get_stock_scores
+from src.reports.tradeplan_language import get_score as get_tradeplan_score, risk_level
+from src.utils.report_consistency import RISK_LABEL_GUIDE, score_risk_label
 from src.utils.score_display import (
     get_action_label,
     get_category,
     get_portfolio_fit,
-    get_risk_label,
     get_score_story,
     get_signal_strength,
     get_smart_money_label,
@@ -185,7 +186,7 @@ def build_component_breakdown(score_data: dict) -> str:
         volume_label = "Volume confirmation still needs review"
 
     try:
-        risk_label = get_risk_label(score_data)
+        risk_label = score_risk_label(score_data)
     except Exception:
         risk_label = "Risk unavailable"
 
@@ -212,7 +213,7 @@ def build_component_breakdown(score_data: dict) -> str:
                 volume_label,
             ),
             component_line(
-                "Risk",
+                "Score Risk",
                 risk_score,
                 risk_label,
             ),
@@ -280,7 +281,7 @@ def build_score_drivers(symbol: str, score_data: dict, score: float | None) -> l
 
 def build_improvement_factors(score_data: dict) -> list[str]:
     try:
-        risk = get_risk_label(score_data)
+        risk = score_risk_label(score_data)
     except Exception:
         risk = ""
 
@@ -313,7 +314,7 @@ def build_improvement_factors(score_data: dict) -> list[str]:
 
 def build_weakening_factors(score_data: dict) -> list[str]:
     try:
-        risk = get_risk_label(score_data)
+        risk = score_risk_label(score_data)
     except Exception:
         risk = "Unknown"
 
@@ -357,7 +358,7 @@ def build_action_read(score_data: dict, score: float | None) -> str:
         action = "Watch"
 
     try:
-        risk = get_risk_label(score_data)
+        risk = score_risk_label(score_data)
     except Exception:
         risk = "Unknown"
 
@@ -411,7 +412,7 @@ def build_scorecard_intelligence_report(symbol: str) -> str:
         signal = label
 
     try:
-        risk = get_risk_label(score_data)
+        risk = score_risk_label(score_data)
     except Exception:
         risk = "Unknown"
 
@@ -419,6 +420,12 @@ def build_scorecard_intelligence_report(symbol: str) -> str:
         category = get_category(score_data)
     except Exception:
         category = "Uncategorized"
+
+    setup_risk = (
+        risk_level(get_tradeplan_score(score_data), category)
+        if score is not None
+        else "Unavailable"
+    )
 
     try:
         story = get_score_story(score_data)
@@ -437,7 +444,9 @@ Headline
 Score: {format_score(score)}
 Label: {label}
 Signal Strength: {signal}
-Risk: {risk}
+Score Risk: {risk}
+Setup Risk: {setup_risk}
+{RISK_LABEL_GUIDE}
 Category: {category}
 
 Score Components

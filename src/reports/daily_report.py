@@ -98,6 +98,7 @@ from src.utils.watchlist_store import load_watchlist
 
 
 from src.reports.live_market_calendar import build_compact_market_calendar
+from src.utils.report_consistency import report_greeting
 
 REPORT_TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/New_York")
 MARKET_TIMEZONE = os.getenv("MARKET_TIMEZONE", "America/New_York")
@@ -1793,9 +1794,8 @@ def build_daily_report() -> str:
             limit=4,
         )
   
-    # Build this AFTER scores/top_scores are loaded.
-    # Use the full ranked score list so the daily report gets the best available trade-plan candidates.
-    tradeplan_snapshot = build_daily_tradeplan_snapshot_section(scores, limit=3)
+    # Keep snapshot candidates aligned with this report's Top Opportunities.
+    tradeplan_snapshot = build_daily_tradeplan_snapshot_section(top_scores, limit=3)
 
     intelligence_used = f"- {build_daily_intelligence_stack_line()}"
 
@@ -1805,7 +1805,7 @@ Daily Brief
 Date: {today}
 Generated: {timestamp} {REPORT_TIMEZONE}
 
-Good morning.
+{report_greeting(now)}
 
 Executive Summary
 {executive_summary}

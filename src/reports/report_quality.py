@@ -1,6 +1,8 @@
 import os
 from typing import Any
 
+from src.utils.report_consistency import validate_report_greeting, validate_report_risks
+
 
 MAX_DAILY_REPORT_CHARS = int(os.getenv("DAILY_REPORT_MAX_CHARS", "7600"))
 
@@ -268,6 +270,14 @@ def validate_daily_report_quality(report: str) -> dict:
         for label in ["Signal:", "Implication:", "Validation:"]
     )
 
+    sections = {
+        header: "\n".join(lines)
+        for header, lines in split_report_sections(text)
+        if header is not None
+    }
+    risk_consistency_errors = validate_report_risks(sections)
+    greeting_errors = validate_report_greeting(text)
+
     return {
         "chars": len(text),
         "max_chars": MAX_DAILY_REPORT_CHARS,
@@ -276,6 +286,8 @@ def validate_daily_report_quality(report: str) -> dict:
         "removed_headers_present": removed_headers_present,
         "what_changed_bullets": what_changed_bullets,
         "ai_summary_ok": ai_summary_ok,
+        "risk_consistency_errors": risk_consistency_errors,
+        "greeting_errors": greeting_errors,
         "passes": (
             len(text) <= MAX_DAILY_REPORT_CHARS
             and not missing_headers
@@ -283,6 +295,8 @@ def validate_daily_report_quality(report: str) -> dict:
             and not removed_headers_present
             and what_changed_bullets <= 3
             and ai_summary_ok
+            and not risk_consistency_errors
+            and not greeting_errors
         ),
     }
 

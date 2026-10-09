@@ -12,6 +12,7 @@ from src.reports.tradeplan_language import (
     safe_number,
     validation_focus,
 )
+from src.utils.report_consistency import RISK_LABEL_GUIDE, score_risk_label
 
 
 def display_score(value) -> str:
@@ -96,7 +97,8 @@ def build_missing_tradeplan(symbol: str) -> str:
 Current Read
 Action Bias: Not enough score data
 Conviction: Low
-Risk Level: Unknown
+Score Risk: Unavailable
+Setup Risk: Unavailable
 Category: Not found in current scoring universe
 
 Why It Matters
@@ -155,7 +157,9 @@ Research only. Not financial advice.
 Current Read
 Action Bias: {action_bias(score)}
 Conviction: {conviction_level(score)}
-Risk Level: {risk_level(score, category)}
+Score Risk: {score_risk_label(stock)}
+Setup Risk: {risk_level(score, category)}
+{RISK_LABEL_GUIDE}
 Category: {category}
 
 Score Breakdown
@@ -184,7 +188,7 @@ Positioning: Keep position size modest until the setup confirms.
 Review trigger: Recheck the plan after major earnings, macro news, SEC filings, analyst changes, or unusual volume.
 
 Smart Money Verdict
-{ticker} is a {conviction_level(score).lower()}-conviction idea with a {risk_level(score, category).lower()} risk profile. The best approach is to let the setup confirm before acting.
+{ticker} is a {conviction_level(score).lower()}-conviction idea. Score Risk is {score_risk_label(stock)}; Setup Risk is {risk_level(score, category)}. Let the setup confirm before acting.
 
 Generated: {generated_at}
 
