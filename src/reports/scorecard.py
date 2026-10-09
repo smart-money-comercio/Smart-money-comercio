@@ -2,6 +2,8 @@ from typing import Any
 
 from src.scoring.scoring_engine import get_stock_scores, score_ticker
 from src.reports.portfolio_headline_impact import build_headline_impact_summary
+from src.reports.tradeplan_language import plain_tradeplan_read
+from src.utils.report_consistency import RISK_LABEL_GUIDE
 from src.utils.score_display import (
     get_action_label,
     get_category,
@@ -391,7 +393,13 @@ def build_scorecard(
     signal = get_signal_strength(stock)
     fit = get_portfolio_fit(stock)
     action = get_action_label(stock)
-    risk = get_risk_label(stock)
+    risk_read = plain_tradeplan_read(stock)
+    risk = risk_read["score_risk"] if curated else "Unavailable"
+    has_score = any(
+        stock.get(key) is not None
+        for key in ("final_score", "score", "smart_score", "smart_money_score", "total_score")
+    )
+    setup_risk = risk_read["risk"] if curated and has_score else "Unavailable"
     volume = get_volume_label(stock)
     setup_type = get_setup_type(stock)
     headline_impact = build_headline_impact_summary(stock)
@@ -414,7 +422,9 @@ Signal Strength: {signal}
 Smart Money Overlap: {get_overlap_label(stock)}
 Portfolio Fit: {fit}
 Action: {action}
-Risk Profile: {risk}
+Score Risk: {risk}
+Setup Risk: {setup_risk}
+{RISK_LABEL_GUIDE}
 Volume Signal: {volume}
 
 Setup Type:

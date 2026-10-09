@@ -1,6 +1,7 @@
 """Offline regressions for risk meaning, candidate alignment, and greetings."""
 
 import argparse
+import asyncio
 import os
 import sys
 import unittest
@@ -8,7 +9,8 @@ from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
 
 
@@ -173,13 +175,21 @@ class CoreConsistencyChecks(unittest.TestCase):
 class BuilderConsistencyChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from src.reports import daily_report, scorecard_intelligence_report, tradeplan_report, tradeplan_snapshot_report
+        from src.reports import daily_report, scorecard, scorecard_intelligence_report, tradeplan_report, tradeplan_snapshot_report
         from src.scoring import scoring_engine
         cls.daily = daily_report
         cls.scorecard = scorecard_intelligence_report
+        cls.active_scorecard = scorecard
         cls.tradeplan = tradeplan_report
         cls.snapshot = tradeplan_snapshot_report
         cls.scoring = scoring_engine
+        headline_patch = patch.object(
+            cls.active_scorecard,
+            "build_headline_impact_summary",
+            return_value="No live headlines used in this offline fixture.",
+        )
+        headline_patch.start()
+        cls.addClassCleanup(headline_patch.stop)
 
     def test_report_tradeplan_scorecard_and_snapshot_share_risk_meaning(self):
         with patch.object(self.scoring, "get_stock_scores", return_value=deepcopy(STOCKS)), patch.object(self.scorecard, "get_stock_scores", return_value=deepcopy(STOCKS)):
@@ -187,6 +197,7 @@ class BuilderConsistencyChecks(unittest.TestCase):
                 build_top_opportunities_section([STOCKS[0]]),
                 self.tradeplan.build_tradeplan_report("MSFT"),
                 self.scorecard.build_scorecard_intelligence_report("MSFT"),
+                self.active_scorecard.build_scorecard("MSFT", deepcopy(STOCKS)),
                 self.snapshot.build_tradeplan_snapshot_section("MSFT"),
             ]
         for report in reports:
@@ -194,13 +205,75 @@ class BuilderConsistencyChecks(unittest.TestCase):
         for report in reports[1:]:
             self.assertIn("Setup Risk: Medium-High", report)
             self.assertIn(RISK_LABEL_GUIDE, report)
+            self.assertNotIn("Risk Profile:", report)
 
     def test_uncovered_symbols_do_not_receive_balanced_or_medium_risk(self):
-        with patch.object(self.scoring, "get_stock_scores", return_value=[]), patch.object(self.scorecard, "get_stock_scores", return_value=[]):
-            reports = [self.tradeplan.build_tradeplan_report("MISSING"), self.scorecard.build_scorecard_intelligence_report("MISSING"), self.snapshot.build_tradeplan_snapshot_section("MISSING")]
+        fallback = {"ticker": "MISSING", "final_score": 85, "category": "Software", "risk_label": "Balanced"}
+        with patch.object(self.scoring, "get_stock_scores", return_value=[]), patch.object(self.scorecard, "get_stock_scores", return_value=[]), patch.object(self.active_scorecard, "score_ticker", return_value=fallback):
+            reports = [
+                self.tradeplan.build_tradeplan_report("MISSING"),
+                self.scorecard.build_scorecard_intelligence_report("MISSING"),
+                self.active_scorecard.build_scorecard("MISSING", []),
+                self.snapshot.build_tradeplan_snapshot_section("MISSING"),
+            ]
         for report in reports:
             self.assertIn("Score Risk: Unavailable", report)
             self.assertIn("Setup Risk: Unavailable", report)
+
+    def test_active_scorecard_entrypoints_share_tradeplan_risk(self):
+        for builder in (self.active_scorecard.build_scorecard, self.active_scorecard.build_scorecard_report, self.active_scorecard.get_scorecard_report):
+            for stock in (deepcopy(STOCKS[0]), {"ticker": "LOW", "final_score": 60, "category": "Income", "risk_label": "Elevated"}):
+                with self.subTest(builder=builder.__name__, ticker=stock["ticker"]):
+                    stock["smart_score"] = 10  # Final score has precedence over component scores.
+                    read = plain_tradeplan_read(stock)
+                    report = builder(stock)
+                    self.assertIn("Score Risk: " + read["score_risk"], report)
+                    self.assertIn("Setup Risk: " + read["risk"], report)
+                    self.assertNotIn("Risk Profile:", report)
+
+    def test_active_scorecard_missing_risk_metadata_is_unavailable(self):
+        stock = {"ticker": "TEST", "final_score": 82, "category": "Software"}
+        report = self.active_scorecard.build_scorecard(stock)
+        self.assertIn("Score Risk: Unavailable", report)
+        self.assertIn("Setup Risk: Medium-High", report)
+
+    def test_active_scorecard_missing_score_does_not_invent_setup_risk(self):
+        report = self.active_scorecard.build_scorecard({"ticker": "TEST", "category": "Software"})
+        self.assertIn("Score Risk: Unavailable", report)
+        self.assertIn("Setup Risk: Unavailable", report)
+
+    def test_registered_scorecard_command_delivers_consistent_risk(self):
+        with patch("openai.OpenAI"):
+            from src.commands import market_commands, register_commands
+        app = SimpleNamespace(add_handler=Mock())
+        register_commands.register_commands(app)
+        handlers = [call.args[0] for call in app.add_handler.call_args_list if "scorecard" in call.args[0].commands]
+        self.assertEqual(len(handlers), 1)
+        self.assertIs(handlers[0].callback, market_commands.scorecard)
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace(args=["$msft"])
+        with patch.object(market_commands, "get_stock_scores", return_value=deepcopy(STOCKS)), patch.object(market_commands, "fetch_quotes_for_symbols", return_value={}):
+            asyncio.run(handlers[0].callback(update, context))
+        report = update.message.reply_text.await_args_list[-1].args[0]
+        self.assertIn("Smart Money Scorecard: MSFT", report)
+        self.assertIn("Score Risk: Controlled", report)
+        self.assertIn("Setup Risk: Medium-High", report)
+        self.assertIn(RISK_LABEL_GUIDE, report)
+        self.assertNotIn("Risk Profile:", report)
+        self.assertLessEqual(len(report), 4096)
+
+    def test_scorecard_command_provider_failures_preserve_unavailable_risk(self):
+        with patch("openai.OpenAI"):
+            from src.commands import market_commands
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace(args=["MISSING"])
+        fallback = {"ticker": "MISSING", "final_score": 85, "category": "Software", "risk_label": "Balanced"}
+        with patch.object(market_commands, "get_stock_scores", side_effect=TimeoutError), patch.object(market_commands, "fetch_quotes_for_symbols", side_effect=TimeoutError), patch.object(self.active_scorecard, "get_stock_scores", side_effect=TimeoutError), patch.object(self.active_scorecard, "score_ticker", return_value=fallback):
+            asyncio.run(market_commands.scorecard(update, context))
+        report = update.message.reply_text.await_args_list[-1].args[0]
+        self.assertIn("Score Risk: Unavailable", report)
+        self.assertIn("Setup Risk: Unavailable", report)
+        self.assertNotIn("Risk Profile:", report)
 
     def build_daily_fixture(self, when):
         class FixedDatetime(datetime):
