@@ -34,6 +34,30 @@ NOW = datetime(2026, 10, 16, 18, tzinfo=timezone.utc)
 _SOCKETPAIR_PERMISSION = threading.local()
 
 
+def portable_tcp_socketpair():
+    """Create asyncio's two local sockets using public APIs available on both OSes."""
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server = None
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.settimeout(2)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            client.settimeout(2)
+            client.connect(listener.getsockname())
+            server, _ = listener.accept()
+        if server.getpeername() != client.getsockname() or client.getpeername() != server.getsockname():
+            raise ConnectionError("Unexpected socketpair peer")
+        server.settimeout(None)
+        client.settimeout(None)
+        return server, client
+    except BaseException:
+        client.close()
+        if server is not None:
+            server.close()
+        raise
+
+
 @contextmanager
 def offline_network_guard():
     """Block providers while allowing only socketpair's private loopback setup.
@@ -199,21 +223,24 @@ class SourceChecks(unittest.TestCase):
 
 class OfflineGuardChecks(unittest.TestCase):
     def test_windows_fallback_socketpair_can_exchange_bytes(self):
-        with patch.object(socket, "socketpair", socket._fallback_socketpair), offline_network_guard() as traffic:
-            left, right = socket.socketpair()
-            try:
-                left.settimeout(2); right.settimeout(2)
-                left.sendall(b"self-pipe")
-                self.assertEqual(right.recv(16), b"self-pipe")
-            finally:
-                left.close(); right.close()
+        # Ubuntu's Python does not expose CPython's private fallback helper.
+        with patch.dict(socket.__dict__):
+            socket.__dict__.pop("_fallback_socketpair", None)
+            with patch.object(socket, "socketpair", portable_tcp_socketpair), offline_network_guard() as traffic:
+                left, right = socket.socketpair()
+                try:
+                    left.settimeout(2); right.settimeout(2)
+                    left.sendall(b"self-pipe")
+                    self.assertEqual(right.recv(16), b"self-pipe")
+                finally:
+                    left.close(); right.close()
         self.assertEqual(traffic["blocked"], [])
 
     def test_asyncio_starts_and_closes_with_windows_socketpair(self):
         async def local_task():
             await asyncio.sleep(0)
             return await asyncio.to_thread(lambda: "ready")
-        with patch.object(socket, "socketpair", socket._fallback_socketpair), offline_network_guard() as traffic:
+        with patch.object(socket, "socketpair", portable_tcp_socketpair), offline_network_guard() as traffic:
             self.assertEqual(asyncio.run(local_task()), "ready")
         self.assertEqual(traffic["blocked"], [])
 
@@ -699,7 +726,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     with ExitStack() as stack:
         if args.windows_socketpair:
-            stack.enter_context(patch.object(socket, "socketpair", socket._fallback_socketpair))
+            stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))
         traffic = stack.enter_context(offline_network_guard())
         result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__]))
     success = result.wasSuccessful() and not traffic["blocked"]
