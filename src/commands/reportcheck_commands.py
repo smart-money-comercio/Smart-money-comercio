@@ -101,6 +101,7 @@ def build_daily_report_quality_card() -> str:
     overall_ok = bool(result.get("passes"))
     risk_errors = result.get("risk_consistency_errors", [])
     greeting_errors = result.get("greeting_errors", [])
+    research_errors = result.get("research_context_errors", [])
 
     details = ""
 
@@ -113,6 +114,7 @@ Duplicate Sections: {format_items(duplicates)}
 Removed Sections Present: {format_items(removed)}
 Risk Consistency: {format_items(risk_errors)}
 Greeting: {format_items(greeting_errors)}
+Research Context: {format_items(research_errors)}
 """.rstrip()
 
     return f"""
@@ -130,6 +132,7 @@ What Changed: {status_label(what_changed_ok)} — {what_changed_bullets} bullets
 Length: {status_label(length_ok)}
 Risk Consistency: {status_label(not risk_errors)}
 Greeting: {status_label(not greeting_errors)}
+Research Context: {status_label(not research_errors)}
 
 Use:
 /brief

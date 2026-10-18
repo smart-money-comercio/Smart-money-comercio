@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 from src.utils.report_consistency import validate_report_greeting, validate_report_risks
+from src.intelligence.research_context import validate_research_output
 
 
 MAX_DAILY_REPORT_CHARS = int(os.getenv("DAILY_REPORT_MAX_CHARS", "7600"))
@@ -277,6 +278,7 @@ def validate_daily_report_quality(report: str) -> dict:
     }
     risk_consistency_errors = validate_report_risks(sections)
     greeting_errors = validate_report_greeting(text)
+    research_context_errors = validate_research_output(text)
 
     return {
         "chars": len(text),
@@ -288,6 +290,7 @@ def validate_daily_report_quality(report: str) -> dict:
         "ai_summary_ok": ai_summary_ok,
         "risk_consistency_errors": risk_consistency_errors,
         "greeting_errors": greeting_errors,
+        "research_context_errors": research_context_errors,
         "passes": (
             len(text) <= MAX_DAILY_REPORT_CHARS
             and not missing_headers
@@ -297,6 +300,7 @@ def validate_daily_report_quality(report: str) -> dict:
             and ai_summary_ok
             and not risk_consistency_errors
             and not greeting_errors
+            and not research_context_errors
         ),
     }
 

@@ -4,3 +4,4 @@ openai
 python-telegram-bot
 yfinance
 python-telegram-bot[job-queue]
+pypdf

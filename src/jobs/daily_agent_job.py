@@ -279,6 +279,8 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
         run_step(steps, "Alert Monitor", refresh_alert_monitor)
         run_step(steps, "StockAnalysis Refresh", refresh_stockanalysis_top_names)
 
+    from src.intelligence.special_alert_context import daily_agent_event_review
+    run_step(steps, "Special Alerts Agent", daily_agent_event_review)
     run_step(steps, "Trade Plans", build_tradeplans_step)
     run_step(steps, "Portfolio Allocation", build_allocation_step)
 

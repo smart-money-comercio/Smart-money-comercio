@@ -1,5 +1,6 @@
 from src.commands.daily_agent_commands import agentstatus_command, rundailyagent_command
 from telegram.ext import CommandHandler
+from src.commands.special_alert_commands import specialalerts_command
 
 from src.commands.admin_commands import (
     admin_command,
@@ -61,6 +62,7 @@ from src.commands.portfolio_commands import (
 from src.commands.quarterly_commands import quarterly_command
 from src.commands.reportcheck_commands import reportcheck_command
 from src.commands.tradeplan_commands import tradeplan_command
+from src.commands.research_commands import research_command
 from src.commands.screener_commands import undervalued
 from src.commands.sec_commands import (
     filing,
@@ -137,6 +139,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("dailycheck", dailycheck_command))
 
     # Research / rankings
+    app.add_handler(CommandHandler("research", research_command))
     app.add_handler(CommandHandler("top10", top10))
     app.add_handler(CommandHandler("watchlist", watchlist_command))
     app.add_handler(CommandHandler("defense", defense))
@@ -178,6 +181,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("conviction", conviction))
     app.add_handler(CommandHandler("smartmoney", smartmoney))
     app.add_handler(CommandHandler("alerts", alerts_command))
+    app.add_handler(CommandHandler("specialalerts", specialalerts_command))
     app.add_handler(CommandHandler("dailyalerts", dailyalerts_command))
     app.add_handler(CommandHandler("alertstatus", alertstatus_command))
     app.add_handler(CommandHandler("alertrules", alertrules_command))

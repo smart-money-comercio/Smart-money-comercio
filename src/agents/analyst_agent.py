@@ -621,8 +621,49 @@ Add {symbol} to the Smart Money scoring watchlist or run /ticker {symbol} for a 
 """.strip()
 
 
-def run_analyst_agent(scores: Any, symbol: str | None = None) -> str:
+def review_special_event(event: dict, scores: Any) -> dict:
+    """Review supplied evidence using the existing analyst rules, without changing scores."""
+    from src.reports.tradeplan_language import plain_tradeplan_read
+    from src.utils.report_consistency import score_risk_label
+
+    stocks = normalize_stocks(scores)
+    wanted = set(event.get("symbols", []))
+    if event.get("kind") == "market":
+        selected = [stock for stock in rank_stocks(stocks)
+                    if any(term in get_category(stock).lower() for term in ("ai", "growth", "semiconductor", "cyber"))][:4]
+        interpretation = "Review growth/AI concentration and confirmation before adding risk. Price data alone does not establish the cause."
+        checks = "Confirm price/volume, near-term earnings and macro releases; review position size and thesis invalidation."
+    else:
+        selected = [stock for stock in stocks if clean_symbol(stock.get("ticker") or stock.get("symbol")) in wanted][:3]
+        official = event.get("evidence", {}).get("official", False)
+        interpretation = ("Company announcement available. " if official else "Headline-only report; company confirmation pending. ")
+        interpretation += "Validate the product stage, timing, demand and execution costs before changing conviction."
+        checks = "Confirm the original announcement, commercial availability, pricing, margins and guidance."
+    context = []
+    for stock in selected:
+        ticker = clean_symbol(stock.get("ticker") or stock.get("symbol"))
+        has_score = any(stock.get(key) is not None for key in ("final_score", "score", "smart_money_score", "total_score"))
+        setup = plain_tradeplan_read(stock).get("risk", "Unavailable") if has_score else "Unavailable"
+        score_risk = score_risk_label(stock) if has_score else "Unavailable"
+        # Use the same risk measures as /report, /tradeplan and /scorecard.
+        context.append(f"{ticker} — Score Risk: {score_risk}; Setup Risk: {setup}")
+    if not context:
+        context = ["Existing score coverage unavailable for the affected company."]
+    return {"interpretation": interpretation, "checks": checks,
+            "model_context": context, "symbols": [clean_symbol(stock.get("ticker") or stock.get("symbol")) for stock in selected] or sorted(wanted),
+            "mode": "existing analyst rules", "score_changes": False}
+
+
+def format_special_event_review(review: dict) -> str:
+    return ("Agent review\nInterpretation: " + review["interpretation"]
+            + "\nExisting model context: " + " | ".join(review["model_context"])
+            + "\nValidation: " + review["checks"])
+
+
+def run_analyst_agent(scores: Any, symbol: str | None = None, event_context: dict | None = None) -> str:
     """
     Main deterministic analyst-agent entry point.
     """
+    if event_context is not None:
+        return format_special_event_review(review_special_event(event_context, scores))
     return build_analyst_summary(scores=scores, symbol=symbol, limit=5)

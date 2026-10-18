@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "visibility": "public_research",
+  "reviewed": true,
+  "known_at": "2026-10-16T16:39:44+00:00",
+  "source": {
+    "sha256": "50beab766499a45fc1f9acb893cc0a287aa31f6f9b160e8667fa8fe54ec5a813",
+    "label": "Empower Q3 2026",
+    "title": "Personal Strategy Market Review and Outlook Q3 2026",
+    "publisher": "Empower",
+    "kind": "quarterly_report",
+    "completeness": "full",
+    "page_count": 20,
+    "period": "Q3 2026",
+    "published_at": null
+  },
+  "issues": [
+    {
+      "code": "period_conflict",
+      "pages": [
+        18
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "event_id": "ai-capex-financing",
+      "type": "opinion",
+      "text": "AI infrastructure spending supports chip demand, while debt funding adds financing risk.",
+      "pages": [
+        9
+      ],
+      "symbols": [
+        "NVDA",
+        "TSM",
+        "AVGO",
+        "AMD",
+        "MSFT",
+        "AMZN",
+        "META",
+        "GOOG",
+        "GOOGL"
+      ],
+      "themes": [
+        "AI infrastructure",
+        "AI financing"
+      ],
+      "scope": "symbols",
+      "evidence_status": "source_reported",
+      "as_of": "2026-09-30T00:00:00+00:00",
+      "expires_at": "2026-12-29T00:00:00+00:00"
+    },
+    {
+      "event_id": "rates-valuation-duration",
+      "type": "opinion",
+      "text": "Higher yields raise financing costs and can pressure growth valuations and bond prices.",
+      "pages": [
+        10,
+        16
+      ],
+      "symbols": [],
+      "themes": [
+        "Rates and valuation",
+        "Bond duration"
+      ],
+      "scope": "market",
+      "evidence_status": "source_reported",
+      "as_of": "2026-09-30T00:00:00+00:00",
+      "expires_at": "2026-12-29T00:00:00+00:00"
+    },
+    {
+      "event_id": "leadership-breadth-q3",
+      "type": "observation",
+      "text": "Quarterly index gains masked weakness in the average stock; distinguish index gains from broad participation.",
+      "pages": [
+        3
+      ],
+      "symbols": [],
+      "themes": [
+        "Market breadth",
+        "Concentration"
+      ],
+      "scope": "market",
+      "evidence_status": "source_reported",
+      "as_of": "2026-09-30T00:00:00+00:00",
+      "expires_at": "2026-12-29T00:00:00+00:00"
+    },
+    {
+      "event_id": "shared-ai-exposure",
+      "type": "opinion",
+      "text": "Shared AI exposures can concentrate risk; review diversification across issuers and asset classes.",
+      "pages": [
+        16
+      ],
+      "symbols": [],
+      "themes": [
+        "Diversification",
+        "Concentration"
+      ],
+      "scope": "market",
+      "evidence_status": "source_reported",
+      "as_of": "2026-09-30T00:00:00+00:00",
+      "expires_at": "2026-12-29T00:00:00+00:00"
+    }
+  ]
+}

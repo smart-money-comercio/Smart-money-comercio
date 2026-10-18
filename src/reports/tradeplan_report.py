@@ -13,6 +13,8 @@ from src.reports.tradeplan_language import (
     validation_focus,
 )
 from src.utils.report_consistency import RISK_LABEL_GUIDE, score_risk_label
+from src.intelligence.research_context import build_market_backdrop
+from src.intelligence.special_alert_context import build_event_review
 
 
 def display_score(value) -> str:
@@ -161,6 +163,10 @@ Score Risk: {score_risk_label(stock)}
 Setup Risk: {risk_level(score, category)}
 {RISK_LABEL_GUIDE}
 Category: {category}
+
+{build_market_backdrop(ticker)}
+
+{build_event_review(ticker)}
 
 Score Breakdown
 {build_score_breakdown(stock)}

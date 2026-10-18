@@ -101,6 +101,7 @@ Duplicate Headers: {format_list(duplicates)}
 Removed Headers Present: {format_list(removed)}
 Risk Consistency Errors: {format_list(result.get('risk_consistency_errors', []))}
 Greeting Errors: {format_list(result.get('greeting_errors', []))}
+Research Context Errors: {format_list(result.get('research_context_errors', []))}
 """.strip()
 
 

@@ -197,6 +197,14 @@ def refresh_alert_monitor() -> str:
     return f"Alert Monitor checked ({len(str(report))} chars)."
 
 
+def refresh_document_research() -> str:
+    from src.intelligence.research_context import build_research_context
+    context = build_research_context()
+    if context["status"] == "unavailable":
+        raise RuntimeError("Public research data could not be validated; prior records were preserved.")
+    return f"Document Research: {context['status']}; {len(context['claims'])} eligible event(s); {context['issues']} source issue(s)."
+
+
 def refresh_context_providers() -> str:
     import src.intelligence.intelligence_context_providers  # noqa: F401
     from src.intelligence.intelligence_context_registry import collect_intelligence_context
@@ -271,6 +279,7 @@ def run_source_refresh(dry_run: bool = False) -> dict[str, Any]:
     run_step(steps, "Initialize Source Files", initialize_source_files, critical=True)
     run_step(steps, "News Intelligence", refresh_news_intelligence)
     run_step(steps, "Alert Monitor", refresh_alert_monitor)
+    run_step(steps, "Document Research", refresh_document_research)
     run_step(steps, "Context Providers", refresh_context_providers, critical=True)
 
     if dry_run:

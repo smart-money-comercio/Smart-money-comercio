@@ -16,6 +16,7 @@ CORE_COMMANDS = [
     ("/newsmemory", "What the news engine has learned"),
     ("/dailyalerts", "Daily alert digest"),
     ("/alerts", "Full alert monitor"),
+    ("/specialalerts [status|preview|history|on|off]", "Company developments, selloffs and agent reviews"),
     ("/alertstatus", "Latest recorded alert state"),
     ("/alertsettings", "Current alert thresholds, environment overrides, and detected preset"),
     ("/alertpreset MODE", "Show conservative, balanced, or aggressive alert preset overrides"),
@@ -50,6 +51,7 @@ DAILY_REPORT_COMMANDS = [
 
 
 STOCK_RESEARCH_COMMANDS = [
+    ("/research [SYMBOL]", "Dated public research, sources, expiry and market confirmation"),
     ("/tradeplan SYMBOL", "Smart Money action plan with entry, confirmation, risk, and verdict"),
     ("/stock SYMBOL", "Stock intelligence"),
     ("/stockdata SYMBOL", "StockAnalysis fundamentals, valuation, financials, balance sheet, cash-flow, and analyst rating snapshot"),
@@ -120,6 +122,7 @@ SMART_MONEY_COMMANDS = [
     ("/sec", "SEC filing intelligence"),
     ("/filing SYMBOL", "Ticker SEC filing intelligence"),
     ("/alerts", "Full Smart Money AI alert monitor"),
+    ("/specialalerts [status|preview|history|on|off]", "Company developments, selloffs and agent reviews"),
     ("/dailyalerts", "Compressed daily alert digest"),
     ("/alertstatus", "Latest recorded alert state"),
     ("/alertrules", "Alert rule thresholds and environment settings"),

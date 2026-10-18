@@ -18,6 +18,8 @@ fi
 
 echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
+"$PYTHON_BIN" scripts/check_special_alerts.py
+
 echo "Checking required files..."
 
 required_files=(
@@ -62,6 +64,10 @@ echo "Checking daily report quality..."
 echo "Checking report risk and greeting consistency..."
 
 "$PYTHON_BIN" scripts/check_report_consistency.py
+
+echo "Checking dated research integration..."
+
+"$PYTHON_BIN" scripts/check_research_integration.py
 
 echo "Checking intelligence quality..."
 

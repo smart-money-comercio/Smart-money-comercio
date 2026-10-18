@@ -4,6 +4,8 @@ from src.scoring.scoring_engine import get_stock_scores, score_ticker
 from src.reports.portfolio_headline_impact import build_headline_impact_summary
 from src.reports.tradeplan_language import plain_tradeplan_read
 from src.utils.report_consistency import RISK_LABEL_GUIDE
+from src.intelligence.research_context import build_market_backdrop
+from src.intelligence.special_alert_context import build_event_review
 from src.utils.score_display import (
     get_action_label,
     get_category,
@@ -432,6 +434,10 @@ Setup Type:
 
 Category:
 {category}
+
+{build_market_backdrop(ticker)}
+
+{build_event_review(ticker)}
 
 Signal Map:
 {get_signal_icons(stock)}

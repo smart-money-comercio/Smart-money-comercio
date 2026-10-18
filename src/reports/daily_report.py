@@ -62,6 +62,7 @@ from src.reports.top10_report import (
     rank_candidates,
 )
 from src.reports.report_quality import enforce_daily_report_quality
+from src.intelligence.research_context import attach_daily_research, build_research_context, market_check, market_observations
 from src.intelligence.market_memory import build_what_changed_today
 from src.intelligence.daily_ai_summary_context import build_integrated_daily_ai_summary
 
@@ -380,6 +381,13 @@ def build_market_moves_line(context: dict, movers: list[dict]) -> str:
         f"Oil {format_percent(context.get('oil'))}, "
         f"TLT {format_percent(context.get('tlt'))}"
     )
+    if "_market_payload" in context:
+        available = market_observations(context["_market_payload"])
+        macro_moves = ", ".join(
+            f"{label} {format_percent(available[symbol])}" if symbol in available else f"{label} unavailable"
+            for symbol, label in [("^GSPC", "S&P"), ("^IXIC", "Nasdaq"), ("^RUT", "Russell"),
+                                  ("^VIX", "VIX"), ("USO", "Oil"), ("TLT", "TLT")]
+        )
 
     if not movers:
         return macro_moves
@@ -1049,6 +1057,7 @@ def load_global_context() -> dict:
 
     return {
         "headline_themes": themes,
+        "_market_payload": payload,
         "headline_examples": examples,
         "regime": cache_status,
         "sp500": extract_market_move(payload, "^GSPC"),
@@ -1102,6 +1111,12 @@ def is_defense_ai_warfare_category(category: str) -> bool:
 
 def get_macro_pressure(context: dict) -> str:
     pressures = []
+    if "_market_payload" in context:
+        observation = market_check(context["_market_payload"])
+        if "unavailable" in observation or "stale" in observation:
+            pressures.append("macro observations stale/unavailable")
+        elif not {"^GSPC", "^IXIC", "^RUT", "^VIX", "USO", "TLT", "GLD"}.issubset(market_observations(context["_market_payload"])):
+            pressures.append("macro observation coverage incomplete")
     themes = context.get("headline_themes", []) or []
     normalized_theme_text = " ".join(str(theme).lower() for theme in themes)
 
@@ -2109,4 +2124,11 @@ Research only. Not financial advice.
             "\n\n",
         )
 
-    return final_report.strip()
+    # Attach dated research after all legacy summary rewrites, within existing line budgets.
+    research = build_research_context(
+        market_payload=global_context.get("_market_payload", {}), now=now,
+    )
+    from src.reports.report_quality import MAX_DAILY_REPORT_CHARS
+    from src.intelligence.special_alert_context import attach_daily_special_alerts
+    report = attach_daily_special_alerts(final_report.strip(), MAX_DAILY_REPORT_CHARS, now)
+    return attach_daily_research(report, research, MAX_DAILY_REPORT_CHARS)

@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.agents.analyst_agent import build_analyst_summary
+from src.intelligence.special_alert_context import build_event_review
 from src.reports.analyst_intelligence_report import build_analyst_intelligence_report
 from src.reports.analyst_stockanalysis_bridge import build_stockanalysis_analyst_overlay
 from src.scoring.scoring_engine import get_stock_scores
@@ -63,6 +64,10 @@ async def analyst_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
 
             title = "🧠 Smart Money AI Analyst Summary"
+
+        event_review = await asyncio.to_thread(build_event_review, symbol)
+        if event_review:
+            message += "\n\n" + event_review
 
         await edit_or_reply_long_message(
             update=update,
