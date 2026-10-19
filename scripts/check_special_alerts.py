@@ -19,6 +19,8 @@ import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
+from urllib.error import HTTPError
+from urllib.parse import unquote
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -142,6 +144,27 @@ def alert():
     return engine.company_alert(news(), NOW, config())
 
 
+TESLA_RELEASE_URL = "https://ir.tesla.com/press-release/tesla-roadster-prototype"
+TESLA_INDEX_HTML = b'<main><a href="/press-release/tesla-roadster-prototype"><time datetime="2026-10-21T12:00:00Z">Earnings date</time></a></main>'
+TESLA_RELEASE_HTML = b'<main><h2 class="press-release__title">Tesla unveils new Roadster prototype</h2><div class="press-release__date"><time datetime="2026-10-16T17:55:00Z">Original publication</time></div></main>'
+TSLA_NEWS_RSS = b'<rss><channel><item><title>Tesla unveils new Roadster prototype</title><link>https://finance.yahoo.com/news/roadster</link><pubDate>Fri, 16 Oct 2026 17:55:00 GMT</pubDate></item></channel></rss>'
+
+
+def blocked_rss_response(url):
+    if url == sources.TESLA_IR_RSS:
+        raise HTTPError(url, 403, "Forbidden", {}, None)
+    if url == sources.TESLA_IR_HOME:
+        return TESLA_INDEX_HTML
+    if url == TESLA_RELEASE_URL:
+        return TESLA_RELEASE_HTML
+    if "/v8/finance/chart/" in url:
+        symbol = unquote(url.split("/chart/", 1)[1].split("?", 1)[0])
+        return json.dumps(chart(symbol, price=100)).encode()
+    if "feeds.finance.yahoo.com" in url:
+        return TSLA_NEWS_RSS
+    raise AssertionError("Unexpected source request")
+
+
 class SourceChecks(unittest.TestCase):
     def test_daily_return_uses_prior_session_not_range_start(self):
         row = sources.chart_observation("^GSPC", chart(), NOW, config())
@@ -219,6 +242,181 @@ class SourceChecks(unittest.TestCase):
     def test_empty_and_provider_error_charts_rejected(self):
         for value in ({}, {"chart": {"error": {"code": "Not Found"}, "result": None}}):
             with self.assertRaises(ValueError): sources.chart_observation("^GSPC", value, NOW, config())
+
+
+class TeslaFallbackChecks(unittest.TestCase):
+    def test_blocked_rss_uses_dated_public_company_release(self):
+        with patch.object(sources, "request_bytes", side_effect=blocked_rss_response):
+            items, detail, issues = sources.tesla_ir_news(NOW, config())
+        self.assertEqual(issues, [])
+        self.assertIn("RSS HTTP 403", detail)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["published"], "2026-10-16T17:55:00+00:00")
+        self.assertEqual(items[0]["url"], TESLA_RELEASE_URL)
+        self.assertEqual(engine.company_alert(items[0], NOW, config())["level"], 2)
+
+    def test_deleted_rss_and_malformed_feed_also_use_public_pages(self):
+        for response in (HTTPError(sources.TESLA_IR_RSS, 404, "Not found", {}, None), b"<html><body>Access page</body></html>"):
+            def fetch(url):
+                if url == sources.TESLA_IR_RSS:
+                    if isinstance(response, Exception):
+                        raise response
+                    return response
+                return blocked_rss_response(url)
+            with self.subTest(response=type(response).__name__), patch.object(sources, "request_bytes", side_effect=fetch):
+                items, _, issues = sources.tesla_ir_news(NOW, config())
+                self.assertEqual(len(items), 1)
+                self.assertEqual(issues, [])
+
+    def test_original_publication_not_index_earnings_or_fetch_date_controls_freshness(self):
+        for when in (b"2026-10-02T12:00:00Z", b"2026-10-21T12:00:00Z"):
+            def fetch(url):
+                if url == TESLA_RELEASE_URL:
+                    return TESLA_RELEASE_HTML.replace(b"2026-10-16T17:55:00Z", when)
+                return blocked_rss_response(url)
+            with self.subTest(when=when), patch.object(sources, "request_bytes", side_effect=fetch):
+                items, detail, issues = sources.tesla_ir_news(NOW, config())
+                self.assertEqual(items, [])
+                self.assertIn("1/1 dated pages read", detail)
+                self.assertEqual(issues, [])
+
+    def test_missing_naive_and_ambiguous_release_dates_are_unavailable(self):
+        invalid = [TESLA_RELEASE_HTML.replace(b' datetime="2026-10-16T17:55:00Z"', b""),
+                   TESLA_RELEASE_HTML.replace(b"2026-10-16T17:55:00Z", b"2026-10-16T17:55:00"),
+                   TESLA_RELEASE_HTML.replace(b"</div>", b'<time datetime="2026-10-15T12:00:00Z"></time></div>')]
+        for body in invalid:
+            def fetch(url):
+                return body if url == TESLA_RELEASE_URL else blocked_rss_response(url)
+            with self.subTest(body=body), patch.object(sources, "request_bytes", side_effect=fetch):
+                items, _, issues = sources.tesla_ir_news(NOW, config())
+                self.assertEqual(items, [])
+                self.assertTrue(any("confirmation unavailable" in item for item in issues))
+
+    def test_index_date_and_generic_metadata_do_not_substitute_for_release_date(self):
+        body = b'<meta property="article:modified_time" content="2026-10-16T17:55:00Z"><h2 class="press-release__title">Tesla unveils Roadster</h2><time datetime="2026-10-16T17:55:00Z">Earnings date</time>'
+        def fetch(url):
+            return body if url == TESLA_RELEASE_URL else blocked_rss_response(url)
+        with patch.object(sources, "request_bytes", side_effect=fetch):
+            items, _, issues = sources.tesla_ir_news(NOW, config())
+        self.assertEqual(items, [])
+        self.assertTrue(issues)
+
+    def test_non_release_html_is_not_company_confirmation(self):
+        def fetch(url):
+            return b"<html>Try again later</html>" if url == TESLA_RELEASE_URL else blocked_rss_response(url)
+        with patch.object(sources, "request_bytes", side_effect=fetch):
+            items, _, issues = sources.tesla_ir_news(NOW, config())
+        self.assertEqual(items, [])
+        self.assertTrue(issues)
+
+    def test_discovery_rejects_external_insecure_and_credential_links_and_is_bounded(self):
+        invalid = ["https://ir.tesla.com.example.com/press-release/fake", "http://ir.tesla.com/press-release/fake",
+                   "https://user:pass@ir.tesla.com/press-release/fake", "https://ir.tesla.com:bad/press-release/fake",
+                   "https://ir.tesla.com:444/press-release/fake", "/other-page"]
+        urls = invalid + ["/press-release/release-" + str(i) for i in range(30)]
+        index = ("".join('<a href="' + url + '">Release</a>' for url in urls)).encode()
+        requested = []
+        def fetch(url):
+            requested.append(url)
+            if url == sources.TESLA_IR_HOME:
+                return index
+            if url.startswith(sources.TESLA_IR_HOME + "press-release/release-"):
+                return TESLA_RELEASE_HTML
+            return blocked_rss_response(url)
+        with patch.object(sources, "request_bytes", side_effect=fetch):
+            items, _, issues = sources.tesla_ir_news(NOW, config())
+        self.assertEqual(issues, [])
+        self.assertEqual(len(items), 3)
+        self.assertEqual(len(requested), 5)  # RSS + index + three releases
+        self.assertFalse(any("fake" in url for url in requested))
+
+    def test_duplicate_release_links_are_fetched_once(self):
+        index = TESLA_INDEX_HTML + TESLA_INDEX_HTML.replace(b"prototype\"", b"prototype?source=ir#release\"")
+        with patch.object(sources, "request_bytes", side_effect=lambda url: index if url == sources.TESLA_IR_HOME else blocked_rss_response(url)) as fetch:
+            items, _, issues = sources.tesla_ir_news(NOW, config())
+        self.assertEqual(len(items), 1)
+        self.assertEqual(issues, [])
+        self.assertEqual(sum(call.args[0] == TESLA_RELEASE_URL for call in fetch.call_args_list), 1)
+
+    def test_consensus_documents_do_not_use_the_release_request_budget(self):
+        index = b'<a href="/press-release/delivery-consensus-third-quarter-2026">Delivery consensus</a><a href="/press-release/earnings-consensus-third-quarter-2026">Earnings consensus</a>' + TESLA_INDEX_HTML
+        with patch.object(sources, "request_bytes", side_effect=lambda url: index if url == sources.TESLA_IR_HOME else blocked_rss_response(url)) as fetch:
+            items, _, issues = sources.tesla_ir_news(NOW, config())
+        self.assertEqual(len(items), 1)
+        self.assertEqual(issues, [])
+        self.assertFalse(any("consensus" in call.args[0] for call in fetch.call_args_list))
+
+    def test_available_official_rss_needs_no_page_fallback(self):
+        rss = TSLA_NEWS_RSS.replace(b"https://finance.yahoo.com/news/roadster", TESLA_RELEASE_URL.encode())
+        with patch.object(sources, "request_bytes", return_value=rss) as fetch:
+            items, detail, issues = sources.tesla_ir_news(NOW, config())
+        fetch.assert_called_once_with(sources.TESLA_IR_RSS)
+        self.assertTrue(items[0]["official"])
+        self.assertEqual(issues, [])
+        self.assertEqual(detail, "official RSS available")
+
+    def test_yahoo_headlines_stay_unconfirmed_if_all_official_access_fails(self):
+        def fetch(url):
+            if "ir.tesla.com" in url:
+                raise HTTPError(url, 403, "Forbidden", {}, None)
+            return blocked_rss_response(url)
+        details = {}
+        with patch.object(sources, "request_bytes", side_effect=fetch):
+            quotes, items, issues = sources.collect_inputs(NOW, config(), details)
+        alerts = engine.evaluate(quotes, items, NOW, config())
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]["level"], 1)
+        self.assertIn("confirmation pending", alerts[0]["text"])
+        self.assertIn("headline feed read", details["TSLA news"])
+        self.assertIn("unavailable", details["Tesla IR"])
+        self.assertTrue(any("RSS HTTP 403; public release index HTTP 403" in item for item in issues))
+
+    def test_yahoo_failure_does_not_block_public_official_release(self):
+        def fetch(url):
+            if "feeds.finance.yahoo.com" in url:
+                raise HTTPError(url, 429, "Too many requests", {}, None)
+            return blocked_rss_response(url)
+        details = {}
+        with patch.object(sources, "request_bytes", side_effect=fetch):
+            _, items, issues = sources.collect_inputs(NOW, config(), details)
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["official"])
+        self.assertEqual(details["TSLA news"], "unavailable")
+        self.assertTrue(any("TSLA news: HTTP 429" in item for item in issues))
+
+    def test_one_failed_release_does_not_discard_another_dated_release(self):
+        index = TESLA_INDEX_HTML + b'<a href="/press-release/unavailable">Other release</a>'
+        def fetch(url):
+            if url == sources.TESLA_IR_HOME:
+                return index
+            if url.endswith("/unavailable"):
+                raise HTTPError(url, 403, "Forbidden", {}, None)
+            return blocked_rss_response(url)
+        with patch.object(sources, "request_bytes", side_effect=fetch):
+            items, detail, issues = sources.tesla_ir_news(NOW, config())
+        self.assertEqual(len(items), 1)
+        self.assertIn("1/2 dated pages read", detail)
+        self.assertTrue(any("HTTP 403" in item for item in issues))
+
+    def test_no_tesla_requests_when_symbol_is_not_configured(self):
+        value = config(); value["symbols"] = ["NVDA"]
+        with patch.object(sources, "request_bytes", side_effect=blocked_rss_response) as fetch:
+            sources.collect_inputs(NOW, value)
+        self.assertFalse(any("tesla.com" in call.args[0] for call in fetch.call_args_list))
+
+    def test_official_redirect_to_another_host_is_not_verified(self):
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.geturl.return_value = "https://other.example/press-release/fake"
+        with patch.object(sources, "urlopen", return_value=response):
+            with self.assertRaisesRegex(ValueError, "outside Tesla IR"):
+                sources.request_bytes(TESLA_RELEASE_URL)
+        response.read.assert_not_called()
+
+    def test_html_access_page_is_not_a_successful_empty_rss_feed(self):
+        with self.assertRaises(ValueError):
+            sources.parse_feed(b"<html><body>Access denied</body></html>", ["TSLA"], "feed")
 
 
 class OfflineGuardChecks(unittest.TestCase):
@@ -480,6 +678,30 @@ class DeliveryChecks(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(store.claim(1, alert(), NOW.timestamp()))
         self.assertIn("Preview only", update.message.reply_text.await_args_list[-1].kwargs["text"])
 
+    async def test_scheduled_scan_saves_separate_headline_and_official_source_status(self):
+        from src.commands import special_alert_commands as commands
+        details = {"TSLA news": "headline feed read; 1 dated matching items",
+                   "Tesla IR": "official release pages: 1/1 dated pages read (RSS HTTP 403)"}
+        self.snapshot["source_status"] = details
+        await self.run_job(SimpleNamespace(send_message=AsyncMock()))
+        self.assertEqual(store.get_settings()["last_source_status"], details)
+        with patch.object(commands, "destinations", return_value=[1]):
+            text = commands.status_report()
+        self.assertIn("TSLA headlines: headline feed read", text)
+        self.assertIn("Tesla confirmation source: official release pages", text)
+
+    async def test_preview_shows_current_source_health_without_overwriting_scheduled_status(self):
+        from src.commands import special_alert_commands as commands
+        store.save_settings(last_source_status={"Tesla IR": "previous scan"})
+        self.snapshot["source_status"] = {"TSLA news": "headline feed read", "Tesla IR": "unavailable"}
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=SimpleNamespace(edit_text=AsyncMock()))))
+        with patch.object(commands, "collect_snapshot", return_value=self.snapshot):
+            await commands.specialalerts_command(update, SimpleNamespace(args=["preview"]))
+        self.assertEqual(store.get_settings()["last_source_status"], {"Tesla IR": "previous scan"})
+        text = update.message.reply_text.await_args_list[-1].kwargs["text"]
+        self.assertIn("TSLA headlines: headline feed read", text)
+        self.assertIn("Tesla confirmation source: unavailable", text)
+
     async def test_only_admin_in_private_chat_can_pause(self):
         from src.commands import special_alert_commands as commands
         update = SimpleNamespace(effective_chat=SimpleNamespace(id=5, type="private"), message=SimpleNamespace(reply_text=AsyncMock()))
@@ -527,6 +749,21 @@ class DeliveryChecks(unittest.IsolatedAsyncioTestCase):
 
 class AgentIntegrationChecks(unittest.TestCase):
     setUp = DeliveryChecks.setUp
+
+    def test_public_release_fallback_passes_confirmed_evidence_to_existing_agent(self):
+        from src.scoring import scoring_engine
+        stocks = [{"ticker": "TSLA", "final_score": 65, "category": "Growth / AI", "risk_label": "Elevated"}]
+        before = deepcopy(stocks)
+        with patch.object(job, "settings", return_value=config()), patch.object(sources, "request_bytes", side_effect=blocked_rss_response), patch.object(scoring_engine, "get_stock_scores", return_value=stocks):
+            result = job.collect_snapshot()
+        self.assertEqual(stocks, before)
+        self.assertEqual(len(result["alerts"]), 1)
+        event = result["alerts"][0]
+        self.assertEqual(event["level"], 2)
+        self.assertEqual(event["evidence"]["url"], TESLA_RELEASE_URL)
+        self.assertIn("Agent review", event["text"])
+        self.assertIn("Score Risk: Elevated", event["text"])
+        self.assertIn("dated pages read", result["source_status"]["Tesla IR"])
 
     def enrich(self):
         from src.agents import analyst_agent

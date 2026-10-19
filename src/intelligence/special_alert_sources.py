@@ -6,10 +6,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 import html
+from html.parser import HTMLParser
 import json
 import math
 import re
-from urllib.parse import quote, urlsplit
+from urllib.error import HTTPError
+from urllib.parse import quote, urljoin, urlsplit
 from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 from zoneinfo import ZoneInfo
@@ -18,6 +20,9 @@ from zoneinfo import ZoneInfo
 UTC = timezone.utc
 NY = ZoneInfo("America/New_York")
 INDEX_NAMES = {"^GSPC": "S&P 500", "^IXIC": "Nasdaq Composite", "^VIX": "VIX"}
+TESLA_IR_HOME = "https://ir.tesla.com/"
+TESLA_IR_RSS = "https://ir.tesla.com/rss/news-releases.xml"
+TESLA_RELEASE_LIMIT = 3
 ALIASES = {
     "TSLA": ("tesla",), "NVDA": ("nvidia",), "MSFT": ("microsoft",),
     "AVGO": ("broadcom",), "PLTR": ("palantir",), "AVAV": ("aerovironment",),
@@ -75,10 +80,112 @@ def safe_url(value: str) -> str:
 def request_bytes(url: str) -> bytes:
     request = Request(url, headers={"User-Agent": "Mozilla/5.0 SmartMoneyAI/1.4", "Accept": "application/json,application/rss+xml,application/atom+xml,text/xml"})
     with urlopen(request, timeout=10) as response:
+        if urlsplit(url).hostname == "ir.tesla.com":
+            final = urlsplit(response.geturl())
+            if final.scheme != "https" or final.netloc.lower() not in {"ir.tesla.com", "ir.tesla.com:443"}:
+                raise ValueError("Official source redirected outside Tesla IR")
         body = response.read(2_000_001)
     if len(body) > 2_000_000:
         raise ValueError("Source response too large")
     return body
+
+
+def source_error(exc: Exception) -> str:
+    if isinstance(exc, HTTPError):
+        return f"HTTP {exc.code}"
+    return type(exc).__name__
+
+
+class TeslaReleasePage(HTMLParser):
+    """Read Tesla's observed release markup, never its earnings-calendar date."""
+
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack = []
+        self.links = []
+        self.title_parts = []
+        self.publications = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = set(attrs.get("class", "").split())
+        if tag not in self.VOID:
+            self.stack.append((tag, classes))
+        if tag == "a":
+            url = safe_url(urljoin(TESLA_IR_HOME, attrs.get("href", "")))
+            parts = urlsplit(url)
+            if (parts.scheme == "https" and parts.netloc.lower() in {"ir.tesla.com", "ir.tesla.com:443"}
+                    and re.fullmatch(r"/press-release/[a-zA-Z0-9-]+/?", parts.path)
+                    and not parts.path.startswith(("/press-release/delivery-consensus-", "/press-release/earnings-consensus-"))):
+                url = parts._replace(query="", fragment="").geturl()
+                if url not in self.links:
+                    self.links.append(url)
+        if tag == "time" and any("press-release__date" in item[1] for item in self.stack):
+            self.publications.append(timestamp(attrs.get("datetime")))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in self.VOID:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                break
+
+    def handle_data(self, data):
+        if any("press-release__title" in item[1] for item in self.stack):
+            self.title_parts.append(data)
+
+
+def tesla_page(body: bytes) -> TeslaReleasePage:
+    page = TeslaReleasePage()
+    page.feed(body.decode("utf-8"))
+    page.close()
+    return page
+
+
+def tesla_ir_news(now: datetime, config: dict) -> tuple[list[dict], str, list[str]]:
+    """Try public release pages if RSS fails; never promote third-party headlines."""
+    try:
+        items = parse_feed(request_bytes(TESLA_IR_RSS), ["TSLA"], "Tesla IR")
+        return items, "official RSS available", []
+    except Exception as exc:
+        rss_error = source_error(exc)
+
+    # Bounded requests to discovered, same-host public release URLs only.
+    try:
+        links = tesla_page(request_bytes(TESLA_IR_HOME)).links[:TESLA_RELEASE_LIMIT]
+        if not links:
+            raise ValueError("No public release links found")
+    except Exception as exc:
+        message = f"Tesla IR: RSS {rss_error}; public release index {source_error(exc)}; company confirmation unavailable"
+        return [], "unavailable; TSLA headlines remain a separate source", [message]
+
+    items, issues, checked = [], [], 0
+    for url in links:
+        try:
+            page = tesla_page(request_bytes(url))
+            title = clean(" ".join(page.title_parts))
+            dates = set(page.publications)
+            if not re.search(r"\bTesla\b", title, re.I) or len(dates) != 1 or None in dates:
+                raise ValueError("Release title or original publication time missing")
+            published = dates.pop()
+            checked += 1
+            if not 0 <= (now - published).total_seconds() <= config["news_hours"] * 3600:
+                continue
+            items.append({"symbol": "TSLA", "title": title, "url": url,
+                          "published": published.isoformat(), "official": True,
+                          "source": "ir.tesla.com"})
+        except Exception as exc:
+            issues.append(f"Tesla IR release: {source_error(exc)} (unavailable or missing original publication time)")
+    if not checked:
+        issues.insert(0, f"Tesla IR: RSS {rss_error}; no dated public release could be read; company confirmation unavailable")
+    detail = f"official release pages: {checked}/{len(links)} dated pages read (RSS {rss_error})"
+    return items, detail, issues
 
 
 def chart_observation(symbol: str, payload: dict, now: datetime, config: dict) -> dict:
@@ -143,6 +250,8 @@ def chart_observation(symbol: str, payload: dict, now: datetime, config: dict) -
 
 def parse_feed(body: bytes, symbols: list[str], feed_name: str) -> list[dict]:
     root = ET.fromstring(body)
+    if root.tag.split("}")[-1] not in {"rss", "feed", "RDF"}:
+        raise ValueError("Source is not an RSS or Atom feed")
     items = []
     for node in root.iter():
         if node.tag.split("}")[-1] not in {"item", "entry"}:
@@ -173,31 +282,37 @@ def parse_feed(body: bytes, symbols: list[str], feed_name: str) -> list[dict]:
     return items
 
 
-def collect_inputs(now: datetime, config: dict) -> tuple[dict, list[dict], list[str]]:
+def collect_inputs(now: datetime, config: dict, source_status: dict | None = None) -> tuple[dict, list[dict], list[str]]:
     observations, news, issues = {}, [], []
     tasks = [("index", symbol, "https://query1.finance.yahoo.com/v8/finance/chart/" + quote(symbol, safe="") + "?range=1mo&interval=1d")
              for symbol in INDEX_NAMES]
     for symbol in config["symbols"]:
         tasks.append(("news", symbol + " news", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=" + quote(symbol, safe="") + "&region=US&lang=en-US"))
     if "TSLA" in config["symbols"]:
-        tasks.append(("news", "Tesla IR", "https://ir.tesla.com/rss/news-releases.xml"))
+        tasks.append(("tesla_ir", "Tesla IR", TESLA_IR_RSS))
 
     def fetch(task):
         kind, name, url = task
         try:
+            if kind == "tesla_ir":
+                items, detail, problems = tesla_ir_news(now, config)
+                return kind, name, items, problems, detail
             raw = request_bytes(url)
             if kind == "index":
-                return kind, name, chart_observation(name, json.loads(raw), now, config), ""
-            return kind, name, parse_feed(raw, config["symbols"], name), ""
+                row = chart_observation(name, json.loads(raw), now, config)
+                return kind, name, row, [], "fresh session quote available"
+            items = parse_feed(raw, config["symbols"], name)
+            return kind, name, items, [], f"headline feed read; {len(items)} dated matching items"
         except Exception as exc:
-            return kind, name, None, f"{name}: {type(exc).__name__} (unavailable or invalid/stale source)"
+            return kind, name, None, [f"{name}: {source_error(exc)} (unavailable or invalid/stale source)"], "unavailable"
 
     with ThreadPoolExecutor(max_workers=5) as executor:
-        for kind, name, result, error in executor.map(fetch, tasks):
-            if error:
-                issues.append(error)
-            elif kind == "index":
+        for kind, name, result, errors, detail in executor.map(fetch, tasks):
+            issues.extend(errors)
+            if source_status is not None:
+                source_status[name] = detail
+            if kind == "index" and result is not None:
                 observations[name] = result
-            else:
+            elif result is not None:
                 news.extend(result)
     return observations, news, issues

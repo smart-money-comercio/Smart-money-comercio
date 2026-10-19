@@ -12,6 +12,13 @@ from src.jobs.special_alert_scheduler import collect_snapshot, destinations
 from src.utils.telegram_messages import reply_long_message
 
 
+def tesla_source_lines(source_status: dict) -> list[str]:
+    if "TSLA news" not in source_status and "Tesla IR" not in source_status:
+        return []
+    return ["TSLA headlines: " + source_status.get("TSLA news", "not checked"),
+            "Tesla confirmation source: " + source_status.get("Tesla IR", "not checked")]
+
+
 def status_report() -> str:
     config, state = settings(), store.get_settings()
     active = config["enabled"] and state.get("enabled", True)
@@ -28,6 +35,7 @@ def status_report() -> str:
              "", "Last scan: " + state.get("last_scan", "not run yet"),
              f"Last scan deliveries: {state.get('last_sent', 0)} sent / {state.get('last_failed', 0)} failed",
              "Source status: " + ("; ".join(state.get("last_issues", [])) or "No recorded source errors"),
+             *tesla_source_lines(state.get("last_source_status", {})),
              "", "/specialalerts preview — current candidates; does not send to the channel",
              "/specialalerts history — dated events and agent reviews from the past day",
              "/specialalerts on · /specialalerts off — admin only"]
@@ -74,6 +82,9 @@ async def specialalerts_command(update, context) -> None:
             messages.append("No qualifying alerts in the available current data.")
         if snapshot["issues"]:
             messages.append("Unavailable inputs: " + "; ".join(snapshot["issues"]))
+        details = tesla_source_lines(snapshot.get("source_status", {}))
+        if details:
+            messages.append("\n".join(details))
         await loading.edit_text("Preview ready.", parse_mode=None)
         await reply_long_message(update, "\n\n".join(messages), title="Special Alerts Preview", parse_mode=None)
     except Exception as exc:

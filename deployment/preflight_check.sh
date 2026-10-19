@@ -9,6 +9,11 @@ cd "$PROJECT_DIR"
 export PYTHONPATH="$PROJECT_DIR:${PYTHONPATH:-}"
 export DAILY_REPORT_LIVE_QUOTES="${DAILY_REPORT_LIVE_QUOTES:-0}"
 
+# Root-run checks must never create or modify the service's production alert DB.
+ALERT_PREFLIGHT_STATE_DIR="$(mktemp -d /tmp/smart-money-alert-preflight.XXXXXX)"
+trap 'rm -rf -- "$ALERT_PREFLIGHT_STATE_DIR"' EXIT
+export SPECIAL_ALERT_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/special_alerts.sqlite3"
+
 echo "Running Smart Money AI preflight checks..."
 
 if [ ! -x "$PYTHON_BIN" ]; then

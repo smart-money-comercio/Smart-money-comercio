@@ -24,7 +24,8 @@ def destinations() -> list:
 
 def collect_snapshot() -> dict:
     now, config = datetime.now(timezone.utc), settings()
-    observations, news, issues = collect_inputs(now, config)
+    source_status = {}
+    observations, news, issues = collect_inputs(now, config, source_status=source_status)
     alerts = evaluate(observations, news, now, config)
     if alerts:
         try:
@@ -42,7 +43,7 @@ def collect_snapshot() -> dict:
                 if "Agent review\n" not in alert["text"]:
                     alert["text"] += "\n\n" + alert["agent_review"]
     return {"asof": now.isoformat(), "alerts": alerts, "issues": issues,
-            "observations": observations, "news_items": len(news)}
+            "observations": observations, "news_items": len(news), "source_status": source_status}
 
 
 async def special_alert_job(context) -> None:
@@ -84,6 +85,7 @@ async def special_alert_job(context) -> None:
                         company_sent[chat_id] += 1
         store.save_settings(last_scan=snapshot["asof"], last_issues=snapshot["issues"],
                             last_candidates=len(snapshot["alerts"]), last_sent=sent, last_failed=failed,
+                            last_source_status=snapshot.get("source_status", {}),
                             last_quote_times={k: v["asof"] for k, v in snapshot["observations"].items()})
     except Exception as exc:
         LOG.exception("Special alert scan failed (%s)", type(exc).__name__)

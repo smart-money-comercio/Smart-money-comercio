@@ -37,12 +37,14 @@ Fresh market stress can affect the integrated summary's risk posture. It expires
 
 - Index returns are computed from the correct dated daily closes; Yahoo's range-start close is not used as yesterday's close. Two-session returns are compounded, not added.
 - Quotes older than 20 minutes, future timestamps, missing prices and missing prior-session closes are rejected. Unavailable data is displayed as unavailable.
-- Company feeds use Yahoo ticker RSS and a best-effort Tesla IR RSS source. Official company links are distinguished from news reports. Undated items, speculation, fan renderings and competitor announcements are excluded where detected. Updated timestamps alone do not establish a new publication date.
+- Company feeds use Yahoo ticker RSS and a best-effort Tesla IR source. If Tesla's RSS endpoint fails (including HTTP 403/404), the monitor tries the public IR homepage and up to three discovered release pages on the same HTTPS host. It uses the release page's original publication time, never the earnings-calendar date or fetch time. Missing or ambiguous release dates are unavailable, not fresh evidence. Headline feeds keep running when official pages fail; status and preview show TSLA headline availability separately from the confirmation source, with actual HTTP codes for failures.
+- Official company links are distinguished from news reports. The public-page fallback marks only the release it actually read as official; it does not promote Yahoo headlines to confirmed announcements. Undated items, speculation, fan renderings and competitor announcements are excluded where detected. Updated timestamps alone do not establish a new publication date.
 - This is a headline monitor. Source coverage, headline wording, outages and delayed quotes limit detection. A five-minute scan interval is not a five-minute end-to-end delivery guarantee.
 - Each destination has durable delivery receipts. Successful sends are suppressed across restarts; failed sends retry when still eligible. A higher market severity or company confirmation can generate a follow-up. Company stories about known products are grouped for 48 hours; unfamiliar product wording may still require manual review.
 - Each destination receives at most three company messages per scan; queued eligible events remain candidates on later scans. Market warnings take priority.
 - SQLite leases prevent overlapping sends. A process failure after Telegram accepts a message but before its receipt is saved can still cause a repeat. Telegram sending has no exactly-once transaction with the local store.
 - Runtime SQLite files are ignored by Git and included in the deployment's existing data-folder backups. No account balances, personal holdings or private PDFs are added to alert data.
+- Deployment preflight uses a temporary special-alert database and removes it on exit, so checks run with `sudo` cannot create a root-owned production alert store. The runtime database must remain writable by the bot's service user (normally `smartmoney`).
 
 ## Configuration
 
@@ -72,7 +74,7 @@ The combined installer accepts the reviewed pre-research source versions and the
 Run from the Windows project folder:
 
 ```powershell
-python "$env:USERPROFILE\Downloads\install_research_and_special_alerts.py"
+python "$env:USERPROFILE\Downloads\install_special_alert_source_fix.py"
 if ($LASTEXITCODE -ne 0) { throw "Installer stopped; review its output." }
 python -m pip install -r requirements.txt
 python scripts/check_special_alerts.py
