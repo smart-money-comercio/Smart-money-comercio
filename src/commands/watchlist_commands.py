@@ -9,6 +9,8 @@ from urllib.error import HTTPError, URLError
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from src.utils.yahoo_quote import QuoteDataError, parse_regular_quote
+
 from src.commands.admin_commands import get_current_chat_id, is_admin
 from src.reports.watchlist_report import build_watchlist_report as build_refined_watchlist_report
 from src.reports.watchlist_movers_report import build_watchlist_movers_report as build_refined_watchlist_movers
@@ -217,46 +219,10 @@ def fetch_chart_quote(symbol: str) -> dict:
                 "error": "No chart data returned",
             }
 
-        result = results[0]
-        meta = result.get("meta", {})
+        return parse_regular_quote(symbol, results[0])
 
-        indicators = result.get("indicators", {})
-        quote_data = indicators.get("quote", [{}])[0]
-
-        close_values = quote_data.get("close", [])
-        volume_values = quote_data.get("volume", [])
-
-        price = meta.get("regularMarketPrice")
-        previous_close = meta.get("previousClose") or meta.get("chartPreviousClose")
-
-        if not isinstance(price, (int, float)):
-            price = latest_number(close_values)
-
-        if not isinstance(previous_close, (int, float)):
-            valid_closes = [
-                value for value in close_values
-                if isinstance(value, (int, float))
-            ]
-
-            if len(valid_closes) >= 2:
-                previous_close = valid_closes[-2]
-
-        volume = latest_number(volume_values)
-        change, change_percent = calculate_change(price, previous_close)
-
-        return {
-            "symbol": symbol,
-            "ok": True,
-            "price": price,
-            "previous_close": previous_close,
-            "change": change,
-            "change_percent": change_percent,
-            "volume": volume,
-            "exchange": meta.get("exchangeName") or meta.get("fullExchangeName") or "N/A",
-            "currency": meta.get("currency", "USD"),
-            "market_state": meta.get("marketState", "N/A"),
-            "instrument_type": meta.get("instrumentType", "N/A"),
-        }
+    except QuoteDataError as error:
+        return {"symbol": symbol, "ok": False, "error": str(error)}
 
     except HTTPError as error:
         return {

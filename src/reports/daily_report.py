@@ -1,5 +1,6 @@
 import os
 import time
+import math
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -723,13 +724,13 @@ def collect_watchlist_movers(symbols: list[str], quotes: dict) -> list[dict]:
     for symbol in symbols or []:
         quote = quotes.get(symbol) or quotes.get(symbol.upper())
 
-        if not isinstance(quote, dict):
+        if not isinstance(quote, dict) or quote.get("ok") is False:
             continue
 
         change_percent = safe_float(get_quote_change_percent(quote))
         price = safe_float(get_quote_price(quote))
 
-        if change_percent is None:
+        if change_percent is None or not math.isfinite(change_percent):
             continue
 
         movers.append(
@@ -737,9 +738,16 @@ def collect_watchlist_movers(symbols: list[str], quotes: dict) -> list[dict]:
                 "symbol": symbol.upper(),
                 "price": price,
                 "change_percent": change_percent,
+                "asof": quote.get("asof"),
+                "session_date": quote.get("session_date"),
+                "previous_session_date": quote.get("previous_session_date"),
             }
         )
 
+    dated = [item["session_date"] for item in movers if item.get("session_date")]
+    if dated:
+        newest = max(dated)
+        movers = [item for item in movers if not item.get("session_date") or item["session_date"] == newest]
     movers.sort(key=lambda item: abs(item["change_percent"]), reverse=True)
 
     return movers
@@ -850,10 +858,19 @@ Use: /global, /headlines, /watchlist movers, or /ticker SYMBOL for live context.
     strongest = max(movers, key=lambda item: item["change_percent"])
     weakest = min(movers, key=lambda item: item["change_percent"])
 
+    sessions = sorted({item["session_date"] for item in movers if item.get("session_date")})
+    stamps = sorted({item["asof"] for item in movers if item.get("asof")})
+    quote_basis = "Scope: watchlist regular-session returns versus dated prior closes."
+    if sessions:
+        quote_basis += "\nQuote session: " + ", ".join(sessions)
+    if stamps:
+        quote_basis += "\nQuote timestamps (UTC): " + stamps[0] + (" to " + stamps[-1] if len(stamps) > 1 else "")
+
     return f"""
 Market Session: {get_market_status_label()}
+{quote_basis}
 Tone: {build_market_tone(movers)}
-Breadth: {positive} up / {negative} down / {len(movers)} live
+Breadth: {positive} up / {negative} down / {len(movers)} quoted
 Average Move: {format_percent(average)}
 Strongest: {strongest["symbol"]} {format_percent(strongest["change_percent"])}
 Weakest: {weakest["symbol"]} {format_percent(weakest["change_percent"])}
@@ -881,7 +898,7 @@ def build_watchlist_snapshot(symbols: list[str], movers: list[dict]) -> str:
 Relevant research universe: {len(symbols)} symbols
 {universe_text}
 
-Largest live movers:
+Largest regular-session movers:
 {mover_text}
 """.strip()
 
@@ -1948,7 +1965,7 @@ Research only. Not financial advice.
         )
 
         signal_parts.append(
-            f"strongest live move is "
+            f"strongest watchlist move is "
             f"{strongest_symbol} "
             f"{format_percent(strongest_change)}"
         )
@@ -2056,7 +2073,7 @@ Research only. Not financial advice.
         )
 
         signal_parts.append(
-            f"strongest live move is "
+            f"strongest watchlist move is "
             f"{strongest_symbol} "
             f"{format_percent(strongest_change)}"
         )

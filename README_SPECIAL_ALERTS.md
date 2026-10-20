@@ -21,6 +21,8 @@ The same evidence and review are saved once per event in a local SQLite store. T
 
 `/rundailyagent` refreshes the Morning Brief cache before a live report build; deployment dry runs skip this network step. If refresh fails, stale or future-dated macro percentages and headline themes are withheld from current report signals. Independent watchlist quotes remain separate. The workflow status shows a short report-build result and all final checks; the complete report is sent separately once. Previously saved status records with an embedded report are summarized when displayed.
 
+Watchlist daily returns use the dated prior trading-session close, never the starting close of Yahoo's multi-day chart. The shared quote reader preserves the regular-session timestamp and date, rejects unavailable or stale session data, and permits the last completed session after hours. The daily snapshot shows its watchlist scope and quote dates, excludes failed or older-session quotes from the newest dated snapshot, and feeds these corrected returns into existing breadth, ranking, and alert rules. A bearish watchlist can still differ from a positive index; the update does not force them to agree.
+
 Fresh market stress can affect the integrated summary's risk posture. It expires with its quote freshness window. A valid below-threshold scan from both main indexes clears active market stress. Company context expires with the original publication time, rather than becoming fresh each scan. Dated history remains available for 24 hours through the command. Internal records are retained for up to 30 days.
 
 ## Telegram controls
@@ -76,7 +78,7 @@ The combined installer accepts the reviewed pre-research source versions and the
 Run from the Windows project folder:
 
 ```powershell
-python "$env:USERPROFILE\Downloads\install_daily_agent_report_fix.py"
+python "$env:USERPROFILE\Downloads\install_watchlist_quote_fix.py"
 if ($LASTEXITCODE -ne 0) { throw "Installer stopped; review its output." }
 python -m pip install -r requirements.txt
 python scripts/check_special_alerts.py
