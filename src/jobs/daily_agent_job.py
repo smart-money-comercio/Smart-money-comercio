@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 STATUS_PATH = Path("data/daily_agent_status.json")
@@ -80,10 +80,11 @@ def run_step(
     name: str,
     func,
     critical: bool = False,
+    result_detail: Callable[[Any], str] | None = None,
 ) -> Any:
     try:
         result = func()
-        detail = str(result) if result is not None else "Completed"
+        detail = result_detail(result) if result_detail else (str(result) if result is not None else "Completed")
         add_step(steps, name, "pass", detail, critical=critical)
         return result
     except Exception as error:
@@ -179,6 +180,17 @@ def refresh_news_intelligence() -> str:
     return f"News Intelligence checked ({len(str(report))} chars)."
 
 
+def refresh_morning_brief_step() -> str:
+    from src.intelligence.research_context import market_check
+    from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
+
+    payload = ensure_morning_brief_cache_is_fresh(force_refresh=True)
+    check = market_check(payload)
+    if "stale" in check or "unavailable" in check:
+        raise RuntimeError("Morning Brief refresh has no usable current macro cache. " + check)
+    return "Morning Brief cache refreshed. " + check
+
+
 def refresh_alert_monitor() -> str:
     report = call_first_available(
         "src.reports.alert_monitor_report",
@@ -271,10 +283,12 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
     os.environ.setdefault("DAILY_REPORT_LIVE_QUOTES", "0" if dry_run else "1")
 
     if dry_run:
+        add_step(steps, "Morning Brief Refresh", "skip", "Skipped during dry run.")
         add_step(steps, "News Intelligence", "skip", "Skipped during dry run.")
         add_step(steps, "Alert Monitor", "skip", "Skipped during dry run.")
         add_step(steps, "StockAnalysis Refresh", "skip", "Skipped during dry run.")
     else:
+        run_step(steps, "Morning Brief Refresh", refresh_morning_brief_step)
         run_step(steps, "News Intelligence", refresh_news_intelligence)
         run_step(steps, "Alert Monitor", refresh_alert_monitor)
         run_step(steps, "StockAnalysis Refresh", refresh_stockanalysis_top_names)
@@ -289,6 +303,7 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
         "Daily Report Build",
         build_daily_report_step,
         critical=True,
+        result_detail=lambda value: f"Daily report built ({len(str(value))} chars).",
     )
 
     if isinstance(report_result, str):
@@ -354,7 +369,13 @@ def format_daily_agent_result(status: dict[str, Any]) -> str:
             "skip": "SKIP",
         }.get(step.get("status"), str(step.get("status", "")).upper())
 
-        lines.append(f"- {marker}: {step.get('name')} - {step.get('detail')}")
+        detail = str(step.get("detail") or "")
+        if step.get("name") == "Daily Report Build" and step.get("status") == "pass":
+            detail = f"Daily report built ({status.get('report_characters', 0)} chars)."
+        detail = " ".join(detail.split())
+        if len(detail) > 240:
+            detail = detail[:237].rstrip() + "..."
+        lines.append(f"- {marker}: {step.get('name')} - {detail}")
 
     lines.extend(
         [

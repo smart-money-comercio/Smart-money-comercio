@@ -77,12 +77,19 @@ async def rundailyagent_command(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         result = await asyncio.to_thread(run_daily_agent, False)
         status_message = format_daily_agent_result(result)
+        status_chunks = split_text(status_message)
 
         await loading_message.edit_text(
-            status_message[:MAX_TELEGRAM_CHARS],
+            status_chunks[0],
             parse_mode=None,
             disable_web_page_preview=True,
         )
+        for chunk in status_chunks[1:]:
+            await update.effective_chat.send_message(
+                text=chunk,
+                parse_mode=None,
+                disable_web_page_preview=True,
+            )
 
         report = result.get("report", "")
 

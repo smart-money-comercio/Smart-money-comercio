@@ -19,6 +19,8 @@ The monitor sends qualifying evidence through `src.agents.analyst_agent.run_anal
 
 The same evidence and review are saved once per event in a local SQLite store. The daily-agent workflow has a **Special Alerts Agent** step, and the context registry, `/report`, `/analyst`, `/tradeplan`, and active `/scorecard` builder read that store. Those readers use cached evidence without fetching feeds or sending another alert. No additional AI API call, key or model subscription is required.
 
+`/rundailyagent` refreshes the Morning Brief cache before a live report build; deployment dry runs skip this network step. If refresh fails, stale or future-dated macro percentages and headline themes are withheld from current report signals. Independent watchlist quotes remain separate. The workflow status shows a short report-build result and all final checks; the complete report is sent separately once. Previously saved status records with an embedded report are summarized when displayed.
+
 Fresh market stress can affect the integrated summary's risk posture. It expires with its quote freshness window. A valid below-threshold scan from both main indexes clears active market stress. Company context expires with the original publication time, rather than becoming fresh each scan. Dated history remains available for 24 hours through the command. Internal records are retained for up to 30 days.
 
 ## Telegram controls
@@ -74,7 +76,7 @@ The combined installer accepts the reviewed pre-research source versions and the
 Run from the Windows project folder:
 
 ```powershell
-python "$env:USERPROFILE\Downloads\install_special_alert_source_fix.py"
+python "$env:USERPROFILE\Downloads\install_daily_agent_report_fix.py"
 if ($LASTEXITCODE -ne 0) { throw "Installer stopped; review its output." }
 python -m pip install -r requirements.txt
 python scripts/check_special_alerts.py

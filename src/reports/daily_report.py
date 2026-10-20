@@ -382,7 +382,9 @@ def build_market_moves_line(context: dict, movers: list[dict]) -> str:
         f"TLT {format_percent(context.get('tlt'))}"
     )
     if "_market_payload" in context:
-        available = market_observations(context["_market_payload"])
+        payload = context["_market_payload"]
+        check = market_check(payload)
+        available = market_observations(payload) if "stale" not in check and "unavailable" not in check else {}
         macro_moves = ", ".join(
             f"{label} {format_percent(available[symbol])}" if symbol in available else f"{label} unavailable"
             for symbol, label in [("^GSPC", "S&P"), ("^IXIC", "Nasdaq"), ("^RUT", "Russell"),
@@ -1044,31 +1046,34 @@ def load_global_context() -> dict:
     send_report.py refreshes this cache before scheduled delivery.
     """
     payload = load_morning_brief_payload()
-    themes = extract_headline_themes(payload)
-    examples = extract_headline_examples(payload)
+    check = market_check(payload)
+    usable_payload = payload if "stale" not in check and "unavailable" not in check else {}
+    themes = extract_headline_themes(usable_payload)
+    examples = extract_headline_examples(usable_payload)
+    available = market_observations(usable_payload)
     age_minutes = get_cache_age_minutes(payload)
 
-    if age_minutes is None:
-        cache_status = "No Morning Brief cache"
-    elif age_minutes <= 360:
-        cache_status = f"Fresh Morning Brief cache ({age_minutes:.0f} min old)"
-    else:
+    if "unavailable" in check:
+        cache_status = "Morning Brief macro cache unavailable"
+    elif "stale" in check:
         cache_status = f"Stale Morning Brief cache ({age_minutes:.0f} min old)"
+    else:
+        cache_status = f"Fresh Morning Brief cache ({age_minutes:.0f} min old)"
 
     return {
         "headline_themes": themes,
         "_market_payload": payload,
         "headline_examples": examples,
         "regime": cache_status,
-        "sp500": extract_market_move(payload, "^GSPC"),
-        "nasdaq": extract_market_move(payload, "^IXIC"),
-        "dow": extract_market_move(payload, "^DJI"),
-        "russell": extract_market_move(payload, "^RUT"),
-        "vix": extract_market_move(payload, "^VIX"),
-        "tlt": extract_market_move(payload, "TLT"),
-        "oil": extract_market_move(payload, "USO"),
-        "gold": extract_market_move(payload, "GLD"),
-        "dollar": extract_market_move(payload, "UUP"),
+        "sp500": available.get("^GSPC", 0.0),
+        "nasdaq": available.get("^IXIC", 0.0),
+        "dow": available.get("^DJI", 0.0),
+        "russell": available.get("^RUT", 0.0),
+        "vix": available.get("^VIX", 0.0),
+        "tlt": available.get("TLT", 0.0),
+        "oil": available.get("USO", 0.0),
+        "gold": available.get("GLD", 0.0),
+        "dollar": available.get("UUP", 0.0),
         "china": 0.0,
         "eem": 0.0,
     }
@@ -1114,7 +1119,7 @@ def get_macro_pressure(context: dict) -> str:
     if "_market_payload" in context:
         observation = market_check(context["_market_payload"])
         if "unavailable" in observation or "stale" in observation:
-            pressures.append("macro observations stale/unavailable")
+            return "macro observations stale/unavailable"
         elif not {"^GSPC", "^IXIC", "^RUT", "^VIX", "USO", "TLT", "GLD"}.issubset(market_observations(context["_market_payload"])):
             pressures.append("macro observation coverage incomplete")
     themes = context.get("headline_themes", []) or []
