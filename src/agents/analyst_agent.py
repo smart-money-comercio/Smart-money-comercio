@@ -637,8 +637,22 @@ def review_special_event(event: dict, scores: Any) -> dict:
         selected = [stock for stock in stocks if clean_symbol(stock.get("ticker") or stock.get("symbol")) in wanted][:3]
         official = event.get("evidence", {}).get("official", False)
         interpretation = ("Company announcement available. " if official else "Headline-only report; company confirmation pending. ")
-        interpretation += "Validate the product stage, timing, demand and execution costs before changing conviction."
-        checks = "Confirm the original announcement, commercial availability, pricing, margins and guidance."
+        reads = {
+            "product": ("Validate the product stage, timing, demand and execution costs before changing conviction.",
+                        "Confirm the original announcement, commercial availability, pricing, margins and guidance."),
+            "contract": ("Validate contract economics and funded commitments; a partnership announcement does not establish booked revenue.",
+                         "Confirm counterparties, contract value, duration, funding, milestones and revenue recognition."),
+            "earnings": ("Assess actual results against prior guidance and expectations; headline growth alone does not establish an attractive setup.",
+                         "Check revenue, margins, cash flow, segment results, guidance and the earnings transcript."),
+            "guidance": ("Verify the direction and scope of the guidance change and the assumptions behind it.",
+                         "Compare new and prior guidance, management assumptions, margins and cash-flow implications."),
+            "risk": ("Validate the reported risk and affected operations; financial impact is not established by the headline.",
+                     "Check the original disclosure, severity, operational exposure, remediation and thesis invalidation."),
+            "acquisition": ("Assess announced deal terms, financing and execution risk; completion remains subject to closing conditions.",
+                            "Verify consideration, funding, approvals, expected closing and integration assumptions."),
+        }
+        detail, checks = reads.get(event.get("event_type", "product"), reads["product"])
+        interpretation += detail
     context = []
     for stock in selected:
         ticker = clean_symbol(stock.get("ticker") or stock.get("symbol"))

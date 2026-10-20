@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from src.commands.admin_commands import is_admin
 from src.config.special_alerts import settings
 from src.intelligence import special_alert_store as store
+from src.intelligence.special_alert_universe import company_universe
 from src.jobs.special_alert_scheduler import collect_snapshot, destinations
 from src.utils.telegram_messages import reply_long_message
 
@@ -19,8 +20,20 @@ def tesla_source_lines(source_status: dict) -> list[str]:
             "Tesla confirmation source: " + source_status.get("Tesla IR", "not checked")]
 
 
+def company_source_lines(source_status: dict, symbols: list[str]) -> list[str]:
+    lines = tesla_source_lines(source_status)
+    for symbol in symbols:
+        if symbol == "TSLA":
+            continue
+        headline = source_status.get(symbol + " news", "not checked")
+        official = source_status.get(symbol + " official", "not configured; headline coverage only")
+        lines.append(f"{symbol}: headlines — {headline}; official — {official}")
+    return lines
+
+
 def status_report() -> str:
     config, state = settings(), store.get_settings()
+    coverage = company_universe(config)
     active = config["enabled"] and state.get("enabled", True)
     lines = ["🚨 Special Alerts", "Monitoring: " + ("ON" if active else "OFF"),
              f"Scan interval: {config['interval'] // 60} minutes · company news also after hours/weekends",
@@ -29,13 +42,16 @@ def status_report() -> str:
              f"Selloff: S&P 500 -{config['sp_drop']:g}% / Nasdaq -{config['nasdaq_drop']:g}%",
              f"Severe: S&P 500 -{config['sp_severe']:g}% / Nasdaq -{config['nasdaq_severe']:g}%",
              f"Two negative sessions: S&P 500 -{config['sp_two_day']:g}% / Nasdaq -{config['nasdaq_two_day']:g}% compounded",
-             "Companies: " + (", ".join(config["symbols"]) or "none configured"),
+             "Core companies: " + (", ".join(coverage["core"]) or "none configured"),
+             "Top opportunities: " + (", ".join(coverage["ranked"]) or "none added"),
+             "Ranking coverage: " + coverage["ranking_status"],
+             "Companies: " + (", ".join(coverage["symbols"]) or "none configured"),
              f"Maximum quote age: {config['max_quote_age'] / 60:g} minutes; news age: {config['news_hours']:g} hours",
              "Repeats: one level per market session; worsening severity and company confirmation can alert again.",
              "", "Last scan: " + state.get("last_scan", "not run yet"),
              f"Last scan deliveries: {state.get('last_sent', 0)} sent / {state.get('last_failed', 0)} failed",
              "Source status: " + ("; ".join(state.get("last_issues", [])) or "No recorded source errors"),
-             *tesla_source_lines(state.get("last_source_status", {})),
+             *company_source_lines(state.get("last_source_status", {}), coverage["symbols"]),
              "", "/specialalerts preview — current candidates; does not send to the channel",
              "/specialalerts history — dated events and agent reviews from the past day",
              "/specialalerts on · /specialalerts off — admin only"]
@@ -77,12 +93,15 @@ async def specialalerts_command(update, context) -> None:
         snapshot = await asyncio.to_thread(collect_snapshot)
         messages = ["Special Alerts Preview · " + snapshot["asof"],
                     "Preview only. Delivery receipts are unchanged."]
+        coverage = snapshot.get("coverage", {})
+        if coverage:
+            messages.append("Companies: " + ", ".join(coverage["symbols"]) + "\n" + coverage["ranking_status"])
         messages.extend(alert["text"] for alert in snapshot["alerts"])
         if not snapshot["alerts"]:
             messages.append("No qualifying alerts in the available current data.")
         if snapshot["issues"]:
             messages.append("Unavailable inputs: " + "; ".join(snapshot["issues"]))
-        details = tesla_source_lines(snapshot.get("source_status", {}))
+        details = company_source_lines(snapshot.get("source_status", {}), coverage.get("symbols", settings()["symbols"]))
         if details:
             messages.append("\n".join(details))
         await loading.edit_text("Preview ready.", parse_mode=None)

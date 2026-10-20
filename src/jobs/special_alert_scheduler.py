@@ -11,6 +11,7 @@ from src.config.special_alerts import settings
 from src.intelligence import special_alert_store as store
 from src.intelligence.special_alert_engine import evaluate
 from src.intelligence.special_alert_sources import collect_inputs
+from src.intelligence.special_alert_universe import company_universe
 from src.jobs.watchlist_alert_scheduler import get_watchlist_alert_chat_ids, parse_chat_destinations
 
 
@@ -24,6 +25,8 @@ def destinations() -> list:
 
 def collect_snapshot() -> dict:
     now, config = datetime.now(timezone.utc), settings()
+    coverage = company_universe(config, now)
+    config = {**config, "symbols": coverage["symbols"]}
     source_status = {}
     observations, news, issues = collect_inputs(now, config, source_status=source_status)
     alerts = evaluate(observations, news, now, config)
@@ -43,7 +46,8 @@ def collect_snapshot() -> dict:
                 if "Agent review\n" not in alert["text"]:
                     alert["text"] += "\n\n" + alert["agent_review"]
     return {"asof": now.isoformat(), "alerts": alerts, "issues": issues,
-            "observations": observations, "news_items": len(news), "source_status": source_status}
+            "observations": observations, "news_items": len(news), "source_status": source_status,
+            "coverage": coverage}
 
 
 async def special_alert_job(context) -> None:
@@ -86,6 +90,7 @@ async def special_alert_job(context) -> None:
         store.save_settings(last_scan=snapshot["asof"], last_issues=snapshot["issues"],
                             last_candidates=len(snapshot["alerts"]), last_sent=sent, last_failed=failed,
                             last_source_status=snapshot.get("source_status", {}),
+                            last_company_symbols=snapshot.get("coverage", {}).get("symbols", []),
                             last_quote_times={k: v["asof"] for k, v in snapshot["observations"].items()})
     except Exception as exc:
         LOG.exception("Special alert scan failed (%s)", type(exc).__name__)

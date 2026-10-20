@@ -24,6 +24,7 @@ def settings() -> dict:
     return {
         "enabled": os.getenv("SPECIAL_ALERTS_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
         "symbols": symbols,
+        "top_count": int(number("SPECIAL_ALERT_TOP_COUNT", 10, 0, 10)),
         "interval": int(number("SPECIAL_ALERT_INTERVAL_SECONDS", 300, 60, 3600)),
         "max_quote_age": number("SPECIAL_ALERT_MAX_QUOTE_AGE_SECONDS", 1200, 60, 1800),
         "news_hours": number("SPECIAL_ALERT_NEWS_MAX_HOURS", 6, 0.25, 24),

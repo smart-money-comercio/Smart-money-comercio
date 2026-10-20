@@ -29,12 +29,36 @@ ALIASES = {
     "KTOS": ("kratos",), "CRWD": ("crowdstrike",), "AAPL": ("apple",),
     "AMZN": ("amazon",), "GOOGL": ("alphabet", "google"), "GOOG": ("alphabet", "google"),
     "AMD": ("advanced micro devices",), "META": ("meta",),
+    "TSM": ("tsmc", "taiwan semiconductor"), "ASML": ("asml",),
+    "NOC": ("northrop grumman",), "LMT": ("lockheed martin",),
+    "RTX": ("raytheon", "rtx"), "GD": ("general dynamics",),
+    "HII": ("huntington ingalls",), "MU": ("micron",),
+    "ORCL": ("oracle",), "ARM": ("arm holdings",), "ON": ("onsemi", "on semiconductor"),
 }
 OFFICIAL_DOMAINS = {
     "TSLA": ("tesla.com",), "NVDA": ("nvidia.com",), "MSFT": ("microsoft.com",),
     "AVGO": ("broadcom.com",), "PLTR": ("palantir.com",), "AVAV": ("avinc.com",),
     "KTOS": ("kratosdefense.com",), "CRWD": ("crowdstrike.com",),
+    "TSM": ("tsmc.com",), "AMD": ("amd.com",), "ASML": ("asml.com",),
+    "NOC": ("northropgrumman.com",), "LMT": ("lockheedmartin.com",),
+    "RTX": ("rtx.com",), "AMZN": ("amazon.com", "aboutamazon.com"),
+    "AAPL": ("apple.com",), "META": ("meta.com",),
+    "GOOG": ("google.com", "abc.xyz"), "GOOGL": ("google.com", "abc.xyz"),
 }
+
+
+def company_url(symbol: str, url: str) -> bool:
+    parts = urlsplit(safe_url(url))
+    host = (parts.hostname or "").lower()
+    return parts.scheme == "https" and any(host == d or host.endswith("." + d)
+                                            for d in OFFICIAL_DOMAINS.get(symbol, ()))
+
+
+def mentions_company(title: str, symbol: str) -> bool:
+    # Short tickers such as ON or MU must not match ordinary words in headlines.
+    ticker = len(symbol) >= 3 and re.search(r"\b" + re.escape(symbol) + r"\b", title)
+    return bool(ticker or any(re.search(r"\b" + re.escape(name) + r"\b", title, re.I)
+                              for name in ALIASES.get(symbol, ())))
 
 
 def finite(value) -> float | None:
@@ -84,6 +108,15 @@ def request_bytes(url: str) -> bytes:
             final = urlsplit(response.geturl())
             if final.scheme != "https" or final.netloc.lower() not in {"ir.tesla.com", "ir.tesla.com:443"}:
                 raise ValueError("Official source redirected outside Tesla IR")
+        else:
+            # A trusted feed cannot acquire company authority through an external redirect.
+            for symbol in ("NVDA", "MSFT", "PLTR"):
+                if company_url(symbol, url) and not company_url(symbol, response.geturl()):
+                    raise ValueError("Official source redirected outside the company domain")
+            if urlsplit(url).hostname == "www.businesswire.com":
+                final = urlsplit(response.geturl())
+                if final.scheme != "https" or final.hostname not in {"www.businesswire.com", "businesswire.com"}:
+                    raise ValueError("Release timestamp source redirected outside Business Wire")
         body = response.read(2_000_001)
     if len(body) > 2_000_000:
         raise ValueError("Source response too large")
@@ -248,7 +281,7 @@ def chart_observation(symbol: str, payload: dict, now: datetime, config: dict) -
             "url": "https://finance.yahoo.com/quote/" + quote(symbol, safe="") + "/"}
 
 
-def parse_feed(body: bytes, symbols: list[str], feed_name: str) -> list[dict]:
+def parse_feed(body: bytes, symbols: list[str], feed_name: str, publisher_symbol: str = "") -> list[dict]:
     root = ET.fromstring(body)
     if root.tag.split("}")[-1] not in {"rss", "feed", "RDF"}:
         raise ValueError("Source is not an RSS or Atom feed")
@@ -271,18 +304,24 @@ def parse_feed(body: bytes, symbols: list[str], feed_name: str) -> list[dict]:
         if not title or not link or published is None:
             continue
         for symbol in symbols:
-            terms = (symbol.lower(),) + ALIASES.get(symbol, ())
-            if not any(re.search(r"\b" + re.escape(term) + r"\b", title, re.I) for term in terms):
+            publisher = symbol == publisher_symbol and company_url(symbol, link)
+            if publisher_symbol and not publisher:
+                continue
+            if not publisher and not mentions_company(title, symbol):
                 continue
             host = (urlsplit(link).hostname or "").lower()
-            official = any(host == domain or host.endswith("." + domain) for domain in OFFICIAL_DOMAINS.get(symbol, ()))
-            items.append({"symbol": symbol, "title": title, "url": link,
+            official = company_url(symbol, link)
+            item = {"symbol": symbol, "title": title, "url": link,
                           "published": published.isoformat(), "official": official,
-                          "source": host or feed_name})
+                          "source": host or feed_name}
+            if publisher:
+                item["publisher_symbol"] = symbol
+            items.append(item)
     return items
 
 
 def collect_inputs(now: datetime, config: dict, source_status: dict | None = None) -> tuple[dict, list[dict], list[str]]:
+    from src.intelligence.special_alert_company_sources import OFFICIAL_FEEDS, official_company_news
     observations, news, issues = {}, [], []
     tasks = [("index", symbol, "https://query1.finance.yahoo.com/v8/finance/chart/" + quote(symbol, safe="") + "?range=1mo&interval=1d")
              for symbol in INDEX_NAMES]
@@ -290,12 +329,18 @@ def collect_inputs(now: datetime, config: dict, source_status: dict | None = Non
         tasks.append(("news", symbol + " news", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=" + quote(symbol, safe="") + "&region=US&lang=en-US"))
     if "TSLA" in config["symbols"]:
         tasks.append(("tesla_ir", "Tesla IR", TESLA_IR_RSS))
+    for symbol in config["symbols"]:
+        if symbol in OFFICIAL_FEEDS:
+            tasks.append(("official", symbol + " official", symbol))
 
     def fetch(task):
         kind, name, url = task
         try:
             if kind == "tesla_ir":
                 items, detail, problems = tesla_ir_news(now, config)
+                return kind, name, items, problems, detail
+            if kind == "official":
+                items, detail, problems = official_company_news(url, now, config)
                 return kind, name, items, problems, detail
             raw = request_bytes(url)
             if kind == "index":

@@ -1,0 +1,47 @@
+name: Alert regressions
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-checks:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: '3.12'
+          - os: windows-latest
+            python: '3.14'
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run offline regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_company_alerts.py
+          python scripts/check_special_alerts.py
+          python scripts/check_research_integration.py
+          python scripts/check_report_consistency.py
+          python scripts/check_daily_agent_delivery.py
+          python scripts/check_watchlist_quotes.py
+          python scripts/check_company_alerts.py --windows-socketpair
+          python scripts/check_special_alerts.py --windows-socketpair

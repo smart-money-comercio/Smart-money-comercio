@@ -26,6 +26,7 @@ echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 "$PYTHON_BIN" scripts/check_special_alerts.py
 "$PYTHON_BIN" scripts/check_daily_agent_delivery.py
 "$PYTHON_BIN" scripts/check_watchlist_quotes.py
+"$PYTHON_BIN" scripts/check_company_alerts.py
 
 echo "Checking required files..."
 
