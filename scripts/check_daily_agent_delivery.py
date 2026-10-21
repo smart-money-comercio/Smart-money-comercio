@@ -21,6 +21,7 @@ from unittest.mock import AsyncMock, Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
+from scripts.check_watchlist_quotes import market_row
 from src.jobs import daily_agent_job as daily
 from src.commands import daily_agent_commands as commands
 from src.intelligence import research_context
@@ -33,10 +34,10 @@ REPORT = "Daily Brief\n" + "\n".join(daily.REQUIRED_DAILY_REPORT_TERMS) + "\n" +
 
 def fresh_payload():
     return {"cached_at": NOW.timestamp(), "market_moves": [
-        {"symbol": "^GSPC", "move": 0.33}, {"symbol": "^IXIC", "move": 0.39},
-        {"symbol": "^RUT", "move": 0.33}, {"symbol": "^VIX", "move": -2.53},
-        {"symbol": "USO", "move": 0.31}, {"symbol": "TLT", "move": -0.38},
-        {"symbol": "GLD", "move": 2.5}],
+        market_row("^GSPC", 0.33, NOW), market_row("^IXIC", 0.39, NOW),
+        market_row("^RUT", 0.33, NOW), market_row("^VIX", -2.53, NOW),
+        market_row("USO", 0.31, NOW), market_row("TLT", -0.38, NOW),
+        market_row("GLD", 2.5, NOW)],
         "theme_summary": {"ranked_themes": [{"theme": "Inflation / Fed", "count": 1}]},
         "headlines": ["Fed policy is in focus."]}
 
@@ -205,7 +206,7 @@ class MacroFreshnessChecks(unittest.TestCase):
 
     def test_fresh_moves_and_genuine_zero_remain_visible_with_missing_assets_unavailable(self):
         payload = fresh_payload()
-        payload["market_moves"] = [{"symbol": "^IXIC", "move": 0.0}, {"symbol": "TLT", "move": -0.38}]
+        payload["market_moves"] = [market_row("^IXIC", 0.0, NOW), market_row("TLT", -0.38, NOW)]
         context = self.context(payload)
         line = daily_report.build_market_moves_line(context, [])
         self.assertIn("Nasdaq +0.00%", line)

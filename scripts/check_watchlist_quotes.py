@@ -19,6 +19,8 @@ sys.path.insert(0, str(ROOT))
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
 from src.commands import watchlist_commands as watchlist
 from src.reports import daily_report
+from src.reports import morning_brief_intro
+from src.intelligence import research_context
 from src.utils import yahoo_quote
 from src.utils.yahoo_quote import QuoteDataError, parse_regular_quote
 
@@ -40,6 +42,23 @@ def result(symbol="TEST", price=101):
                      "currentTradingPeriod": {"regular": {"start": instant(19, 13, 30).timestamp(), "end": instant(19, 20).timestamp()}}},
             "timestamp": [instant(day, 13, 30).timestamp() for day in (13, 14, 15, 16, 19)],
             "indicators": {"quote": [{"close": [110, 108, 104, 100, price], "volume": [100, 200, 300, 400, 500]}]}}
+
+
+def market_row(symbol, move, clock=NOW):
+    """Synthetic dated cache evidence, independent of the production adapter."""
+    from zoneinfo import ZoneInfo
+    day = clock.astimezone(ZoneInfo("America/New_York")).date()
+    start = datetime(day.year, day.month, day.day, 13, 30, tzinfo=UTC)
+    end = start.replace(hour=20, minute=0)
+    previous = day - timedelta(days=3 if day.weekday() == 0 else 1)
+    previous_stamp = start.replace(year=previous.year, month=previous.month, day=previous.day)
+    evidence = {"meta": {"symbol": symbol, "regularMarketPrice": 100 * (1 + move / 100),
+                         "regularMarketTime": min(clock, end).timestamp(),
+                         "exchangeTimezoneName": "America/New_York",
+                         "currentTradingPeriod": {"regular": {"start": start.timestamp(), "end": end.timestamp()}}},
+                "timestamp": [previous_stamp.timestamp(), start.timestamp()],
+                "indicators": {"quote": [{"close": [100, None]}]}}
+    return {"symbol": symbol, "move": move, "quote_evidence": evidence}
 
 
 class QuoteChecks(unittest.TestCase):
@@ -220,6 +239,138 @@ class ConsumerChecks(unittest.TestCase):
         old = {**quote, "symbol": "OLD", "session_date": "2026-10-16", "change_percent": -20}
         movers = daily_report.collect_watchlist_movers(["TEST", "OLD"], {"TEST": quote, "OLD": old})
         self.assertEqual([item["symbol"] for item in movers], ["TEST"])
+
+
+class BackdropQuoteChecks(unittest.TestCase):
+    def setUp(self):
+        self.clock = NOW
+        owner = self
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return owner.clock.astimezone(tz) if tz else owner.clock.replace(tzinfo=None)
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch.object(morning_brief_intro, "datetime", Clock))
+        self.stack.enter_context(patch.object(yahoo_quote, "datetime", Clock))
+        self.stack.enter_context(patch.object(research_context, "utc_now", side_effect=lambda: self.clock))
+
+    def fetch(self, value):
+        with patch.object(morning_brief_intro, "request_text", return_value=json.dumps({"chart": {"result": [value], "error": None}})):
+            return morning_brief_intro.get_asset_move(value["meta"]["symbol"])
+
+    def payload(self, *rows):
+        return {"cached_at": self.clock.timestamp(), "market_moves": list(rows)}
+
+    def test_missing_today_bar_cannot_turn_yesterdays_gain_into_todays_return(self):
+        value = result("MSFT", 99.7)
+        value["indicators"]["quote"][0]["close"] = [110, 108, 99.167, 100, None]
+        self.assertAlmostEqual(100 * (100 / 99.167 - 1), 0.84, places=2)
+        row = self.fetch(value)
+        self.assertEqual(row["move"], -0.3)
+        self.assertEqual(row["session_date"], "2026-10-19")
+        self.assertEqual(row["asof"], "2026-10-19T20:00:01+00:00")
+        self.assertIn("MSFT -0.30%", research_context.market_check(self.payload(row), self.clock, "MSFT"))
+
+    def test_watchlist_and_backdrop_use_the_same_return_when_the_daily_bar_disagrees(self):
+        value = result("MSFT", 99.7)
+        value["indicators"]["quote"][0]["close"][-1] = 105
+        row = self.fetch(value)
+        quote = parse_regular_quote("MSFT", value, self.clock)
+        self.assertEqual(row["move"], round(quote["change_percent"], 2))
+        self.assertEqual(research_context.market_observations(self.payload(row)), {"MSFT": -0.3})
+
+    def test_missing_prior_close_does_not_collapse_to_an_older_bar(self):
+        value = result(); value["indicators"]["quote"][0]["close"][-2] = None
+        row = self.fetch(value)
+        self.assertIsNone(row["move"])
+        self.assertIn("QuoteDataError", row["error"])
+
+    def test_missing_price_or_original_time_does_not_fall_back_to_history(self):
+        for field in ("regularMarketPrice", "regularMarketTime"):
+            value = result(); value["meta"].pop(field)
+            with self.subTest(field=field): self.assertIsNone(self.fetch(value)["move"])
+
+    def test_fresh_fetch_cannot_make_an_old_quote_current(self):
+        value = result(); value["meta"]["regularMarketTime"] = (self.clock - timedelta(days=8)).timestamp()
+        self.assertIsNone(self.fetch(value)["move"])
+
+    def test_stale_intraday_quote_is_unavailable_on_fetch_and_cached_read(self):
+        self.clock = instant(19, 18)
+        value = result(); value["meta"]["regularMarketTime"] = instant(19, 17, 50).timestamp()
+        row = self.fetch(value)
+        self.assertEqual(row["move"], 1)
+        self.clock = instant(19, 18, 15)
+        self.assertIsNone(self.fetch(value)["move"])
+        self.assertEqual(research_context.market_observations(self.payload(row)), {})
+
+    def test_fresh_cache_timestamp_cannot_revalidate_stale_quote_evidence(self):
+        row = self.fetch(result())
+        self.clock += timedelta(days=8)
+        text = research_context.market_check(self.payload(row), self.clock)
+        self.assertIn("unavailable", text)
+
+    def test_old_completed_session_is_withheld_after_the_next_open(self):
+        row = self.fetch(result("^IXIC"))
+        self.clock = instant(20, 13)
+        self.assertIn("Nasdaq +1.00%", research_context.market_check(self.payload(row), self.clock))
+        self.clock = instant(20, 14)
+        self.assertIn("unavailable", research_context.market_check(self.payload(row), self.clock))
+
+    def test_legacy_undated_cache_cannot_supply_a_stock_or_index_return(self):
+        rows = [{"symbol": symbol, "move": 0.84} for symbol in ("MSFT", "^IXIC", "TLT")]
+        payload = self.payload(*rows)
+        self.assertEqual(research_context.market_observations(payload), {})
+        self.assertIn("unavailable", research_context.market_check(payload, self.clock, "MSFT"))
+        self.assertIsNone(morning_brief_intro.get_market_move(rows, "^IXIC"))
+        self.assertIsNone(morning_brief_intro.get_move_from_cache(rows, "MSFT"))
+
+    def test_tampered_return_is_withheld_in_every_cache_consumer(self):
+        row = self.fetch(result("MSFT", 99.7)); row["move"] = 0.84
+        self.assertEqual(research_context.market_observations(self.payload(row)), {})
+        self.assertIsNone(morning_brief_intro.get_market_move([row], "MSFT"))
+        self.assertIsNone(morning_brief_intro.get_move_from_cache([row], "MSFT"))
+
+    def test_one_stale_asset_does_not_hide_independent_valid_quotes(self):
+        good = self.fetch(result("MSFT", 99.7)); bad = self.fetch(result("TLT"))
+        bad["quote_evidence"]["meta"]["regularMarketTime"] = (self.clock - timedelta(days=8)).timestamp()
+        text = research_context.market_check(self.payload(good, bad), self.clock, "MSFT")
+        self.assertIn("MSFT -0.30%", text)
+        self.assertNotIn("TLT +", text)
+
+    def test_backdrop_distinguishes_cache_time_from_the_quote_session_and_time(self):
+        row = self.fetch(result("MSFT", 99.7))
+        text = research_context.market_check(self.payload(row), self.clock, "MSFT")
+        self.assertIn("10-20 03:00 UTC cache", text)
+        self.assertIn("Regular-session returns: 2026-10-19", text)
+        self.assertIn("earliest quote 10-19 20:00 UTC", text)
+
+    def test_genuine_zero_is_valid_with_dated_source_evidence(self):
+        row = self.fetch(result("TLT", 100))
+        self.assertIn("TLT +0.00%", research_context.market_check(self.payload(row), self.clock))
+
+    def test_json_cache_round_trip_preserves_original_evidence_without_network(self):
+        row = self.fetch(result("MSFT", 99.7))
+        payload = json.loads(json.dumps(self.payload(row)))
+        before = deepcopy(payload)
+        with patch.object(morning_brief_intro, "request_text", side_effect=AssertionError("No cache-side fetch")):
+            self.assertEqual(research_context.market_observations(payload), {"MSFT": -0.3})
+        self.assertEqual(payload, before)
+
+    def test_wrong_instrument_and_malformed_evidence_are_withheld(self):
+        row = self.fetch(result("MSFT"))
+        for evidence in (None, [], {}, {"meta": None}, result("OTHER")):
+            with self.subTest(evidence=evidence):
+                self.assertEqual(research_context.market_observations(self.payload({**row, "quote_evidence": evidence})), {})
+
+    def test_five_day_move_uses_chronological_dated_bars_and_current_regular_price(self):
+        value = result("MSFT", 99.7)
+        first = self.fetch(value)
+        value["timestamp"].reverse()
+        value["indicators"]["quote"][0]["close"].reverse()
+        second = self.fetch(value)
+        self.assertEqual(first["week_move"], second["week_move"])
+        self.assertEqual(first["week_move"], round(100 * (99.7 / 110 - 1), 2))
 
 
 def main(argv=None):

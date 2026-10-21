@@ -26,6 +26,7 @@ os.environ.setdefault("DAILY_REPORT_LIVE_QUOTES", "0")
 from src.intelligence import research_context as context_module
 from src.intelligence import research_ingestion as ingestion
 from src.intelligence import research_store as store
+from scripts.check_watchlist_quotes import market_row
 
 
 NOW = datetime(2026, 10, 16, 17, 0, tzinfo=timezone.utc)
@@ -38,8 +39,8 @@ def manifest() -> dict:
 
 def market_payload() -> dict:
     return {"cached_at": NOW.timestamp(), "market_moves": [
-        {"symbol": "^IXIC", "move": 0.4}, {"symbol": "TLT", "move": -0.3},
-        {"symbol": "MSFT", "move": 0.8},
+        market_row("^IXIC", 0.4, NOW), market_row("TLT", -0.3, NOW),
+        market_row("MSFT", 0.8, NOW),
     ]}
 
 
@@ -291,7 +292,7 @@ class ResearchChecks(unittest.TestCase):
         self.assertIn("unavailable", context_module.market_check(payload, NOW))
 
     def test_real_zero_move_is_valid_and_tlt_is_not_a_yield(self):
-        payload = {"cached_at": NOW.timestamp(), "market_moves": [{"symbol": "TLT", "move": 0.0}]}
+        payload = {"cached_at": NOW.timestamp(), "market_moves": [market_row("TLT", 0.0, NOW)]}
         line = context_module.market_check(payload, NOW)
         self.assertIn("+0.00% (bond-price proxy)", line)
         self.assertIn("Yields unverified", line)
@@ -435,7 +436,7 @@ class ReportChecks(ResearchChecks):
     def test_summary_does_not_display_missing_assets_as_zero_moves(self):
         context = dict.fromkeys(["nasdaq", "sp500", "russell", "vix", "oil", "gold", "tlt"], 0)
         payload = market_payload()
-        payload["market_moves"][0]["move"] = 0.0
+        payload["market_moves"][0] = market_row("^IXIC", 0.0, NOW)
         context["_market_payload"] = payload
         line = self.daily.build_market_moves_line(context, [])
         self.assertIn("Nasdaq +0.00%", line)

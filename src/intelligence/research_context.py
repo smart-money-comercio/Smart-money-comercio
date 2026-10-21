@@ -12,6 +12,7 @@ import re
 from src.intelligence.research_store import (
     PROJECT_ROOT, ResearchError, eligible_claims, parse_time, read_documents, utc_now,
 )
+from src.utils.yahoo_quote import cached_regular_quote
 
 
 TYPE_LABELS = {"observation": "Observation", "estimate": "Estimate", "forecast": "Forecast", "opinion": "Opinion"}
@@ -41,19 +42,26 @@ def load_market_payload() -> dict:
         return {}
 
 
-def market_observations(payload: dict) -> dict[str, float]:
+def market_quotes(payload: dict, now: datetime | None = None) -> dict[str, dict]:
+    now = parse_time(now or utc_now())
     payload = payload if isinstance(payload, dict) else {}
     raw_moves = payload.get("market_moves", [])
     if not isinstance(raw_moves, list):
         raw_moves = []
-    moves = {}
+    quotes = {}
     for row in raw_moves:
         if not isinstance(row, dict) or row.get("error"):
             continue
-        move = row.get("move")
-        if type(move) in (int, float) and math.isfinite(move):
-            moves[str(row.get("symbol", "")).upper()] = move
-    return moves
+        try:
+            quote = cached_regular_quote(row, now)
+        except (ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError):
+            continue
+        quotes[quote["symbol"].upper()] = quote
+    return quotes
+
+
+def market_observations(payload: dict, now: datetime | None = None) -> dict[str, float]:
+    return {symbol: round(quote["change_percent"], 2) for symbol, quote in market_quotes(payload, now).items()}
 
 
 def market_check(payload: dict, now: datetime | None = None, symbol: str = "") -> str:
@@ -71,7 +79,8 @@ def market_check(payload: dict, now: datetime | None = None, symbol: str = "") -
         return "Market check: unavailable; the market-cache timestamp is in the future."
     if age > MAX_MARKET_AGE_SECONDS:
         return f"Market check: stale cache ({observed.date().isoformat()}); refresh before using this backdrop."
-    moves = market_observations(payload)
+    quotes = market_quotes(payload, now)
+    moves = {symbol: round(quote["change_percent"], 2) for symbol, quote in quotes.items()}
     labels = []
     # The source cache measures last-session/daily price moves, not a Treasury yield.
     symbol = str(symbol or "").upper().replace("$", "")
@@ -86,7 +95,11 @@ def market_check(payload: dict, now: datetime | None = None, symbol: str = "") -
     if not labels:
         return "Market check: unavailable; this cache has no usable price or bond-proxy observations."
     stamp = observed.strftime("%m-%d %H:%M UTC")
-    return f"Market check ({stamp} cache): {'; '.join(labels)}. Yields unverified."
+    shown = [s for s in (symbol, "^IXIC" if "^IXIC" in moves else "^GSPC", "TLT") if s in quotes]
+    sessions = ", ".join(sorted({quotes[s]["session_date"] for s in shown}))
+    source_stamp = min(datetime.fromisoformat(quotes[s]["asof"]) for s in shown).strftime("%m-%d %H:%M UTC")
+    return (f"Market check ({stamp} cache): {'; '.join(labels)}. "
+            f"Regular-session returns: {sessions}; earliest quote {source_stamp}. Yields unverified.")
 
 
 def build_research_context(symbol: str = "", market_payload: dict | None = None,

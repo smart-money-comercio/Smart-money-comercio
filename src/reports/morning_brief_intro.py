@@ -4,10 +4,12 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from src.utils.yahoo_quote import cached_regular_quote, finite_number, parse_regular_quote, source_time
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -681,42 +683,36 @@ def get_asset_move(symbol: str) -> dict:
     try:
         payload = json.loads(request_text(url))
         result = payload["chart"]["result"][0]
+        now = datetime.now(timezone.utc)
+        quote = parse_regular_quote(symbol, result, now)
         closes = result["indicators"]["quote"][0]["close"]
-
-        clean_closes = [
-            float(value)
-            for value in closes
-            if value is not None
-        ]
-
-        if len(clean_closes) < 2:
-            return {"symbol": symbol, "move": None, "week_move": None}
-
-        week_start = clean_closes[0]
-        previous = clean_closes[-2]
-        latest = clean_closes[-1]
-
-        if previous == 0:
-            day_move = None
-        else:
-            day_move = ((latest - previous) / previous) * 100
-
-        if week_start == 0:
-            week_move = None
-        else:
-            week_move = ((latest - week_start) / week_start) * 100
-
+        dated_closes = []
+        for epoch, raw_close in zip(result.get("timestamp") or [], closes):
+            observed, close = source_time(epoch), finite_number(raw_close)
+            if observed is not None and observed <= datetime.fromisoformat(quote["asof"]) and close is not None and close > 0:
+                dated_closes.append((observed, close))
+        week_start = min(dated_closes)[1] if dated_closes else None
+        week_move = 100 * (quote["price"] / week_start - 1) if week_start else None
+        # Preserve the minimal original chart evidence for cache readers to revalidate.
+        meta_fields = ("symbol", "regularMarketPrice", "regularMarketTime", "exchangeTimezoneName",
+                       "currentTradingPeriod", "currency", "exchangeName", "instrumentType")
+        evidence = {"meta": {key: result["meta"][key] for key in meta_fields if key in result["meta"]},
+                    "timestamp": result["timestamp"], "indicators": {"quote": [{"close": closes}]}}
         return {
             "symbol": symbol,
-            "latest": round(latest, 2),
-            "previous": round(previous, 2),
-            "week_start": round(week_start, 2),
-            "move": round(day_move, 2) if day_move is not None else None,
+            "latest": quote["price"],
+            "previous": quote["previous_close"],
+            "week_start": week_start,
+            "move": round(quote["change_percent"], 2),
             "week_move": round(week_move, 2) if week_move is not None else None,
+            "asof": quote["asof"], "session_date": quote["session_date"],
+            "previous_session_date": quote["previous_session_date"],
+            "return_basis": quote["return_basis"], "quote_timing": quote["quote_timing"],
+            "quote_evidence": evidence,
         }
-
-    except Exception:
-        return {"symbol": symbol, "move": None, "week_move": None}
+    except Exception as exc:
+        return {"symbol": symbol, "move": None, "week_move": None,
+                "error": "Dated quote unavailable (" + type(exc).__name__ + ")"}
 
 
 def fetch_market_moves() -> list[dict]:
@@ -1182,13 +1178,9 @@ Whether earnings, macro data, and geopolitical headlines support a broader rally
 def get_market_move(market_moves: list[dict], symbol: str) -> float | None:
     for item in market_moves:
         if str(item.get("symbol", "")).upper() == symbol.upper():
-            value = item.get("move")
-
             try:
-                if value is None:
-                    return None
-
-                return float(value)
+                cached_regular_quote(item)
+                return item["move"]
             except Exception:
                 return None
 
@@ -1779,6 +1771,7 @@ def get_market_week_move(market_moves: list[dict], symbol: str) -> float | None:
     for item in market_moves:
         if str(item.get("symbol", "")).upper() == symbol.upper():
             try:
+                cached_regular_quote(item)
                 value = item.get("week_move")
 
                 if value is None:
@@ -1925,13 +1918,9 @@ The big narratives:
 def get_move_from_cache(market_moves: list[dict], symbol: str) -> float | None:
     for item in market_moves:
         if str(item.get("symbol", "")).upper() == symbol.upper():
-            value = item.get("move")
-
             try:
-                if value is None:
-                    return None
-
-                return float(value)
+                cached_regular_quote(item)
+                return item["move"]
             except Exception:
                 return None
 
@@ -2076,13 +2065,9 @@ def build_flowing_what_watching(theme_summary: dict) -> str:
 def get_move_from_cache(market_moves: list[dict], symbol: str) -> float | None:
     for item in market_moves:
         if str(item.get("symbol", "")).upper() == symbol.upper():
-            value = item.get("move")
-
             try:
-                if value is None:
-                    return None
-
-                return float(value)
+                cached_regular_quote(item)
+                return item["move"]
             except Exception:
                 return None
 

@@ -115,3 +115,17 @@ def parse_regular_quote(symbol: str, result: dict, now: datetime | None = None) 
             "asof": asof.isoformat(), "session_date": quote_day.isoformat(),
             "previous_session_date": previous_day.isoformat(), "quote_timing": timing,
             "return_basis": "regular-session price vs dated previous-session close"}
+
+
+def cached_regular_quote(row: dict, now: datetime | None = None) -> dict:
+    """Recheck source evidence; refreshing a cache never refreshes an old quote."""
+    if not isinstance(row, dict) or row.get("error"):
+        raise QuoteDataError("Cached quote unavailable")
+    evidence = row.get("quote_evidence")
+    if not isinstance(evidence, dict):
+        raise QuoteDataError("Cached quote has no dated source evidence; refresh required")
+    quote = parse_regular_quote(str(row.get("symbol", "")), evidence, now)
+    move = finite_number(row.get("move"))
+    if move is None or abs(move - round(quote["change_percent"], 2)) > 0.000001:
+        raise QuoteDataError("Cached return does not match the dated source evidence")
+    return quote
