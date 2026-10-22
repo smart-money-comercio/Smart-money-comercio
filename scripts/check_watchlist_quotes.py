@@ -373,6 +373,129 @@ class BackdropQuoteChecks(unittest.TestCase):
         self.assertEqual(first["week_move"], round(100 * (99.7 / 110 - 1), 2))
 
 
+class IndexClosingChecks(unittest.TestCase):
+    setUp = BackdropQuoteChecks.setUp
+    fetch = BackdropQuoteChecks.fetch
+    payload = BackdropQuoteChecks.payload
+
+    def index(self, symbol="^GSPC", minutes=45):
+        value = result(symbol)
+        value["meta"].update(instrumentType="INDEX", hasPrePostMarketData=False,
+                             dataGranularity="1d", priceHint=2,
+                             regularMarketTime=(instant(19, 20) + timedelta(minutes=minutes)).timestamp())
+        value["indicators"]["quote"][0]["close"][-1] = 101.0003
+        return value
+
+    def test_delayed_cash_index_closing_updates_are_supported_for_all_four_indexes(self):
+        for symbol, minutes in (("^GSPC", 45), ("^IXIC", 76), ("^RUT", 30), ("^DJI", 50)):
+            with self.subTest(symbol=symbol):
+                quote = parse_regular_quote(symbol, self.index(symbol, minutes), self.clock)
+                self.assertAlmostEqual(quote["change_percent"], 1)
+                self.assertTrue(quote["closing_quote_update"])
+                self.assertEqual(quote["quote_timing"], "completed_session")
+
+    def test_original_after_close_source_timestamp_is_retained(self):
+        value = self.index("^IXIC", 76)
+        quote = parse_regular_quote("^IXIC", value, self.clock)
+        self.assertEqual(quote["asof"], "2026-10-19T21:16:00+00:00")
+        self.assertEqual(quote["session_date"], "2026-10-19")
+        self.assertEqual(quote["previous_session_date"], "2026-10-16")
+
+    def test_missing_or_invalid_current_daily_close_cannot_corroborate_the_update(self):
+        for close in (None, True, 0, -1, float("nan"), float("inf")):
+            value = self.index(); value["indicators"]["quote"][0]["close"][-1] = close
+            with self.subTest(close=close), self.assertRaises(QuoteDataError):
+                parse_regular_quote("^GSPC", value, self.clock)
+
+    def test_price_disagreement_is_rejected_at_the_sources_reported_precision(self):
+        value = self.index(); value["indicators"]["quote"][0]["close"][-1] = 101.01
+        with self.assertRaises(QuoteDataError):
+            parse_regular_quote("^GSPC", value, self.clock)
+
+    def test_prior_day_price_match_cannot_replace_the_missing_current_bar(self):
+        value = self.index(); value["timestamp"].pop()
+        value["indicators"]["quote"][0]["close"] = [110, 108, 104, 101]
+        with self.assertRaises(QuoteDataError):
+            parse_regular_quote("^GSPC", value, self.clock)
+
+    def test_duplicate_current_session_bars_are_ambiguous(self):
+        value = self.index(); value["timestamp"].append(instant(19, 13, 31).timestamp())
+        value["indicators"]["quote"][0]["close"].append(101)
+        with self.assertRaises(QuoteDataError):
+            parse_regular_quote("^GSPC", value, self.clock)
+
+    def test_missing_or_wrong_index_metadata_does_not_enable_later_timestamps(self):
+        for field, invalid in (("instrumentType", "ETF"), ("hasPrePostMarketData", True),
+                               ("hasPrePostMarketData", None), ("dataGranularity", "1m"),
+                               ("priceHint", None), ("priceHint", True), ("priceHint", 9)):
+            value = self.index(); value["meta"][field] = invalid
+            with self.subTest(field=field, invalid=invalid), self.assertRaises(QuoteDataError):
+                parse_regular_quote("^GSPC", value, self.clock)
+
+    def test_equities_etfs_and_other_indices_keep_the_existing_closing_time_rule(self):
+        for symbol, kind in (("MSFT", "EQUITY"), ("TLT", "ETF"), ("OTHER", "INDEX")):
+            value = self.index(symbol); value["meta"]["instrumentType"] = kind
+            with self.subTest(symbol=symbol), self.assertRaises(QuoteDataError):
+                parse_regular_quote(symbol, value, self.clock)
+
+    def test_future_source_times_remain_unavailable_even_with_a_matching_close(self):
+        value = self.index(); value["meta"]["regularMarketTime"] = (self.clock + timedelta(minutes=5)).timestamp()
+        with self.assertRaisesRegex(QuoteDataError, "future"):
+            parse_regular_quote("^GSPC", value, self.clock)
+
+    def test_old_index_session_cannot_become_current_after_the_next_market_open(self):
+        value = self.index(); self.clock = instant(20, 14)
+        with self.assertRaisesRegex(QuoteDataError, "metadata is outdated"):
+            parse_regular_quote("^GSPC", value, self.clock)
+
+    def test_the_first_twenty_minutes_after_close_keep_the_existing_freshness_rule(self):
+        value = self.index(minutes=10); self.clock = instant(19, 20, 15)
+        with self.assertRaisesRegex(QuoteDataError, "Current regular-session"):
+            parse_regular_quote("^GSPC", value, self.clock)
+
+    def test_special_alert_monitor_still_rejects_late_index_updates(self):
+        from src.config.special_alerts import settings
+        from src.intelligence.special_alert_sources import chart_observation
+        for minutes in (10, 45):
+            value = self.index(minutes=minutes)
+            with self.subTest(minutes=minutes), self.assertRaises(ValueError):
+                chart_observation("^GSPC", {"chart": {"result": [value]}},
+                                  instant(19, 20, minutes + 1), settings())
+
+    def test_morning_brief_and_cache_reader_preserve_the_required_source_metadata(self):
+        row = self.fetch(self.index("^IXIC", 76))
+        self.assertEqual(row["move"], 1)
+        evidence = row["quote_evidence"]["meta"]
+        self.assertIs(evidence["hasPrePostMarketData"], False)
+        self.assertEqual(evidence["dataGranularity"], "1d")
+        self.assertEqual(evidence["priceHint"], 2)
+        payload = json.loads(json.dumps(self.payload(row)))
+        self.assertEqual(research_context.market_observations(payload), {"^IXIC": 1})
+        self.assertIn("Nasdaq +1.00%", research_context.market_check(payload, self.clock))
+
+    def test_early_close_uses_the_provider_session_end_without_fixed_utc_hours(self):
+        value = self.index(); value["meta"]["currentTradingPeriod"]["regular"]["end"] = instant(19, 17).timestamp()
+        value["meta"]["regularMarketTime"] = instant(19, 17, 45).timestamp()
+        self.assertTrue(parse_regular_quote("^GSPC", value, self.clock)["closing_quote_update"])
+
+    def test_source_exchange_timezone_handles_a_winter_index_close(self):
+        value = self.index(); self.clock = instant(4, 3, month=11)
+        value["meta"]["currentTradingPeriod"]["regular"] = {
+            "start": instant(3, 14, 30, month=11).timestamp(), "end": instant(3, 21, month=11).timestamp()}
+        value["meta"]["regularMarketTime"] = instant(3, 21, 45, month=11).timestamp()
+        value["timestamp"] = [instant(day, 14, 30, month=11).timestamp() for day in (2, 3)]
+        value["indicators"]["quote"][0]["close"] = [100, 101.0003]
+        self.assertEqual(parse_regular_quote("^GSPC", value, self.clock)["session_date"], "2026-11-03")
+
+    def test_normal_intraday_index_quotes_remain_live_without_a_close_corroboration(self):
+        value = self.index(); self.clock = instant(19, 18)
+        value["meta"]["regularMarketTime"] = instant(19, 17, 59).timestamp()
+        value["indicators"]["quote"][0]["close"][-1] = None
+        quote = parse_regular_quote("^GSPC", value, self.clock)
+        self.assertFalse(quote["closing_quote_update"])
+        self.assertEqual(quote["quote_timing"], "regular_session")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--windows-socketpair", action="store_true")

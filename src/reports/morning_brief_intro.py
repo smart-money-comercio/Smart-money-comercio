@@ -695,7 +695,8 @@ def get_asset_move(symbol: str) -> dict:
         week_move = 100 * (quote["price"] / week_start - 1) if week_start else None
         # Preserve the minimal original chart evidence for cache readers to revalidate.
         meta_fields = ("symbol", "regularMarketPrice", "regularMarketTime", "exchangeTimezoneName",
-                       "currentTradingPeriod", "currency", "exchangeName", "instrumentType")
+                       "currentTradingPeriod", "currency", "exchangeName", "instrumentType",
+                       "hasPrePostMarketData", "dataGranularity", "priceHint")
         evidence = {"meta": {key: result["meta"][key] for key in meta_fields if key in result["meta"]},
                     "timestamp": result["timestamp"], "indicators": {"quote": [{"close": closes}]}}
         return {

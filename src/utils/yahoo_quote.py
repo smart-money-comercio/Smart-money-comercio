@@ -31,6 +31,29 @@ def source_time(value):
         return None
 
 
+def corroborated_index_close(symbol: str, result: dict, price: float, start: datetime,
+                             end: datetime) -> bool:
+    """Cash-index closing updates need a matching dated daily bar, not extra time alone."""
+    meta = result.get("meta", {})
+    precision = meta.get("priceHint")
+    if (symbol.upper() not in {"^GSPC", "^IXIC", "^DJI", "^RUT"}
+            or meta.get("instrumentType") != "INDEX"
+            or meta.get("hasPrePostMarketData") is not False
+            or meta.get("dataGranularity") != "1d"
+            or type(precision) is not int or not 0 <= precision <= 8):
+        return False
+    rows = result.get("indicators", {}).get("quote") or []
+    if not rows:
+        return False
+    closes = []
+    for epoch, raw_close in zip(result.get("timestamp") or [], rows[0].get("close") or []):
+        when, close = source_time(epoch), finite_number(raw_close)
+        if when is not None and start <= when <= end:
+            closes.append(close)
+    return (len(closes) == 1 and closes[0] is not None and closes[0] > 0
+            and abs(price - closes[0]) <= 0.5 * 10 ** -precision)
+
+
 def parse_regular_quote(symbol: str, result: dict, now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -58,11 +81,15 @@ def parse_regular_quote(symbol: str, result: dict, now: datetime | None = None) 
     regular_day = end.astimezone(exchange_zone).date()
     local_now = now.astimezone(exchange_zone)
     in_check_window = start <= now <= end + timedelta(minutes=20)
+    closing_update = False
     if in_check_window:
         if asof < start or asof > end + timedelta(seconds=60) or age > 1200:
             raise QuoteDataError("Current regular-session quote is stale or unavailable")
     elif now > end:
-        if quote_day != regular_day or asof < start or asof > end + timedelta(seconds=60):
+        if asof > end + timedelta(seconds=60):
+            closing_update = corroborated_index_close(symbol, result, price, start, end)
+        if (quote_day != regular_day or asof < start
+                or (asof > end + timedelta(seconds=60) and not closing_update)):
             raise QuoteDataError("Latest completed regular-session quote unavailable")
         # An old schedule must not label a previous weekday's price as current.
         if (local_now.date() > regular_day and local_now.weekday() < 5
@@ -114,6 +141,7 @@ def parse_regular_quote(symbol: str, result: dict, now: datetime | None = None) 
             "instrument_type": meta.get("instrumentType", "N/A"),
             "asof": asof.isoformat(), "session_date": quote_day.isoformat(),
             "previous_session_date": previous_day.isoformat(), "quote_timing": timing,
+            "closing_quote_update": closing_update,
             "return_basis": "regular-session price vs dated previous-session close"}
 
 
