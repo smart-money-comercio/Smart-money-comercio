@@ -4,7 +4,9 @@ The report and `/calendar` use a dated snapshot that distinguishes publisher sch
 
 ## Economic releases
 
-The bot reads the official [BLS iCalendar](https://www.bls.gov/schedule/news_release/bls.ics), [BEA iCalendar](https://www.bea.gov/news/schedule/ics/online-calendar-subscription.ics), and [Labor Department claims publication schedule](https://oui.doleta.gov/unemploy/claims_arch.asp). BLS's `US-Eastern` timezone is normalized to `America/New_York`. BEA UTC timestamps and DOL holiday exceptions retain their dates and adjust for daylight saving time.
+The bot reads the official [BLS iCalendar](https://www.bls.gov/schedule/news_release/bls.ics), [BEA iCalendar](https://www.bea.gov/news/schedule/ics/online-calendar-subscription.ics), [Labor Department claims publication schedule](https://oui.doleta.gov/unemploy/claims_arch.asp), [Fed event calendar](https://www.federalreserve.gov/json/calendar.json), and [University of Michigan's next-release notice](https://www.sca.isr.umich.edu/). BLS's `US-Eastern` timezone is normalized to `America/New_York`. BEA UTC timestamps and DOL holiday exceptions retain their dates and adjust for daylight saving time.
+
+BEA's abbreviated national `GDP (Advance/Second/Third Estimate)` titles are recognized. Regional and Puerto Rico GDP cannot confirm the national release, and quarterly PCE prices remain distinct from monthly PCE price indexes. The Fed supplies separate dated statement/decision, press-conference and minutes entries. Its announcement-day field is used instead of the meeting's starting date; missing clocks are never filled with default times. Fed announcement clocks use US Eastern Time, consistent with its [policy-rate explanation](https://www.federalreserve.gov/economy-at-a-glance-policy-rate.htm). Michigan's next-release notice must explicitly supply one full date, a matching weekday and an Eastern clock. It confirms that notice only, rather than every future survey date.
 
 A matching publisher release establishes the scheduled date and time. Actual, consensus and previous values still come from Nasdaq and retain that separate provenance. The bot does not infer a timezone from Nasdaq's field name `gmt`. For example:
 
@@ -13,7 +15,9 @@ A matching publisher release establishes the scheduled date and time. Actual, co
 Time unverified (source 09:45) - S&P Global Manufacturing PMI - ...
 ```
 
-Unsupported releases, inaccessible publisher schedules and ambiguous dates remain explicitly unverified. A date that conflicts with a nearby matching publisher release cannot supply actual, expected or previous values. Future actuals are withheld before caching, including before a verified release later on the same day. Publisher schedules can still supply release dates and times when Nasdaq's economic feed is unavailable, with forecast values left unavailable.
+Unsupported releases, inaccessible publisher schedules and ambiguous dates remain explicitly unverified. A date that conflicts with a nearby matching publisher release cannot supply actual, expected or previous values. Future actuals are withheld before caching, including before a verified release later on the same day. Publisher schedules can still supply release dates and times when Nasdaq's economic feed is unavailable or omits a scheduled release, with forecast values left unavailable. Omitted releases and publisher failures remain visible in calendar coverage notes. An empty result describes the available feeds rather than claiming there are no macro events that day.
+
+S&P Global's public PMI calendar returned HTTP 403 during deployment verification. This update therefore keeps PMI as Nasdaq coverage with unverified timing; it does not invent a publisher clock or hard-code the October release date. Other unsupported economic schedules also remain unverified.
 
 Dates in calendar headings use the US calendar. Verified times convert to `REPORT_TIMEZONE`; when conversion crosses midnight, the displayed time includes its converted date. Unverified times keep their original source clock without a conversion.
 

@@ -23,6 +23,16 @@ from src.reports import live_market_calendar as calendar
 NOW = datetime(2026, 10, 22, 15, tzinfo=timezone.utc)
 DAYS = [date(2026, 10, 22), date(2026, 10, 23)]
 DOL = "Publication Schedule: The UI Weekly Claims News Release is published each week on Thursday morning at 8:30am EST. Wednesday, November 25, 2026 8:30 AM EST."
+MICHIGAN = "<p>Next data release: Friday, October 23, 2026 for Final October data at 10am ET</p>"
+
+
+def fed_row(**overrides):
+    return {"type": "FOMC", "title": "FOMC Meeting", "month": "2026-10", "days": "28",
+            "time": "2:00 p.m.", "description": "Two-day meeting, October 27 - 28", **overrides}
+
+
+def fed(*rows):
+    return json.dumps({"events": list(rows)})
 
 
 def event(start="DTSTART;TZID=US-Eastern:20261014T083000", name="Consumer Price Index", uid="release", sequence=0, extra=""):
@@ -265,6 +275,130 @@ class SnapshotChecks(IsolatedChecks):
         snapshot = self.snapshot(); snapshot["economic"] = [None]; self.save(snapshot)
         with patch.object(calendar, "_fetch_calendar_days", side_effect=AssertionError("No fetch")):
             self.assertIsNone(context.calendar_context_provider())
+
+
+class AdditionalPublisherChecks(IsolatedChecks):
+    def test_bea_abbreviated_gdp_is_verified_without_confusing_regional_releases(self):
+        raw = ics(event("DTSTART:20261029T123000Z", "GDP (Advance Estimate)\\, 3rd Quarter 2026"))
+        schedule = sources.parse_ics(raw, "BEA")
+        for name in ("GDP", "GDP Price Index", "Core PCE Prices"):
+            self.assertEqual(sources.verify_time(name, date(2026, 10, 29), schedule)["time_status"], "verified")
+        for name in ("GDP by County and Personal Income by County", "Gross Domestic Product for Puerto Rico", "Gross Domestic Product by State and Personal Income by State"):
+            self.assertEqual(sources.parse_ics(ics(event(name=name)), "BEA"), [])
+
+    def test_gdp_does_not_confirm_monthly_pce_or_a_census_goods_trade_release(self):
+        schedule = sources.parse_ics(ics(event("DTSTART:20261029T123000Z", "GDP (Advance Estimate)")), "BEA")
+        self.assertEqual(sources.verify_time("Core PCE Price Index", date(2026, 10, 29), schedule)["time_status"], "unverified")
+        trade = sources.parse_ics(ics(event("DTSTART:20261006T123000Z", "U.S. International Trade in Goods and Services")), "BEA")
+        self.assertEqual(sources.verify_time("Goods Trade Balance", date(2026, 10, 6), trade)["time_status"], "unverified")
+
+    def test_gdp_and_monthly_pce_count_as_distinct_releases_at_the_same_clock(self):
+        day = date(2026, 10, 29)
+        schedule = sources.parse_ics(ics(event("DTSTART:20261029T123000Z", "GDP (Advance Estimate)", uid="gdp"),
+            event("DTSTART:20261029T123000Z", "Personal Income and Outlays", uid="pce")), "BEA")
+        raw = {(day, "economic"): [macro("GDP", actual=""), macro("GDP Price Index", actual=""), macro("Core PCE Price Index", actual="")]}
+        self.assertIn("2 publisher-verified releases", context.review_snapshot(self.snapshot(raw, dates=[day], schedules=schedule)))
+
+    def test_fed_uses_announcement_day_instead_of_meeting_start_or_asof(self):
+        rows = sources.parse_fed_calendar(fed(fed_row()))
+        self.assertEqual(rows[0]["at"], "2026-10-28T18:00:00+00:00")
+        self.assertEqual(rows[0]["url"], sources.FED_URL)
+        self.assertEqual(sources.verify_time("Fed Interest Rate Decision", date(2026, 10, 28), rows)["time_status"], "verified")
+        self.assertEqual(sources.verify_time("FOMC Statement", date(2026, 10, 27), rows)["time_status"], "conflict")
+
+    def test_fed_press_conference_and_minutes_keep_independent_times(self):
+        rows = sources.parse_fed_calendar(fed(fed_row(), fed_row(title="FOMC Press Conference", time="2:30 p.m."), fed_row(title="FOMC Minutes", days="7")))
+        self.assertEqual(sources.verify_time("FOMC Press Conference", date(2026, 10, 28), rows)["event_at"], "2026-10-28T18:30:00+00:00")
+        self.assertEqual(sources.verify_time("FOMC Minutes", date(2026, 10, 7), rows)["event_at"], "2026-10-07T18:00:00+00:00")
+
+    def test_fed_time_changes_and_winter_offsets_are_read_from_the_calendar(self):
+        rows = sources.parse_fed_calendar(fed(fed_row(month="2026-12", days="9", time="1:15 p.m.")))
+        self.assertEqual(rows[0]["at"], "2026-12-09T18:15:00+00:00")
+
+    def test_fed_never_invents_a_clock_or_expands_a_meeting_date_range(self):
+        for values in ({"time": ""}, {"time": "14:00"}, {"time": "2:99 p.m."}, {"days": "27-28"}, {"days": "28,29"}, {"days": "32"}, {"type": "Speeches"}, {"title": "FOMC Special Discussion"}):
+            self.assertEqual(sources.parse_fed_calendar(fed(fed_row(**values))), [])
+
+    def test_fed_calendar_handles_its_full_event_list_without_truncating_at_1500(self):
+        rows = [{"type": "Other"}] * 2000 + [fed_row()]
+        self.assertEqual(len(sources.parse_fed_calendar(fed(*rows))), 1)
+        for raw in ("<html>Unavailable</html>", "null", '{"events":null}', '{"events":{}}', fed(*([{}] * 4001))):
+            with self.subTest(raw=raw[:30]), self.assertRaises(ValueError): sources.parse_fed_calendar(raw)
+
+    def test_michigan_requires_its_explicit_next_release_date_and_eastern_clock(self):
+        row = sources.parse_michigan_schedule(MICHIGAN)[0]
+        self.assertEqual(row["at"], "2026-10-23T14:00:00+00:00")
+        self.assertEqual(row["name"], "Michigan Consumer Sentiment (Final)")
+        self.assertEqual(sources.verify_time("Michigan Consumer Sentiment", DAYS[1], [row])["time_status"], "verified")
+
+    def test_michigan_winter_release_and_preliminary_stage_are_preserved(self):
+        raw = "Next data release: Friday, December 4, 2026 for Preliminary December data at 10:00am ET"
+        row = sources.parse_michigan_schedule(raw)[0]
+        self.assertEqual(row["at"], "2026-12-04T15:00:00+00:00")
+        self.assertIn("Preliminary", row["name"])
+
+    def test_michigan_ambiguous_missing_or_inconsistent_notices_are_not_verified(self):
+        for raw in ("<p>Current result 46.3</p>", MICHIGAN * 2, MICHIGAN.replace("Friday", "Monday"), MICHIGAN.replace(" ET", " UTC"), MICHIGAN.replace("10am", "99am"), MICHIGAN.replace(", 2026", "")):
+            with self.subTest(raw=raw), self.assertRaises(ValueError): sources.parse_michigan_schedule(raw)
+
+    def test_michigan_fallback_keeps_friday_visible_when_nasdaq_returns_no_events(self):
+        schedule = sources.parse_michigan_schedule(MICHIGAN)
+        snapshot = self.snapshot({(DAYS[1], "economic"): [], (DAYS[1], "earnings"): []}, dates=[DAYS[1]], schedules=schedule)
+        report = self.render(snapshot)
+        self.assertIn("10:00 EDT [Michigan] - Michigan Consumer Sentiment (Final)", report)
+        self.assertNotIn("No matching releases", report)
+        self.assertIn("incomplete Nasdaq coverage", report)
+        self.assertEqual(snapshot["economic"][0]["actual"], "")
+
+    def test_fed_statement_and_decision_count_once_and_do_not_add_a_duplicate_fallback(self):
+        day = date(2026, 10, 28)
+        schedule = sources.parse_fed_calendar(fed(fed_row(), fed_row(title="FOMC Press Conference", time="2:30 p.m.")))
+        raw = {(day, "economic"): [macro("FOMC Statement", gmt="14:00", actual=""), macro("Fed Interest Rate Decision", gmt="14:00", actual=""), macro("FOMC Press Conference", gmt="14:30", actual="")]}
+        snapshot = self.snapshot(raw, dates=[day], schedules=schedule)
+        self.assertEqual(len(snapshot["economic"]), 3)
+        self.assertIn("2 publisher-verified releases", context.review_snapshot(snapshot))
+        report = self.render(snapshot)
+        self.assertIn("14:00 EDT [Fed]", report)
+        self.assertIn("14:30 EDT [Fed]", report)
+        self.save(snapshot)
+        self.assertIn("FOMC Press Conference", context.calendar_context_provider().signal)
+
+    def test_fed_fallback_supplies_the_decision_and_press_conference_without_forecasts(self):
+        day = date(2026, 10, 28)
+        schedule = sources.parse_fed_calendar(fed(fed_row(), fed_row(title="FOMC Press Conference", time="2:30 p.m.")))
+        snapshot = self.snapshot({}, dates=[day], schedules=schedule)
+        report = self.render(snapshot)
+        self.assertIn("FOMC Statement / Rate Decision", report)
+        self.assertIn("FOMC Press Conference", report)
+        self.assertNotIn("4.00%", report)
+        self.save(snapshot)
+        with patch.object(sources, "collect_schedules", side_effect=AssertionError("No network")):
+            block = context.calendar_context_provider()
+        self.assertIn("FOMC", block.signal)
+        self.assertFalse(block.metadata["score_changes"])
+
+    def test_publisher_outages_remain_visible_without_disabling_other_sources(self):
+        payloads = {sources.BLS_URL: ics(event()), sources.BEA_URL: ics(event("DTSTART:20261029T123000Z", "GDP (Advance Estimate)")), sources.DOL_URL: DOL,
+                    sources.FED_URL: fed(fed_row()), sources.MICHIGAN_URL: "<html>Unavailable</html>"}
+        with patch.object(sources, "request_schedule", side_effect=lambda url: payloads[url]):
+            schedule, status = sources.collect_schedules(DAYS)
+        self.assertEqual(status["Fed"], "available")
+        self.assertIn("unavailable", status["Michigan"])
+        snapshot = context.normalize_snapshot(DAYS, {}, schedule, status, NOW)
+        self.assertIn("Michigan schedule unavailable", self.render(snapshot))
+
+    def test_past_michigan_next_release_notice_is_flagged_for_a_later_window(self):
+        payloads = {sources.BLS_URL: ics(event()), sources.BEA_URL: ics(event("DTSTART:20261029T123000Z", "GDP (Advance Estimate)")), sources.DOL_URL: DOL,
+                    sources.FED_URL: fed(fed_row()), sources.MICHIGAN_URL: MICHIGAN}
+        with patch.object(sources, "request_schedule", side_effect=lambda url: payloads[url]):
+            _, status = sources.collect_schedules([date(2026, 10, 26)])
+        self.assertIn("unavailable", status["Michigan"])
+
+    def test_empty_partial_sources_do_not_claim_the_day_has_no_macro_events(self):
+        snapshot = self.snapshot({(DAYS[1], "economic"): [], (DAYS[1], "earnings"): []}, dates=[DAYS[1]], schedules=[])
+        report = self.render(snapshot)
+        self.assertIn("coverage may be incomplete", report)
+        self.assertNotIn("No matching major US macro events", report)
 
 
 class OutputChecks(IsolatedChecks):

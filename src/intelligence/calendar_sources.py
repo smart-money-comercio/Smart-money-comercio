@@ -5,6 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from html import unescape
+import json
 import re
 import urllib.request
 from zoneinfo import ZoneInfo
@@ -14,14 +15,17 @@ NY = ZoneInfo("America/New_York")
 BLS_URL = "https://www.bls.gov/schedule/news_release/bls.ics"
 BEA_URL = "https://www.bea.gov/news/schedule/ics/online-calendar-subscription.ics"
 DOL_URL = "https://oui.doleta.gov/unemploy/claims_arch.asp"
-SOURCE_URLS = {"BLS": BLS_URL, "BEA": BEA_URL, "DOL": DOL_URL}
+FED_URL = "https://www.federalreserve.gov/json/calendar.json"
+MICHIGAN_URL = "https://www.sca.isr.umich.edu/"
+SOURCE_URLS = {"BLS": BLS_URL, "BEA": BEA_URL, "DOL": DOL_URL,
+               "Fed": FED_URL, "Michigan": MICHIGAN_URL}
 MAX_BYTES = 1_000_000
 
 
 def request_schedule(url: str) -> str:
     if url not in SOURCE_URLS.values():
         raise ValueError("Unknown release-schedule source")
-    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/calendar,text/html,*/*"})
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/calendar,application/json,text/html,*/*"})
     with urllib.request.urlopen(request, timeout=8) as response:
         if response.geturl().split("/", 3)[:3] != url.split("/", 3)[:3]:
             raise ValueError("Release schedule redirected to another host")
@@ -40,13 +44,23 @@ def category(name: str, publisher: str = "") -> str:
                  "u.s. import and export price indexes": "trade_prices"}
         return exact.get(name, "")
     if publisher == "BEA":
-        if name.startswith("gross domestic product"):
+        # National releases also use the abbreviated GDP title. Regional GDP
+        # and Puerto Rico releases cannot confirm the national GDP schedule.
+        if re.match(r"^(?:gross domestic product|gdp)(?:$|,| \((?:advance|second|third|initial|updated) estimate\))", name):
             return "gdp"
         if name.startswith("personal income and outlays"):
             return "pce"
         if name.startswith("u.s. international trade in goods and services"):
             return "trade"
         return ""
+    if name in {"fomc statement", "fed interest rate decision", "fomc statement / rate decision"}:
+        return "fomc_decision"
+    if name == "fomc press conference":
+        return "fomc_press"
+    if name in {"fomc minutes", "fomc meeting minutes"}:
+        return "fomc_minutes"
+    if re.fullmatch(r"(?:university of )?michigan consumer sentiment(?: \((?:prelim|preliminary|final)\))?", name):
+        return "michigan_sentiment"
     if re.fullmatch(r"(?:initial(?: jobless| unemployment)? claims|continuing jobless claims|jobless claims 4-week avg\.?)", name):
         return "claims"
     if re.search(r"\b(?:cpi|consumer price index)\b", name):
@@ -65,9 +79,11 @@ def category(name: str, publisher: str = "") -> str:
         return "trade_prices"
     if "gdp" in name and "gdpnow" not in name:
         return "gdp"
+    if name in {"pce prices", "core pce prices"}:
+        return "gdp"  # Quarterly GDP components, distinct from monthly PCE indexes.
     if any(term in name for term in ("pce price", "personal consumption expenditure", "personal income", "personal spending")):
         return "pce"
-    if "trade balance" in name:
+    if name == "trade balance":
         return "trade"
     return ""
 
@@ -151,18 +167,91 @@ def parse_claims_schedule(text: str, dates: list[date]) -> list[dict]:
     return result
 
 
+def parse_fed_calendar(text: str) -> list[dict]:
+    payload = json.loads(text.lstrip("\ufeff"))
+    if (not isinstance(payload, dict) or not isinstance(payload.get("events"), list)
+            or len(payload["events"]) > 4000):
+        raise ValueError("Fed did not return the recognized event calendar")
+    titles = {"FOMC Meeting": ("fomc_decision", "FOMC Statement / Rate Decision"),
+              "FOMC Press Conference": ("fomc_press", "FOMC Press Conference"),
+              "FOMC Minutes": ("fomc_minutes", "FOMC Minutes")}
+    result = []
+    for row in payload["events"]:
+        if (not isinstance(row, dict) or row.get("type") != "FOMC"
+                or not isinstance(row.get("title"), str) or row["title"] not in titles):
+            continue
+        month, day, clock = row.get("month", ""), row.get("days", ""), row.get("time", "")
+        if not all(isinstance(value, str) for value in (month, day, clock)):
+            continue
+        # The calendar's day is the announcement day, rather than the first
+        # date mentioned in the meeting description. Never expand a range.
+        if not re.fullmatch(r"\d{4}-\d{2}", month) or not re.fullmatch(r"\d{1,2}", day.strip()):
+            continue
+        match = re.fullmatch(r"(\d{1,2}):(\d{2})\s+([ap])\.m\.", clock.strip(), re.I)
+        if not match:
+            continue
+        hour, minute = int(match[1]), int(match[2])
+        if not 1 <= hour <= 12 or not 0 <= minute <= 59:
+            continue
+        try:
+            scheduled_day = date.fromisoformat(month + "-" + day.strip().zfill(2))
+            # Fed FOMC announcement clocks use US Eastern Time. The actual
+            # clock comes from the calendar; no 14:00/14:30 default is inserted.
+            at = datetime.combine(scheduled_day, time(hour % 12 + (12 if match[3].lower() == "p" else 0), minute), NY)
+        except ValueError:
+            continue
+        kind, name = titles[row["title"]]
+        result.append({"category": kind, "name": name, "at": at.astimezone(timezone.utc).isoformat(),
+                       "publisher": "Fed", "url": FED_URL})
+    return result
+
+
+def parse_michigan_schedule(text: str) -> list[dict]:
+    text = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", text, flags=re.I | re.S)
+    text = " ".join(unescape(re.sub(r"<[^>]+>", " ", text)).split())
+    matches = re.findall(
+        r"Next data release:\s*(Monday|Tuesday|Wednesday|Thursday|Friday),\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})"
+        r"\s+for\s+(Final|Preliminary|Prelim)\s+[A-Za-z]+\s+data at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+(ET|EST|EDT)\b",
+        text, flags=re.I)
+    if len(matches) != 1:
+        raise ValueError("Michigan did not provide one dated release with an Eastern time")
+    weekday, month, day, year, stage, hour, minute, meridiem, _ = matches[0]
+    months = {name: number for number, name in enumerate(
+        ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"), 1)}
+    if month.lower() not in months:
+        raise ValueError("Michigan release month is unrecognized")
+    release_day = date(int(year), months[month.lower()], int(day))
+    hour, minute = int(hour), int(minute or 0)
+    weekdays = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+    if weekdays[release_day.weekday()] != weekday.lower() or not 1 <= hour <= 12 or not 0 <= minute <= 59:
+        raise ValueError("Michigan release date or clock is inconsistent")
+    at = datetime.combine(release_day, time(hour % 12 + (12 if meridiem.lower() == "pm" else 0), minute), NY)
+    stage = "Final" if stage.lower() == "final" else "Preliminary"
+    return [{"category": "michigan_sentiment", "name": f"Michigan Consumer Sentiment ({stage})",
+             "at": at.astimezone(timezone.utc).isoformat(), "publisher": "Michigan", "url": MICHIGAN_URL}]
+
+
 def collect_schedules(dates: list[date]) -> tuple[list[dict], dict]:
     def fetch(publisher):
         try:
             text = request_schedule(SOURCE_URLS[publisher])
-            events = parse_claims_schedule(text, dates) if publisher == "DOL" else parse_ics(text, publisher)
+            if publisher == "DOL":
+                events = parse_claims_schedule(text, dates)
+            elif publisher == "Fed":
+                events = parse_fed_calendar(text)
+            elif publisher == "Michigan":
+                events = parse_michigan_schedule(text)
+                if dates and datetime.fromisoformat(events[0]["at"]).astimezone(NY).date() < min(dates):
+                    raise ValueError("Michigan's next-release notice predates the requested window")
+            else:
+                events = parse_ics(text, publisher)
             if not events:
                 raise ValueError("No recognized publisher releases")
             return events, "available"
         except Exception as exc:
             return [], "unavailable (" + type(exc).__name__ + ")"
     events, status = [], {}
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=5) as pool:
         for publisher, (rows, detail) in zip(SOURCE_URLS, pool.map(fetch, SOURCE_URLS)):
             events.extend(rows)
             status[publisher] = detail

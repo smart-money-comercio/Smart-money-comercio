@@ -651,7 +651,7 @@ def _build_calendar(
         elif economic_rows:
             lines.extend(_format_economic(row) for row in economic_rows)
         else:
-            lines.append("- No matching major US macro events found.")
+            lines.append("- No matching releases returned by available sources; coverage may be incomplete.")
         lines.append("Earnings:")
         if not earnings_available:
             lines.append("- Live earnings calendar unavailable.")
@@ -661,11 +661,7 @@ def _build_calendar(
             lines.append("- No earnings entries returned.")
         sections.append("\n".join(lines))
     if not sections:
-        return (
-            "Earnings & Economic Calendar\n"
-            "No major US macro events or earnings found for this period.\n"
-            "Full calendar: /weeklycalendar"
-        )
+        sections.append("No matching releases returned by available sources; coverage may be incomplete.")
     result = "Earnings & Economic Calendar\n"
     result += f"US calendar dates; verified release times: {report_zone()}.\n"
     if all_earnings:

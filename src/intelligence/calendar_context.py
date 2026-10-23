@@ -109,6 +109,9 @@ def normalize_snapshot(dates: list[date], raw: dict, schedules: list[dict], sour
     zone = report_zone()
     snapshot = {"schema": 1, "checked_at": now.isoformat(), "timezone": str(zone), "days": [],
                 "economic": [], "earnings": [], "source_status": source_status, "issues": []}
+    for publisher, status in source_status.items():
+        if status != "available":
+            snapshot["issues"].append(f"{publisher} schedule {status}")
     for day in dates:
         economic, earnings = raw.get((day, "economic")), raw.get((day, "earnings"))
         official_day = [row for row in schedules if checked_time(row["at"]).astimezone(publishers.NY).date() == day]
@@ -140,6 +143,7 @@ def normalize_snapshot(dates: list[date], raw: dict, schedules: list[dict], sour
             snapshot["economic"].append(fields)
         covered = {publishers.category(row["eventName"]) for row in snapshot["economic"]
                    if row["source_date"] == day.isoformat() and row["time_status"] == "verified"}
+        filled = 0
         for row in official_day:
             if row["category"] in covered:
                 continue
@@ -152,6 +156,9 @@ def normalize_snapshot(dates: list[date], raw: dict, schedules: list[dict], sour
                 "data_source": row["publisher"], "time_status": "verified", "event_at": row["at"],
                 "publisher": row["publisher"], "timing_url": row["url"]})
             covered.add(row["category"])
+            filled += 1
+        if filled and economic is not None:
+            snapshot["issues"].append(f"{day.isoformat()}: {filled} publisher-scheduled releases added to incomplete Nasdaq coverage")
         for row in (earnings or [])[:1000]:
             symbol = text(row, "symbol", "ticker").upper()
             if not symbol or not all(character.isalnum() or character in ".-" for character in symbol) or len(symbol) > 12:
@@ -189,8 +196,12 @@ def get_snapshot(dates: list[date], force_refresh: bool = False) -> dict:
     return snapshot
 
 
+def release_key(row: dict) -> tuple[str, str, str]:
+    return row["publisher"], row["event_at"], publishers.category(row["eventName"]) or row["eventName"]
+
+
 def review_snapshot(snapshot: dict) -> str:
-    verified = len({(row["publisher"], row["event_at"]) for row in snapshot["economic"] if row["time_status"] == "verified"})
+    verified = len({release_key(row) for row in snapshot["economic"] if row["time_status"] == "verified"})
     unverified = sum(row["time_status"] == "unverified" for row in snapshot["economic"])
     conflicts = sum(row["time_status"] == "conflict" for row in snapshot["economic"])
     estimated = len(snapshot["earnings"])
@@ -216,9 +227,10 @@ def calendar_context_provider():
     if not any(day["economic_available"] or day["earnings_available"] for day in snapshot["days"]):
         return None
     now = utc_now()
-    upcoming = [row for row in snapshot["economic"] if row["time_status"] == "verified" and checked_time(row["event_at"]) >= now]
+    upcoming = {release_key(row): row for row in snapshot["economic"]
+                if row["time_status"] == "verified" and checked_time(row["event_at"]) >= now}
     signals = []
-    for row in sorted(upcoming, key=lambda value: value["event_at"])[:2]:
+    for row in sorted(upcoming.values(), key=lambda value: value["event_at"])[:2]:
         at = checked_time(row["event_at"]).astimezone(report_zone())
         signals.append(f"{row['eventName']} {at.strftime('%m-%d %H:%M %Z')} ({row['publisher']})")
     if not signals:
