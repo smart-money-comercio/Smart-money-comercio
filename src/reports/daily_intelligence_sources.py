@@ -31,10 +31,15 @@ def status_label(active: bool) -> str:
 
 
 def build_daily_intelligence_stack_line() -> str:
-    return (
+    text = (
         "Smart Money Summary, Trade Plan Snapshot, News Intelligence, Alert Monitor, "
         "StockAnalysis, Alert Settings, Watchlist Evolution, and Market Memory are feeding today's report."
     )
+    from src.intelligence.calendar_context import read_snapshot
+    snapshot = read_snapshot()
+    if snapshot and any(day["economic_available"] or day["earnings_available"] for day in snapshot["days"]):
+        text += " Calendar Evidence: active."
+    return text
 
 
 def build_daily_intelligence_sources_section() -> str:

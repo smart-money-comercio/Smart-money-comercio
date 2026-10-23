@@ -1,0 +1,392 @@
+"""Offline behavioral checks for publisher times, date confidence and agent context."""
+
+from __future__ import annotations
+
+from contextlib import ExitStack
+from copy import deepcopy
+from datetime import date, datetime, timedelta, timezone
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scripts.check_special_alerts import offline_network_guard
+from src.intelligence import calendar_context as context, calendar_sources as sources
+from src.reports import live_market_calendar as calendar
+
+NOW = datetime(2026, 10, 22, 15, tzinfo=timezone.utc)
+DAYS = [date(2026, 10, 22), date(2026, 10, 23)]
+DOL = "Publication Schedule: The UI Weekly Claims News Release is published each week on Thursday morning at 8:30am EST. Wednesday, November 25, 2026 8:30 AM EST."
+
+
+def event(start="DTSTART;TZID=US-Eastern:20261014T083000", name="Consumer Price Index", uid="release", sequence=0, extra=""):
+    return f"BEGIN:VEVENT\nUID:{uid}\nSEQUENCE:{sequence}\n{start}\nSUMMARY:{name}\n{extra}\nEND:VEVENT\n"
+
+
+def ics(*events):
+    return "BEGIN:VCALENDAR\nVERSION:2.0\n" + "".join(events) + "END:VCALENDAR\n"
+
+
+def macro(name="Initial Jobless Claims", **overrides):
+    return {"eventName": name, "gmt": "08:30", "country": "United States", "actual": "194K",
+            "consensus": "200K", "previous": "199K", **overrides}
+
+
+def earnings(symbol="MSFT", **overrides):
+    return {"symbol": symbol, "name": "Example Company", "time": "time-after-hours",
+            "epsForecast": "2.00", "marketCap": "$1T", **overrides}
+
+
+class IsolatedChecks(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="calendar-evidence-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.path = self.root / "calendar.json"
+        self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch.dict(os.environ, {"CALENDAR_STATE_FILE": str(self.path),
+            "SPECIAL_ALERT_STATE_FILE": str(self.root / "alerts.sqlite3"), "REPORT_TIMEZONE": "America/New_York"}))
+        self.stack.enter_context(patch.object(context, "utc_now", return_value=NOW))
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+        self.stack.enter_context(patch.object(calendar, "datetime", Clock))
+
+    def snapshot(self, raw=None, dates=None, now=None, schedules=None):
+        dates = DAYS if dates is None else dates
+        if raw is None:
+            raw = {(DAYS[0], "economic"): [macro()], (DAYS[1], "economic"): [macro("S&P Global Manufacturing PMI", gmt="09:45", actual="")],
+                   (DAYS[0], "earnings"): [earnings()], (DAYS[1], "earnings"): []}
+        schedules = sources.parse_claims_schedule(DOL, dates) if schedules is None else schedules
+        return context.normalize_snapshot(dates, raw, schedules, {"DOL": "available"}, now or NOW)
+
+    def save(self, snapshot=None):
+        snapshot = self.snapshot() if snapshot is None else snapshot
+        context.save_snapshot(snapshot)
+        return snapshot
+
+    def render(self, snapshot=None, compact=True):
+        snapshot = self.snapshot() if snapshot is None else snapshot
+        dates = [date.fromisoformat(day["date"]) for day in snapshot["days"]]
+        with patch.object(calendar, "_business_days", return_value=dates), patch.object(context, "get_snapshot", return_value=snapshot):
+            return calendar.build_compact_market_calendar(["MSFT"]) if compact else calendar.build_full_market_calendar()
+
+
+class PublisherChecks(IsolatedChecks):
+    def test_bls_eastern_schedule_uses_daylight_saving_time(self):
+        rows = sources.parse_ics(ics(event()), "BLS")
+        self.assertEqual(rows[0]["at"], "2026-10-14T12:30:00+00:00")
+        self.assertEqual(rows[0]["publisher"], "BLS")
+
+    def test_bls_winter_release_uses_standard_time(self):
+        rows = sources.parse_ics(ics(event("DTSTART;TZID=US-Eastern:20261113T083000", "Producer Price Index")), "BLS")
+        self.assertEqual(rows[0]["at"], "2026-11-13T13:30:00+00:00")
+
+    def test_bea_utc_dates_and_folded_summaries_are_supported(self):
+        rows = sources.parse_ics(ics(event("DTSTART;VALUE=DATE-TIME:20261029T123000Z", "Personal Income and Outlays\\, Septem\n ber 2026")), "BEA")
+        self.assertEqual(rows[0]["category"], "pce")
+        self.assertIn("September 2026", rows[0]["name"])
+
+    def test_floating_all_day_and_unknown_timezones_do_not_establish_a_time(self):
+        for start in ("DTSTART:20261014T083000", "DTSTART;VALUE=DATE:20261014", "DTSTART;TZID=Unknown/Zone:20261014T083000"):
+            with self.subTest(start=start): self.assertEqual(sources.parse_ics(ics(event(start)), "BLS"), [])
+
+    def test_modified_timestamp_does_not_replace_missing_release_time(self):
+        self.assertEqual(sources.parse_ics(ics(event("DTSTAMP:20261022T150000Z")), "BLS"), [])
+
+    def test_html_or_truncated_calendar_is_unavailable(self):
+        for text in ("<html>Access denied</html>", "BEGIN:VCALENDAR\n"):
+            with self.subTest(text=text), self.assertRaises(ValueError): sources.parse_ics(text, "BLS")
+
+    def test_rescheduled_uid_uses_the_latest_revision(self):
+        raw = ics(event(), event("DTSTART;TZID=US-Eastern:20261015T083000", sequence=1))
+        rows = sources.parse_ics(raw, "BLS")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["at"], "2026-10-15T12:30:00+00:00")
+
+    def test_cancelled_latest_revision_does_not_leave_the_old_release_active(self):
+        self.assertEqual(sources.parse_ics(ics(event(), event(sequence=1, extra="STATUS:CANCELLED")), "BLS"), [])
+
+    def test_conflicting_equal_revisions_are_withheld(self):
+        raw = ics(event(), event("DTSTART;TZID=US-Eastern:20261015T083000"))
+        self.assertEqual(sources.parse_ics(raw, "BLS"), [])
+
+    def test_claims_schedule_confirms_current_thursday_in_eastern_time(self):
+        schedule = sources.parse_claims_schedule(DOL, DAYS)
+        result = sources.verify_time("Initial Jobless Claims", DAYS[0], schedule)
+        self.assertEqual(result["time_status"], "verified")
+        self.assertEqual(result["event_at"], "2026-10-22T12:30:00+00:00")
+
+    def test_thanksgiving_exception_moves_claims_to_wednesday(self):
+        day = date(2026, 11, 25)
+        schedule = sources.parse_claims_schedule(DOL, [day, day + timedelta(days=1)])
+        self.assertEqual(sources.verify_time("Initial Jobless Claims", day, schedule)["time_status"], "verified")
+        self.assertEqual(sources.verify_time("Initial Jobless Claims", day + timedelta(days=1), schedule)["time_status"], "conflict")
+
+    def test_claims_winter_time_is_not_a_fixed_daylight_offset(self):
+        schedule = sources.parse_claims_schedule(DOL, [date(2026, 11, 5)])
+        self.assertEqual(sources.verify_time("Initial Jobless Claims", date(2026, 11, 5), schedule)["event_at"], "2026-11-05T13:30:00+00:00")
+
+    def test_unrecognized_claims_schedule_is_not_assumed_to_mean_thursday(self):
+        with self.assertRaises(ValueError): sources.parse_claims_schedule("Schedule unavailable", DAYS)
+
+    def test_a_cpi_schedule_does_not_confirm_a_pmi_or_earnings_time(self):
+        schedule = sources.parse_ics(ics(event()), "BLS")
+        self.assertEqual(sources.verify_time("S&P Global Manufacturing PMI", date(2026, 10, 14), schedule)["time_status"], "unverified")
+
+    def test_one_publisher_failure_does_not_disable_the_others(self):
+        payloads = {sources.BLS_URL: "<html>Unavailable</html>", sources.BEA_URL: ics(event("DTSTART:20261029T123000Z", "Personal Income and Outlays")), sources.DOL_URL: DOL}
+        with patch.object(sources, "request_schedule", side_effect=lambda url: payloads[url]):
+            rows, status = sources.collect_schedules(DAYS)
+        self.assertIn("unavailable", status["BLS"])
+        self.assertEqual(status["BEA"], "available")
+        self.assertEqual(status["DOL"], "available")
+        self.assertTrue(rows)
+
+
+class SnapshotChecks(IsolatedChecks):
+    def test_publisher_time_is_used_without_assuming_the_gmt_column_is_utc(self):
+        raw = {(DAYS[0], "economic"): [macro(gmt="13:30")]}
+        row = self.snapshot(raw)["economic"][0]
+        self.assertEqual(row["gmt"], "13:30")
+        self.assertEqual(row["event_at"], "2026-10-22T12:30:00+00:00")
+
+    def test_zero_actual_and_eps_are_real_values(self):
+        raw = {(DAYS[0], "economic"): [macro(actual=0, previous=0)], (DAYS[0], "earnings"): [earnings(epsForecast=0)]}
+        snapshot = self.snapshot(raw)
+        self.assertEqual(snapshot["economic"][0]["actual"], "0")
+        self.assertEqual(snapshot["earnings"][0]["epsForecast"], "0")
+
+    def test_unknown_timezone_is_not_inferred_from_the_gmt_field_name(self):
+        row = self.snapshot()["economic"][1]
+        self.assertEqual(row["time_status"], "unverified")
+        self.assertEqual(row["event_at"], "")
+
+    def test_conflicting_release_date_withholds_values(self):
+        raw = {(DAYS[1], "economic"): [macro()]}
+        row = next(item for item in self.snapshot(raw)["economic"] if item["source_date"] == DAYS[1].isoformat())
+        self.assertEqual(row["time_status"], "conflict")
+        self.assertEqual((row["actual"], row["previous"], row["consensus"]), ("", "", ""))
+
+    def test_actual_is_withheld_before_a_verified_release_even_on_the_same_day(self):
+        snapshot = self.snapshot(now=NOW.replace(hour=10))
+        self.assertEqual(snapshot["economic"][0]["actual"], "")
+
+    def test_future_source_actuals_are_removed_before_caching(self):
+        raw = {(DAYS[1], "economic"): [macro("S&P Global Manufacturing PMI", actual="999")]}
+        self.assertEqual(self.snapshot(raw)["economic"][0]["actual"], "")
+
+    def test_ambiguous_publisher_times_are_not_verified(self):
+        schedule = sources.parse_claims_schedule(DOL, DAYS)
+        original = next(row for row in schedule if row["at"].startswith("2026-10-22"))
+        schedule.append({**original, "at": "2026-10-22T13:00:00+00:00"})
+        self.assertEqual(self.snapshot(schedules=schedule)["economic"][0]["time_status"], "conflict")
+
+    def test_unknown_country_is_not_assumed_to_be_a_us_release(self):
+        raw = {(DAYS[0], "economic"): [macro(country=""), macro(country="Canada")]}
+        self.assertEqual(self.snapshot(raw, schedules=[])["economic"], [])
+
+    def test_unavailable_feed_is_distinct_from_a_valid_empty_feed(self):
+        raw = {(DAYS[0], "economic"): [], (DAYS[0], "earnings"): None}
+        snapshot = self.snapshot(raw)
+        self.assertTrue(snapshot["days"][0]["economic_available"])
+        self.assertFalse(snapshot["days"][0]["earnings_available"])
+
+    def test_publisher_release_is_still_available_when_the_nasdaq_feed_fails(self):
+        snapshot = self.snapshot({})
+        self.assertTrue(snapshot["days"][0]["economic_available"])
+        self.assertEqual(snapshot["economic"][0]["data_source"], "DOL")
+        self.assertEqual(snapshot["economic"][0]["actual"], "")
+        self.assertTrue(snapshot["issues"])
+
+    def test_an_empty_feed_cannot_hide_a_publisher_confirmed_cpi_release(self):
+        schedule = sources.parse_ics(ics(event("DTSTART;TZID=US-Eastern:20261022T083000")), "BLS")
+        snapshot = self.snapshot({(DAYS[0], "economic"): []}, schedules=schedule)
+        self.assertEqual(snapshot["economic"][0]["eventName"], "Consumer Price Index")
+        self.assertEqual(snapshot["economic"][0]["publisher"], "BLS")
+
+    def test_original_snapshot_is_not_changed_by_rendering(self):
+        snapshot = self.snapshot(); before = deepcopy(snapshot)
+        self.render(snapshot)
+        self.assertEqual(snapshot, before)
+
+    def test_public_snapshot_excludes_unrecognized_feed_fields(self):
+        raw = {(DAYS[0], "economic"): [macro(description="UNRECOGNIZED_FIELD")]}
+        self.assertNotIn("UNRECOGNIZED_FIELD", json.dumps(self.snapshot(raw)))
+
+    def test_malformed_snapshot_is_unavailable(self):
+        for text in ("{", "[]", "null", "true"):
+            self.path.write_text(text)
+            with self.subTest(text=text): self.assertIsNone(context.read_snapshot())
+
+    def test_stale_future_or_naive_checked_time_cannot_be_relabelled_as_current(self):
+        for stamp in ((NOW - timedelta(hours=7)).isoformat(), (NOW + timedelta(hours=1)).isoformat(), "2026-10-22T15:00:00"):
+            snapshot = self.snapshot(); snapshot["checked_at"] = stamp; self.save(snapshot)
+            with self.subTest(stamp=stamp): self.assertIsNone(context.read_snapshot())
+
+    def test_fresh_snapshot_is_reused_without_network(self):
+        self.save()
+        with patch.object(calendar, "_fetch_calendar_days", side_effect=AssertionError("No fetch")), patch.object(sources, "collect_schedules", side_effect=AssertionError("No publisher fetch")):
+            self.assertEqual(context.get_snapshot(DAYS)["checked_at"], NOW.isoformat())
+
+    def test_force_refresh_fetches_new_evidence_and_preserves_source_independence(self):
+        self.save()
+        with patch.object(calendar, "_fetch_calendar_days", return_value={(DAYS[0], "economic"): [macro(actual="195K")]}) as fetch, patch.object(sources, "collect_schedules", return_value=(sources.parse_claims_schedule(DOL, DAYS), {"DOL": "available"})) as official:
+            snapshot = context.get_snapshot(DAYS, force_refresh=True)
+        fetch.assert_called_once_with(DAYS); official.assert_called_once_with(DAYS)
+        self.assertEqual(snapshot["economic"][0]["actual"], "195K")
+
+    def test_timezone_change_requires_a_new_snapshot(self):
+        self.save()
+        with patch.dict(os.environ, {"REPORT_TIMEZONE": "America/Lima"}): self.assertIsNone(context.read_snapshot())
+
+    def test_calendar_views_refresh_a_thirty_minute_old_snapshot_while_reviews_can_read_it(self):
+        snapshot = self.snapshot(now=NOW - timedelta(minutes=31)); self.save(snapshot)
+        self.assertIsNotNone(context.read_snapshot())
+        with patch.object(calendar, "_fetch_calendar_days", return_value={(DAYS[0], "economic"): [macro()]}) as fetch, patch.object(sources, "collect_schedules", return_value=(sources.parse_claims_schedule(DOL, DAYS), {"DOL": "available"})):
+            context.get_snapshot(DAYS)
+        fetch.assert_called_once_with(DAYS)
+
+    def test_interrupted_save_preserves_previous_snapshot(self):
+        self.save(); before = self.path.read_bytes()
+        with patch.object(context.os, "replace", side_effect=OSError("simulated interruption")):
+            with self.assertRaises(OSError): context.save_snapshot(self.snapshot())
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertFalse(list(self.root.glob(".calendar-*.tmp")))
+
+    def test_bad_cached_row_is_withheld_without_a_network_fallback(self):
+        snapshot = self.snapshot(); snapshot["economic"] = [None]; self.save(snapshot)
+        with patch.object(calendar, "_fetch_calendar_days", side_effect=AssertionError("No fetch")):
+            self.assertIsNone(context.calendar_context_provider())
+
+
+class OutputChecks(IsolatedChecks):
+    def test_compact_calendar_shows_verified_zone_and_estimated_earnings_dates(self):
+        report = self.render()
+        self.assertIn("08:30 EDT [DOL]", report)
+        self.assertIn("Time unverified (source 09:45)", report)
+        self.assertIn("Nasdaq estimates; company confirmation pending", report)
+        self.assertIn("Checked: 2026-10-22 11:00 EDT", report)
+        self.assertNotIn("Economic release times: timezone unverified", report)
+
+    def test_full_calendar_includes_publisher_source_links(self):
+        report = self.render(compact=False)
+        for url in sources.SOURCE_URLS.values(): self.assertIn(url, report)
+
+    def test_conflicting_dates_cannot_show_source_actuals_as_verified_results(self):
+        report = self.render(self.snapshot({(DAYS[1], "economic"): [macro(actual="999")] }))
+        self.assertIn("date conflicts with publisher schedule", report)
+        self.assertNotIn("999", report)
+
+    def test_source_outage_is_not_rendered_as_no_events(self):
+        report = self.render(self.snapshot({}, schedules=[]))
+        self.assertIn("Live economic calendar unavailable", report)
+        self.assertNotIn("No matching major US macro events", report)
+
+    def test_verified_times_convert_to_lima_without_assuming_a_fixed_offset(self):
+        with patch.dict(os.environ, {"REPORT_TIMEZONE": "America/Lima"}):
+            report = self.render(self.snapshot())
+        self.assertIn("07:30 -05 [DOL]", report)
+
+    def test_converted_time_shows_its_date_when_it_crosses_midnight(self):
+        with patch.dict(os.environ, {"REPORT_TIMEZONE": "Pacific/Kiritimati"}):
+            report = self.render(self.snapshot())
+        self.assertIn("10-23 02:30 +14 [DOL]", report)
+        self.assertIn("US calendar dates", report)
+
+    def test_business_day_selection_uses_the_us_calendar_even_in_another_report_zone(self):
+        with patch.dict(os.environ, {"REPORT_TIMEZONE": "Asia/Tokyo"}):
+            self.assertEqual(calendar._business_days(2), DAYS)
+
+    def test_economic_query_offset_remains_explicit_and_asof_does_not_set_event_dates(self):
+        payload = {"data": {"asOf": "Thu, Jan 01, 1970", "rows": [macro()]}}
+        with patch.dict(os.environ, {"CALENDAR_ECONOMIC_DATE_OFFSET": "1"}), patch.object(calendar, "_calendar_request_payload", return_value=payload) as fetch:
+            result = calendar._request_json(calendar.NASDAQ_ECONOMIC_URL, DAYS[0])
+        fetch.assert_called_once_with(calendar.NASDAQ_ECONOMIC_URL, DAYS[0] + timedelta(days=1))
+        snapshot = self.snapshot({(DAYS[0], "economic"): calendar._extract_rows(result)})
+        self.assertEqual(snapshot["economic"][0]["source_date"], "2026-10-22")
+
+
+class AgentChecks(IsolatedChecks):
+    def test_calendar_review_warms_the_same_cache_used_by_the_report(self):
+        with patch.object(calendar, "_business_days", return_value=DAYS), patch.object(calendar, "_fetch_calendar_days", return_value={(DAYS[0], "economic"): [macro()]}), patch.object(sources, "collect_schedules", return_value=(sources.parse_claims_schedule(DOL, DAYS), {"DOL": "available"})):
+            detail = context.refresh_calendar_review()
+        self.assertIn("1 publisher-verified releases", detail)
+        self.assertIsNotNone(context.read_snapshot())
+
+    def test_cache_only_context_has_no_risk_votes_or_score_changes(self):
+        self.save()
+        with patch.object(calendar, "_fetch_calendar_days", side_effect=AssertionError("No fetch")):
+            block = context.calendar_context_provider()
+        self.assertEqual(block.feature, "Calendar Evidence")
+        self.assertEqual((block.risks, block.themes), ([], []))
+        self.assertFalse(block.metadata["score_changes"])
+        self.assertIn("estimates", block.implication)
+
+    def test_three_claims_rows_count_as_one_publisher_release(self):
+        raw = {(DAYS[0], "economic"): [macro(), macro("Continuing Jobless Claims"), macro("Jobless Claims 4-Week Avg.")]}
+        self.assertIn("1 publisher-verified releases", context.review_snapshot(self.snapshot(raw)))
+
+    def test_company_calendar_review_preserves_estimate_status_and_symbol_scope(self):
+        self.save()
+        text = context.build_catalyst_review("MSFT")
+        self.assertIn("2026-10-22", text)
+        self.assertIn("Nasdaq date estimate; company confirmation pending", text)
+        self.assertEqual(context.build_catalyst_review("NVDA"), "")
+
+    def test_tradeplan_and_active_scorecard_use_the_same_calendar_evidence(self):
+        self.save()
+        from scripts.check_report_consistency import STOCKS
+        from src.reports import tradeplan_report, scorecard
+        stock = deepcopy(next(item for item in STOCKS if item.get("ticker") == "MSFT")); before = deepcopy(stock)
+        with patch.object(tradeplan_report, "find_stock", return_value=stock), patch.object(scorecard, "build_headline_impact_summary", return_value="Offline headlines"):
+            reports = [tradeplan_report.build_tradeplan_report("MSFT"), scorecard.build_scorecard(stock)]
+        for report in reports:
+            self.assertIn("Calendar Catalyst", report)
+            self.assertIn("company confirmation pending", report)
+            self.assertIn("Score Risk:", report)
+        self.assertEqual(stock, before)
+
+    def test_daily_intelligence_label_requires_a_current_snapshot(self):
+        from src.reports.daily_intelligence_sources import build_daily_intelligence_stack_line
+        self.assertNotIn("Calendar Evidence: active", build_daily_intelligence_stack_line())
+        self.save()
+        self.assertIn("Calendar Evidence: active", build_daily_intelligence_stack_line())
+
+    def test_delivered_daily_report_preserves_calendar_confidence_within_quality_budget(self):
+        self.save()
+        from scripts.check_report_consistency import BuilderConsistencyChecks
+        from src.reports import daily_report
+        from src.reports.report_quality import validate_daily_report_quality, MAX_DAILY_REPORT_CHARS
+        report = BuilderConsistencyChecks.build_daily_fixture(SimpleNamespace(daily=daily_report), NOW, self.render())
+        quality = validate_daily_report_quality(report)
+        self.assertTrue(quality["passes"], quality)
+        self.assertLessEqual(len(report), MAX_DAILY_REPORT_CHARS)
+        self.assertIn("08:30 EDT [DOL]", report)
+        self.assertIn("company confirmation pending", report)
+        self.assertIn("Calendar Evidence: active", report)
+
+    def test_unavailable_calendars_cannot_report_a_successful_source_review(self):
+        self.save(self.snapshot({}, schedules=[]))
+        with patch.object(context, "get_snapshot", return_value=self.snapshot({}, schedules=[])):
+            with self.assertRaisesRegex(RuntimeError, "Calendar sources unavailable"): context.refresh_calendar_review()
+
+
+def main():
+    with offline_network_guard() as traffic:
+        result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__]))
+    passed = result.wasSuccessful() and not traffic["blocked"]
+    print(f"Calendar Evidence Check: {'PASS' if passed else 'FAIL'} ({result.testsRun} tests)")
+    if traffic["blocked"]: print(f"FAIL: {len(traffic['blocked'])} unexpected provider connections blocked")
+    return 0 if passed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

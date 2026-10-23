@@ -13,6 +13,7 @@ export DAILY_REPORT_LIVE_QUOTES="${DAILY_REPORT_LIVE_QUOTES:-0}"
 ALERT_PREFLIGHT_STATE_DIR="$(mktemp -d /tmp/smart-money-alert-preflight.XXXXXX)"
 trap 'rm -rf -- "$ALERT_PREFLIGHT_STATE_DIR"' EXIT
 export SPECIAL_ALERT_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/special_alerts.sqlite3"
+export CALENDAR_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/calendar_snapshot.json"
 
 echo "Running Smart Money AI preflight checks..."
 
@@ -27,6 +28,7 @@ echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 "$PYTHON_BIN" scripts/check_daily_agent_delivery.py
 "$PYTHON_BIN" scripts/check_watchlist_quotes.py
 "$PYTHON_BIN" scripts/check_company_alerts.py
+"$PYTHON_BIN" scripts/check_calendar_evidence.py
 
 echo "Checking required files..."
 

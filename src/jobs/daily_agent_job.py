@@ -191,6 +191,11 @@ def refresh_morning_brief_step() -> str:
     return "Morning Brief cache refreshed. " + check
 
 
+def refresh_calendar_step() -> str:
+    from src.intelligence.calendar_context import refresh_calendar_review
+    return refresh_calendar_review()
+
+
 def refresh_alert_monitor() -> str:
     report = call_first_available(
         "src.reports.alert_monitor_report",
@@ -284,11 +289,13 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
 
     if dry_run:
         add_step(steps, "Morning Brief Refresh", "skip", "Skipped during dry run.")
+        add_step(steps, "Calendar Review", "skip", "Skipped during dry run.")
         add_step(steps, "News Intelligence", "skip", "Skipped during dry run.")
         add_step(steps, "Alert Monitor", "skip", "Skipped during dry run.")
         add_step(steps, "StockAnalysis Refresh", "skip", "Skipped during dry run.")
     else:
         run_step(steps, "Morning Brief Refresh", refresh_morning_brief_step)
+        run_step(steps, "Calendar Review", refresh_calendar_step)
         run_step(steps, "News Intelligence", refresh_news_intelligence)
         run_step(steps, "Alert Monitor", refresh_alert_monitor)
         run_step(steps, "StockAnalysis Refresh", refresh_stockanalysis_top_names)

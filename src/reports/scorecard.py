@@ -6,6 +6,7 @@ from src.reports.tradeplan_language import plain_tradeplan_read
 from src.utils.report_consistency import RISK_LABEL_GUIDE
 from src.intelligence.research_context import build_market_backdrop
 from src.intelligence.special_alert_context import build_event_review
+from src.intelligence.calendar_context import build_catalyst_review
 from src.utils.score_display import (
     get_action_label,
     get_category,
@@ -438,6 +439,8 @@ Category:
 {build_market_backdrop(ticker)}
 
 {build_event_review(ticker)}
+
+{build_catalyst_review(ticker)}
 
 Signal Map:
 {get_signal_icons(stock)}

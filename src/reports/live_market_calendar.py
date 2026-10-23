@@ -94,6 +94,9 @@ def _missing(value: Any) -> bool:
         "na",
         "none",
         "null",
+        "nan",
+        "inf",
+        "infinity",
     }
 
 
@@ -218,7 +221,7 @@ def _business_days(
     count: int,
 ) -> list[date]:
     now = datetime.now(
-        ZoneInfo(REPORT_TIMEZONE)
+        ZoneInfo("America/New_York")
     )
 
     cursor = now.date()
@@ -485,15 +488,23 @@ def _select_earnings(
 
 def _format_economic(row: dict) -> str:
     name = _economic_event_name(row)
-    # The feed calls the field 'gmt', but its header only says 'Time'.
-    # Calendar output identifies the timezone as unverified.
-    event_time = _first(row, "gmt", "time")
+    if row.get("time_status") == "conflict":
+        return f"- {name} - date conflicts with publisher schedule; source values withheld."
+    if row.get("time_status") == "verified":
+        from src.intelligence.calendar_context import checked_time, report_zone
+        at = checked_time(row["event_at"]).astimezone(report_zone())
+        clock = "%m-%d %H:%M %Z" if at.date().isoformat() != row["source_date"] else "%H:%M %Z"
+        event_time = at.strftime(clock) + " [" + row["publisher"] + "]"
+    else:
+        raw_time = _first(row, "gmt", "time")
+        event_time = "Time unverified" + (f" (source {raw_time})" if raw_time else "")
     consensus = _first(row, "consensus", "forecast", "estimate")
     previous = _first(row, "previous", "prior")
     actual = _first(row, "actual")
     prefix = f"{event_time} - " if event_time else ""
     if actual:
-        details = [f"actual {actual}"]
+        label = "actual" if row.get("time_status") == "verified" else "source-reported actual"
+        details = [f"{label} {actual}"]
         if consensus:
             details.append(f"expected {consensus}")
         if previous:
@@ -610,16 +621,18 @@ def _build_calendar(
     compact: bool,
 ) -> str:
     dates = _business_days(day_count)
-    today = datetime.now(ZoneInfo(REPORT_TIMEZONE)).date()
-    payload = _fetch_calendar_days(dates)
+    from src.intelligence.calendar_context import checked_time, get_snapshot, report_zone
+    snapshot = get_snapshot(dates)
+    available = {row["date"]: row for row in snapshot["days"]}
     sections = []
     all_economic = []
     all_earnings = []
     for event_date in dates:
-        economic_source = payload.get((event_date, "economic"))
-        earnings_source = payload.get((event_date, "earnings"))
-        economic_available = economic_source is not None
-        earnings_available = earnings_source is not None
+        day_status = available[event_date.isoformat()]
+        economic_source = [row for row in snapshot["economic"] if row["source_date"] == event_date.isoformat()]
+        earnings_source = [row for row in snapshot["earnings"] if row["source_date"] == event_date.isoformat()]
+        economic_available = day_status["economic_available"]
+        earnings_available = day_status["earnings_available"]
         economic_rows = _select_economic(economic_source or [], economic_limit)
         earnings_rows = _select_earnings(
             earnings_source or [], watchlist_symbols or [], earnings_limit,
@@ -629,18 +642,14 @@ def _build_calendar(
             and not economic_rows and not earnings_rows
         ):
             continue
-        all_economic.extend(economic_rows)
+        all_economic.extend(row for row in economic_rows if row.get("time_status") != "conflict")
         all_earnings.extend(earnings_rows)
         lines = [event_date.strftime("%A, %b %d")]
         lines.append("Economic:")
         if not economic_available:
             lines.append("- Live economic calendar unavailable.")
         elif economic_rows:
-            display_rows = (
-                [dict(row, actual="") for row in economic_rows]
-                if event_date > today else economic_rows
-            )
-            lines.extend(_format_economic(row) for row in display_rows)
+            lines.extend(_format_economic(row) for row in economic_rows)
         else:
             lines.append("- No matching major US macro events found.")
         lines.append("Earnings:")
@@ -658,11 +667,19 @@ def _build_calendar(
             "Full calendar: /weeklycalendar"
         )
     result = "Earnings & Economic Calendar\n"
-    if any(_first(row, "gmt", "time") for row in all_economic):
-        result += "Economic release times: timezone unverified.\n"
+    result += f"US calendar dates; verified release times: {report_zone()}.\n"
+    if all_earnings:
+        result += "Earnings dates: Nasdaq estimates; company confirmation pending.\n"
+    checked = checked_time(snapshot["checked_at"]).astimezone(report_zone())
+    result += "Checked: " + checked.strftime("%Y-%m-%d %H:%M %Z") + ".\n"
     result += "\n" + "\n\n".join(sections)
     if all_economic or all_earnings:
         result += "\n\nMarket Impact\n" + _build_market_impact(all_economic, all_earnings)
+    if not compact:
+        from src.intelligence.calendar_sources import SOURCE_URLS
+        result += "\n\nTiming Sources\n" + "\n".join(name + ": " + url for name, url in SOURCE_URLS.items())
+    if snapshot["issues"]:
+        result += "\n\nCalendar coverage: " + "; ".join(snapshot["issues"][:2])
     if compact:
         result += "\n\nFull calendar: /weeklycalendar"
     return result.strip()

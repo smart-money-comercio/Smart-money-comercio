@@ -10,6 +10,7 @@ from src.intelligence.intelligence_context_registry import (
 )
 from src.intelligence.research_context import research_context_provider
 from src.intelligence.special_alert_context import special_alert_context_provider
+from src.intelligence.calendar_context import calendar_context_provider
 
 
 STOCKANALYSIS_CACHE_FILE = Path(os.getenv("STOCKANALYSIS_CACHE_FILE", "data/stockanalysis_cache.json"))
@@ -242,6 +243,7 @@ def register_default_context_providers() -> None:
     register_context_provider(alert_settings_context_provider)
     register_context_provider(research_context_provider)
     register_context_provider(special_alert_context_provider)
+    register_context_provider(calendar_context_provider)
 
 
 # Side-effect registration for daily summary imports.

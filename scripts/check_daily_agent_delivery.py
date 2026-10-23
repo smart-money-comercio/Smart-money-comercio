@@ -52,7 +52,7 @@ class WorkflowChecks(unittest.TestCase):
         self.stack.enter_context(patch.dict(os.environ, {"SPECIAL_ALERT_STATE_FILE": str(self.root / "events.sqlite3")}))
         self.actions = []
         self.mocks = {}
-        for name in ("refresh_morning_brief_step", "refresh_news_intelligence", "refresh_alert_monitor",
+        for name in ("refresh_morning_brief_step", "refresh_calendar_step", "refresh_news_intelligence", "refresh_alert_monitor",
                      "refresh_stockanalysis_top_names", "build_tradeplans_step", "build_allocation_step"):
             def action(name=name):
                 self.actions.append(name)
@@ -68,13 +68,15 @@ class WorkflowChecks(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(self.actions[0], "refresh_morning_brief_step")
         self.assertLess(self.actions.index("refresh_morning_brief_step"), self.actions.index("build_daily_report_step"))
+        self.assertLess(self.actions.index("refresh_calendar_step"), self.actions.index("build_daily_report_step"))
 
     def test_dry_run_skips_all_source_refreshes(self):
         result = daily.run_daily_agent(True)
-        for name in ("refresh_morning_brief_step", "refresh_news_intelligence", "refresh_alert_monitor", "refresh_stockanalysis_top_names"):
+        for name in ("refresh_morning_brief_step", "refresh_calendar_step", "refresh_news_intelligence", "refresh_alert_monitor", "refresh_stockanalysis_top_names"):
             self.mocks[name].assert_not_called()
         step = next(item for item in result["steps"] if item["name"] == "Morning Brief Refresh")
         self.assertEqual(step["status"], "skip")
+        self.assertEqual(next(item for item in result["steps"] if item["name"] == "Calendar Review")["status"], "skip")
 
     def test_full_report_is_returned_once_and_not_saved_inside_workflow_steps(self):
         result = daily.run_daily_agent(False)

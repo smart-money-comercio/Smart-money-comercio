@@ -275,7 +275,7 @@ class BuilderConsistencyChecks(unittest.TestCase):
         self.assertIn("Setup Risk: Unavailable", report)
         self.assertNotIn("Risk Profile:", report)
 
-    def build_daily_fixture(self, when):
+    def build_daily_fixture(self, when, calendar_report=None):
         class FixedDatetime(datetime):
             @classmethod
             def now(cls, tz=None):
@@ -296,7 +296,7 @@ class BuilderConsistencyChecks(unittest.TestCase):
             "build_compact_defense_impact": lambda **kwargs: "",
             "build_executive_summary": lambda **kwargs: "• Focus: NVDA; confirm before acting.",
             "build_clean_ai_summary": lambda *args: "Signal: Mixed.\nImplication: Review.\nValidation: Confirm.",
-            "build_compact_market_calendar": lambda symbols: "Earnings & Economic Calendar\nEconomic release times: timezone unverified.\nFull calendar: /weeklycalendar",
+            "build_compact_market_calendar": lambda symbols: calendar_report or "Earnings & Economic Calendar\nEconomic release times: timezone unverified.\nFull calendar: /weeklycalendar",
         }
         with ExitStack() as stack:
             for name, value in replacements.items():
