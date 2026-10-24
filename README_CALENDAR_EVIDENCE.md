@@ -19,6 +19,16 @@ Unsupported releases, inaccessible publisher schedules and ambiguous dates remai
 
 S&P Global's public PMI calendar returned HTTP 403 during deployment verification. This update therefore keeps PMI as Nasdaq coverage with unverified timing; it does not invent a publisher clock or hard-code the October release date. Other unsupported economic schedules also remain unverified.
 
+## Publisher outages
+
+HTTP status codes are included in source health. A publisher returning HTTP 403 is not requested again for six hours; other failures use a 15-minute pause. The retry deadline is shown in UTC and survives a bot restart. Other publishers continue independently. These pauses do not change the report's Nasdaq refresh interval.
+
+Successfully fetched publisher schedules are kept in `data/calendar_source_cache.json`. `CALENDAR_SOURCE_CACHE_FILE` overrides that file; by default it sits beside `CALENDAR_STATE_FILE`, including during isolated checks. Only parsed public schedule fields are stored, with each original check timestamp. The runtime file is ignored by Git.
+
+During an outage, schedules checked within the past 24 hours can supply explicitly cached timing evidence. A row can read `08:30 EDT [BLS; cached 10-23 12:00 UTC]`. Agent reviews count cached releases separately from live publisher verification. Source-reported actual values remain separate from the cached schedule. Repeated failures and newly generated reports cannot renew the publisher check time. Expired, malformed, future-dated, naive or wrong-origin cache entries cannot supply timing evidence; without usable history the publisher remains unavailable. This does not remove a server's BLS access restriction or create an initial BLS schedule when the server has never fetched one successfully.
+
+A successful BLS/BEA/Fed refresh replaces the previous schedule so rescheduled or cancelled releases cannot linger in fallback history. Michigan's next-release notice is a rolling notice: a recently checked past release is retained for up to 24 hours when the notice advances. Its original date and check time remain visible; a fresh notice for the same date replaces it.
+
 Dates in calendar headings use the US calendar. Verified times convert to `REPORT_TIMEZONE`; when conversion crosses midnight, the displayed time includes its converted date. Unverified times keep their original source clock without a conversion.
 
 ## Earnings

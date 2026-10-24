@@ -6,9 +6,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from html import unescape
 import json
+import logging
 import re
+from urllib.error import HTTPError
 import urllib.request
 from zoneinfo import ZoneInfo
+
+from src.intelligence import calendar_source_cache as source_cache
 
 
 NY = ZoneInfo("America/New_York")
@@ -232,7 +236,22 @@ def parse_michigan_schedule(text: str) -> list[dict]:
 
 
 def collect_schedules(dates: list[date]) -> tuple[list[dict], dict]:
+    with source_cache.LOCK:
+        return _collect_schedules(dates)
+
+
+def _collect_schedules(dates: list[date]) -> tuple[list[dict], dict]:
+    now = source_cache.utc_now()
+    saved = source_cache.load()
     def fetch(publisher):
+        previous = source_cache.usable_rows(publisher, saved.get(publisher), SOURCE_URLS[publisher], now)
+        pause = source_cache.paused_until(saved.get(publisher), now)
+        if pause is not None:
+            record = saved[publisher]
+            rows = [{**row, "cached": True} for row in previous]
+            label = "cached" if rows else "unavailable"
+            retry = pause.astimezone(timezone.utc).strftime("%m-%d %H:%M UTC")
+            return rows, f"{label} ({record['error']}; retry after {retry})", {**record, "events": previous}
         try:
             text = request_schedule(SOURCE_URLS[publisher])
             if publisher == "DOL":
@@ -246,16 +265,39 @@ def collect_schedules(dates: list[date]) -> tuple[list[dict], dict]:
             else:
                 events = parse_ics(text, publisher)
             if not events:
+                # A parsed document with no recognized active releases can
+                # represent cancellations. Do not revive its superseded rows.
+                previous = []
                 raise ValueError("No recognized publisher releases")
-            return events, "available"
+            record = source_cache.success(events, previous, publisher, now)
+            rows = [{**row, "cached": row["fetched_at"] != now.isoformat()} for row in record["events"]]
+            return rows, "available", record
         except Exception as exc:
-            return [], "unavailable (" + type(exc).__name__ + ")"
+            detail = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else type(exc).__name__
+            record = source_cache.failure(previous, detail, now, isinstance(exc, HTTPError) and exc.code == 403)
+            rows = [{**row, "cached": True} for row in previous]
+            label = "cached" if rows else "unavailable"
+            retry = source_cache.timestamp(record["retry_after"]).astimezone(timezone.utc).strftime("%m-%d %H:%M UTC")
+            return rows, f"{label} ({detail}; retry after {retry})", record
     events, status = [], {}
+    updated = {}
     with ThreadPoolExecutor(max_workers=5) as pool:
-        for publisher, (rows, detail) in zip(SOURCE_URLS, pool.map(fetch, SOURCE_URLS)):
+        for publisher, (rows, detail, record) in zip(SOURCE_URLS, pool.map(fetch, SOURCE_URLS)):
             events.extend(rows)
             status[publisher] = detail
+            updated[publisher] = record
+    try:
+        source_cache.save(updated)
+    except (OSError, ValueError) as exc:
+        logging.getLogger(__name__).warning("Publisher schedule cache save unavailable (%s)", type(exc).__name__)
+        status["Schedule cache"] = "save unavailable (" + type(exc).__name__ + ")"
     return events, status
+
+
+def timing_evidence(row: dict) -> dict:
+    if "fetched_at" not in row:
+        return {}
+    return {"timing_checked_at": row["fetched_at"], "timing_cached": bool(row.get("cached"))}
 
 
 def verify_time(name: str, source_date: date, schedules: list[dict]) -> dict:
@@ -264,9 +306,11 @@ def verify_time(name: str, source_date: date, schedules: list[dict]) -> dict:
     exact = [row for row in matching if datetime.fromisoformat(row["at"]).astimezone(NY).date() == source_date]
     times = {row["at"] for row in exact}
     if len(times) == 1:
-        row = exact[0]
-        return {"time_status": "verified", "event_at": row["at"], "publisher": row["publisher"], "timing_url": row["url"]}
+        row = min(exact, key=lambda value: bool(value.get("cached")))
+        return {"time_status": "cached" if row.get("cached") else "verified", "event_at": row["at"],
+                "publisher": row["publisher"], "timing_url": row["url"], **timing_evidence(row)}
     if len(times) > 1:
         return {"time_status": "conflict", "event_at": "", "publisher": "", "timing_url": ""}
     nearby = [row for row in matching if abs((datetime.fromisoformat(row["at"]).astimezone(NY).date() - source_date).days) <= 3]
-    return {"time_status": "conflict" if nearby else "unverified", "event_at": "", "publisher": "", "timing_url": ""}
+    evidence = timing_evidence(nearby[0]) if nearby else {}
+    return {"time_status": "conflict" if nearby else "unverified", "event_at": "", "publisher": "", "timing_url": "", **evidence}

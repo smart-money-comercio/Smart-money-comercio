@@ -14,6 +14,7 @@ ALERT_PREFLIGHT_STATE_DIR="$(mktemp -d /tmp/smart-money-alert-preflight.XXXXXX)"
 trap 'rm -rf -- "$ALERT_PREFLIGHT_STATE_DIR"' EXIT
 export SPECIAL_ALERT_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/special_alerts.sqlite3"
 export CALENDAR_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/calendar_snapshot.json"
+export CALENDAR_SOURCE_CACHE_FILE="$ALERT_PREFLIGHT_STATE_DIR/calendar_source_cache.json"
 
 echo "Running Smart Money AI preflight checks..."
 

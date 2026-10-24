@@ -11,13 +11,14 @@ from pathlib import Path
 import sys
 import tempfile
 from types import SimpleNamespace
+from urllib.error import HTTPError
 import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.check_special_alerts import offline_network_guard
-from src.intelligence import calendar_context as context, calendar_sources as sources
+from src.intelligence import calendar_context as context, calendar_sources as sources, calendar_source_cache as source_cache
 from src.reports import live_market_calendar as calendar
 
 NOW = datetime(2026, 10, 22, 15, tzinfo=timezone.utc)
@@ -61,8 +62,10 @@ class IsolatedChecks(unittest.TestCase):
         self.path = self.root / "calendar.json"
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.dict(os.environ, {"CALENDAR_STATE_FILE": str(self.path),
+            "CALENDAR_SOURCE_CACHE_FILE": str(self.root / "publisher-cache.json"),
             "SPECIAL_ALERT_STATE_FILE": str(self.root / "alerts.sqlite3"), "REPORT_TIMEZONE": "America/New_York"}))
         self.stack.enter_context(patch.object(context, "utc_now", return_value=NOW))
+        self.stack.enter_context(patch.object(source_cache, "utc_now", return_value=NOW))
         class Clock(datetime):
             @classmethod
             def now(cls, tz=None):
@@ -399,6 +402,189 @@ class AdditionalPublisherChecks(IsolatedChecks):
         report = self.render(snapshot)
         self.assertIn("coverage may be incomplete", report)
         self.assertNotIn("No matching major US macro events", report)
+
+
+class SourceResilienceChecks(IsolatedChecks):
+    def collect(self, when=NOW, failures=None, bls=None, michigan=MICHIGAN):
+        payloads = {sources.BLS_URL: bls if bls is not None else ics(event("DTSTART;TZID=US-Eastern:20261023T083000")),
+            sources.BEA_URL: ics(event("DTSTART:20261029T123000Z", "GDP (Advance Estimate)")), sources.DOL_URL: DOL,
+            sources.FED_URL: fed(fed_row()), sources.MICHIGAN_URL: michigan}
+        failures = failures or {}
+        def request(url):
+            if url in failures:
+                raise failures[url]
+            return payloads[url]
+        with patch.object(source_cache, "utc_now", return_value=when), patch.object(sources, "request_schedule", side_effect=request) as fetch:
+            rows, status = sources.collect_schedules(DAYS)
+        return rows, status, [call.args[0] for call in fetch.call_args_list]
+
+    def forbidden(self):
+        return HTTPError(sources.BLS_URL, 403, "Forbidden", None, None)
+
+    def test_first_403_without_history_never_invents_bls_verification(self):
+        rows, status, _ = self.collect(failures={sources.BLS_URL: self.forbidden()})
+        self.assertFalse(any(row["publisher"] == "BLS" for row in rows))
+        self.assertIn("unavailable (HTTP 403; retry after 10-22 21:00 UTC)", status["BLS"])
+        self.assertEqual(status["Fed"], "available")
+        self.assertEqual(status["BEA"], "available")
+
+    def test_403_pauses_bls_for_six_hours_without_disabling_other_publishers(self):
+        self.collect(failures={sources.BLS_URL: self.forbidden()})
+        _, status, calls = self.collect(NOW + timedelta(hours=5))
+        self.assertNotIn(sources.BLS_URL, calls)
+        self.assertIn(sources.BEA_URL, calls)
+        self.assertIn("HTTP 403", status["BLS"])
+        self.assertEqual(status["BEA"], "available")
+        _, status, calls = self.collect(NOW + timedelta(hours=6, seconds=1))
+        self.assertIn(sources.BLS_URL, calls)
+        self.assertEqual(status["BLS"], "available")
+
+    def test_recent_successful_bls_schedule_survives_a_403_with_its_original_check(self):
+        self.collect()
+        rows, status, _ = self.collect(NOW + timedelta(hours=1), {sources.BLS_URL: self.forbidden()})
+        row = next(row for row in rows if row["publisher"] == "BLS")
+        self.assertEqual(row["fetched_at"], NOW.isoformat())
+        self.assertTrue(row["cached"])
+        self.assertIn("cached (HTTP 403", status["BLS"])
+        timing = sources.verify_time("CPI", DAYS[1], rows)
+        self.assertEqual(timing["time_status"], "cached")
+        self.assertEqual(timing["timing_checked_at"], NOW.isoformat())
+
+    def test_cached_schedule_expiry_cannot_be_extended_by_more_failed_scans(self):
+        self.collect()
+        self.collect(NOW + timedelta(hours=23), {sources.BLS_URL: self.forbidden()})
+        rows, status, calls = self.collect(NOW + timedelta(hours=25))
+        self.assertNotIn(sources.BLS_URL, calls)
+        self.assertFalse(any(row["publisher"] == "BLS" for row in rows))
+        self.assertIn("unavailable", status["BLS"])
+        self.assertFalse(source_cache.load()["BLS"]["events"])
+
+    def test_recovery_replaces_the_old_schedule_instead_of_merging_rescheduled_bls_dates(self):
+        self.collect()
+        self.collect(NOW + timedelta(hours=1), {sources.BLS_URL: self.forbidden()})
+        revised = ics(event("DTSTART;TZID=US-Eastern:20261026T083000", sequence=1))
+        rows, status, _ = self.collect(NOW + timedelta(hours=8), bls=revised)
+        bls = [row for row in rows if row["publisher"] == "BLS"]
+        self.assertEqual([row["at"] for row in bls], ["2026-10-26T12:30:00+00:00"])
+        self.assertFalse(bls[0]["cached"])
+        self.assertEqual(status["BLS"], "available")
+
+    def test_cancellation_cannot_revive_the_old_schedule_from_cache(self):
+        self.collect()
+        cancelled = ics(event("DTSTART;TZID=US-Eastern:20261023T083000", extra="STATUS:CANCELLED"))
+        rows, _, _ = self.collect(NOW + timedelta(hours=1), bls=cancelled)
+        self.assertFalse(any(row["publisher"] == "BLS" for row in rows))
+        self.assertFalse(source_cache.load()["BLS"]["events"])
+
+    def test_html_returned_instead_of_a_calendar_keeps_only_recent_labelled_history(self):
+        self.collect()
+        rows, status, _ = self.collect(NOW + timedelta(hours=1), bls="<html>Access denied</html>")
+        self.assertTrue(next(row for row in rows if row["publisher"] == "BLS")["cached"])
+        self.assertIn("cached (ValueError", status["BLS"])
+
+    def test_other_http_failures_have_a_shorter_backoff_and_show_the_http_code(self):
+        error = HTTPError(sources.BEA_URL, 503, "Unavailable", None, None)
+        self.collect(failures={sources.BEA_URL: error})
+        _, status, calls = self.collect(NOW + timedelta(minutes=14))
+        self.assertNotIn(sources.BEA_URL, calls)
+        self.assertIn("HTTP 503", status["BEA"])
+        _, status, calls = self.collect(NOW + timedelta(minutes=16))
+        self.assertIn(sources.BEA_URL, calls)
+        self.assertEqual(status["BEA"], "available")
+
+    def test_corrupt_unknown_origin_future_and_naive_cached_rows_cannot_supply_times(self):
+        self.collect()
+        original = deepcopy(source_cache.load()["BLS"]["events"][0])
+        for override in ({"url": "https://example.invalid/schedule"}, {"publisher": "BEA"},
+                         {"fetched_at": (NOW + timedelta(hours=1)).isoformat()}, {"fetched_at": "2026-10-22T15:00:00"},
+                         {"fetched_at": (NOW - timedelta(hours=25)).isoformat()}, {"at": "2026-10-23"}, {"category": []}):
+            state = {"BLS": source_cache.failure([{**original, **override}], "HTTP 403", NOW, True)}
+            source_cache.save(state)
+            rows, _, _ = self.collect()
+            self.assertFalse(any(row["publisher"] == "BLS" for row in rows), override)
+
+    def test_a_forged_long_or_future_backoff_does_not_stop_a_valid_new_request(self):
+        for attempted, retry in ((NOW, NOW + timedelta(days=100)), (NOW + timedelta(hours=1), NOW + timedelta(hours=6))):
+            source_cache.save({"BLS": {"events": [], "error": "HTTP 403", "attempted_at": attempted.isoformat(), "retry_after": retry.isoformat()}})
+            _, status, calls = self.collect()
+            self.assertIn(sources.BLS_URL, calls)
+            self.assertEqual(status["BLS"], "available")
+
+    def test_malformed_source_cache_does_not_disable_current_sources(self):
+        for text in ("{", "null", "[]", '{"schema":true,"sources":{}}'):
+            source_cache.state_path().write_text(text)
+            _, status, calls = self.collect()
+            self.assertIn(sources.BLS_URL, calls)
+            self.assertEqual(status["BLS"], "available")
+
+    def test_interrupted_cache_write_keeps_previous_bytes_and_live_results(self):
+        self.collect(); before = source_cache.state_path().read_bytes()
+        with patch.object(source_cache.os, "replace", side_effect=PermissionError("simulated write failure")):
+            rows, status, _ = self.collect(NOW + timedelta(hours=1))
+        self.assertTrue(any(row["publisher"] == "BLS" and not row["cached"] for row in rows))
+        self.assertIn("save unavailable", status["Schedule cache"])
+        self.assertEqual(source_cache.state_path().read_bytes(), before)
+        self.assertFalse(list(self.root.glob(".calendar-source-*.tmp")))
+
+    def test_report_and_agent_show_cached_age_without_promoting_it_to_live_verification(self):
+        self.collect()
+        when = NOW + timedelta(hours=1)
+        rows, status, _ = self.collect(when, {sources.BLS_URL: self.forbidden()})
+        raw = {(DAYS[1], "economic"): [macro("CPI", actual="999")], (DAYS[1], "earnings"): []}
+        snapshot = context.normalize_snapshot([DAYS[1]], raw, rows, status, when)
+        report = self.render(snapshot)
+        self.assertIn("08:30 EDT [BLS; cached 10-22 15:00 UTC]", report)
+        self.assertNotIn("999", report)
+        self.assertIn("HTTP 403", report)
+        self.assertIn("1 cached publisher release;", context.review_snapshot(snapshot))
+        self.save(snapshot)
+        with patch.object(context, "utc_now", return_value=when), patch.object(sources, "request_schedule", side_effect=AssertionError("No network")):
+            block = context.calendar_context_provider()
+        self.assertIn("cached as of 10-22 15:00 UTC", block.signal)
+        self.assertFalse(block.metadata["score_changes"])
+        from scripts.check_report_consistency import BuilderConsistencyChecks
+        from src.reports import daily_report
+        from src.reports.report_quality import validate_daily_report_quality, MAX_DAILY_REPORT_CHARS
+        daily = BuilderConsistencyChecks.build_daily_fixture(SimpleNamespace(daily=daily_report), when, report)
+        self.assertTrue(validate_daily_report_quality(daily)["passes"])
+        self.assertLessEqual(len(daily), MAX_DAILY_REPORT_CHARS)
+        self.assertIn("BLS; cached 10-22 15:00 UTC", daily)
+
+    def test_a_new_report_timestamp_cannot_launder_expired_publisher_evidence(self):
+        self.collect()
+        rows, status, _ = self.collect(NOW + timedelta(hours=1), {sources.BLS_URL: self.forbidden()})
+        snapshot = context.normalize_snapshot([DAYS[1]], {(DAYS[1], "economic"): [macro("CPI")]}, rows, status, NOW + timedelta(hours=1))
+        self.save(snapshot)
+        self.assertIsNotNone(context.read_snapshot(now=NOW + timedelta(hours=1)))
+        snapshot["checked_at"] = (NOW + timedelta(hours=25)).isoformat(); self.save(snapshot)
+        self.assertIsNone(context.read_snapshot(now=NOW + timedelta(hours=25)))
+
+    def test_a_cached_release_date_disagreement_stays_explicit_and_withholds_values(self):
+        self.collect()
+        rows, status, _ = self.collect(NOW + timedelta(hours=1), {sources.BLS_URL: self.forbidden()})
+        snapshot = context.normalize_snapshot([DAYS[0]], {(DAYS[0], "economic"): [macro("CPI", actual="999")]}, rows, status, NOW + timedelta(hours=1))
+        report = self.render(snapshot)
+        self.assertIn("date conflicts with cached publisher schedule", report)
+        self.assertNotIn("999", report)
+
+    def test_michigan_rollover_keeps_the_recent_past_notice_with_its_original_age(self):
+        before = datetime(2026, 10, 23, 12, tzinfo=timezone.utc)
+        self.collect(before)
+        new_notice = "Next data release: Friday, November 6, 2026 for Preliminary November data at 10am ET"
+        rows, status, _ = self.collect(before + timedelta(hours=4), michigan=new_notice)
+        old = next(row for row in rows if row["publisher"] == "Michigan" and row["at"].startswith("2026-10-23"))
+        self.assertTrue(old["cached"])
+        self.assertEqual(old["fetched_at"], before.isoformat())
+        upcoming = next(row for row in rows if row["publisher"] == "Michigan" and row["at"].startswith("2026-11-06"))
+        self.assertFalse(upcoming["cached"])
+        self.assertEqual(status["Michigan"], "available")
+
+    def test_cached_actual_values_remain_source_reported_instead_of_publisher_confirmed(self):
+        self.collect()
+        when = NOW + timedelta(hours=23)
+        rows, status, _ = self.collect(when, {sources.BLS_URL: self.forbidden()})
+        snapshot = context.normalize_snapshot([DAYS[1]], {(DAYS[1], "economic"): [macro("CPI", actual="3.0%")]}, rows, status, when)
+        self.assertIn("source-reported actual 3.0%", self.render(snapshot))
 
 
 class OutputChecks(IsolatedChecks):

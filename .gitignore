@@ -30,6 +30,10 @@ Thumbs.db
 logs/
 
 # Local runtime data
+data/calendar_snapshot.json
+data/calendar_source_cache.json
+Data/calendar_snapshot.json
+Data/calendar_source_cache.json
 data/special_alerts.sqlite3*
 Data/special_alerts.sqlite3*
 # Research drafts may contain source text. Only sanitized reviewed manifests belong in resources/.

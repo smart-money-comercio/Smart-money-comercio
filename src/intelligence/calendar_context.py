@@ -67,15 +67,21 @@ def read_snapshot(now: datetime | None = None) -> dict | None:
             if not isinstance(rows, list) or len(rows) > MAX_ROWS:
                 return None
             for row in rows:
-                if not isinstance(row, dict) or row["time_status"] not in {"verified", "unverified", "conflict"}:
+                if not isinstance(row, dict) or row["time_status"] not in {"verified", "cached", "unverified", "conflict"}:
                     return None
                 date.fromisoformat(row["source_date"])
                 date.fromisoformat(row["display_date"])
-                if row["time_status"] == "verified":
+                if row["time_status"] in {"verified", "cached"}:
                     at = checked_time(row["event_at"])
                     if at.astimezone(publishers.NY).date().isoformat() != row["source_date"]:
                         return None
                     if publishers.SOURCE_URLS.get(row["publisher"]) != row["timing_url"]:
+                        return None
+                if row["time_status"] == "cached" and not row.get("timing_cached"):
+                    return None
+                if row.get("timing_cached"):
+                    age = (now - checked_time(row["timing_checked_at"])).total_seconds()
+                    if not -60 <= age <= publishers.source_cache.MAX_AGE_SECONDS:
                         return None
         if not isinstance(value["issues"], list) or not all(isinstance(item, str) for item in value["issues"]):
             return None
@@ -111,7 +117,8 @@ def normalize_snapshot(dates: list[date], raw: dict, schedules: list[dict], sour
                 "economic": [], "earnings": [], "source_status": source_status, "issues": []}
     for publisher, status in source_status.items():
         if status != "available":
-            snapshot["issues"].append(f"{publisher} schedule {status}")
+            label = publisher if publisher == "Schedule cache" else publisher + " schedule"
+            snapshot["issues"].append(f"{label} {status}")
     for day in dates:
         economic, earnings = raw.get((day, "economic")), raw.get((day, "earnings"))
         official_day = [row for row in schedules if checked_time(row["at"]).astimezone(publishers.NY).date() == day]
@@ -142,7 +149,7 @@ def normalize_snapshot(dates: list[date], raw: dict, schedules: list[dict], sour
                 fields.update(actual="", consensus="", previous="")
             snapshot["economic"].append(fields)
         covered = {publishers.category(row["eventName"]) for row in snapshot["economic"]
-                   if row["source_date"] == day.isoformat() and row["time_status"] == "verified"}
+                   if row["source_date"] == day.isoformat() and row["time_status"] in {"verified", "cached"}}
         filled = 0
         for row in official_day:
             if row["category"] in covered:
@@ -153,8 +160,8 @@ def normalize_snapshot(dates: list[date], raw: dict, schedules: list[dict], sour
             at = checked_time(row["at"])
             snapshot["economic"].append({"eventName": row["name"], "gmt": "", "actual": "", "previous": "", "consensus": "",
                 "source_date": day.isoformat(), "display_date": at.astimezone(zone).date().isoformat(),
-                "data_source": row["publisher"], "time_status": "verified", "event_at": row["at"],
-                "publisher": row["publisher"], "timing_url": row["url"]})
+                "data_source": row["publisher"], "time_status": "cached" if row.get("cached") else "verified", "event_at": row["at"],
+                "publisher": row["publisher"], "timing_url": row["url"], **publishers.timing_evidence(row)})
             covered.add(row["category"])
             filled += 1
         if filled and economic is not None:
@@ -202,10 +209,14 @@ def release_key(row: dict) -> tuple[str, str, str]:
 
 def review_snapshot(snapshot: dict) -> str:
     verified = len({release_key(row) for row in snapshot["economic"] if row["time_status"] == "verified"})
+    cached = len({release_key(row) for row in snapshot["economic"] if row["time_status"] == "cached"})
     unverified = sum(row["time_status"] == "unverified" for row in snapshot["economic"])
     conflicts = sum(row["time_status"] == "conflict" for row in snapshot["economic"])
     estimated = len(snapshot["earnings"])
     detail = f"{verified} publisher-verified releases; {unverified} rows with unverified times; {conflicts} date conflicts; {estimated} estimated earnings dates."
+    if cached:
+        label = "release" if cached == 1 else "releases"
+        detail += f" {cached} cached publisher {label}; original check times retained."
     if snapshot["issues"]:
         detail += " " + "; ".join(snapshot["issues"][:2])
     return detail
@@ -228,11 +239,15 @@ def calendar_context_provider():
         return None
     now = utc_now()
     upcoming = {release_key(row): row for row in snapshot["economic"]
-                if row["time_status"] == "verified" and checked_time(row["event_at"]) >= now}
+                if row["time_status"] in {"verified", "cached"} and checked_time(row["event_at"]) >= now}
     signals = []
     for row in sorted(upcoming.values(), key=lambda value: value["event_at"])[:2]:
         at = checked_time(row["event_at"]).astimezone(report_zone())
-        signals.append(f"{row['eventName']} {at.strftime('%m-%d %H:%M %Z')} ({row['publisher']})")
+        provenance = row["publisher"]
+        if row["time_status"] == "cached":
+            stamp = checked_time(row["timing_checked_at"]).astimezone(timezone.utc).strftime("%m-%d %H:%M UTC")
+            provenance += "; cached as of " + stamp
+        signals.append(f"{row['eventName']} {at.strftime('%m-%d %H:%M %Z')} ({provenance})")
     if not signals:
         signals.append("Calendar reviewed; no upcoming publisher-verified release in the cached window.")
     return IntelligenceContextBlock(feature="Calendar Evidence", priority=65, signal="; ".join(signals),

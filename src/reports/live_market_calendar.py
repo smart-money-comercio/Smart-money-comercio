@@ -489,12 +489,18 @@ def _select_earnings(
 def _format_economic(row: dict) -> str:
     name = _economic_event_name(row)
     if row.get("time_status") == "conflict":
-        return f"- {name} - date conflicts with publisher schedule; source values withheld."
-    if row.get("time_status") == "verified":
+        source = "cached publisher schedule" if row.get("timing_cached") else "publisher schedule"
+        return f"- {name} - date conflicts with {source}; source values withheld."
+    if row.get("time_status") in {"verified", "cached"}:
         from src.intelligence.calendar_context import checked_time, report_zone
         at = checked_time(row["event_at"]).astimezone(report_zone())
         clock = "%m-%d %H:%M %Z" if at.date().isoformat() != row["source_date"] else "%H:%M %Z"
-        event_time = at.strftime(clock) + " [" + row["publisher"] + "]"
+        provenance = row["publisher"]
+        if row["time_status"] == "cached":
+            from datetime import timezone
+            checked = checked_time(row["timing_checked_at"]).astimezone(timezone.utc)
+            provenance += "; cached " + checked.strftime("%m-%d %H:%M UTC")
+        event_time = at.strftime(clock) + " [" + provenance + "]"
     else:
         raw_time = _first(row, "gmt", "time")
         event_time = "Time unverified" + (f" (source {raw_time})" if raw_time else "")
