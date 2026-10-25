@@ -72,6 +72,25 @@ def matched_symbols(title: str, symbols: list[str]) -> list[str]:
     return result
 
 
+def story_type(story: dict) -> str:
+    """Classify the headline's format without claiming the article was read."""
+    if story["official"]:
+        return "announcement"
+    title = story["title"]
+    roundup = (
+        r"^(?:here are\s+)?(?:\d+|three|five|ten)\b.{0,65}\b(?:stocks|etfs|funds|picks)\b",
+        r"\b(?:stocks|etfs|funds)\s+(?:to|you should)\s+(?:buy|watch|own|sell)\b",
+        r"^(?:dow jones|s&p 500|nasdaq|stock market|wall street|market)\s+(?:futures|today|outlook|preview|week ahead)\b",
+    )
+    if any(re.search(pattern, title, re.I) for pattern in roundup):
+        return "roundup"
+    if len(story["symbols"]) > 1 and re.search(r"\b(?:week ahead|earnings preview|market outlook)\b", title, re.I):
+        return "roundup"
+    if re.search(r"^(?:why|how)\b|\b(?:opinion|analysis)\s*:", title, re.I) or title.endswith("?"):
+        return "commentary"
+    return "reported development"
+
+
 def cache_candidates(now: datetime, symbols: list[str]) -> tuple[list[dict], list[str]]:
     path = Path(os.getenv("NEWS_LIVE_SOURCE_CACHE_FILE", str(feeds.CACHE_FILE)))
     try:
@@ -154,11 +173,16 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story.update(source_check="hold", reason=str(exc))
             ledger.append(story)
             continue
+        story["story_type"] = story_type(story)
         if not raw.get("relevant", True) or (story["kind"] == "company" and not story["symbols"]):
             story.update(decision="skip", reason="Outside monitored companies and market themes")
+        elif story["story_type"] == "roundup":
+            story.update(decision="skip", reason="Broad market preview or stock-pick roundup; no discrete company development established by the headline")
         else:
             rank = min((symbols.index(symbol) for symbol in story["symbols"]), default=len(symbols))
             story["priority"] = (100 if story["official"] else 70) + (10 if story["symbols"] else 5) + max(0, 10 - rank)
+            if story["story_type"] == "commentary":
+                story["priority"] -= 12
             story.update(decision="eligible", reason="Dated source and research relevance checks passed")
         ledger.append(story)
     selected, urls, titles, companies = [], set(), set(), set()
@@ -181,7 +205,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 1, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 2, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def selected_stories(plan: dict) -> list[dict]:
@@ -195,17 +219,26 @@ def research_focus(story: dict) -> str:
 
 
 def render_story(story: dict, zone, company_names: dict) -> str:
-    at = dated(story["published"]).astimezone(zone).strftime("%B %d at %I:%M %p %Z")
+    published = dated(story["published"]).astimezone(zone)
+    at = f"{published:%B} {published.day} at {published.strftime('%I:%M').lstrip('0')} {published:%p %Z}"
+    headline = "“" + story["title"].rstrip(".") + "”"
+    punctuation = "" if story["title"].endswith(("?", "!")) else "."
     if story["kind"] == "company":
         company = company_names.get(story["symbols"][0], story["symbols"][0])
-        label = "A sourced company announcement" if story["official"] else "An unconfirmed headline report"
-        lead = f"{label} concerning {company}, published {at}, attributed to {story['source']}, says: "
-        qualification = "Commercial timing and impact still require review." if story["official"] else "Company confirmation is pending."
+        if story["official"]:
+            return (f"{company}'s company announcement, published {at} via {story['source']}, is headlined {headline}{punctuation} "
+                    "Commercial timing and impact still require review.")
+        if story.get("story_type") == "commentary":
+            return (f"In commentary on {company}, {story['source']}'s headline, published {at}, reads {headline}{punctuation} "
+                    "This is headline-only commentary, unconfirmed by the company.")
+        return (f"{story['source']}'s report on {company}, published {at}, carries the headline {headline}{punctuation} "
+                "This is a headline-only report, unconfirmed by the company.")
     else:
-        label = "A publisher announcement" if story["official"] else "An unconfirmed headline report"
-        lead = f"{label} from {story['source']}, published {at}, says: "
-        qualification = "Review the original release for scope and context." if story["official"] else "This is a headline-only account; check the original release."
-    return lead + story["title"].rstrip(".") + ". " + qualification + " " + research_focus(story)
+        if story["official"]:
+            return (f"A publisher announcement from {story['source']}, published {at}, is headlined {headline}{punctuation} "
+                    "Review the original release for scope and context.")
+        return (f"In market news, {story['source']}'s headline, published {at}, reads {headline}{punctuation} "
+                "This headline-only account is unconfirmed; it does not establish the cause of market moves.")
 
 
 def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str) -> str:
@@ -264,6 +297,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                           "Source: " + story["source"] + " | Published: " + story["published"],
                           "Evidence: " + ("publisher/company announcement" if story["official"] else "headline only; confirmation pending"),
                           "Source check: " + story.get("source_check", "hold") + " | Cached at: " + str(story.get("source_checked_at") or "unavailable")]
+                if story.get("story_type"):
+                    lines.append("Story type: " + story["story_type"])
                 if story.get("source_check") == "pass":
                     lines.append(story["url"])
                 if story["decision"] == "selected":

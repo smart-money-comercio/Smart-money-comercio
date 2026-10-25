@@ -324,15 +324,15 @@ class NewsChecks(IsolatedChecks):
     def test_headline_only_development_is_not_rewritten_as_company_confirmation(self):
         self.event()
         text = build_daily_news_brief(self.research())
-        self.assertIn("An unconfirmed headline report", text)
-        self.assertIn("attributed to example.com", text)
+        self.assertIn("headline-only report, unconfirmed by the company", text)
+        self.assertIn("example.com's report on Microsoft", text)
         self.assertIn("published October 25", text)
-        self.assertNotIn("A sourced company announcement", text)
+        self.assertNotIn("Microsoft's company announcement", text)
 
     def test_official_development_keeps_the_execution_follow_up(self):
         self.event(announcement(official=True))
         text = build_daily_news_brief(self.research())
-        self.assertIn("A sourced company announcement", text)
+        self.assertIn("Microsoft's company announcement", text)
         self.assertIn("Commercial timing and impact still require review", text)
 
     def test_cached_publisher_time_is_never_described_as_a_fresh_verification(self):
@@ -355,6 +355,11 @@ class NewsChecks(IsolatedChecks):
         result = validate_daily_report_quality(text)
         self.assertEqual(result["format"], "news"); self.assertTrue(result["passes"])
         self.assertFalse(validate_news_brief(text.replace("Company confirmation is pending.", ""))["passes"])
+
+    def test_one_estimated_earnings_date_cannot_supply_another_dates_qualification(self):
+        text = build_daily_news_brief(self.research())
+        self.assertGreater(text.count("Company confirmation is pending."), 1)
+        self.assertFalse(validate_news_brief(text.replace("Company confirmation is pending.", "", 1))["passes"])
 
     def test_quality_rejects_wrong_greeting_missing_date_session_and_excess_length(self):
         text = build_daily_news_brief(self.research())
@@ -385,7 +390,38 @@ class NewsChecks(IsolatedChecks):
         text = build_daily_news_brief(self.research(), brief)
         self.assertLessEqual(len(text), MAX_NEWS_CHARS)
         self.assertTrue(text.endswith("Research only. Not financial advice."))
-        self.assertIn("unconfirmed headline report", text)
+        self.assertIn("headline-only report, unconfirmed by the company", text)
+
+    def test_oil_theme_has_plain_language_outlook_without_a_claimed_market_cause(self):
+        text = build_daily_news_brief(self.research())
+        self.assertIn("Oil and inflation are on the watch list", text)
+        self.assertIn("Our view: Higher energy costs can put pressure on company margins", text)
+        self.assertNotIn("caused", text.lower())
+        self.assertNotIn("Here is your Smart Money Daily News Brief", text)
+
+    def test_selloff_outlook_uses_dated_market_evidence(self):
+        text = build_daily_news_brief(self.research(replacements={"Executive Summary": "- Main theme: Growth pressure.\n- Market moves: S&P -1.6%, Nasdaq -2.6%, Russell -0.4%, VIX +12%, Oil +0.4%, TLT +1%."}))
+        self.assertIn("The Nasdaq's decline leads", text)
+        self.assertIn("whether the Nasdaq stabilizes", text)
+        self.assertNotIn("energy costs can put pressure", text)
+
+    def test_index_gains_and_watchlist_declines_are_explained_with_scope(self):
+        text = build_daily_news_brief(self.research(replacements={"Executive Summary": "- Main theme: Macro / earnings setup.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.1%."}))
+        self.assertIn("gains across the indexes we track", text)
+        self.assertIn("Index gains are not shared by most names in this research watchlist", text)
+
+    def test_undated_data_cannot_drive_the_theme_or_interpretation(self):
+        text = build_daily_news_brief(self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"}))
+        self.assertIn("Market coverage is incomplete", text)
+        self.assertIn("A complete, dated market snapshot", text)
+        self.assertNotIn("energy costs can put pressure", text)
+        self.assertNotIn("Oil and inflation are on", text)
+
+    def test_research_outlook_does_not_convert_a_bond_fund_into_verified_yields(self):
+        text = build_daily_news_brief(self.research())
+        self.assertIn("TLT is a bond-price proxy; Treasury yields are not verified", text)
+        self.assertNotIn("Treasury yields rose", text)
+        self.assertNotIn("Treasury yields fell", text)
 
     def test_quality_command_labels_the_news_profile_and_its_actual_limit(self):
         from src.commands import reportcheck_commands

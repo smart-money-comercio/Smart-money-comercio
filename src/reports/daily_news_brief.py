@@ -40,16 +40,55 @@ def display_day(raw: str) -> str:
     return datetime.strptime(raw, "%Y-%m-%d").strftime("%A, %B %d")
 
 
+def market_takeaway(moves: dict, is_open: bool) -> str:
+    """Lead with an observation, keeping causes outside the price evidence."""
+    indexes = [float(moves[key].rstrip("%")) for key in ("S&P", "Nasdaq", "Russell") if key in moves]
+    if len(indexes) < 3:
+        return "Market coverage is incomplete; this edition separates the available figures from company news and the calendar."
+    if float(moves["Nasdaq"].rstrip("%")) <= -2:
+        return "The Nasdaq's decline leads this edition's market update."
+    if float(moves.get("Oil", "0%").rstrip("%")) >= 1.5:
+        return "Oil and inflation are on the watch list alongside stocks."
+    if all(value > 0 for value in indexes):
+        return "The indexes we track are higher in this snapshot." if is_open else "The latest session brought gains across the indexes we track."
+    if all(value < 0 for value in indexes):
+        return "The indexes we track are lower in this snapshot." if is_open else "The latest session brought declines across the indexes we track."
+    return "The latest snapshot shows a mixed picture across U.S. indexes."
+
+
+def market_outlook(moves: dict, breadth) -> str:
+    """Offer conditional follow-up questions, never an inferred market cause."""
+    if not all(key in moves for key in ("S&P", "Nasdaq", "Russell")):
+        return "Our view: A complete, dated market snapshot is the next useful check before drawing a broad market conclusion."
+    if float(moves["Nasdaq"].rstrip("%")) <= -2:
+        return "Our view: Watch whether the Nasdaq stabilizes and more watchlist names recover. A single rebound would leave the question of a lasting recovery open."
+    if float(moves.get("Oil", "0%").rstrip("%")) >= 1.5:
+        return "Our view: Higher energy costs can put pressure on company margins. Watch whether that appears in earnings guidance and whether upcoming inflation reports change the outlook."
+    if breadth and int(breadth[2]) > int(breadth[1]) and all(float(moves[key].rstrip("%")) > 0 for key in ("S&P", "Nasdaq", "Russell")):
+        return "Our view: Index gains are not shared by most names in this research watchlist. Watch whether participation broadens in the next session."
+    return "Our view: Watch whether market leadership holds through the next round of earnings and economic releases."
+
+
+def company_followup(stories: list[dict]) -> list[str]:
+    companies = [story for story in stories if story["kind"] == "company"]
+    if any(re.search(r"\b(?:china|export)\b", story["title"], re.I) for story in companies):
+        return ["For the companies in these reports, the follow-up is their own disclosure on regional sales and export access."]
+    if any(re.search(r"\b(?:AI|cloud|data.center)\b", story["title"], re.I) for story in companies):
+        return ["For AI and cloud companies, watch whether spending plans translate into reported revenue and margins."]
+    return []
+
+
 def validate_news_brief(text: str) -> dict:
     lines = text.splitlines()
     missing = [header for header in HEADERS if header not in lines]
     duplicates = [header for header in HEADERS if lines.count(header) > 1]
     qualification = []
-    lower = text.lower()
-    if "earnings calendar lists" in lower and ("estimate" not in lower or "confirmation is pending" not in lower):
-        qualification.append("Earnings date confidence is missing")
-    if "headline report" in lower and "unconfirmed" not in lower:
-        qualification.append("Headline confirmation status is missing")
+    for paragraph in text.split("\n\n"):
+        lowered = paragraph.lower()
+        if "earnings calendar lists" in lowered and ("estimate" not in lowered or "company confirmation is pending" not in lowered):
+            qualification.append("Earnings date confidence is missing")
+        if ("headline report" in lowered or "headline-only" in lowered) and not ("unconfirmed" in lowered or "company confirmation is pending" in lowered):
+            qualification.append("Headline confirmation status is missing")
     if not text.startswith(TITLE + "\n"):
         missing.append(TITLE)
     if not re.search(r"^Generated: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S+$", text, re.M):
@@ -84,11 +123,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     quote_day = re.search(r"^Quote session: (\d{4}-\d{2}-\d{2})$", snapshot, re.M)
     is_open = "Market Session: Open" in snapshot
     data_label = ("regular session " if is_open else "completed regular session ") + quote_day[1] if quote_day else "unavailable"
-    prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now)}\nHere is your Smart Money Daily News Brief."
     executive = sections["Executive Summary"]
     moves = dict(re.findall(r"(S&P|Nasdaq|Russell|VIX|Oil|TLT)\s+([+-]?\d+(?:\.\d+)?%)", executive))
     if quote_day is None:
         moves = {}
+    prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now)}\n{market_takeaway(moves, is_open)}"
     indices = [direction(label, moves[key]) for key, label in (("S&P", "the S&P 500"), ("Nasdaq", "the Nasdaq Composite"), ("Russell", "the Russell 2000")) if key in moves]
     if indices:
         session = ("During the " if is_open else "In the last completed U.S. regular session, ") + (display_day(quote_day[1]) if quote_day else "latest available snapshot")
@@ -114,10 +153,13 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                       + " This is dated price evidence; it does not establish the cause of the move.")
     leaders = [name(row[0]) for row in rankings]
     leader_text = ", ".join(leaders[:-1]) + " and " + leaders[-1] if len(leaders) > 1 else "".join(leaders)
-    companies = [(leader_text + (" lead" if len(leaders) > 1 else " leads") + " Smart Money's research rankings. Fresh company, price and volume checks are still required.")
+    companies = [(leader_text + (" lead" if len(leaders) > 1 else " leads") + " our research rankings.")
                  if rankings else "Company rankings were unavailable for this edition; no leading setup is being inferred."]
     for story in editor.selected_stories(plan):
         (companies if story["kind"] == "company" else market).append(story_paragraphs[story["id"]])
+    no_company_story = "No company story was selected for this edition."
+    if not any(story["kind"] == "company" for story in editor.selected_stories(plan)):
+        companies.append(no_company_story)
     dated_rows = sorted([row for row in brief["rows"] if row["calendar"]["dates"]], key=lambda row: row["calendar"]["dates"][0])
     ahead = []
     for row in dated_rows[:2]:
@@ -146,14 +188,15 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         ahead.append("The available company announcements and calendars did not establish a dated catalyst. Check company sources before planning around an event.")
     if plan["issues"]:
         ahead.append("Calendar or company-news coverage is incomplete; unverified dates and times remain uncertain.")
-    watching = ["For the next session, watch whether market leadership holds and how companies guide around scheduled releases. Confirm the research view with current price, volume and original announcements before acting."]
+    watching = [market_outlook(moves, breadth if quote_day else None)]
+    watching.extend(company_followup(editor.selected_stories(plan)))
     notes = ["Sources and full evidence: /storylog · /fullreport · /catalysts · /calendar · /specialalerts", "Research only. Not financial advice."]
     groups = list(zip(HEADERS, (market, companies, ahead, watching, notes)))
     def render():
         return prefix + "\n\n" + "\n\n".join(header + "\n" + "\n\n".join(body) for header, body in groups)
     text = render()
     # Drop optional whole paragraphs rather than truncating spoken facts or qualifications.
-    protected = set(story_paragraphs.values())
+    protected = set(story_paragraphs.values()) | {no_company_story}
     if brief.get("market_events"):
         protected.add(market[1])
     for body, minimum in ((market, 1), (companies, 1), (ahead, 2)):
@@ -171,6 +214,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         paragraph = story_paragraphs[story["id"]]
         (companies if story["kind"] == "company" else market).remove(paragraph)
         story.update(decision="skip", reason="Narration length budget; source qualification kept with remaining stories")
+        retained = editor.selected_stories(plan)
+        watching[1:] = company_followup(retained)
+        if not any(item["kind"] == "company" for item in retained) and no_company_story not in companies:
+            companies.append(no_company_story)
         text = render()
     result = validate_news_brief(text)
     if not result["passes"]:

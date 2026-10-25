@@ -151,7 +151,7 @@ class EditorChecks(IsolatedChecks):
         rows, _ = editor.cache_candidates(NOW, ["MSFT"])
         text = self.render(rows)
         self.assertIn("A publisher announcement from Federal Reserve", text)
-        self.assertNotIn("A sourced company announcement", text)
+        self.assertNotIn("company announcement", text)
 
     def test_unsafe_links_are_held_without_execution_or_fetching(self):
         for url in ("javascript:alert(1)", "http://example.com/news", "https://name:secret@example.com/news", "https://example.com:444/news", "https://[invalid", "https://example.com/a\nb"):
@@ -197,16 +197,92 @@ class EditorChecks(IsolatedChecks):
 
     def test_brief_retains_headline_attribution_date_and_research_focus(self):
         text = self.render([candidate()])
-        self.assertIn("An unconfirmed headline report concerning Microsoft", text)
+        self.assertIn("example.com's report on Microsoft", text)
         self.assertIn("published October 25", text)
-        self.assertIn("Company confirmation is pending", text)
-        self.assertIn("Research focus:", text)
+        self.assertIn("headline-only report, unconfirmed by the company", text)
+        self.assertNotIn("Research focus:", text)
+        self.assertIn("Research focus:", editor.build_editor_status(history=True))
         self.assertNotIn("caused stocks to fall", text)
 
     def test_macro_headline_stays_a_headline_and_does_not_explain_market_cause(self):
         text = self.render([candidate(kind="macro", symbols=[], title="Oil market review")])
-        self.assertIn("An unconfirmed headline report from example.com", text)
-        self.assertIn("headline does not establish a market cause", text)
+        self.assertIn("In market news, example.com's headline", text)
+        self.assertIn("does not establish the cause of market moves", text)
+
+    def test_live_preview_roundups_are_logged_without_becoming_company_news(self):
+        values = [candidate(title="Dow Jones Futures Due With Microsoft, Google, Amazon Ahead; Will Doom Or Bloom Control Market?"),
+                  candidate("TSLA", title="3 AI Infrastructure Stocks Riding The Tesla And SpaceX Compute Buildout"),
+                  candidate("NVDA", title="Nvidia (NVDA) Has Lost Its China AI Accelerator Market")]
+        text = self.render(values)
+        record = store.read_editions(report=text)[0]
+        selected = [story for story in record["candidates"] if story["decision"] == "selected"]
+        self.assertEqual([story["symbols"][0] for story in selected], ["NVDA"])
+        self.assertIn(values[2]["title"], text)
+        self.assertNotIn(values[0]["title"], text)
+        self.assertNotIn(values[1]["title"], text)
+        for story in record["candidates"][:2]:
+            self.assertEqual(story["story_type"], "roundup")
+            self.assertEqual(story["source_check"], "pass")
+            self.assertIn("roundup", story["reason"])
+        history = editor.build_editor_status(history=True)
+        self.assertIn("Story type: roundup", history)
+        self.assertIn(values[1]["title"], history)
+
+    def test_numbered_product_releases_are_not_mistaken_for_stock_pick_lists(self):
+        for title in ("Microsoft introduces 3 cloud tools", "Nvidia ships five new products", "Palantir reports results before market open"):
+            with self.subTest(title=title):
+                self.assertEqual(len(editor.selected_stories(self.plan([candidate(title=title)]))), 1)
+
+    def test_company_official_evidence_keeps_its_authority_even_with_a_question_headline(self):
+        plan = self.plan([candidate(title="How can our new platform help customers?", official=True)])
+        story = editor.selected_stories(plan)[0]
+        self.assertEqual(story["story_type"], "announcement")
+        self.assertTrue(story["official"])
+
+    def test_specific_company_news_takes_priority_over_high_ranked_commentary(self):
+        values = [candidate(title="Why Microsoft shares could rebound?"), candidate("NVDA"), candidate("TSM"), candidate("PLTR")]
+        plan = self.plan(values)
+        self.assertEqual({story["symbols"][0] for story in editor.selected_stories(plan)}, {"NVDA", "TSM", "PLTR"})
+        self.assertEqual(plan["candidates"][0]["story_type"], "commentary")
+
+    def test_commentary_is_labeled_without_becoming_a_company_announcement(self):
+        value = candidate(title="Why Microsoft shares could rebound?")
+        text = self.render([value])
+        self.assertIn("In commentary on Microsoft", text)
+        self.assertIn("headline-only commentary, unconfirmed by the company", text)
+        self.assertIn(value["title"], text)
+        self.assertNotIn("company announcement", text)
+
+    def test_no_eligible_company_story_is_stated_without_roundup_filler(self):
+        text = self.render([candidate(title="5 AI Stocks to Buy This Week")])
+        self.assertIn("No company story was selected", text)
+        self.assertNotIn("5 AI Stocks", text)
+
+    def test_one_story_qualification_cannot_cover_another_unqualified_paragraph(self):
+        from src.reports.daily_news_brief import validate_news_brief
+        text = self.render([candidate(), candidate("NVDA")])
+        self.assertTrue(validate_news_brief(text)["passes"])
+        bad = text.replace("headline-only report, unconfirmed by the company", "headline-only report", 1)
+        self.assertFalse(validate_news_brief(bad)["passes"])
+
+    def test_publication_clock_and_source_title_are_retained_in_shorter_narration(self):
+        value = candidate(title="Microsoft introduces a new cloud platform")
+        text = self.render([value])
+        self.assertIn("October 25 at 12:45 PM EDT", text)
+        self.assertIn("“" + value["title"] + "”", text)
+        self.assertIn("example.com", text)
+        self.assertNotIn("Research focus:", text)
+
+    def test_length_cut_removes_the_dropped_storys_followup_from_narration(self):
+        from src.reports import daily_news_brief as news
+        value = candidate(title="Microsoft China export market development " * 5, source="Example publisher name " * 3)
+        with patch.object(news, "MAX_NEWS_CHARS", 1500):
+            text = self.render([value])
+        record = store.read_editions(report=text)[0]
+        self.assertFalse(any(story["decision"] == "selected" for story in record["candidates"]))
+        self.assertNotIn("regional sales and export access", text)
+        self.assertIn("No company story was selected", text)
+        self.assertLessEqual(len(text), 1500)
 
     def test_news_report_has_exactly_matching_record_and_six_stages(self):
         text = self.render([candidate(), candidate("NVDA"), candidate("PLTR")])
@@ -311,7 +387,7 @@ class EditorChecks(IsolatedChecks):
         for story in record["candidates"]:
             present = story["title"].rstrip(".") in text
             self.assertEqual(present, story["decision"] == "selected")
-        self.assertIn("Company confirmation is pending", text)
+        self.assertIn("unconfirmed by the company", text)
 
 
 class SQLiteCleanupChecks(unittest.TestCase):
