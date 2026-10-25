@@ -1,6 +1,8 @@
 from src.commands.daily_agent_commands import agentstatus_command, rundailyagent_command
 from telegram.ext import CommandHandler
 from src.commands.special_alert_commands import specialalerts_command
+from src.commands.company_catalyst_commands import catalysts_command, fullreport_command
+from src.commands.news_editor_commands import editorstatus_command, storylog_command
 
 from src.commands.admin_commands import (
     admin_command,
@@ -122,6 +124,11 @@ def register_commands(app):
     # Daily report
     app.add_handler(CommandHandler("brief", report))
     app.add_handler(CommandHandler("report", report))
+    app.add_handler(CommandHandler("newsbrief", report))
+    app.add_handler(CommandHandler("editorstatus", editorstatus_command))
+    app.add_handler(CommandHandler("storylog", storylog_command))
+    app.add_handler(CommandHandler("fullreport", fullreport_command))
+    app.add_handler(CommandHandler("catalysts", catalysts_command))
     app.add_handler(CommandHandler("snapshot", snapshot_command))
     app.add_handler(CommandHandler("quality", reportcheck_command))
     app.add_handler(CommandHandler("reportcheck", reportcheck_command))

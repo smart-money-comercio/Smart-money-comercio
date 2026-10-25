@@ -25,7 +25,7 @@ def main() -> int:
             build_allocation_report,
             build_allocation_snapshot_section,
         )
-        from src.reports.daily_report import build_daily_report
+        from src.reports.daily_report import build_research_report as build_daily_report
         from src.scoring.scoring_engine import get_stock_scores
 
         scores = get_stock_scores()

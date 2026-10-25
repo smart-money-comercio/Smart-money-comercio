@@ -14,13 +14,16 @@ RANKING_PATH = Path(__file__).resolve().parents[2] / "data/opportunity_score_mem
 SYMBOL = re.compile(r"[A-Z][A-Z0-9.\-]{0,9}\Z")
 
 
-def company_universe(config: dict, now: datetime | None = None, path: Path | None = None) -> dict:
+def company_universe(config: dict, now: datetime | None = None, path: Path | None = None,
+                     include_scores: bool = False) -> dict:
     """Read the existing ranking snapshot; never fetch, rescore, or write memory."""
     now = now or datetime.now(timezone.utc)
     core = list(dict.fromkeys(s for s in config["symbols"] if SYMBOL.fullmatch(s)))[:20]
     count = config.get("top_count", 0)
     result = {"symbols": core.copy(), "core": core, "ranked": [],
               "ranking_status": "Cached top opportunities disabled"}
+    if include_scores:
+        result.update(ranking_date=None, scores={})
     if not count:
         return result
     try:
@@ -52,6 +55,10 @@ def company_universe(config: dict, now: datetime | None = None, path: Path | Non
         result["ranked"] = [row[2] for row in ranked[:count]]
         result["symbols"] = list(dict.fromkeys(core + result["ranked"]))
         result["ranking_status"] = f"Top {len(result['ranked'])} from rankings dated {day.isoformat()} (cache only)"
+        if include_scores:
+            result["ranking_date"] = day.isoformat()
+            result["scores"] = {symbol: {"opportunity_score": score, "structural_score": structural, "rank": index}
+                                for index, (score, structural, symbol) in enumerate(ranked, 1) if symbol in result["symbols"]}
     except (OSError, ValueError, TypeError, KeyError, OverflowError):
         result["ranking_status"] = "Cached rankings unavailable, invalid, or stale; core companies only"
     return result

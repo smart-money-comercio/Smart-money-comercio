@@ -11,13 +11,12 @@ from typing import Any, Callable
 STATUS_PATH = Path("data/daily_agent_status.json")
 
 REQUIRED_DAILY_REPORT_TERMS = [
-    "Executive Summary",
-    "Intelligence Used Today",
-    "Smart Money Summary",
-    "Trade Plan Snapshot",
-    "Portfolio Allocation Snapshot",
-    "Action Checklist",
-    "Next Commands",
+    "Smart Money Daily News Brief",
+    "Market Update",
+    "Companies in Focus",
+    "What's Ahead",
+    "What We're Watching",
+    "Research Notes",
     "Research only. Not financial advice.",
 ]
 
@@ -277,6 +276,10 @@ def validate_daily_report(report: str) -> str:
     if missing:
         raise RuntimeError("Daily report missing: " + ", ".join(missing))
 
+    from src.reports.report_quality import validate_daily_report_quality
+    if not validate_daily_report_quality(report)["passes"]:
+        raise RuntimeError("Daily news brief quality validation failed.")
+
     return "Daily report quality validation passed."
 
 
@@ -317,6 +320,14 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
         report = report_result
 
     if report:
+        if dry_run:
+            add_step(steps, "News Editor Review", "skip", "Skipped during dry run.")
+            add_step(steps, "Company Catalyst Review", "skip", "Skipped during dry run.")
+        else:
+            from src.intelligence.news_editor import review_daily_edition
+            run_step(steps, "News Editor Review", lambda: review_daily_edition(report), critical=True)
+            from src.intelligence.company_catalyst_context import daily_company_catalyst_review
+            run_step(steps, "Company Catalyst Review", daily_company_catalyst_review)
         run_step(
             steps,
             "Quality Review",
@@ -344,6 +355,7 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
         "last_run": started_at,
         "completed_at": utc_now(),
         "dry_run": dry_run,
+        "report_format": "news",
         "report_characters": len(report),
         "message": "Daily agent completed successfully." if success else "Daily agent completed with errors.",
         "steps": steps,

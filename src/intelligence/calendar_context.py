@@ -224,7 +224,7 @@ def review_snapshot(snapshot: dict) -> str:
 
 def refresh_calendar_review() -> str:
     from src.reports.live_market_calendar import _business_days
-    snapshot = get_snapshot(_business_days(2), force_refresh=True)
+    snapshot = get_snapshot(_business_days(5), force_refresh=True)
     if not any(day["economic_available"] or day["earnings_available"] for day in snapshot["days"]):
         raise RuntimeError("Calendar sources unavailable; no current calendar evidence.")
     return review_snapshot(snapshot)

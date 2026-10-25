@@ -1736,7 +1736,7 @@ def build_action_checklist(
     return "\n".join(f"• {action}" for action in actions[:4])
 
 
-def build_daily_report() -> str:
+def build_research_report() -> str:
     now = datetime.now(ZoneInfo(REPORT_TIMEZONE))
     today = now.strftime("%B %d, %Y")
     timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -1818,6 +1818,11 @@ def build_daily_report() -> str:
         
     )
 
+    calendar_report = build_compact_market_calendar(watchlist_symbols)
+    from src.intelligence.company_catalyst_context import build_company_catalyst_brief, catalyst_note
+    company_brief = build_company_catalyst_brief(ranked=opportunity_scores, now=now)
+    catalyst_notes = {row["symbol"]: catalyst_note(row) for row in company_brief["rows"]}
+
     if scoring_error:
         top_opportunities = f"Scoring unavailable: {scoring_error}"
         fastest_rising = "Opportunity change unavailable because scoring failed."
@@ -1825,6 +1830,7 @@ def build_daily_report() -> str:
         top_opportunities = build_top_opportunities_section(
             opportunity_scores,
             limit=MAX_TOP_OPPORTUNITIES,
+            catalyst_notes=catalyst_notes,
         )
         fastest_rising = build_fastest_rising_section(
             opportunity_scores,
@@ -1859,7 +1865,7 @@ Theme Read
 Market Snapshot
 {build_market_snapshot(watchlist_symbols, movers)}
 
-{build_compact_market_calendar(watchlist_symbols)}
+{calendar_report}
 
 Portfolio Read
 {build_portfolio_read(global_context, top_scores, scores)}
@@ -1896,7 +1902,7 @@ Next Commands
 /weeklycalendar
 /global
 /contextstatus
-/summarypreview
+/catalysts
 /allocation
 
 Notes
@@ -2154,3 +2160,8 @@ Research only. Not financial advice.
     from src.intelligence.special_alert_context import attach_daily_special_alerts
     report = attach_daily_special_alerts(final_report.strip(), MAX_DAILY_REPORT_CHARS, now)
     return attach_daily_research(report, research, MAX_DAILY_REPORT_CHARS)
+
+
+def build_daily_report() -> str:
+    from src.reports.daily_news_brief import build_daily_news_brief
+    return build_daily_news_brief(build_research_report())

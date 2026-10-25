@@ -149,18 +149,12 @@ async def dailycheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
     required_sections = [
-        "Smart Money AI Daily Report",
-        "Daily Brief",
-        "Executive Summary",
-        "Market Snapshot",
-        "Portfolio Read",
-        "Watchlist Movers",
-        "Top Opportunities",
-        "Risk Notes",
-        "Smart Money Summary",
-        "Action Checklist",
-        "Next Commands",
-        "Notes",
+        "Smart Money Daily News Brief",
+        "Market Update",
+        "Companies in Focus",
+        "What's Ahead",
+        "What We're Watching",
+        "Research Notes",
     ]
 
     try:

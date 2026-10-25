@@ -45,11 +45,12 @@ def main() -> int:
     require("Quality Review" in status_report, "status report missing Quality Review step", errors)
 
     for term in [
-        "Executive Summary",
-        "Smart Money Summary",
-        "Trade Plan Snapshot",
-        "Portfolio Allocation Snapshot",
-        "Intelligence Used Today",
+        "Smart Money Daily News Brief",
+        "Market Update",
+        "Companies in Focus",
+        "What's Ahead",
+        "What We're Watching",
+        "Research Notes",
         "Research only. Not financial advice.",
     ]:
         require(term in daily_report, f"daily report missing {term}", errors)

@@ -10,7 +10,12 @@ START_COMMANDS = [
 
 
 CORE_COMMANDS = [
-    ("/brief", "Daily market brief"),
+    ("/editorstatus", "News edition stages, source coverage and review status"),
+    ("/storylog [SYMBOL]", "Selected, skipped and held news stories with reasons"),
+    ("/brief", "Smart Money Daily News Brief"),
+    ("/newsbrief", "Spoken-friendly daily news edition"),
+    ("/fullreport", "Detailed research report and evidence"),
+    ("/catalysts [SYMBOL]", "Company earnings, sourced developments and confirmation checks"),
     ("/headlines", "Fast market headline tape"),
     ("/newsintel", "Evolving market-news intelligence"),
     ("/newsmemory", "What the news engine has learned"),
@@ -35,8 +40,12 @@ CORE_COMMANDS = [
 
 
 DAILY_REPORT_COMMANDS = [
-    ("/brief", "Daily market brief"),
-    ("/report", "Daily report legacy alias"),
+    ("/editorstatus", "News editor review and decision logging"),
+    ("/storylog [SYMBOL]", "Source evidence and editorial decisions"),
+    ("/brief", "Smart Money Daily News Brief"),
+    ("/report", "Daily news brief alias"),
+    ("/newsbrief", "Daily news brief alias"),
+    ("/fullreport", "Detailed research report"),
     ("/snapshot", "Fast one-screen market snapshot"),
     ("/headlines", "Fast market headline tape"),
     ("/newsintel", "Evolving market-news intelligence"),
@@ -51,6 +60,7 @@ DAILY_REPORT_COMMANDS = [
 
 
 STOCK_RESEARCH_COMMANDS = [
+    ("/catalysts [SYMBOL]", "Cached company catalyst brief and analyst follow-up"),
     ("/research [SYMBOL]", "Dated public research, sources, expiry and market confirmation"),
     ("/tradeplan SYMBOL", "Smart Money action plan with entry, confirmation, risk, and verdict"),
     ("/stock SYMBOL", "Stock intelligence"),

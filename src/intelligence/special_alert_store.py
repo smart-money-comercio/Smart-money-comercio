@@ -87,3 +87,24 @@ def recent_events(now: float, symbol: str = "", active_only: bool = True, limit:
         if len(result) >= limit:
             break
     return result
+
+
+def read_current_events(now: float, limit: int = 100) -> list[dict]:
+    """Read existing evidence without creating a DB, tables, leases or receipts."""
+    path = Path(os.getenv("SPECIAL_ALERT_STATE_FILE", str(ROOT / "data/special_alerts.sqlite3")))
+    if not path.is_file():
+        raise FileNotFoundError("Special alert evidence cache is unavailable")
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)) as db:
+        rows = db.execute("SELECT payload,observed,expires FROM events WHERE active=1 AND expires>=? AND observed BETWEEN ? AND ? ORDER BY observed DESC LIMIT ?",
+                          (now, now - 86400, now + 60, min(max(int(limit), 1), 100))).fetchall()
+    result = []
+    for payload, observed, expires in rows:
+        try:
+            event = json.loads(payload)
+            if not isinstance(event, dict):
+                continue
+            event.update(expires=expires, observed=observed, currently_active=True)
+            result.append(event)
+        except (ValueError, TypeError):
+            continue
+    return result

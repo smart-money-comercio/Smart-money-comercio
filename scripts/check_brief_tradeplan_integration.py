@@ -21,7 +21,7 @@ def main() -> int:
     errors: list[str] = []
 
     try:
-        from src.reports.daily_report import build_daily_report
+        from src.reports.daily_report import build_research_report as build_daily_report
         from src.reports.daily_tradeplan_bridge import build_daily_tradeplan_snapshot_section
         from src.scoring.scoring_engine import get_stock_scores
 

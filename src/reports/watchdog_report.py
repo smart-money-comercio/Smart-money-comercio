@@ -14,6 +14,7 @@ NY_TZ = ZoneInfo("America/New_York")
 EXPECTED_RUN_TIME = time(8, 15)
 WATCHDOG_CHECK_TIME = time(8, 45)
 MIN_REPORT_CHARACTERS = 3000
+MIN_NEWS_REPORT_CHARACTERS = 600
 
 
 def now_ny() -> datetime:
@@ -125,6 +126,7 @@ def build_watchdog_payload() -> dict[str, Any]:
     ran_today = bool(last_run_ny and last_run_ny.date() == today_ny)
     agent_success = status.get("success") is True
     report_chars = int(status.get("report_characters") or 0)
+    minimum_chars = MIN_NEWS_REPORT_CHARACTERS if status.get("report_format") == "news" else MIN_REPORT_CHARACTERS
 
     telegram_success = has_recent_telegram_success(log_lines)
     cron_error = has_recent_cron_error(log_lines)
@@ -144,7 +146,7 @@ def build_watchdog_payload() -> dict[str, Any]:
     elif not agent_success:
         watchdog_status = "FAIL"
         action = "Daily agent ran today but failed. Check /agentlog and server cron logs."
-    elif report_chars < MIN_REPORT_CHARACTERS:
+    elif report_chars < minimum_chars:
         watchdog_status = "WARNING"
         action = "Daily agent passed, but the report may be too short. Review /report and /quality."
     elif cron_error and not telegram_success:

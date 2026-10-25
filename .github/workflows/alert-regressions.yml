@@ -44,5 +44,9 @@ jobs:
           python scripts/check_daily_agent_delivery.py
           python scripts/check_watchlist_quotes.py
           python scripts/check_calendar_evidence.py
+          python scripts/check_daily_news_brief.py
+          python scripts/check_daily_news_brief.py --windows-socketpair
+          python scripts/check_news_editor.py
+          python scripts/check_news_editor.py --windows-socketpair
           python scripts/check_company_alerts.py --windows-socketpair
           python scripts/check_special_alerts.py --windows-socketpair

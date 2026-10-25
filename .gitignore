@@ -36,6 +36,8 @@ Data/calendar_snapshot.json
 Data/calendar_source_cache.json
 data/special_alerts.sqlite3*
 Data/special_alerts.sqlite3*
+data/news_editor.sqlite3*
+Data/news_editor.sqlite3*
 # Research drafts may contain source text. Only sanitized reviewed manifests belong in resources/.
 data/research/
 Data/research/

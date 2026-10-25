@@ -39,6 +39,9 @@ def build_daily_intelligence_stack_line() -> str:
     snapshot = read_snapshot()
     if snapshot and any(day["economic_available"] or day["earnings_available"] for day in snapshot["days"]):
         text += " Calendar Evidence: active."
+    from src.intelligence.company_catalyst_context import build_company_catalyst_brief
+    if build_company_catalyst_brief()["has_evidence"]:
+        text += " Company Catalysts: active."
     return text
 
 

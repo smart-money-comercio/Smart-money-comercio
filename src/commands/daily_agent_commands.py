@@ -94,10 +94,6 @@ async def rundailyagent_command(update: Update, context: ContextTypes.DEFAULT_TY
         report = result.get("report", "")
 
         if result.get("success") and report:
-            await update.effective_chat.send_message(
-                text="Daily Report Output",
-                parse_mode=None,
-            )
             await send_long_plain_text(update, report)
 
     except Exception as error:

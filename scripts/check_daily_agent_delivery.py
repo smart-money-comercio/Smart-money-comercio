@@ -29,7 +29,29 @@ from src.reports import daily_report, morning_brief_intro
 
 
 NOW = datetime(2026, 10, 20, 2, 16, tzinfo=timezone.utc)
-REPORT = "Daily Brief\n" + "\n".join(daily.REQUIRED_DAILY_REPORT_TERMS) + "\n" + ("Report evidence. " * 400) + "REPORT_END"
+REPORT = """Smart Money Daily News Brief
+Date: October 19, 2026
+Generated: 2026-10-19 22:16:00 America/New_York
+Market data: unavailable
+
+Good evening.
+Here is the news brief.
+
+Market Update
+Market data are unavailable.
+
+Companies in Focus
+Research rankings require confirmation.
+
+What's Ahead
+Calendar evidence is unavailable.
+
+What We're Watching
+Check price, volume and original announcements.
+
+Research Notes
+Research only. Not financial advice.
+REPORT_END"""
 
 
 def fresh_payload():
@@ -62,6 +84,7 @@ class WorkflowChecks(unittest.TestCase):
             self.actions.append("build_daily_report_step")
             return REPORT
         self.build = self.stack.enter_context(patch.object(daily, "build_daily_report_step", side_effect=build))
+        self.editor = self.stack.enter_context(patch("src.intelligence.news_editor.review_daily_edition", return_value="Edition evidence reviewed"))
 
     def test_live_run_refreshes_macro_cache_before_building_report(self):
         result = daily.run_daily_agent(False)
@@ -82,6 +105,7 @@ class WorkflowChecks(unittest.TestCase):
         result = daily.run_daily_agent(False)
         self.assertEqual(result["report"], REPORT)
         stored = json.loads(daily.STATUS_PATH.read_text())
+        self.assertEqual(stored["report_format"], "news")
         self.assertNotIn("report", stored)
         self.assertNotIn("REPORT_END", json.dumps(stored))
         step = next(item for item in stored["steps"] if item["name"] == "Daily Report Build")
@@ -89,6 +113,31 @@ class WorkflowChecks(unittest.TestCase):
         text = daily.format_daily_agent_result(result)
         self.assertIn("PASS: Quality Review", text)
         self.assertLess(len(text), commands.MAX_TELEGRAM_CHARS)
+
+    def test_company_review_runs_after_the_rankings_are_refreshed(self):
+        with patch("src.intelligence.company_catalyst_context.daily_company_catalyst_review", return_value="Cached companies reviewed") as review:
+            result = daily.run_daily_agent(False)
+        review.assert_called_once()
+        names = [step["name"] for step in result["steps"]]
+        self.assertLess(names.index("Daily Report Build"), names.index("Company Catalyst Review"))
+        self.assertLess(names.index("Company Catalyst Review"), names.index("Quality Review"))
+
+    def test_dry_run_skips_company_review(self):
+        with patch("src.intelligence.company_catalyst_context.daily_company_catalyst_review") as review:
+            result = daily.run_daily_agent(True)
+        review.assert_not_called()
+        self.assertEqual(next(step["status"] for step in result["steps"] if step["name"] == "Company Catalyst Review"), "skip")
+
+    def test_live_editor_review_uses_the_exact_report_and_is_critical(self):
+        result = daily.run_daily_agent(False)
+        self.editor.assert_called_once_with(REPORT)
+        self.assertTrue(next(step["critical"] for step in result["steps"] if step["name"] == "News Editor Review"))
+
+    def test_missing_editor_record_blocks_success(self):
+        self.editor.side_effect = RuntimeError("No matching editorial record")
+        result = daily.run_daily_agent(False)
+        self.assertFalse(result["success"])
+        self.assertIn("FAIL: News Editor Review", daily.format_daily_agent_result(result))
 
     def test_saved_legacy_report_detail_is_summarized_when_read(self):
         result = daily.run_daily_agent(True)
@@ -143,9 +192,9 @@ class TelegramChecks(unittest.IsolatedAsyncioTestCase):
             await commands.rundailyagent_command(update, SimpleNamespace())
         status = loading.edit_text.await_args.args[0]
         self.assertIn("PASS: Quality Review", status)
-        self.assertNotIn("Daily Brief", status)
+        self.assertNotIn("Market Update", status)
         messages = [call.kwargs["text"] for call in chat.send_message.await_args_list]
-        self.assertEqual(sum("Daily Brief" in text for text in messages), 1)
+        self.assertEqual(sum("Smart Money Daily News Brief" in text for text in messages), 1)
         self.assertEqual(sum("REPORT_END" in text for text in messages), 1)
         self.assertTrue(all(len(text) <= commands.MAX_TELEGRAM_CHARS for text in messages))
 

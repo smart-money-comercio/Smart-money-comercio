@@ -626,14 +626,14 @@ def _build_calendar(
     earnings_limit: int,
     compact: bool,
 ) -> str:
-    dates = _business_days(day_count)
+    dates = _business_days(max(day_count, 5))
     from src.intelligence.calendar_context import checked_time, get_snapshot, report_zone
     snapshot = get_snapshot(dates)
     available = {row["date"]: row for row in snapshot["days"]}
     sections = []
     all_economic = []
     all_earnings = []
-    for event_date in dates:
+    for event_date in dates[:day_count]:
         day_status = available[event_date.isoformat()]
         economic_source = [row for row in snapshot["economic"] if row["source_date"] == event_date.isoformat()]
         earnings_source = [row for row in snapshot["earnings"] if row["source_date"] == event_date.isoformat()]

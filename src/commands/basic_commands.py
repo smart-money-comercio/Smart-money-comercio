@@ -14,8 +14,13 @@ START_MESSAGE = """
 🚀 Smart Money AI is online.
 
 Main Commands
-/report - Latest full report
-/brief - Short daily market brief
+/report - Smart Money Daily News Brief
+/brief - Daily news brief
+/newsbrief - Daily news brief
+/fullreport - Detailed research report
+/catalysts - Company catalyst brief
+/editorstatus - News editor workflow and coverage
+/storylog - Story decisions and source evidence
 /top10 - Top ranked Smart Money ideas
 /smartmoney - Smart Money command center
 /conviction - Highest signal-overlap ideas
@@ -95,7 +100,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     loading_message = await update.message.reply_text(
-        "📊 Refreshing market data and building daily report...",
+        "📰 Building Smart Money Daily News Brief...",
         parse_mode=None,
     )
 
@@ -110,7 +115,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             update=update,
             loading_message=loading_message,
             text=report_text,
-            title="📊 Daily Report",
+            title="Smart Money Daily News Brief",
             parse_mode=None,
         )
 

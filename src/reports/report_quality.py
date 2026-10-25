@@ -239,6 +239,9 @@ def hard_trim_report(report: str) -> str:
 
 def validate_daily_report_quality(report: str) -> dict:
     text = str(report or "")
+    from src.reports.daily_news_brief import TITLE, validate_news_brief
+    if text.startswith(TITLE + "\n"):
+        return validate_news_brief(text)
     missing_headers = [
         header for header in REQUIRED_HEADERS
         if f"\n{header}\n" not in f"\n{text}\n"

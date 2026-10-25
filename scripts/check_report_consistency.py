@@ -301,7 +301,7 @@ class BuilderConsistencyChecks(unittest.TestCase):
         with ExitStack() as stack:
             for name, value in replacements.items():
                 stack.enter_context(patch.object(self.daily, name, value))
-            return self.daily.build_daily_report()
+            return self.daily.build_research_report()
 
     def test_daily_snapshot_uses_daily_ranking_and_report_clock(self):
         report = self.build_daily_fixture(datetime(2026, 10, 7, 1, 5, tzinfo=timezone.utc))

@@ -37,6 +37,10 @@ def get_validation_value(result: dict, *keys, default=None):
 
 
 def format_quality_report(result: dict) -> str:
+    if result.get("format") == "news":
+        errors = result["missing_headers"] + result["duplicate_headers"] + result["greeting_errors"] + result["research_context_errors"]
+        return ("Smart Money Daily News Brief Quality\nStatus: " + ("PASS" if result["passes"] else "FAIL")
+                + f"\nCharacters: {result['chars']} / {result['max_chars']}\nDetails: " + format_list(errors))
     missing = get_validation_value(
         result,
         "missing_required_headers",

@@ -475,6 +475,7 @@ def direction_text(delta: float) -> str:
 def build_top_opportunities_section(
     ranked: list[dict],
     limit: int = 3,
+    catalyst_notes: dict[str, str] | None = None,
 ) -> str:
     if not ranked:
         return "No daily opportunities available."
@@ -508,6 +509,8 @@ def build_top_opportunities_section(
             if drivers
             else "structural conviction remains the main driver"
         )
+        if catalyst_notes and symbol in catalyst_notes:
+            driver_text += "; " + catalyst_notes[symbol]
 
         price_text = (
             f"{float(price):+.1f}%"

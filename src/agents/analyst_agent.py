@@ -14,6 +14,29 @@ from src.utils.score_display import (
 DEFAULT_MAX_ITEMS = 5
 
 
+def review_company_catalyst(evidence: dict) -> dict:
+    """Explain the next research checks without changing numerical scores."""
+    calendar = evidence.get("calendar", {})
+    events = evidence.get("events", [])
+    if calendar.get("status") == "conflict":
+        focus = "Resolve earnings date"
+        interpretation = "The cached calendar lists conflicting earnings dates. Check the company's investor-relations announcement."
+    elif calendar.get("dates"):
+        focus = "Confirm earnings schedule"
+        interpretation = "The earnings date is a Nasdaq estimate. Confirm the company announcement, release timing and guidance before changing conviction."
+    elif any(not event.get("official") for event in events):
+        focus = "Confirm company development"
+        interpretation = "A headline report is not company confirmation. Check the original announcement, commercial timing and execution costs."
+    elif events:
+        focus = "Review announced development"
+        interpretation = "A sourced announcement deserves follow-up on demand, timing, costs and guidance; it does not establish revenue or a buy signal."
+    else:
+        focus = "Complete catalyst checks"
+        interpretation = "No dated company catalyst is established in the available cached window. Check investor relations and current news."
+    return {"focus": focus, "interpretation": interpretation,
+            "confirmation": "Price and volume confirmation still need a fresh check.", "score_changes": False}
+
+
 def safe_float(value: Any, default: float = 0) -> float:
     try:
         if value is None:
