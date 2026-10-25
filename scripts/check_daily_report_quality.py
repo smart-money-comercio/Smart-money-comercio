@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 from pathlib import Path
 
 
@@ -38,9 +39,11 @@ def get_validation_value(result: dict, *keys, default=None):
 
 def format_quality_report(result: dict) -> str:
     if result.get("format") == "news":
-        errors = result["missing_headers"] + result["duplicate_headers"] + result["greeting_errors"] + result["research_context_errors"]
+        errors = result["missing_headers"] + result["duplicate_headers"] + result["greeting_errors"] + result["research_context_errors"] + result["narration_errors"]
         return ("Smart Money Daily News Brief Quality\nStatus: " + ("PASS" if result["passes"] else "FAIL")
-                + f"\nCharacters: {result['chars']} / {result['max_chars']}\nDetails: " + format_list(errors))
+                + f"\nCharacters: {result['chars']} / {result['max_chars']}"
+                + f"\nNarration: {result['spoken_words']} spoken words; ~{result['estimated_narration_seconds']:g} seconds at {result['narration_wpm']} words/minute"
+                + "\nDetails: " + format_list(errors))
     missing = get_validation_value(
         result,
         "missing_required_headers",
@@ -109,9 +112,15 @@ Research Context Errors: {format_list(result.get('research_context_errors', []))
 """.strip()
 
 
-def main() -> int:
+def main(offline_fixture: bool = False) -> int:
     try:
-        report = build_daily_report()
+        if offline_fixture:
+            from scripts.check_daily_news_brief import offline_news_fixture
+            print("Validation input: isolated offline fixture; not a live market report.")
+            with offline_news_fixture():
+                report = build_daily_report()
+        else:
+            report = build_daily_report()
     except Exception as error:
         print("Daily Report Quality Check")
         print("Status: FAIL")
@@ -144,4 +153,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--offline-fixture", action="store_true")
+    raise SystemExit(main(parser.parse_args().offline_fixture))

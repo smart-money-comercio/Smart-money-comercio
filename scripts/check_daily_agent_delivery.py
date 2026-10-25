@@ -29,7 +29,7 @@ from src.reports import daily_report, morning_brief_intro
 
 
 NOW = datetime(2026, 10, 20, 2, 16, tzinfo=timezone.utc)
-REPORT = """Smart Money Daily News Brief
+SHORT_REPORT = """Smart Money Daily News Brief
 Date: October 19, 2026
 Generated: 2026-10-19 22:16:00 America/New_York
 Market data: unavailable
@@ -48,6 +48,34 @@ Calendar evidence is unavailable.
 
 What We're Watching
 Check price, volume and original announcements.
+
+Research Notes
+Research only. Not financial advice.
+REPORT_END"""
+
+REPORT = """Smart Money Daily News Brief
+Date: October 19, 2026
+Generated: 2026-10-19 22:16:00 America/New_York
+Market data: completed regular session 2026-10-19
+
+Good evening.
+The indexes in this offline example finished the regular session higher.
+
+Market Update
+At the completed regular-session close, the S&P 500 rose 0.33 percent, the Nasdaq Composite rose 0.39 percent, and the Russell 2000 rose 0.33 percent.
+
+The Nasdaq had the strongest quoted return among these indexes. Its lead over the other two was 0.06 percentage points, so the difference in index performance was small in this example.
+
+These observations refer to the completed session. They describe price changes rather than establishing the cause of those changes, and the next opening may present a different pattern.
+
+Companies in Focus
+Microsoft, Nvidia and Taiwan Semiconductor are on this fixture's research list. No new source-confirmed company report is included in the example, so no corporate development is being inferred from the index returns.
+
+What's Ahead
+No publisher-confirmed upcoming release is included in this offline fixture. An event date would need an original publisher schedule before it could be narrated as a confirmed calendar entry.
+
+What We're Watching
+Our view: The next useful comparison is whether the broad indexes and the companies we follow continue to move in the same direction. Watch participation and the original company disclosures as they become available, and keep later evidence separate from this completed-session snapshot.
 
 Research Notes
 Research only. Not financial advice.
@@ -155,6 +183,17 @@ class WorkflowChecks(unittest.TestCase):
         self.assertIn("FAIL: Morning Brief Refresh", text)
         self.assertIn("Current macro cache unavailable", text)
         self.assertIn("PASS: Quality Review", text)
+
+    def test_short_narration_blocks_a_successful_daily_run(self):
+        self.build.side_effect = lambda: SHORT_REPORT
+        result = daily.run_daily_agent(False)
+        self.assertFalse(result["success"])
+        step = next(item for item in result["steps"] if item["name"] == "Quality Review")
+        self.assertEqual(step["status"], "fail")
+        from src.reports.daily_news_brief import validate_news_brief
+        validation = validate_news_brief(SHORT_REPORT)
+        self.assertEqual(validation["missing_headers"], [])
+        self.assertTrue(validation["narration_errors"])
 
     def test_critical_build_failure_has_no_report_and_quality_review_fails(self):
         self.build.side_effect = RuntimeError("Report build failed")

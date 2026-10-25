@@ -73,7 +73,7 @@ echo "Checking command catalog..."
 
 echo "Checking daily report quality..."
 
-"$PYTHON_BIN" scripts/check_daily_report_quality.py
+"$PYTHON_BIN" scripts/check_daily_report_quality.py --offline-fixture
 
 echo "Checking report risk and greeting consistency..."
 
@@ -85,7 +85,7 @@ echo "Checking dated research integration..."
 
 echo "Checking intelligence quality..."
 
-"$PYTHON_BIN" scripts/check_intelligence_quality.py
+"$PYTHON_BIN" scripts/check_intelligence_quality.py --offline-fixture
 
 echo "Checking critical imports and required functions..."
 
@@ -219,7 +219,7 @@ echo " Checking daily intelligence integration..."
 echo " Checking allocation quality..."
 
 "$PYTHON_BIN" scripts/check_allocation_quality.py
-"$PYTHON_BIN" scripts/check_daily_agent_quality.py
+"$PYTHON_BIN" scripts/check_daily_agent_quality.py --offline-fixture
 "$PYTHON_BIN" scripts/check_agentlog_quality.py
 "$PYTHON_BIN" scripts/check_watchdog_quality.py
 "$PYTHON_BIN" scripts/check_sourcehealth_quality.py

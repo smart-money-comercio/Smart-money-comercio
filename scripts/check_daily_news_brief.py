@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from contextlib import ExitStack, closing, redirect_stdout
+from contextlib import ExitStack, closing, contextmanager, redirect_stdout
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 import hashlib
@@ -93,6 +93,19 @@ class IsolatedChecks(unittest.TestCase):
                                  for header, lines in split_report_sections(report))
         self.assertTrue(validate_daily_report_quality(report)["passes"])
         return report
+
+
+@contextmanager
+def offline_news_fixture():
+    """Exercise the real news renderer with isolated, explicitly synthetic inputs."""
+    case = IsolatedChecks("research")
+    case.setUp()
+    try:
+        research = case.research()
+        with patch.object(daily_report, "build_research_report", return_value=research):
+            yield case
+    finally:
+        case.doCleanups()
 
 
 class CompanyChecks(IsolatedChecks):
@@ -276,6 +289,14 @@ class SQLiteCleanupChecks(unittest.TestCase):
 
 
 class NewsChecks(IsolatedChecks):
+    def confirmed_news_without_prices(self):
+        brief = companies.build_company_catalyst_brief()
+        for row in brief["rows"][:3]:
+            value = announcement(row["symbol"], official=True)["evidence"]
+            row["events"] = [{**value, "symbols": [row["symbol"]], "source_checked_at": NOW.isoformat(),
+                              "title": row["symbol"] + " reports quarterly financial results with revenue growth and an updated full-year earnings outlook"}]
+        return brief
+
     def test_research_edition_passes_the_deployment_intelligence_check(self):
         from scripts import check_daily_intelligence_integration as check
         report = self.research()
@@ -313,7 +334,7 @@ class NewsChecks(IsolatedChecks):
 
     def test_undated_price_data_cannot_be_presented_as_a_current_market_move(self):
         research = self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"})
-        text = build_daily_news_brief(research)
+        text = build_daily_news_brief(research, self.confirmed_news_without_prices())
         self.assertIn("Market data: unavailable", text)
         self.assertNotIn("0.52 percent", text)
         self.assertNotIn("18-symbol", text)
@@ -420,7 +441,7 @@ class NewsChecks(IsolatedChecks):
         self.assertIn("Index gains are not shared by most names in this research watchlist", text)
 
     def test_undated_data_cannot_drive_the_theme_or_interpretation(self):
-        text = build_daily_news_brief(self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"}))
+        text = build_daily_news_brief(self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"}), self.confirmed_news_without_prices())
         self.assertIn("Market coverage is incomplete", text)
         self.assertIn("A complete, dated market snapshot", text)
         self.assertNotIn("energy costs can put pressure", text)
@@ -439,6 +460,87 @@ class NewsChecks(IsolatedChecks):
         self.assertIn("Smart Money Daily News Brief Quality", card)
         self.assertIn("/ 3800", card)
         self.assertIn("Status: PASS", card)
+        self.assertIn("60-second Minimum: PASS", card)
+        self.assertIn("spoken words", card)
+
+    def timed_fixture(self, words):
+        prefix = f"{TITLE}\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\nMarket data: unavailable\n\nGood afternoon.\n\n"
+        return prefix + "\n\n".join(header + ("\n" + " ".join(["spoken"] * (words - 2)) if index == 0 else "")
+                                       for index, header in enumerate(HEADERS)) + "\nResearch only. Not financial advice."
+
+    def test_179_spoken_words_fails_and_180_passes_the_one_minute_boundary(self):
+        short, ready = validate_news_brief(self.timed_fixture(179)), validate_news_brief(self.timed_fixture(180))
+        self.assertFalse(short["passes"])
+        self.assertEqual(short["spoken_words"], 179)
+        self.assertLess(short["estimated_narration_seconds"], 60)
+        self.assertTrue(ready["passes"])
+        self.assertEqual(ready["estimated_narration_seconds"], 60)
+
+    def test_display_metadata_and_research_footer_cannot_supply_the_spoken_minimum(self):
+        text = self.timed_fixture(160).replace("Good afternoon.", "Display metadata: " + "date " * 150 + "\n\nGood afternoon.")
+        text += "\n" + "footer " * 150 + "/storylog https://example.com/research"
+        result = validate_news_brief(text)
+        self.assertEqual(result["spoken_words"], 160)
+        self.assertTrue(result["narration_errors"])
+
+    def test_spoken_copy_excludes_section_titles_commands_urls_and_notes(self):
+        from src.reports.daily_news_brief import spoken_text
+        text = "Title\nDate: 2026-10-25\n\nGood afternoon.\nMarket Update\nStocks changed. /report https://example.com\nResearch Notes\nLinks and disclaimer."
+        self.assertEqual(spoken_text(text).split(), ["Good", "afternoon.", "Stocks", "changed."])
+
+    def test_quiet_edition_reaches_a_minute_with_derived_dated_market_context(self):
+        text = build_daily_news_brief(self.research())
+        result = validate_news_brief(text)
+        self.assertGreaterEqual(result["spoken_words"], 180)
+        self.assertGreaterEqual(result["estimated_narration_seconds"], 60)
+        self.assertIn("0.31 percentage points", text)
+        self.assertNotIn("headline-only", text)
+
+    def test_confirmed_calendar_context_is_used_before_other_duration_expansion(self):
+        from src.reports import daily_news_brief as news
+        brief = companies.build_company_catalyst_brief()
+        brief["macro"] = [{"eventName": title, "event_at": f"2026-10-{day}T12:30:00+00:00", "time_status": "verified"}
+                          for day, title in ((28, "Fed Interest Rate Decision"), (29, "Initial Jobless Claims"), (30, "CPI"))]
+        with patch.object(news, "MIN_NARRATION_WORDS", 220):
+            text = build_daily_news_brief(self.research(), brief)
+            self.assertGreaterEqual(news.narration_metrics(text)["spoken_words"], 220)
+        self.assertIn("consumer inflation", text)
+
+    def test_insufficient_evidence_is_withheld_instead_of_padding_or_adding_unconfirmed_news(self):
+        from src.intelligence import news_editor_store
+        brief = companies.build_company_catalyst_brief(); brief["macro"] = []
+        report = self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"})
+        with self.assertRaisesRegex(ValueError, "Narration minimum not met"):
+            build_daily_news_brief(report, brief)
+        self.assertFalse(news_editor_store.state_path().exists())
+
+    def test_report_preflight_uses_real_duration_validation_with_isolated_inputs(self):
+        from scripts import check_daily_report_quality as check
+        before = self.ranking.read_bytes(); output = io.StringIO()
+        with redirect_stdout(output):
+            result = check.main(offline_fixture=True)
+        self.assertEqual(result, 0, output.getvalue())
+        self.assertIn("isolated offline fixture", output.getvalue())
+        self.assertIn("spoken words", output.getvalue())
+        self.assertEqual(before, self.ranking.read_bytes())
+
+    def test_normal_quality_check_does_not_replace_short_live_copy_with_a_fixture(self):
+        from scripts import check_daily_report_quality as check
+        output = io.StringIO()
+        with patch.object(check, "build_daily_report", return_value=self.timed_fixture(179)), redirect_stdout(output):
+            self.assertEqual(check.main(), 1)
+        self.assertIn("Narration minimum not met", output.getvalue())
+        self.assertNotIn("isolated offline fixture", output.getvalue())
+
+    def test_agent_preflight_keeps_live_status_unchanged(self):
+        from scripts import check_daily_agent_quality as check
+        from src.jobs import daily_agent_job
+        live = self.root / "live-agent.json"; live.write_text('{"keep":"live status"}')
+        output = io.StringIO()
+        with patch.object(daily_agent_job, "STATUS_PATH", live), redirect_stdout(output):
+            result = check.main(offline_fixture=True)
+        self.assertEqual(result, 0, output.getvalue())
+        self.assertEqual(live.read_text(), '{"keep":"live status"}')
 
 
 class CommandChecks(unittest.IsolatedAsyncioTestCase):

@@ -1,5 +1,8 @@
 ﻿import os
 import sys
+import argparse
+from contextlib import ExitStack
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -17,16 +20,25 @@ def require(condition: bool, message: str, errors: list[str]) -> None:
         errors.append(message)
 
 
-def main() -> int:
+def main(offline_fixture: bool = False) -> int:
     errors: list[str] = []
 
     try:
         from src.jobs.daily_agent_job import run_daily_agent
         from src.reports.daily_agent_status_report import build_daily_agent_status_report
 
-        result = run_daily_agent(dry_run=True)
-        status_report = build_daily_agent_status_report()
-        daily_report = result.get("report", "")
+        with ExitStack() as stack:
+            if offline_fixture:
+                from scripts.check_daily_news_brief import offline_news_fixture
+                from src.jobs import daily_agent_job
+                case = stack.enter_context(offline_news_fixture())
+                stack.enter_context(patch.object(daily_agent_job, "STATUS_PATH", case.root / "agent.json"))
+                stack.enter_context(patch.object(daily_agent_job, "build_tradeplans_step", return_value="Offline fixture trade plans; separately validated."))
+                stack.enter_context(patch.object(daily_agent_job, "build_allocation_step", return_value="Offline fixture allocation; separately validated."))
+                print("Validation input: isolated offline fixture; no delivery or live market report.")
+            result = run_daily_agent(dry_run=True)
+            status_report = build_daily_agent_status_report()
+            daily_report = result.get("report", "")
 
     except Exception as error:
         print("Daily Agent Quality Check")
@@ -77,4 +89,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--offline-fixture", action="store_true")
+    raise SystemExit(main(parser.parse_args().offline_fixture))

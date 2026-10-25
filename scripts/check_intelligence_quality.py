@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 import tempfile
 from pathlib import Path
 
@@ -39,14 +40,22 @@ from src.utils.intelligence_quality import (  # noqa: E402
 )
 
 
-def main() -> int:
+def main(offline_fixture: bool = False) -> int:
     symbol = os.getenv("INTELLIGENCE_GUARDRAIL_SYMBOL", DEFAULT_SYMBOL)
 
-    payload = run_intelligence_quality_check(symbol)
+    if offline_fixture:
+        from scripts.check_daily_news_brief import offline_news_fixture
+        print("Validation input: isolated offline fixture; not a live market report.")
+        with offline_news_fixture():
+            payload = run_intelligence_quality_check(symbol)
+    else:
+        payload = run_intelligence_quality_check(symbol)
     print(format_intelligence_quality_report(payload))
 
     return 0 if payload.get("status") == "PASS" else 1
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--offline-fixture", action="store_true")
+    raise SystemExit(main(parser.parse_args().offline_fixture))
