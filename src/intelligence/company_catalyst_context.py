@@ -45,9 +45,15 @@ def valid_event(event: dict, now: datetime) -> dict | None:
             symbols = [item for item in event["symbols"] if isinstance(item, str) and SYMBOL.fullmatch(item)]
             if not symbols or not isinstance(evidence.get("title"), str) or not evidence["title"].strip():
                 return None
+            original_title = evidence.get("original_title", evidence["title"])
+            title = clean(original_title if isinstance(original_title, str) else evidence["title"], 1001)
+            shortened = bool(evidence.get("title_truncated")) or not isinstance(original_title, str) or len(title) > 1000
+            # Older alert readers capped titles at 240 without a completeness flag.
+            if "original_title" not in evidence and len(title) == 240:
+                shortened = True
             event = {**event, "symbols": symbols, "evidence": {**evidence, "official": evidence.get("official") is True}}
             return {"kind": "company", "symbols": symbols, "fact": event_fact(event), "url": url,
-                    "official": event["evidence"]["official"], "title": clean(evidence["title"], 150),
+                    "official": event["evidence"]["official"], "title": title[:1000], "title_truncated": shortened,
                     "source": clean(evidence.get("source") or parts.hostname, 65), "published": published.isoformat(),
                     "source_checked_at": datetime.fromtimestamp(event["observed"], timezone.utc).isoformat()
                     if type(event.get("observed")) in (int, float) and math.isfinite(event["observed"]) else None}

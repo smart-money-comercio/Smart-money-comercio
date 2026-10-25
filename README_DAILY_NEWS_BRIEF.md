@@ -8,6 +8,8 @@ The writing follows a market-review pattern inspired by the supplied Empower com
 
 Company paragraphs use shorter source attribution while keeping the original headline, publication date/time and confirmation status together. Repeated research checklists are kept in `/storylog`. Broad market previews and stock-pick lists are logged as skipped rather than narrated as discrete company developments. Commentary can appear when current and relevant, with an explicit commentary label and lower priority than specific company reports. An edition with no eligible company story says so instead of filling the space with unrelated headlines.
 
+Company names are expanded for the core coverage and common research leaders, including Apple, Alphabet, Amazon, Northrop Grumman and Lockheed Martin. Complete source headlines are retained in narration; the editor holds incomplete wording and removes whole stories to meet the length limit. Retrospectives and personal-wealth profiles are excluded from the daily company-news slots unless the headline establishes a relevant corporate event such as compensation or a share sale. These editorial rules do not change company scores or independently confirm headline claims.
+
 The news edition is rendered from the same validated detailed report. `/fullreport` retains the research tables, scores, trade-plan snapshot, allocation, source context and validation commands. Quality checks recognize both formats; the news edition has its own structure, date/greeting, length and source-qualification checks. It does not present numerical research rankings as confirmed entries or change stock scores. Important cached market alerts retain their dated source evidence and do not establish the cause of a price move.
 
 ## Company catalyst brief

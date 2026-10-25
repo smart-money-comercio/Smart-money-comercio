@@ -284,6 +284,136 @@ class EditorChecks(IsolatedChecks):
         self.assertIn("No company story was selected", text)
         self.assertLessEqual(len(text), 1500)
 
+    def test_posted_retrospective_and_personal_wealth_stories_do_not_fill_news_slots(self):
+        values = [candidate(title="Apple's Market Cap Grew From $350 Billion to $4.6 Trillion During Tim Cook's 15 Years as CEO. Here's What That Growth Curve Means for Apple's Next Chapter Under"),
+                  candidate("TSLA", title="Elon Musk Became the First Person Ever Confirmed With a Net Worth Above $1 Trillion in June 2026. Here's Why That Milestone Still Matters for Tesla and SpaceX S"),
+                  candidate("NVDA", title="Nvidia (NVDA) Has Lost Its China AI Accelerator Market")]
+        text = self.render(values)
+        record = store.read_editions(report=text)[0]
+        self.assertEqual([story["story_type"] for story in record["candidates"][:2]], ["retrospective", "personal wealth"])
+        self.assertEqual([story["decision"] for story in record["candidates"]], ["skip", "skip", "selected"])
+        self.assertIn(values[2]["title"], text)
+        self.assertNotIn("$350 Billion", text)
+        self.assertNotIn("Net Worth", text)
+
+    def test_original_feed_headline_is_complete_without_changing_other_feed_displays(self):
+        title = "Microsoft introduces a cloud platform for enterprise customers and partners " * 3 + "but will not launch it this year"
+        path = self.cache(title=title)
+        source = editor.feeds.NEWS_SOURCES[0]
+        body = json.loads(path.read_text())[source["url"]]["body"]
+        legacy = editor.feeds.parse_rss_items(body, source)[0]["title"]
+        self.assertEqual(len(legacy), 180)
+        self.assertTrue(legacy.endswith("..."))
+        rows, _ = editor.cache_candidates(NOW, ["MSFT"])
+        self.assertEqual(rows[0]["title"], title)
+        text = self.render(rows)
+        self.assertIn(title, text)
+        self.assertIn("but will not launch it this year", text)
+        record = store.read_editions(report=text)[0]
+        self.assertEqual(record["candidates"][0]["title"], title)
+        self.assertFalse(record["candidates"][0]["title_truncated"])
+
+    def test_ellipsis_and_explicitly_shortened_titles_are_held(self):
+        for changes in ({"title": "Microsoft releases a new cloud platform..."},
+                        {"title": "Microsoft releases a new cloud platform…"}, {"title_truncated": True}):
+            with self.subTest(changes=changes):
+                story = self.plan([candidate(**changes)])["candidates"][0]
+                self.assertEqual(story["decision"], "wait")
+                self.assertEqual(story["source_check"], "hold")
+                self.assertIn("Complete original headline", story["reason"])
+
+    def test_oversized_title_is_bounded_and_cannot_hide_another_usable_story(self):
+        plan = self.plan([candidate(title="Microsoft " + "x" * (editor.MAX_HEADLINE_CHARS + 1)), candidate("NVDA")])
+        held = plan["candidates"][0]
+        self.assertEqual(held["decision"], "wait")
+        self.assertEqual(len(held["title"]), editor.MAX_HEADLINE_CHARS)
+        self.assertTrue(held["title_truncated"])
+        self.assertEqual([story["symbols"][0] for story in editor.selected_stories(plan)], ["NVDA"])
+
+    def test_event_reader_does_not_cut_a_complete_title_at_150_characters(self):
+        value = self.event()
+        title = "Microsoft introduces an enterprise cloud platform for customers and partners " * 2 + "with commercial availability still pending"
+        value["evidence"]["title"] = title
+        self.event(value)
+        event = next(row["events"][0] for row in self.brief()["rows"] if row["events"])
+        self.assertEqual(event["title"], title)
+        self.assertFalse(event["title_truncated"])
+        self.assertIn(title, self.render([]))
+
+    def test_legacy_event_at_the_unmarked_240_character_limit_is_not_narrated(self):
+        value = self.event()
+        value["evidence"]["title"] = ("Microsoft cloud platform development " * 10)[:240]
+        self.event(value)
+        event = next(row["events"][0] for row in self.brief()["rows"] if row["events"])
+        self.assertTrue(event["title_truncated"])
+        text = self.render([])
+        self.assertIn("No company story was selected", text)
+        self.assertNotIn("Microsoft cloud platform development", text)
+
+    def test_original_event_title_restores_full_wording_when_supplied_separately(self):
+        value = self.event()
+        title = "Microsoft introduces a cloud product for customers and partners " * 4 + "with launch timing unconfirmed"
+        value["evidence"].update(title=title[:240], original_title=title)
+        self.event(value)
+        event = next(row["events"][0] for row in self.brief()["rows"] if row["events"])
+        self.assertEqual(event["title"], title)
+        self.assertFalse(event["title_truncated"])
+        self.assertIn(title, self.render([]))
+
+    def test_malformed_original_event_title_is_not_turned_into_a_company_claim(self):
+        value = self.event()
+        value["evidence"]["original_title"] = {"unexpected": "structure"}
+        self.event(value)
+        event = next(row["events"][0] for row in self.brief()["rows"] if row["events"])
+        self.assertTrue(event["title_truncated"])
+        text = self.render([])
+        self.assertNotIn("unexpected", text)
+        self.assertIn("No company story was selected", text)
+
+    def test_compensation_and_share_sales_are_kept_even_with_net_worth_mentions(self):
+        for title in ("Tesla shareholders approve Musk pay package as his net worth rises",
+                      "CEO reports stock sales as net worth falls"):
+            with self.subTest(title=title):
+                story = editor.selected_stories(self.plan([candidate("TSLA", title=title)]))[0]
+                self.assertEqual(story["story_type"], "reported development")
+
+    def test_a_personal_wealth_milestone_does_not_become_news_by_using_announces(self):
+        plan = self.plan([candidate("TSLA", title="Elon Musk announces a new net worth milestone")])
+        self.assertFalse(editor.selected_stories(plan))
+        self.assertEqual(plan["candidates"][0]["story_type"], "personal wealth")
+
+    def test_current_ceo_transition_is_kept_even_with_retrospective_context(self):
+        for title in ("Apple appoints new CEO after Tim Cook's 15 years as CEO",
+                      "Tim Cook steps down after 15 years as CEO"):
+            with self.subTest(title=title):
+                story = editor.selected_stories(self.plan([candidate(title=title)]))[0]
+                self.assertEqual(story["story_type"], "reported development")
+
+    def test_embedded_explanatory_hook_is_labeled_as_commentary(self):
+        value = candidate(title="Microsoft Valuation Is Back in Focus. Here's What Investors Need to Know")
+        text = self.render([value])
+        self.assertIn("In commentary on Microsoft", text)
+        self.assertIn("headline-only commentary, unconfirmed by the company", text)
+
+    def test_editorial_review_rejects_a_selected_incomplete_headline(self):
+        plan = self.plan([candidate()])
+        story = editor.selected_stories(plan)[0]
+        paragraph = editor.render_story(story, companies.calendar_context.report_zone(), {"MSFT": "Microsoft"})
+        story["title_truncated"] = True
+        with self.assertRaisesRegex(ValueError, "headline is incomplete"):
+            editor.review_and_record(plan, paragraph, {story["id"]: paragraph}, self.research())
+        self.assertFalse(store.state_path().exists())
+
+    def test_apple_is_named_in_the_spoken_story_instead_of_only_using_a_ticker(self):
+        brief = self.brief()
+        brief["rows"].append({"symbol": "AAPL", "events": [], "calendar": {"dates": []}})
+        value = candidate("AAPL", title="Apple announces an example product")
+        with patch.object(editor, "cache_candidates", return_value=([value], [])):
+            text = build_daily_news_brief(self.research(), brief)
+        self.assertIn("report on Apple", text)
+        self.assertNotIn("report on AAPL", text)
+        self.assertIn(value["title"], text)
+
     def test_news_report_has_exactly_matching_record_and_six_stages(self):
         text = self.render([candidate(), candidate("NVDA"), candidate("PLTR")])
         record = store.read_editions(report=text)[0]

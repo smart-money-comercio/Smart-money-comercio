@@ -355,7 +355,7 @@ def child_text(item: ET.Element, tag_name: str) -> str:
     return ""
 
 
-def parse_rss_items(xml_text: str, source: dict) -> list[dict]:
+def parse_rss_items(xml_text: str, source: dict, *, full_titles: bool = False) -> list[dict]:
     try:
         root = ET.fromstring(xml_text)
     except Exception:
@@ -377,7 +377,7 @@ def parse_rss_items(xml_text: str, source: dict) -> list[dict]:
 
         items.append(
             {
-                "title": compact_text(title, 180),
+                "title": title if full_titles else compact_text(title, 180),
                 "description": compact_text(description, 280),
                 "link": link,
                 "published": published,

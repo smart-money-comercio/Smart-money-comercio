@@ -16,7 +16,10 @@ TITLE = "Smart Money Daily News Brief"
 MAX_NEWS_CHARS = 3800
 HEADERS = ["Market Update", "Companies in Focus", "What's Ahead", "What We're Watching", "Research Notes"]
 NAMES = {"MSFT": "Microsoft", "NVDA": "Nvidia", "PLTR": "Palantir", "TSLA": "Tesla",
-         "TSM": "Taiwan Semiconductor", "AVGO": "Broadcom", "AVAV": "AeroVironment", "CRWD": "CrowdStrike"}
+         "TSM": "Taiwan Semiconductor", "AVGO": "Broadcom", "AVAV": "AeroVironment", "CRWD": "CrowdStrike",
+         "AAPL": "Apple", "AMZN": "Amazon", "GOOG": "Alphabet", "GOOGL": "Alphabet", "META": "Meta Platforms",
+         "AMD": "Advanced Micro Devices", "INTC": "Intel", "NOC": "Northrop Grumman", "LMT": "Lockheed Martin",
+         "KTOS": "Kratos Defense", "CACI": "CACI International"}
 
 
 def name(symbol: str) -> str:

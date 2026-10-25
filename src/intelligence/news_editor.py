@@ -21,6 +21,7 @@ MAX_CANDIDATES = 180
 MAX_CACHE_BYTES = 3_000_000
 MAX_CACHE_AGE = 6 * 3600
 MAX_NEWS_AGE = 24 * 3600
+MAX_HEADLINE_CHARS = 1000
 OFFICIAL_HOSTS = {"Federal Reserve": "federalreserve.gov", "U.S. Treasury": "treasury.gov", "EIA": "eia.gov"}
 ALIASES = {**feeds.TICKER_TERMS, "TSM": ["TSM", "TSMC", "Taiwan Semiconductor"],
            "NOC": ["NOC", "Northrop Grumman"], "LMT": ["LMT", "Lockheed Martin"],
@@ -77,6 +78,19 @@ def story_type(story: dict) -> str:
     if story["official"]:
         return "announcement"
     title = story["title"]
+    capital_event = re.search(
+        r"\b(?:compensation|pay package|shareholder vote|share sales?|stock sales?|stake sales?|margin call)\b", title, re.I)
+    corporate_event = re.search(
+        r"\b(?:appoints?|names? .{0,30}(?:CEO|chief executive)|steps down|resigns?|retires?|"
+        r"launch(?:es)?|announces?|signs? .{0,30}(?:contract|deal)|wins? .{0,30}contract)\b", title, re.I)
+    corporate_event = corporate_event or capital_event
+    if re.search(r"\b(?:net worth|richest (?:person|man|woman)|trillionaire)\b", title, re.I) and not capital_event:
+        return "personal wealth"
+    retrospective = re.search(r"\b(?:a look back|looking back|years? as (?:CEO|chief executive))\b", title, re.I)
+    metric_history = re.search(r"\b(?:market cap|market value).{0,30}(?:grew|grown|growth).{0,30}from\b", title, re.I)
+    analysis_cue = re.search(r"\bhere['’]s (?:why|what|how)\b|\bstill matters\b|\bgrowth curve\b", title, re.I)
+    if (retrospective or (metric_history and analysis_cue)) and not corporate_event:
+        return "retrospective"
     roundup = (
         r"^(?:here are\s+)?(?:\d+|three|five|ten)\b.{0,65}\b(?:stocks|etfs|funds|picks)\b",
         r"\b(?:stocks|etfs|funds)\s+(?:to|you should)\s+(?:buy|watch|own|sell)\b",
@@ -86,7 +100,8 @@ def story_type(story: dict) -> str:
         return "roundup"
     if len(story["symbols"]) > 1 and re.search(r"\b(?:week ahead|earnings preview|market outlook)\b", title, re.I):
         return "roundup"
-    if re.search(r"^(?:why|how)\b|\b(?:opinion|analysis)\s*:", title, re.I) or title.endswith("?"):
+    if (re.search(r"^(?:why|how)\b|\b(?:opinion|analysis)\s*:", title, re.I) or title.endswith("?")
+            or (analysis_cue and not corporate_event)):
         return "commentary"
     return "reported development"
 
@@ -114,7 +129,7 @@ def cache_candidates(now: datetime, symbols: list[str]) -> tuple[list[dict], lis
             if not isinstance(body, str) or len(body.encode()) > MAX_CACHE_BYTES:
                 raise ValueError("invalid feed body")
             # HTML titles and fetch times are never substituted for original RSS dates.
-            items = feeds.parse_rss_items(body, source)[:30]
+            items = feeds.parse_rss_items(body, source, full_titles=True)[:30]
             if not items:
                 raise ValueError("no dated RSS article candidates")
         except (KeyError, TypeError, ValueError) as exc:
@@ -151,15 +166,18 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     candidates += cached
     ledger = []
     for raw in candidates[:MAX_CANDIDATES]:
-        title = clean(raw.get("title"), 160)
-        story = {"title": title, "url": clean(raw.get("url"), 2048), "source": clean(raw.get("source"), 65),
+        raw_title = raw.get("title")
+        title = clean(raw_title, MAX_HEADLINE_CHARS + 1)
+        incomplete = bool(raw.get("title_truncated")) or len(title) > MAX_HEADLINE_CHARS or title.endswith(("...", "…"))
+        story = {"title": title[:MAX_HEADLINE_CHARS], "title_truncated": incomplete,
+                 "url": clean(raw.get("url"), 2048), "source": clean(raw.get("source"), 65),
                  "symbols": [symbol for symbol in raw.get("symbols", []) if symbol in symbols],
                  "kind": raw.get("kind", "macro"), "origin": raw.get("origin", "cached RSS"),
                  "official": raw.get("official") is True, "published": clean(raw.get("published"), 100),
                  "source_checked_at": raw.get("source_checked_at"), "decision": "wait", "reason": "Source checks pending"}
         story["id"] = hashlib.sha256(json.dumps([story["title"], story["url"], story["published"]]).encode()).hexdigest()[:16]
         try:
-            if not title or not story["source"]:
+            if not isinstance(raw_title, str) or not title or not story["source"]:
                 raise ValueError("Headline or source missing")
             story["canonical_url"] = canonical_url(raw.get("url"))
             published = dated(raw.get("published"))
@@ -167,6 +185,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 raise ValueError("Original publication time is future-dated or older than 24 hours")
             if raw.get("authority_mismatch"):
                 raise ValueError("Publisher-feed link does not match the original publisher")
+            if incomplete:
+                raise ValueError("Complete original headline unavailable or longer than the editorial limit; shortened wording withheld")
             story["published"] = published.isoformat()
             story["source_check"] = "pass"
         except (ValueError, TypeError, OverflowError) as exc:
@@ -178,6 +198,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story.update(decision="skip", reason="Outside monitored companies and market themes")
         elif story["story_type"] == "roundup":
             story.update(decision="skip", reason="Broad market preview or stock-pick roundup; no discrete company development established by the headline")
+        elif story["story_type"] in {"personal wealth", "retrospective"}:
+            story.update(decision="skip", reason="Personal-wealth profile or retrospective; a current company development is not established by the headline")
         else:
             rank = min((symbols.index(symbol) for symbol in story["symbols"]), default=len(symbols))
             story["priority"] = (100 if story["official"] else 70) + (10 if story["symbols"] else 5) + max(0, 10 - rank)
@@ -205,7 +227,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 2, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 3, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def selected_stories(plan: dict) -> list[dict]:
@@ -244,6 +266,8 @@ def render_story(story: dict, zone, company_names: dict) -> str:
 def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str) -> str:
     selected = selected_stories(plan)
     for story in selected:
+        if story.get("title_truncated"):
+            raise ValueError("Selected story headline is incomplete")
         if report.count(paragraphs[story["id"]]) != 1:
             raise ValueError("Selected story evidence or qualification changed during narration")
     if len(selected) > MAX_STORIES:
@@ -259,7 +283,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Source Check", "status": "limited" if counts["wait"] or value["issues"] else "pass", "detail": f"{counts['wait']} held; original publication dates and HTTPS URLs checked"},
         {"name": "Relevance", "status": "pass", "detail": "Core companies, dated top opportunities and market themes"},
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
-        {"name": "Editorial Review", "status": "pass", "detail": "Selected source facts, dates, attribution and confidence labels retained"},
+        {"name": "Editorial Review", "status": "pass", "detail": "Complete selected headlines, dates, attribution and confidence labels retained"},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
     return store.save_edition(value, report)
 
@@ -272,7 +296,7 @@ def review_daily_edition(report: str) -> str:
     if not any(step["name"] == "Editorial Review" and step["status"] == "pass" for step in record["stages"]):
         raise RuntimeError("Editorial review did not pass")
     counts = {decision: sum(story["decision"] == decision for story in record["candidates"]) for decision in ("selected", "skip", "wait")}
-    return f"{counts['selected']} sourced stories selected; {counts['skip']} skipped; {counts['wait']} held. Editorial facts and qualifications checked; edition {record['id']}."
+    return f"{counts['selected']} sourced stories selected; {counts['skip']} skipped; {counts['wait']} held. Source wording and qualifications checked; edition {record['id']}."
 
 
 def build_editor_status(symbol: str = "", history: bool = False) -> str:
