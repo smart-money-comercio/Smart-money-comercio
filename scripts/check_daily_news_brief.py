@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from contextlib import ExitStack, closing
+from contextlib import ExitStack, closing, redirect_stdout
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -271,6 +272,16 @@ class SQLiteCleanupChecks(unittest.TestCase):
 
 
 class NewsChecks(IsolatedChecks):
+    def test_research_edition_passes_the_deployment_intelligence_check(self):
+        from scripts import check_daily_intelligence_integration as check
+        report = self.research()
+        output = io.StringIO()
+        with patch.object(daily_report, "build_research_report", return_value=report), redirect_stdout(output):
+            result = check.main()
+        self.assertEqual(result, 0, output.getvalue())
+        self.assertIn("/summarypreview", report)
+        self.assertIn("/catalysts", report)
+
     def test_news_brand_and_spoken_paragraphs_replace_the_long_tables(self):
         text = build_daily_news_brief(self.research())
         self.assertTrue(text.startswith(TITLE))

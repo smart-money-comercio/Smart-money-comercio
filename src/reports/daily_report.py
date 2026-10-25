@@ -1902,7 +1902,7 @@ Next Commands
 /weeklycalendar
 /global
 /contextstatus
-/catalysts
+/summarypreview · /catalysts
 /allocation
 
 Notes
