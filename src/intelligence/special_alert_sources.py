@@ -184,7 +184,7 @@ def tesla_page(body: bytes) -> TeslaReleasePage:
 def tesla_ir_news(now: datetime, config: dict) -> tuple[list[dict], str, list[str]]:
     """Try public release pages if RSS fails; never promote third-party headlines."""
     try:
-        items = parse_feed(request_bytes(TESLA_IR_RSS), ["TSLA"], "Tesla IR")
+        items = parse_feed(request_bytes(TESLA_IR_RSS), ["TSLA"], "Tesla IR", publisher_symbol="TSLA")
         return items, "official RSS available", []
     except Exception as exc:
         rss_error = source_error(exc)
@@ -212,7 +212,7 @@ def tesla_ir_news(now: datetime, config: dict) -> tuple[list[dict], str, list[st
                 continue
             items.append({"symbol": "TSLA", "title": title, "url": url,
                           "published": published.isoformat(), "official": True,
-                          "source": "ir.tesla.com"})
+                          "source": "ir.tesla.com", "publisher_symbol": "TSLA"})
         except Exception as exc:
             issues.append(f"Tesla IR release: {source_error(exc)} (unavailable or missing original publication time)")
     if not checked:

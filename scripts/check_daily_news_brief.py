@@ -27,6 +27,7 @@ from scripts.check_calendar_evidence import earnings, fed, fed_row
 from scripts.check_report_consistency import BuilderConsistencyChecks
 from src.intelligence import calendar_context as calendar, calendar_sources as publishers
 from src.intelligence import company_catalyst_context as companies, special_alert_store as store, special_alert_universe as universe
+from src.intelligence.special_alert_sources import OFFICIAL_DOMAINS
 from src.reports import daily_report
 from src.reports.daily_news_brief import TITLE, HEADERS, MAX_NEWS_CHARS, build_daily_news_brief, validate_news_brief
 from src.reports.report_quality import split_report_sections, validate_daily_report_quality
@@ -39,6 +40,9 @@ def announcement(symbol="MSFT", official=False, **overrides):
     evidence = {"title": "Example company introduces a new research platform", "source": "example.com",
                 "url": "https://example.com/announcement", "official": official,
                 "published": (NOW - timedelta(hours=1)).isoformat()}
+    if official:
+        domain = OFFICIAL_DOMAINS.get(symbol, ("microsoft.com",))[0]
+        evidence.update(source=domain, url="https://www." + domain + "/announcement", publisher_symbol=symbol)
     return {"key": symbol + "-event", "kind": "company", "symbols": [symbol], "level": 1,
             "expires": NOW.timestamp() + 3600, "evidence": evidence, "agent_review": "Interpretation: Verify the announcement.", **overrides}
 
@@ -316,17 +320,17 @@ class NewsChecks(IsolatedChecks):
 
     def test_earnings_are_estimates_and_fed_times_have_publisher_evidence(self):
         text = build_daily_news_brief(self.research())
-        self.assertIn("estimated earnings calendar", text)
-        self.assertIn("Company confirmation is pending", text)
+        self.assertNotIn("estimated earnings calendar", text)
+        self.assertNotIn("Company confirmation is pending", text)
+        self.assertIn("Nasdaq estimate", companies.build_company_catalyst_report("MSFT"))
         self.assertIn("Federal Reserve's interest-rate decision", text)
         self.assertIn("02:00 PM EDT", text)
 
     def test_headline_only_development_is_not_rewritten_as_company_confirmation(self):
         self.event()
         text = build_daily_news_brief(self.research())
-        self.assertIn("headline-only report, unconfirmed by the company", text)
-        self.assertIn("example.com's report on Microsoft", text)
-        self.assertIn("published October 25", text)
+        self.assertNotIn("Example company introduces", text)
+        self.assertNotIn("headline-only", text)
         self.assertNotIn("Microsoft's company announcement", text)
 
     def test_official_development_keeps_the_execution_follow_up(self):
@@ -354,12 +358,12 @@ class NewsChecks(IsolatedChecks):
         text = build_daily_news_brief(self.research())
         result = validate_daily_report_quality(text)
         self.assertEqual(result["format"], "news"); self.assertTrue(result["passes"])
-        self.assertFalse(validate_news_brief(text.replace("Company confirmation is pending.", ""))["passes"])
+        self.assertFalse(validate_news_brief(text + "\n\nNasdaq's estimated earnings calendar lists Microsoft. Company confirmation is pending.")["passes"])
 
     def test_one_estimated_earnings_date_cannot_supply_another_dates_qualification(self):
         text = build_daily_news_brief(self.research())
-        self.assertGreater(text.count("Company confirmation is pending."), 1)
-        self.assertFalse(validate_news_brief(text.replace("Company confirmation is pending.", "", 1))["passes"])
+        self.assertNotIn("Company confirmation is pending.", text)
+        self.assertFalse(validate_news_brief(text + "\n\nA headline-only report, unconfirmed by the company.")["passes"])
 
     def test_quality_rejects_wrong_greeting_missing_date_session_and_excess_length(self):
         text = build_daily_news_brief(self.research())
@@ -383,14 +387,19 @@ class NewsChecks(IsolatedChecks):
 
     def test_large_company_titles_are_bounded_without_cutting_qualifications_mid_sentence(self):
         brief = companies.build_company_catalyst_brief()
-        event = {"url": "https://example.com/one", "source": "example.com", "official": False,
+        event = {"url": "https://www.microsoft.com/one", "source": "microsoft.com", "official": True,
                  "published": (NOW - timedelta(minutes=5)).isoformat(),
-                 "title": "Long but bounded development " * 5}
-        for index, row in enumerate(brief["rows"][:2]): row["events"] = [{**event, "url": event["url"] + str(index)}]
+                 "title": "Microsoft introduces a cloud platform " * 5}
+        for index, row in enumerate(brief["rows"][:2]):
+            domain = OFFICIAL_DOMAINS[row["symbol"]][0]
+            row["events"] = [{**event, "url": "https://www." + domain + "/one" + str(index),
+                              "publisher_symbol": row["symbol"], "source_checked_at": NOW.isoformat(),
+                              "title": row["symbol"] + " introduces a cloud platform " * 5}]
         text = build_daily_news_brief(self.research(), brief)
         self.assertLessEqual(len(text), MAX_NEWS_CHARS)
         self.assertTrue(text.endswith("Research only. Not financial advice."))
-        self.assertIn("headline-only report, unconfirmed by the company", text)
+        self.assertIn("company announcement", text)
+        self.assertNotIn("headline-only", text)
 
     def test_oil_theme_has_plain_language_outlook_without_a_claimed_market_cause(self):
         text = build_daily_news_brief(self.research())

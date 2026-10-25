@@ -54,6 +54,7 @@ def valid_event(event: dict, now: datetime) -> dict | None:
             event = {**event, "symbols": symbols, "evidence": {**evidence, "official": evidence.get("official") is True}}
             return {"kind": "company", "symbols": symbols, "fact": event_fact(event), "url": url,
                     "official": event["evidence"]["official"], "title": title[:1000], "title_truncated": shortened,
+                    "publisher_symbol": evidence.get("publisher_symbol", ""),
                     "source": clean(evidence.get("source") or parts.hostname, 65), "published": published.isoformat(),
                     "source_checked_at": datetime.fromtimestamp(event["observed"], timezone.utc).isoformat()
                     if type(event.get("observed")) in (int, float) and math.isfinite(event["observed"]) else None}

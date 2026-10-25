@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from src.intelligence.special_alert_company_sources import OFFICIAL_FEEDS
+
 
 CACHE_FILE = Path(os.getenv("NEWS_LIVE_SOURCE_CACHE_FILE", "data/news_live_source_cache.json"))
 CACHE_TTL_SECONDS = int(os.getenv("NEWS_LIVE_SOURCE_CACHE_TTL_SECONDS", "1800"))
@@ -50,6 +52,8 @@ NEWS_SOURCES = [
         "url": "https://www.eia.gov/rss/todayinenergy.xml",
         "category": "energy",
     },
+    {"name": "Nvidia Newsroom", "url": OFFICIAL_FEEDS["NVDA"], "category": "company", "company_symbol": "NVDA"},
+    {"name": "Microsoft Blog", "url": OFFICIAL_FEEDS["MSFT"], "category": "company", "company_symbol": "MSFT"},
 ]
 
 

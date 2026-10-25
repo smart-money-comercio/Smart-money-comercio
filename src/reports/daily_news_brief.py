@@ -88,10 +88,10 @@ def validate_news_brief(text: str) -> dict:
     qualification = []
     for paragraph in text.split("\n\n"):
         lowered = paragraph.lower()
-        if "earnings calendar lists" in lowered and ("estimate" not in lowered or "company confirmation is pending" not in lowered):
-            qualification.append("Earnings date confidence is missing")
-        if ("headline report" in lowered or "headline-only" in lowered) and not ("unconfirmed" in lowered or "company confirmation is pending" in lowered):
-            qualification.append("Headline confirmation status is missing")
+        if "earnings calendar lists" in lowered or "company confirmation is pending" in lowered:
+            qualification.append("Unconfirmed company dates are excluded from the news edition")
+        if "headline report" in lowered or "headline-only" in lowered:
+            qualification.append("Original-source reports are required; unconfirmed headline stories are excluded")
     if not text.startswith(TITLE + "\n"):
         missing.append(TITLE)
     if not re.search(r"^Generated: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S+$", text, re.M):
@@ -160,17 +160,12 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                  if rankings else "Company rankings were unavailable for this edition; no leading setup is being inferred."]
     for story in editor.selected_stories(plan):
         (companies if story["kind"] == "company" else market).append(story_paragraphs[story["id"]])
-    no_company_story = "No company story was selected for this edition."
+    no_company_story = "No new source-confirmed company report met the editorial checks for this edition."
     if not any(story["kind"] == "company" for story in editor.selected_stories(plan)):
         companies.append(no_company_story)
-    dated_rows = sorted([row for row in brief["rows"] if row["calendar"]["dates"]], key=lambda row: row["calendar"]["dates"][0])
     ahead = []
-    for row in dated_rows[:2]:
-        calendar = row["calendar"]
-        if calendar["status"] == "conflict":
-            ahead.append(f"{name(row['symbol'])} has conflicting earnings-date estimates. Verify its investor-relations announcement.")
-        else:
-            ahead.append(f"Nasdaq's estimated earnings calendar lists {name(row['symbol'])} for {display_day(calendar['dates'][0])}, {calendar.get('time', 'time not supplied')}. Company confirmation is pending.")
+    # The cached Nasdaq rows are estimates, not issuer-confirmed schedules.
+    # Keep them in /calendar and /catalysts rather than narrating them as news.
     families = {"fomc_decision": "the Federal Reserve's interest-rate decision", "cpi": "consumer inflation", "ppi": "producer inflation",
                 "jobs": "the employment report", "pce": "PCE inflation and personal income", "gdp": "gross domestic product",
                 "claims": "weekly jobless claims", "eci": "employment costs", "jolts": "job openings"}
