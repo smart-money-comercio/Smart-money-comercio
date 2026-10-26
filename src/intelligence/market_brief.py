@@ -104,6 +104,18 @@ def market_segment(evidence: dict) -> str:
 def defense_segment(stories: list[dict]) -> str:
     defense = [story for story in stories if "defense" in story_topics(story)]
     if defense:
+        companies = [story for story in defense if story.get("kind") == "company"]
+        if companies:
+            from src.agents.analyst_agent import review_sourced_development
+            from src.intelligence.daily_brief_analysis import NAMES
+            parts = []
+            for story in companies:
+                review = review_sourced_development(story)
+                symbol = story.get("publisher_symbol") or story["symbols"][0]
+                parts.append(f"For {NAMES.get(symbol, symbol)}, our analysis: " + review["why"] + " Watch next: " + review["watch"])
+            if any(story.get("kind") != "company" and re.search(r"\b(prototype|demonstrat\w*|tests?|concept)\b", story["title"], re.I) for story in defense):
+                parts.append("The agency's technical milestone still requires evidence of production readiness and funded demand.")
+            return " ".join(parts)
         if any(re.search(r"\b(prototype|demonstrat\w*|tests?|concept)\b", story["title"], re.I) for story in defense):
             return ("Defense and innovation lens: Technical milestones warrant checking production readiness, funded demand and execution costs. "
                     "A prototype or demonstration alone does not establish orders or revenue; those are the next tests for defense exposure.")

@@ -418,7 +418,7 @@ def child_text(item: ET.Element, tag_name: str) -> str:
     return ""
 
 
-def parse_rss_items(xml_text: str, source: dict, *, full_titles: bool = False) -> list[dict]:
+def parse_rss_items(xml_text: str, source: dict, *, full_titles: bool = False, full_text: bool = False) -> list[dict]:
     try:
         root = ET.fromstring(xml_text)
     except Exception:
@@ -434,13 +434,19 @@ def parse_rss_items(xml_text: str, source: dict, *, full_titles: bool = False) -
             continue
 
         title = child_text(item, "title")
-        description = child_text(item, "description")
+        description = child_text(item, "description") or child_text(item, "encoded")
         link = child_text(item, "link")
         published = child_text(item, "pubDate") or child_text(item, "published") or child_text(item, "date")
         if kind == "entry":
             links = [node.attrib.get("href", "") for node in item if node.tag.split("}")[-1] == "link" and node.attrib.get("rel", "alternate") == "alternate"]
             link = links[0] if len(links) == 1 else ""
             description = child_text(item, "summary")
+        if full_text:
+            for name in (("summary", "content") if kind == "entry" else ("encoded", "description")):
+                original = next((node for node in item if node.tag.split("}")[-1].lower() == name and (node.text or len(node))), None)
+                if original is not None:
+                    description = (original.text or "") + "".join(ET.tostring(node, encoding="unicode") for node in original)
+                    break
 
         if not title:
             continue
@@ -448,7 +454,7 @@ def parse_rss_items(xml_text: str, source: dict, *, full_titles: bool = False) -
         items.append(
             {
                 "title": title if full_titles else compact_text(title, 180),
-                "description": compact_text(description, 280),
+                "description": originals.release_text(description) if full_text else compact_text(description, 280),
                 "link": link,
                 "published": published,
                 "source": source.get("name", "Unknown"),
@@ -494,10 +500,22 @@ def parse_source_payload(payload: dict, source: dict) -> list[dict]:
     return []
 
 
-def parse_article_items(payload: dict, source: dict, *, full_titles: bool = False) -> list[dict]:
+def parse_article_items(payload: dict, source: dict, *, full_titles: bool = False, full_text: bool = False) -> list[dict]:
     if source.get("format") in {"palantir", "index"}:
-        return originals.cached_items(payload, source)
-    return parse_rss_items(payload.get("body", ""), source, full_titles=full_titles)
+        rows = originals.cached_items(payload, source)
+    else:
+        rows = parse_rss_items(payload.get("body", ""), source, full_titles=full_titles, full_text=full_text)
+    if full_text:
+        for row in rows:
+            row["evidence_scope"] = row.get("evidence_scope") or ("publisher feed excerpt" if row.get("description") else "headline only")
+            row["evidence_checked_at"] = payload.get("fetched_at_epoch")
+            details = payload.get("release_evidence", [])
+            for detail in (details[:1] if isinstance(details, list) else []):
+                if (isinstance(detail, dict) and detail.get("title") == row["title"] and detail.get("url") == row["link"]
+                        and timestamp(detail.get("published")) == timestamp(row["published"])):
+                    row.update(description=originals.release_text(detail.get("text", "")), evidence_scope="original release excerpt",
+                               evidence_checked_at=detail.get("checked_at_epoch"))
+    return rows
 
 
 def is_original_source(source: dict) -> bool:
@@ -690,6 +708,14 @@ def fetch_news_live_context(force_refresh: bool = False) -> dict:
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         payloads = list(pool.map(lambda source: fetch_source(source, force_refresh), NEWS_SOURCES))
+        def read_release(pair):
+            source, payload = pair
+            result = originals.enrich_feed(source, payload, parse_rss_items,
+                lambda url: fetch_url(url, force_refresh, cache_result=False), datetime.now(timezone.utc))
+            if result is not payload:
+                set_cached_source(source["url"], result)
+            return result
+        payloads = list(pool.map(read_release, zip(NEWS_SOURCES, payloads)))
     for source, payload in zip(NEWS_SOURCES, payloads):
         try:
             parsed_items = parse_source_payload(payload, source) if payload.get("status") == "ok" else []

@@ -105,6 +105,11 @@ def analyze_report(report: str, stories: list[dict] | None = None) -> dict:
             raise ValueError("Market interpretation requires admitted original-source stories")
         evidence["stories"].append({key: deepcopy(story[key]) for key in (
             "id", "title", "kind", "symbols", "source", "url", "published", "official", "publisher_symbol", "decision", "source_check")})
+        if story["kind"] == "company":
+            from src.intelligence.story_analysis import checked_evidence
+            checked_evidence(story)
+            evidence["stories"][-1].update({key: deepcopy(story[key]) for key in (
+                "event_evidence", "materiality", "evidence_checked_at", "source_checked_at") if key in story})
     if evidence["stories"]:
         evidence["source_sections"].append("Verified story decisions")
     return {"schema": 1, "research_sha256": hashlib.sha256(report.encode()).hexdigest(),

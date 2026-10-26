@@ -60,3 +60,5 @@ python scripts/check_report_consistency.py
 ```
 
 Regression checks cover both report formats, delivery, read-only cache access, multi-company coverage, earnings confidence, headline attribution, market-session labels, source gaps and bounded narration. The new check is included in deployment preflight and the Linux/Windows regression workflow.
+
+Event-specific analysis explains the investment questions behind admitted company reports. A completed acquisition focuses on integration and cash generation; a proposed transaction focuses on financing and closing conditions. Contracts distinguish potential ceilings from disclosed obligations, while product demonstrations remain separate from deliveries or commercial availability. Disclosed figures retain their source qualifications and reporting periods; the analyst's conditional interpretation and next evidence check remain separate. Defense stories use the same event-specific review instead of an unrelated generic procurement paragraph. The 3,800-character budget, full-brief minimum and market-segment duration checks remain enforced.

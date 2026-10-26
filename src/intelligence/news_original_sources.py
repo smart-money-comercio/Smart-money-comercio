@@ -1,17 +1,116 @@
 """Bounded original-publisher indexes; fetch clocks never become news dates."""
 
 from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 import json
+import math
 import re
 from urllib.parse import urljoin, urlsplit
 
-from src.intelligence.special_alert_company_sources import publication_time
+from src.intelligence.special_alert_company_sources import PublicationPage, publication_time
 from src.intelligence.special_alert_sources import company_url, timestamp
+from src.intelligence.story_analysis import VisibleText, event_type, release_text
 
 
 MAX_ARTICLES = 30
 MAX_DETAIL_PAGES = 3
+
+
+class ArticleBody(VisibleText):
+    """Read identified release bodies, without treating site navigation as news."""
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+    def __init__(self):
+        super().__init__()
+        self.depth = 0
+        self.heading_tag, self.heading_parts, self.headings = None, [], []
+
+    def handle_starttag(self, tag, attrs):
+        classes = set(dict(attrs).get("class", "").split())
+        if tag == "h1" or "wd_title" in classes:
+            self.heading_tag, self.heading_parts = tag, []
+        if not self.depth and (tag == "article" or classes & {"wd_news_body", "article-body", "release-body"}):
+            self.depth = 1
+        elif self.depth and tag not in self.VOID:
+            self.depth += 1
+        if self.depth:
+            super().handle_starttag(tag, attrs)
+
+    def handle_endtag(self, tag):
+        if tag == self.heading_tag:
+            self.headings.append(" ".join("".join(self.heading_parts).split()))
+            self.heading_tag = None
+        if self.depth and tag not in self.VOID:
+            super().handle_endtag(tag)
+            self.depth -= 1
+
+    def handle_data(self, data):
+        if self.heading_tag:
+            self.heading_parts.append(data)
+        if self.depth:
+            super().handle_data(data)
+
+
+def article_excerpt(body: str, title: str, published: str) -> str:
+    """Bind extra facts to the same complete headline and original publication."""
+    expected = timestamp(published)
+    if expected is None:
+        raise ValueError("Original article needs the admitted feed publication clock")
+    parser = ArticleBody()
+    parser.feed(body)
+    text = release_text("".join(parser.parts))
+    if not text:
+        raise ValueError("Recognizable original release body unavailable")
+    try:
+        actual = publication_time(body.encode(), title)
+    except ValueError:
+        metadata = PublicationPage()
+        metadata.feed(body)
+        # Some publisher pages omit time metadata. A zoned original RSS clock
+        # may still bind an exact heading and the same explicit release date.
+        if metadata.dates or 'datePublished' in body or sum(value.casefold() == title.casefold() for value in parser.headings) != 1:
+            raise ValueError("Original article identity or publication clock unavailable")
+        try:
+            original = datetime.fromisoformat(published.replace("Z", "+00:00"))
+        except ValueError:
+            original = parsedate_to_datetime(published)
+        month = f"(?:{original:%B}|{original:%b})"
+        if not re.search(r"\b" + month + rf"\.?\s+{original.day},\s+{original.year}\b", text):
+            raise ValueError("Original article release date does not match its feed")
+    else:
+        if actual != expected:
+            raise ValueError("Original article publication does not match the admitted feed")
+    return text
+
+
+def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -> dict:
+    """At most one fresh company release per publisher, during refresh only."""
+    if not source.get("company_symbol") or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == 1:
+        return payload
+    observed = payload.get("fetched_at_epoch")
+    if not authorized_response(source, payload) or type(observed) not in (int, float) or not math.isfinite(observed) or not -60 <= now.timestamp() - observed <= 6 * 3600:
+        return payload
+    candidates = []
+    for row in parse_feed(payload.get("body", ""), source, full_titles=True):
+        published = timestamp(row["published"])
+        if (published and 0 <= (now - published).total_seconds() <= 24 * 3600
+                and company_url(source["company_symbol"], row["link"])
+                and event_type(row["title"])[0] in {"acquisition", "divestiture", "contract", "product", "guidance", "earnings"}):
+            candidates.append((published, row))
+    candidates.sort(key=lambda value: value[0], reverse=True)
+    details, issues = [], []
+    for _, row in candidates[:1]:
+        try:
+            detail = fetch(row["link"])
+            if detail.get("status") != "ok" or not authorized_response(source, detail):
+                raise ValueError(detail.get("error") or "Original release redirect mismatch")
+            excerpt = article_excerpt(detail["body"], row["title"], row["published"])
+            details.append({"title": row["title"], "url": row["link"], "published": row["published"],
+                            "text": excerpt, "checked_at_epoch": detail["fetched_at_epoch"]})
+        except (ValueError, TypeError, KeyError, UnicodeError) as exc:
+            issues.append(str(exc)[:160])
+    return {**payload, "release_excerpt_schema": 1, "release_evidence": details, "release_evidence_issues": issues}
 
 
 class ReleaseLinks(HTMLParser):
@@ -82,7 +181,8 @@ def service_items(body: str, source: dict) -> list[dict]:
         if not isinstance(title, str) or not title.strip() or not company_url("PLTR", link) or "/news-details/" not in urlsplit(link).path:
             continue
         # A naive service date remains naive until the exact issuer page verifies it.
-        rows.append({"title": " ".join(title.split()), "link": link, "published": value.get("PressReleaseDate", "")})
+        rows.append({"title": " ".join(title.split()), "link": link, "published": value.get("PressReleaseDate", ""),
+                     "description": release_text(value.get("Body", ""))})
     return rows
 
 
@@ -132,6 +232,10 @@ def retrieve(source: dict, fetch, now: datetime) -> dict:
             published = publication_time(detail["body"].encode(), row["title"])
             row["published"] = published.isoformat()
             row["publication_url"] = row["link"]
+            try:
+                row["description"] = article_excerpt(detail["body"], row["title"], row["published"])
+            except ValueError:
+                pass
         except (ValueError, KeyError, TypeError, UnicodeError) as exc:
             problems.append(str(exc)[:160])
     return {**payload, "url": source["url"], "final_url": source["url"], "original_profile": 1,
@@ -148,5 +252,6 @@ def cached_items(payload: dict, source: dict) -> list[dict]:
         if not company_url(source["company_symbol"], item["link"]):
             continue
         rows.append({"title": item["title"], "link": item["link"], "published": item.get("published", ""),
-                     "description": "", "source": source["name"], "category": "company"})
+                     "description": release_text(item.get("description", "")), "source": source["name"], "category": "company",
+                     "evidence_scope": "original release excerpt" if item.get("publication_url") == item["link"] else "publisher feed excerpt"})
     return rows

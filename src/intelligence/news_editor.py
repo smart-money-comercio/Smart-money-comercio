@@ -16,6 +16,7 @@ from src.intelligence import news_live_sources as feeds, news_editor_store as st
 from src.intelligence.special_alert_sources import clean, company_url
 from src.intelligence.special_alert_engine import company_event
 from src.intelligence.market_brief import story_topics
+from src.intelligence.story_analysis import build_evidence, checked_evidence, event_type
 
 
 MAX_STORIES = 3
@@ -50,6 +51,11 @@ def materiality(story: dict) -> str:
     if story["kind"] == "company":
         if re.search(r"\b(earnings|results) (date|call|webcast)\b|\bannounces? (?:its |the )?date\b|\b(?:will|to) (?:report|release)\b.{0,60}\b(results|earnings)\b", title, re.I):
             return ""
+        kind, stage = event_type(title)
+        if kind in {"acquisition", "divestiture"}:
+            return "" if re.search(r"\b(rumou?r\w*|reportedly|could|might|may|considering)\b|\?", title, re.I) else kind
+        if kind == "contract" and stage == "cooperation":
+            return "contract"
         event = company_event(title)
         if event:
             return event[0]
@@ -185,7 +191,7 @@ def cache_candidates(now: datetime, symbols: list[str], *, health: list | None =
             if feeds.is_original_source(source) and not feeds.originals.authorized_response(source, payload):
                 raise ValueError("Publisher redirect mismatch")
             # HTML titles and fetch times are never substituted for original RSS dates.
-            items = feeds.parse_article_items(payload, source, full_titles=True)[:30]
+            items = feeds.parse_article_items(payload, source, full_titles=True, full_text=True)[:30]
             if not items:
                 if source_health["status"] == "available":
                     continue
@@ -207,11 +213,17 @@ def cache_candidates(now: datetime, symbols: list[str], *, health: list | None =
             official = bool(official_host and (host == official_host or host.endswith("." + official_host)))
             if publisher:
                 official = bool(publisher in symbols and company_url(publisher, item["link"]))
+            evidence_stamp = item.get("evidence_checked_at", fetched)
+            usable_excerpt = (type(evidence_stamp) in (int, float) and math.isfinite(evidence_stamp)
+                              and -60 <= now.timestamp() - evidence_stamp <= MAX_CACHE_AGE)
             candidates.append({"kind": "company" if publisher or (company_symbols and not official_host) else "macro", "symbols": company_symbols,
                 "title": item["title"], "url": item["link"], "published": item["published"],
                 "source": source["name"], "source_checked_at": datetime.fromtimestamp(fetched, timezone.utc).isoformat(),
                 "publisher_symbol": publisher if official and publisher else "",
                 "official": official, "origin": "cached RSS", "themes": themes,
+                "source_excerpt": item.get("description", "") if usable_excerpt else "",
+                "excerpt_scope": item.get("evidence_scope", "publisher feed excerpt") if usable_excerpt else "headline only",
+                "evidence_checked_at": datetime.fromtimestamp(evidence_stamp, timezone.utc).isoformat() if usable_excerpt else "",
                 "relevant": bool(company_symbols or themes or official_host), "authority_mismatch": bool(official_host and not official)})
     return candidates, issues
 
@@ -241,7 +253,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         fresh = published is not None and -60 <= (now - published).total_seconds() <= MAX_NEWS_AGE
         return (item.get("official") is not True, not fresh, -published.timestamp() if published else 0)
     candidates.sort(key=scan_priority)
-    ledger = []
+    ledger, excerpts = [], {}
     for raw in candidates[:MAX_CANDIDATES]:
         raw_title = raw.get("title")
         title = clean(raw_title, MAX_HEADLINE_CHARS + 1)
@@ -294,6 +306,12 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             rank = min((symbols.index(symbol) for symbol in story["symbols"]), default=len(symbols))
             story["priority"] = (100 if story["official"] else 70) + (10 if story["symbols"] else 5) + max(0, 10 - rank)
             story.update(decision="eligible", reason="Dated source and research relevance checks passed")
+            if story["kind"] == "company":
+                scope = raw.get("excerpt_scope", "headline only")
+                text = raw.get("source_excerpt", "")
+                if scope not in {"headline only", "publisher feed excerpt", "original release excerpt"}:
+                    text, scope = "", "headline only"
+                excerpts[story["id"]] = (text, scope, raw.get("evidence_checked_at") or story["source_checked_at"])
         ledger.append(story)
     selected, urls, titles, companies = [], set(), set(), set()
     company_eligible = any(story["decision"] == "eligible" and story["kind"] == "company" for story in ledger)
@@ -314,9 +332,14 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story.update(decision="selected", reason=f"Original {story['confirmed_by']} report; material {story['materiality']} development within the edition budget")
             selected.append(story)
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
+    for story in selected:
+        if story["kind"] == "company":
+            text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
+            story["evidence_checked_at"] = observed
+            story["event_evidence"] = build_evidence(story, text, scope)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 6, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 7, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def timestamp_for_priority(value):
@@ -356,9 +379,14 @@ def render_story(story: dict, zone, company_names: dict) -> str:
         issuer = story.get("confirmed_by") or story["symbols"][0]
         company = company_names.get(issuer, issuer)
         if story["official"]:
-            from src.agents.analyst_agent import reported_development_focus
-            return (f"{company}'s company announcement, published {at} via {story['source']}, is headlined {headline}{punctuation} "
-                    + reported_development_focus(materiality(story)))
+            from src.agents.analyst_agent import review_sourced_development
+            review = review_sourced_development(story)
+            text = f"{company}'s company announcement, published {at} via {story['source']}, is headlined {headline}{punctuation}"
+            if review["facts"]:
+                text += " " + review["facts"]
+            if "defense" not in story_topics(story):
+                text += " Our analysis: " + review["why"] + " Watch next: " + review["watch"]
+            return text
         if story.get("story_type") == "commentary":
             return (f"In commentary on {company}, {story['source']}'s headline, published {at}, reads {headline}{punctuation} "
                     "This is headline-only commentary, unconfirmed by the company.")
@@ -379,6 +407,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Selected story headline is incomplete")
         if not primary_source(story) or story.get("story_type") != "announcement" or not materiality(story):
             raise ValueError("Selected story needs a material original-source report")
+        if story["kind"] == "company":
+            checked_evidence(story)
         if report.count(paragraphs[story["id"]]) != 1:
             raise ValueError("Selected story evidence or qualification changed during narration")
     if len(selected) > MAX_STORIES:
@@ -399,6 +429,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Relevance", "status": "pass", "detail": "Material company developments and macro releases; original-source reports required"},
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
+         + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
     return store.save_edition(value, report)
@@ -491,6 +522,14 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if story.get("confirmed_by"):
                     lines.append("Original publisher verified: " + story["confirmed_by"])
                     lines.append("Investor topic: " + story["materiality"])
+                if story.get("event_evidence"):
+                    from src.agents.analyst_agent import review_sourced_development
+                    review = review_sourced_development(story)
+                    event = review["evidence"]
+                    lines.append("Event: " + event["event"] + " | Stage: " + event["stage"] + " | Evidence read: " + event["scope"])
+                    if review["facts"]:
+                        lines.append("Disclosed excerpt facts: " + review["facts"])
+                    lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]
                 if story.get("source_check") == "pass":
                     lines.append(story["url"])
                 if story["decision"] == "selected":

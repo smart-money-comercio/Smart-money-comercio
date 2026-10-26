@@ -966,7 +966,7 @@ class OriginalSourceChecks(IsolatedChecks):
         class Clock(datetime):
             @classmethod
             def now(cls, tz=None): return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
-        with patch.object(feeds, "NEWS_SOURCES", [source]), patch.object(feeds, "datetime", Clock), patch.object(feeds, "fetch_source", return_value=self.payload(body)):
+        with patch.object(feeds, "NEWS_SOURCES", [source]), patch.object(feeds, "datetime", Clock), patch.object(feeds, "fetch_source", return_value=self.payload(body)), patch.object(feeds.originals, "enrich_feed", side_effect=lambda source, payload, *args: payload):
             context = feeds.fetch_news_live_context()
         self.assertEqual(len(context["items"]), 1)
         self.assertIn("new AI platform", context["items"][0]["title"])
@@ -1020,6 +1020,209 @@ class OriginalSourceChecks(IsolatedChecks):
             result = job.refresh_news_intelligence()
         self.assertIn("1/1 available", result)
         self.assertIn("0 fresh dated reports", result)
+
+
+class StoryAnalysisChecks(IsolatedChecks):
+    def setUp(self):
+        super().setUp()
+        self.stack.enter_context(patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "MSFT,NVDA,PLTR,LMT,AVAV,KTOS"}))
+
+    def story(self, title="Example Defense completes an undersea acquisition", text="", symbol="LMT"):
+        return candidate(symbol, title=title, source_excerpt=text, excerpt_scope="publisher feed excerpt")
+
+    def render(self, values):
+        with patch.object(editor, "cache_candidates", return_value=(values, [])):
+            return build_daily_news_brief(self.research())
+
+    def profile(self, title, text=""):
+        from src.intelligence.story_analysis import build_evidence
+        return build_evidence(self.story(title, text), text, "publisher feed excerpt")
+
+    def article(self, title, text, clock=None, day="October 25, 2026"):
+        metadata = (f'<meta property="og:title" content="{escape(title)}"><meta property="article:published_time" content="{clock}">') if clock else ""
+        return (f'<html><head>{metadata}</head><nav>Unrelated purchase price $999 billion.</nav><h1>{escape(title)}</h1>'
+                f'<div class="wd_news_body"><p>Publisher dateline, {day}.</p><p>{text}</p></div></html>')
+
+    def test_completed_acquisition_gets_integration_analysis_and_source_facts(self):
+        text = self.render([self.story(text="The acquisition expands capabilities in anti-submarine warfare.")])
+        self.assertIn("After the reported close", text)
+        self.assertIn("integration costs", text)
+        self.assertIn("anti-submarine warfare", text)
+        self.assertNotIn("Contract ceilings", text)
+        self.assertNotIn("regulatory conditions", text)
+        record = store.read_editions(report=text)[0]
+        story = editor.selected_stories(record)[0]
+        self.assertEqual(story["materiality"], "acquisition")
+        self.assertEqual(story["event_evidence"]["stage"], "completed")
+        self.assertEqual(story["event_evidence"]["facts"][0]["field"], "business_focus")
+
+    def test_proposed_and_cancelled_acquisitions_have_different_next_checks(self):
+        proposed = self.render([self.story("Example Defense agrees to acquire a maritime business")])
+        self.assertIn("closing conditions", proposed)
+        self.assertNotIn("After the reported close", proposed)
+        cancelled = self.render([self.story("Example Defense terminates its acquisition agreement")])
+        self.assertIn("cancelled transaction", cancelled)
+        self.assertIn("termination costs", cancelled)
+
+    def test_future_or_negated_completion_is_not_reported_as_closed(self):
+        from src.intelligence.story_analysis import event_type
+        for title in ("Example Defense expects to complete the acquisition", "Example Defense will close the acquisition", "Example Defense has not completed its acquisition", "Example acquisition is not completed"):
+            self.assertNotEqual(event_type(title)[1], "completed", title)
+
+    def test_guidance_after_an_acquisition_is_classified_by_the_actual_change(self):
+        from src.intelligence.story_analysis import event_type
+        self.assertEqual(event_type("Example cuts revenue guidance following its acquisition"), ("guidance", "lowered"))
+        self.assertEqual(event_type("Example completes an acquisition and updates guidance"), ("acquisition", "completed"))
+
+    def test_deal_amount_preserves_approximation_and_debt_qualification(self):
+        evidence = self.profile("Example agrees to acquire a business", "The acquisition was valued at approximately $1.25 billion, including assumed debt.")
+        fact = evidence["facts"][0]
+        self.assertEqual(fact["value"], "approximately $1.25 billion, including assumed debt")
+        self.assertIn(fact["value"].split(",")[0], fact["evidence"])
+
+    def test_financing_plans_are_labelled_as_plans_and_missing_terms_stay_absent(self):
+        evidence = self.profile("Example agrees to acquire a business", "The transaction will be financed with cash and debt.")
+        self.assertEqual(evidence["facts"][0]["field"], "financing_plan")
+        text = self.render([self.story()])
+        self.assertNotIn("Stated deal amount", text)
+        self.assertNotIn("Financing described", text)
+
+    def test_denied_or_ambiguous_deal_values_are_not_promoted_to_facts(self):
+        for text in ("The acquisition was not valued at $500 million.", "The transaction was valued at $3 billion to $5 billion.", "The hypothetical acquisition was valued at $5 billion.", "The transaction could be valued at $500 million.", "The acquisition might expand undersea warfare capabilities."):
+            self.assertFalse(self.profile("Example agrees to acquire a business", text)["facts"], text)
+
+    def test_contract_ceiling_is_distinct_from_the_obligated_amount(self):
+        text = self.render([self.story("Example Defense wins a production contract", "The contract has a ceiling of $500 million. At award, $15 million is obligated.", "KTOS")])
+        self.assertIn("Announced ceiling: ceiling of $500 million", text)
+        self.assertIn("Amount described as obligated: $15 million", text)
+        self.assertIn("does not establish funded orders or booked revenue", text)
+        profile = editor.selected_stories(store.read_editions(report=text)[0])[0]["event_evidence"]
+        self.assertEqual({row["field"] for row in profile["facts"]}, {"contract_ceiling", "obligated_amount"})
+
+    def test_not_to_exceed_is_a_ceiling_and_market_opportunity_is_not(self):
+        profile = self.profile("Example wins a contract", "The contract value is not to exceed $200 million.")
+        self.assertEqual(profile["facts"][0]["field"], "contract_ceiling")
+        profile = self.profile("Example signs an MOU", "The addressable market opportunity has a potential value of $200 million.")
+        self.assertFalse(profile["facts"])
+
+    def test_cooperation_agreement_does_not_become_a_funded_order(self):
+        text = self.render([self.story("Example Defense signs an MOU for autonomous systems", symbol="AVAV")])
+        self.assertIn("cooperation agreement", text)
+        self.assertIn("funded orders still require evidence", text)
+
+    def test_contract_loss_does_not_get_an_award_or_growth_interpretation(self):
+        text = self.render([self.story("Example Defense loses a production contract", "The contract previously had a ceiling of $500 million.", "KTOS")])
+        self.assertIn("reported contract loss", text)
+        self.assertNotIn("An award can support future work", text)
+        self.assertNotIn("Announced ceiling", text)
+
+    def test_procurement_acquisition_word_does_not_invent_a_corporate_merger(self):
+        from src.intelligence.story_analysis import event_type
+        self.assertEqual(event_type("Example wins a Defense Acquisition Council contract")[0], "contract")
+
+    def test_prototype_and_actual_production_have_different_execution_questions(self):
+        prototype = self.render([self.story("Example unveils an autonomous prototype system", symbol="AVAV")])
+        production = self.render([self.story("Example begins production of an autonomous system", symbol="AVAV")])
+        self.assertIn("prototype alone does not establish orders or revenue", prototype)
+        self.assertIn("manufacturing scale", production)
+
+    def test_planned_production_is_not_actual_delivery(self):
+        from src.intelligence.story_analysis import event_type, investor_read
+        value = self.story("Example announces plans for first deliveries of a system", symbol="AVAV")
+        self.assertEqual(event_type(value["title"]), ("product", "planned"))
+        self.assertIn("announced production plan", investor_read(value)["why"])
+
+    def test_reported_revenue_keeps_its_period_and_excludes_future_guidance(self):
+        value = self.profile("Example reports quarterly financial results", "Third-quarter revenue was approximately $8.4 billion. The company expects revenue of $9.0 billion next quarter.")
+        self.assertEqual(len(value["facts"]), 1)
+        self.assertEqual(value["facts"][0]["value"], "approximately $8.4 billion (Third-quarter)")
+        self.assertFalse(self.profile("Example reports results", "Revenue was $8.4 billion.")["facts"])
+
+    def test_reaffirmed_guidance_does_not_claim_the_outlook_changed(self):
+        from src.intelligence.story_analysis import investor_read
+        review = investor_read(self.story("Example reaffirms revenue guidance", symbol="MSFT"))
+        self.assertIn("Reaffirmed guidance", review["why"])
+        self.assertNotIn("changes the forward assumptions", review["why"])
+
+    def test_raw_publication_excerpt_excludes_scripts_and_boilerplate(self):
+        from src.intelligence.story_analysis import release_text
+        text = release_text('<p>The acquisition expands undersea warfare capabilities.</p><script>The acquisition was valued at $99 billion.</script><h2>Forward-Looking Statements</h2><p>The acquisition was valued at $88 billion.</p>')
+        self.assertNotIn("$99", text)
+        self.assertNotIn("$88", text)
+
+    def test_original_article_requires_matching_headline_and_publication_clock(self):
+        from src.intelligence.news_original_sources import article_excerpt
+        title = "Example completes an acquisition"
+        published = (NOW - timedelta(minutes=20)).isoformat()
+        body = self.article(title, 'The acquisition was valued at <b>$500 million</b>.', published)
+        excerpt = article_excerpt(body, title, published)
+        self.assertIn("valued at $500 million", excerpt)
+        self.assertNotIn("$999", excerpt)
+        with self.assertRaises(ValueError): article_excerpt(body, "Different headline", published)
+        with self.assertRaises(ValueError): article_excerpt(body, title, NOW.isoformat())
+
+    def test_date_only_page_can_use_its_matching_original_zoned_feed_clock(self):
+        from src.intelligence.news_original_sources import article_excerpt
+        title = "Example completes an acquisition"
+        body = self.article(title, "The acquisition expands undersea warfare capabilities.")
+        self.assertTrue(article_excerpt(body, title, format_datetime(NOW)))
+        with self.assertRaises(ValueError): article_excerpt(body.replace("October 25", "October 24"), title, format_datetime(NOW))
+        with self.assertRaises(ValueError): article_excerpt(body, title, "2026-10-25")
+
+    def test_release_enrichment_is_bounded_and_keeps_the_feed_observation_time(self):
+        from src.intelligence.news_original_sources import enrich_feed
+        source = next(row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol") == "LMT")
+        title = "Example completes an acquisition"
+        url = "https://news.lockheedmartin.com/fixture"
+        published = format_datetime(NOW - timedelta(minutes=20))
+        rss = f'<rss><channel><item><title>{title}</title><link>{url}</link><pubDate>{published}</pubDate></item></channel></rss>'
+        payload = {"status": "ok", "body": rss, "fetched_at_epoch": NOW.timestamp() - 100}
+        calls = []
+        def fetch(link):
+            calls.append(link)
+            return {"status": "ok", "url": link, "body": self.article(title, "The acquisition expands undersea warfare capabilities.", published), "fetched_at_epoch": NOW.timestamp()}
+        enriched = enrich_feed(source, payload, editor.feeds.parse_rss_items, fetch, NOW)
+        self.assertEqual(calls, [url])
+        self.assertEqual(enriched["fetched_at_epoch"], payload["fetched_at_epoch"])
+        self.assertEqual(enriched["release_evidence"][0]["published"], published)
+        self.assertIs(enrich_feed(source, enriched, editor.feeds.parse_rss_items, fetch, NOW), enriched)
+
+    def test_stale_or_unverified_feed_does_not_fetch_optional_article_details(self):
+        from src.intelligence.news_original_sources import enrich_feed
+        source = next(row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol") == "LMT")
+        fetch = Mock()
+        for payload in ({"status": "ok", "body": "", "fetched_at_epoch": NOW.timestamp() - 7 * 3600},
+                        {"status": "ok", "body": "", "fetched_at_epoch": NOW.timestamp(), "final_url": "https://example.com/fake"}):
+            self.assertIs(enrich_feed(source, payload, editor.feeds.parse_rss_items, fetch, NOW), payload)
+        fetch.assert_not_called()
+
+    def test_altered_fact_or_stage_cannot_pass_the_analyst_evidence_check(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        plan = editor.build_editorial_plan(companies.build_company_catalyst_brief(), NOW, [self.story(text="The acquisition was valued at $500 million.")])
+        story = editor.selected_stories(plan)[0]
+        story["event_evidence"]["facts"][0]["value"] = "$999 billion"
+        with self.assertRaisesRegex(ValueError, "do not match"):
+            analyze_report(self.research(), [story])
+
+    def test_dropped_story_cannot_leave_its_facts_or_interpretation_in_the_brief(self):
+        from src.reports import daily_news_brief as news
+        baseline = self.render([])
+        story = self.story("Example announces an acquisition " + "with enterprise business details " * 20, "The acquisition was valued at $987 million.", "MSFT")
+        with patch.object(editor, "cache_candidates", return_value=([story], [])), patch.object(news, "MAX_NEWS_CHARS", len(baseline) + 20):
+            text = build_daily_news_brief(self.research())
+        self.assertNotIn("$987", text)
+        self.assertNotIn("The proposed acquisition", text)
+        self.assertEqual(store.read_editions(report=text)[0]["analyst_review"]["evidence"]["stories"], [])
+
+    def test_story_log_distinguishes_sourced_facts_from_agent_interpretation(self):
+        text = self.render([self.story(text="The acquisition expands capabilities in anti-submarine warfare.")])
+        status = editor.build_editor_status("LMT", True)
+        self.assertIn("Stage: completed", status)
+        self.assertIn("Evidence read: publisher feed excerpt", status)
+        self.assertIn("Disclosed excerpt facts:", status)
+        self.assertIn("Agent interpretation:", status)
+        self.assertIn("Watch next:", status)
+        self.assertTrue(store.read_editions(report=text))
 
 
 class SQLiteCleanupChecks(unittest.TestCase):

@@ -154,6 +154,12 @@ def reported_development_focus(topic: str) -> str:
     }.get(topic, "Commercial timing and impact still require review.")
 
 
+def review_sourced_development(story: dict) -> dict:
+    """Tie each investor interpretation to the admitted event and release facts."""
+    from src.intelligence.story_analysis import investor_read
+    return investor_read(story)
+
+
 def safe_float(value: Any, default: float = 0) -> float:
     try:
         if value is None:

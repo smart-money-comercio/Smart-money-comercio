@@ -88,6 +88,10 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
                    or any(not isinstance(story.get(key), str) for key in ("title", "url", "source", "published", "reason"))
                    or not isinstance(story.get("symbols"), list) for story in value["candidates"]):
                 continue
+            from src.intelligence.story_analysis import checked_evidence
+            for story in value["candidates"]:
+                if story.get("event_evidence") is not None:
+                    checked_evidence(story)
             value["id"] = edition
             records.append(value)
         except (ValueError, TypeError):

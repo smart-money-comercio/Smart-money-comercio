@@ -358,7 +358,7 @@ class NewsChecks(IsolatedChecks):
         self.event(announcement(official=True))
         text = build_daily_news_brief(self.research())
         self.assertIn("Microsoft's company announcement", text)
-        self.assertIn("Commercial timing and impact still require review", text)
+        self.assertIn("commercial timing, demand and execution costs still require evidence", text)
 
     def test_cached_publisher_time_is_never_described_as_a_fresh_verification(self):
         brief = companies.build_company_catalyst_brief()
