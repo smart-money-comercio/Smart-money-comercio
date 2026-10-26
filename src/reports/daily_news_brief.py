@@ -183,10 +183,12 @@ def validate_news_brief(text: str) -> dict:
 
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None) -> str:
-    from src.reports.report_quality import split_report_sections, validate_daily_report_quality
+    from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
-    if quality.get("format") == "news" or not quality["passes"]:
-        raise ValueError("The underlying research report did not pass quality review")
+    if quality.get("format") == "news":
+        raise ValueError("The underlying research report did not pass quality review: expected the detailed research format")
+    if not quality["passes"]:
+        raise ValueError("The underlying research report did not pass quality review: " + describe_quality_failure(quality))
     sections = {header: "\n".join(lines[1:]) for header, lines in split_report_sections(research_report) if header}
     generated = re.search(r"^Generated: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\S+)$", research_report, re.M)
     dated = re.search(r"^Date: (.+)$", research_report, re.M)

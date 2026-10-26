@@ -19,7 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 os.environ.setdefault("DAILY_REPORT_LIVE_QUOTES", "0")
 
-from src.intelligence.opportunity_ranker import build_top_opportunities_section, risk_adjustment
+from src.intelligence.opportunity_ranker import build_opportunity_item, build_top_opportunities_section, risk_adjustment
 from src.reports.daily_tradeplan_bridge import build_daily_tradeplan_snapshot_section
 from src.reports.report_quality import (
     REQUIRED_HEADERS,
@@ -51,6 +51,18 @@ def ranked_stocks() -> list[dict]:
     return ranked
 
 
+def enriched_ranked_stocks() -> list[dict]:
+    """Use the production enrichment that adds model evidence to ranking rows."""
+    stocks = deepcopy(STOCKS)
+    stocks[1]["final_score"] = 86.2
+    moves = {"MSFT": 0.7, "TSM": 1.5, "NVDA": -0.6}
+    ranked = []
+    for stock in stocks:
+        stock.update(smart_score=89, defense_score=84, congress_score=78, insider_score=51.5)
+        ranked.append(build_opportunity_item(stock, {"change_percent": moves[stock["ticker"]]}, 0, None))
+    return sorted(ranked, key=lambda item: item["opportunity_score"], reverse=True)
+
+
 def risk_sections(stocks=None) -> dict[str, str]:
     stocks = deepcopy(STOCKS if stocks is None else stocks)
     return {
@@ -59,8 +71,8 @@ def risk_sections(stocks=None) -> dict[str, str]:
     }
 
 
-def quality_fixture() -> str:
-    bodies = risk_sections()
+def quality_fixture(stocks=None) -> str:
+    bodies = risk_sections(stocks)
     bodies["Trade Plan Snapshot"] = bodies["Trade Plan Snapshot"].split("\n", 1)[1]
     bodies["Smart Money Summary"] = "Signal: Mixed.\nImplication: Review.\nValidation: Confirm."
     bodies["What Changed Today"] = "• Leadership changed."
@@ -162,6 +174,24 @@ class CoreConsistencyChecks(unittest.TestCase):
         self.assertTrue(result["passes"], result)
         self.assertIn(RISK_LABEL_GUIDE, report)
         self.assertIn("Setup Risk: Medium-High", report)
+
+    def test_model_evidence_does_not_cut_off_the_third_candidates_risk(self):
+        source = quality_fixture(enriched_ranked_stocks())
+        self.assertTrue(validate_daily_report_quality(source)["passes"])
+        report = enforce_daily_report_quality(source)
+        result = validate_daily_report_quality(report)
+        self.assertTrue(result["passes"], result)
+        for symbol in ("TSM", "MSFT", "NVDA"):
+            self.assertIn(f"Full review: /tradeplan {symbol}", report)
+        self.assertEqual(report.count("Model adjustments:"), 2)
+        self.assertEqual(report.count("Model inputs:"), 2)
+
+    def test_enforcement_preserves_real_risk_conflicts_for_validation(self):
+        source = quality_fixture(enriched_ranked_stocks())
+        source = source.replace("Score Risk: Elevated", "Score Risk: Controlled", 1)
+        result = validate_daily_report_quality(enforce_daily_report_quality(source))
+        self.assertFalse(result["passes"])
+        self.assertTrue(any("disagrees for NVDA" in error for error in result["risk_consistency_errors"]))
 
     def test_quality_check_flags_risk_and_greeting_errors(self):
         report = quality_fixture().replace("Good evening.", "Good morning.")
@@ -275,7 +305,7 @@ class BuilderConsistencyChecks(unittest.TestCase):
         self.assertIn("Setup Risk: Unavailable", report)
         self.assertNotIn("Risk Profile:", report)
 
-    def build_daily_fixture(self, when, calendar_report=None):
+    def build_daily_fixture(self, when, calendar_report=None, ranked=None):
         class FixedDatetime(datetime):
             @classmethod
             def now(cls, tz=None):
@@ -289,7 +319,7 @@ class BuilderConsistencyChecks(unittest.TestCase):
             "load_global_context": lambda: dict.fromkeys(("vix", "oil", "tlt", "russell", "nasdaq", "sp500", "gold"), 0),
             "fetch_watchlist_quotes": lambda context: ([stock["ticker"] for stock in STOCKS], {}),
             "record_watchlist_evolution_day": lambda *args, **kwargs: None,
-            "rank_daily_opportunities": lambda **kwargs: ranked_stocks(),
+            "rank_daily_opportunities": lambda **kwargs: deepcopy(ranked) if ranked is not None else ranked_stocks(),
             "build_allocation_snapshot_section": lambda **kwargs: "Portfolio Allocation Snapshot\nPosture: Watchlist.",
             "build_what_changed_today": lambda **kwargs: "• Leadership changed.\n• Confirmation matters.\n• New themes emerging.",
             "build_optimized_theme_read": lambda **kwargs: "• Theme history is building.",
@@ -314,6 +344,18 @@ class BuilderConsistencyChecks(unittest.TestCase):
         self.assertIn("1. NVDA", snapshot)
         self.assertLess(snapshot.index("NVDA"), snapshot.index("MSFT"))
         self.assertIn("Score Risk: Controlled | Setup Risk: Medium-High", snapshot)
+
+    def test_daily_builder_preserves_all_enriched_ranking_and_risk_rows(self):
+        ranked = enriched_ranked_stocks()
+        before = deepcopy(ranked)
+        report = self.build_daily_fixture(datetime(2026, 10, 25, 23, tzinfo=timezone.utc), ranked=ranked)
+        result = validate_daily_report_quality(report)
+        self.assertTrue(result["passes"], result)
+        self.assertEqual(ranked, before)
+        self.assertIn("3. NVDA - Opportunity", report)
+        self.assertIn("Full review: /tradeplan NVDA", report)
+        self.assertEqual(report.count("Model adjustments:"), 2)
+        self.assertEqual(report.count("Model inputs:"), 2)
 
     def test_daily_greeting_changes_at_noon_and_evening(self):
         for hour in (8, 12, 18):

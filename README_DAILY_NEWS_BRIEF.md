@@ -36,6 +36,8 @@ Company names are expanded for the core coverage and common research leaders, in
 
 The news edition is rendered from the same validated detailed report. `/fullreport` retains the research tables, scores, trade-plan snapshot, allocation, source context and validation commands. Quality checks recognize both formats; the news edition has its own structure, date/greeting, length and source-qualification checks. It does not present numerical research rankings as confirmed entries or change stock scores. Important cached market alerts retain their dated source evidence and do not establish the cause of a price move.
 
+Ranking entries retain their complete model evidence, Score Risk and review commands when the detailed report is formatted. They are not cut by the older fixed line limit. Candidate order, risk consistency and the overall character limit are still checked; a failed build names the failing research check. Offline deployment fixtures exercise the production ranking enrichment through the detailed report builder before rendering the spoken brief.
+
 ## Company catalyst brief
 
 `/catalysts` covers the configured core companies plus up to ten dated cached top opportunities, using the same universe as special alerts. `/catalysts MSFT` narrows that brief to a monitored company. An outside symbol is identified as outside the current coverage rather than being silently scored. Core coverage includes TSLA, NVDA, MSFT, AVGO, PLTR, AVAV, KTOS and CRWD by default. Additional opportunities depend on valid cached rankings, whose date is shown.

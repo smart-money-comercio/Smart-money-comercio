@@ -47,7 +47,9 @@ SECTION_LINE_LIMITS = {
     "What Changed Today": 4,      # header + 3 bullets
     "Theme Read": 4,              # header + 3 bullets
     "Watchlist Movers": 8,
-    "Top Opportunities": 18,
+    # Ranking rows include captured model evidence. Keep each candidate's full
+    # block, including Score Risk and its review command; the report-wide
+    # character limit is still validated independently.
     "Fastest-Rising Opportunities": 6,
     "Risk Notes": 4,
     "Smart Money Summary": 4,              # header + Signal / Implication / Validation
@@ -306,6 +308,28 @@ def validate_daily_report_quality(report: str) -> dict:
             and not research_context_errors
         ),
     }
+
+
+def describe_quality_failure(result: dict) -> str:
+    """Expose the failing checks without including the underlying report."""
+    issues = []
+    for key, label in (
+        ("risk_consistency_errors", "Risk consistency"),
+        ("missing_headers", "Missing sections"),
+        ("duplicate_headers", "Duplicate sections"),
+        ("removed_headers_present", "Obsolete sections"),
+        ("greeting_errors", "Greeting"),
+        ("research_context_errors", "Research context"),
+    ):
+        if result.get(key):
+            issues.append(label + ": " + "; ".join(result[key]))
+    if result.get("chars", 0) > result.get("max_chars", MAX_DAILY_REPORT_CHARS):
+        issues.append(f"Length: {result['chars']} characters exceeds {result.get('max_chars', MAX_DAILY_REPORT_CHARS)}")
+    if result.get("what_changed_bullets", 0) > 3:
+        issues.append("What Changed Today exceeds three bullets")
+    if not result.get("ai_summary_ok", True):
+        issues.append("Smart Money Summary is missing Signal, Implication or Validation")
+    return "; ".join(issues) or "Unspecified validation failure"
 
 
 def enforce_daily_report_quality(report: str) -> str:

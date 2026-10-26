@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
 from scripts.check_calendar_evidence import earnings, fed, fed_row
-from scripts.check_report_consistency import BuilderConsistencyChecks
+from scripts.check_report_consistency import BuilderConsistencyChecks, enriched_ranked_stocks
 from src.intelligence import calendar_context as calendar, calendar_sources as publishers
 from src.intelligence import company_catalyst_context as companies, special_alert_store as store, special_alert_universe as universe
 from src.intelligence.special_alert_sources import OFFICIAL_DOMAINS
@@ -84,8 +84,8 @@ class IsolatedChecks(unittest.TestCase):
         store.record_snapshot([value], {}, observed.timestamp())
         return value
 
-    def research(self, now=NOW, replacements=None):
-        report = BuilderConsistencyChecks.build_daily_fixture(SimpleNamespace(daily=daily_report), now)
+    def research(self, now=NOW, replacements=None, ranked=None):
+        report = BuilderConsistencyChecks.build_daily_fixture(SimpleNamespace(daily=daily_report), now, ranked=ranked)
         bodies = {"Executive Summary": "- Main theme: Oil / inflation risk.\n- Market moves: S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.",
                   "Market Snapshot": "Market Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted"}
         bodies.update(replacements or {})
@@ -101,7 +101,7 @@ def offline_news_fixture():
     case = IsolatedChecks("research")
     case.setUp()
     try:
-        research = case.research()
+        research = case.research(ranked=enriched_ranked_stocks())
         with patch.object(daily_report, "build_research_report", return_value=research):
             yield case
     finally:
@@ -396,6 +396,34 @@ class NewsChecks(IsolatedChecks):
         with self.assertRaisesRegex(ValueError, "underlying research report"):
             build_daily_news_brief(self.research().replace("Executive Summary", "Missing"))
         with self.assertRaises(ValueError): build_daily_news_brief(build_daily_news_brief(self.research()))
+
+    def test_enriched_daily_builder_reaches_both_narration_checks(self):
+        research = self.research(ranked=enriched_ranked_stocks())
+        self.assertIn("3. NVDA - Opportunity", research)
+        self.assertIn("Full review: /tradeplan NVDA", research)
+        with patch.object(daily_report, "build_research_report", return_value=research):
+            text = daily_report.build_daily_report()
+        result = validate_news_brief(text)
+        self.assertTrue(result["passes"], result)
+        self.assertGreaterEqual(result["spoken_words"], 180)
+        self.assertTrue(15 <= result["market_estimated_seconds"] <= 30)
+        self.assertIn("Global and Defense Watch", text)
+        self.assertIn("displayed advantage over Microsoft is 0.2 points", text)
+
+    def test_underlying_failure_names_the_actual_risk_or_missing_section(self):
+        research = self.research(ranked=enriched_ranked_stocks())
+        conflict = research.replace("Score Risk: Elevated", "Score Risk: Controlled", 1)
+        with self.assertRaisesRegex(ValueError, "Risk consistency:.*Score Risk disagrees for NVDA"):
+            build_daily_news_brief(conflict)
+        with self.assertRaisesRegex(ValueError, "Missing sections: Executive Summary"):
+            build_daily_news_brief(research.replace("Executive Summary", "Missing"))
+
+    def test_underlying_character_limit_still_blocks_the_brief_with_a_reason(self):
+        from src.reports.report_quality import MAX_DAILY_REPORT_CHARS
+        research = self.research(ranked=enriched_ranked_stocks())
+        oversized = research + "X" * MAX_DAILY_REPORT_CHARS
+        with self.assertRaisesRegex(ValueError, f"Length: [0-9]+ characters exceeds {MAX_DAILY_REPORT_CHARS}"):
+            build_daily_news_brief(oversized)
 
     def test_default_daily_builder_returns_news_and_keeps_detailed_builder_separate(self):
         research = self.research()
