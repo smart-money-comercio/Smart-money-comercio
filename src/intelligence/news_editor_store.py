@@ -71,6 +71,12 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
                 continue
             if any(not isinstance(step, dict) or any(not isinstance(step.get(key), str) for key in ("name", "status", "detail")) for step in value["stages"]):
                 continue
+            analysis = value.get("analyst_review")
+            if analysis is not None and (not isinstance(analysis, dict) or analysis.get("schema") != 1
+                    or not isinstance(analysis.get("evidence"), dict) or not isinstance(analysis["evidence"].get("source_sections"), list)
+                    or any(not isinstance(section, str) for section in analysis["evidence"]["source_sections"])
+                    or not isinstance(analysis.get("insights"), list) or len(analysis["insights"]) > 6):
+                continue
             if any(not isinstance(story, dict) or story.get("decision") not in {"selected", "skip", "wait"}
                    or any(not isinstance(story.get(key), str) for key in ("title", "url", "source", "published", "reason"))
                    or not isinstance(story.get("symbols"), list) for story in value["candidates"]):

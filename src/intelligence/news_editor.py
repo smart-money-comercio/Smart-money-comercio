@@ -312,8 +312,9 @@ def render_story(story: dict, zone, company_names: dict) -> str:
         issuer = story.get("confirmed_by") or story["symbols"][0]
         company = company_names.get(issuer, issuer)
         if story["official"]:
+            from src.agents.analyst_agent import reported_development_focus
             return (f"{company}'s company announcement, published {at} via {story['source']}, is headlined {headline}{punctuation} "
-                    "Commercial timing and impact still require review.")
+                    + reported_development_focus(materiality(story)))
         if story.get("story_type") == "commentary":
             return (f"In commentary on {company}, {story['source']}'s headline, published {at}, reads {headline}{punctuation} "
                     "This is headline-only commentary, unconfirmed by the company.")
@@ -327,7 +328,7 @@ def render_story(story: dict, zone, company_names: dict) -> str:
                 "This headline-only account is unconfirmed; it does not establish the cause of market moves.")
 
 
-def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str) -> str:
+def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str, analyst_review: dict | None = None) -> str:
     selected = selected_stories(plan)
     for story in selected:
         if story.get("title_truncated"):
@@ -341,6 +342,10 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
     value = deepcopy(plan)
     counts = {decision: sum(story["decision"] == decision for story in value["candidates"]) for decision in ("selected", "skip", "wait")}
     value["research_sha256"] = hashlib.sha256(research_report.encode()).hexdigest()
+    if analyst_review is not None:
+        from src.intelligence.daily_brief_analysis import validate_review
+        validate_review(analyst_review, research_report, report)
+        value["analyst_review"] = deepcopy(analyst_review)
     snapshot = re.search(r"\nMarket Snapshot\n(.*?)\n\n", research_report, re.S)
     moves = re.search(r"^[-•] Market moves: (.+)$", research_report, re.M)
     value["market_evidence"] = {"snapshot": snapshot[1][:900] if snapshot else "Unavailable", "moves": moves[1][:600] if moves else "Unavailable"}
@@ -349,7 +354,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Source Check", "status": "limited" if counts["wait"] or value["issues"] else "pass", "detail": f"{counts['wait']} held; original publication dates and HTTPS URLs checked"},
         {"name": "Relevance", "status": "pass", "detail": "Material company developments and macro releases; original-source reports required"},
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
-        {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"},
+        {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
+         + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
     return store.save_edition(value, report)
 
@@ -362,7 +368,9 @@ def review_daily_edition(report: str) -> str:
     if not any(step["name"] == "Editorial Review" and step["status"] == "pass" for step in record["stages"]):
         raise RuntimeError("Editorial review did not pass")
     counts = {decision: sum(story["decision"] == decision for story in record["candidates"]) for decision in ("selected", "skip", "wait")}
-    return f"{counts['selected']} sourced stories selected; {counts['skip']} skipped; {counts['wait']} held. Source wording and qualifications checked; edition {record['id']}."
+    analysis = record.get("analyst_review", {})
+    detail = f" {len(analysis['insights'])} analyst insights grounded in this research edition." if analysis else ""
+    return f"{counts['selected']} sourced stories selected; {counts['skip']} skipped; {counts['wait']} held.{detail} Source wording and qualifications checked; edition {record['id']}."
 
 
 def build_editor_status(symbol: str = "", history: bool = False) -> str:
@@ -380,6 +388,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             if record["issues"]:
                 lines.append("Coverage: " + "; ".join(clean(issue, 120) for issue in record["issues"][:3]))
             lines += ["", "Market evidence: " + clean(record["market_evidence"]["moves"], 400)]
+            analysis = record.get("analyst_review")
+            if analysis:
+                lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
         else:
             stories = [story for story in record["candidates"] if not symbol or symbol in story["symbols"]]
             for story in stories[:12]:

@@ -285,14 +285,15 @@ class EditorChecks(IsolatedChecks):
     def test_length_cut_removes_the_dropped_storys_followup_from_narration(self):
         from src.reports import daily_news_brief as news
         value = candidate(title="Microsoft introduces a cloud platform for China " * 5, source="Microsoft original publisher " * 3)
-        with patch.object(news, "MAX_NEWS_CHARS", 1500):
+        budget = len(self.render([])) + 80
+        with patch.object(news, "MAX_NEWS_CHARS", budget):
             text = self.render([value])
         record = store.read_editions(report=text)[0]
         self.assertFalse(any(story["decision"] == "selected" for story in record["candidates"]))
         self.assertNotIn("regional sales and export access", text)
         self.assertIn("No new source-confirmed company report", text)
         self.assertIn("Narration length budget", record["candidates"][0]["reason"])
-        self.assertLessEqual(len(text), 1500)
+        self.assertLessEqual(len(text), budget)
 
     def test_posted_retrospective_and_personal_wealth_stories_do_not_fill_news_slots(self):
         values = [candidate(title="Apple's Market Cap Grew From $350 Billion to $4.6 Trillion During Tim Cook's 15 Years as CEO. Here's What That Growth Curve Means for Apple's Next Chapter Under", official=False),

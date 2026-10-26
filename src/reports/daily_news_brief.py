@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from src.intelligence.calendar_context import checked_time, publishers
 from src.intelligence.company_catalyst_context import build_company_catalyst_brief
 from src.intelligence import news_editor as editor
+from src.intelligence.daily_brief_analysis import analyze_report, retained_review
 from src.utils.report_consistency import report_greeting, validate_report_greeting
 
 
@@ -83,6 +84,18 @@ def company_followup(stories: list[dict]) -> list[str]:
     if any(re.search(r"\b(?:AI|cloud|data.center)\b", story["title"], re.I) for story in companies):
         return ["For AI and cloud companies, watch whether spending plans translate into reported revenue and margins."]
     return []
+
+
+def calendar_implication(families: set[str]) -> str:
+    if "fomc_decision" in families:
+        return "Why it matters: Watch the Fed's guidance on the rate outlook and what it could mean for growth-company financing and valuations."
+    if families & {"cpi", "ppi", "pce"}:
+        return "Why it matters: Inflation releases will test the cost backdrop and expectations for interest rates; the figures and policy response are still ahead."
+    if families & {"jobs", "claims", "jolts", "eci"}:
+        return "Why it matters: Labor releases offer a check on demand and wage pressure. Watch the trend alongside company guidance."
+    if "gdp" in families:
+        return "Why it matters: Growth data offer a check on demand. Compare the release with company guidance before changing the outlook."
+    return ""
 
 
 def spoken_text(text: str) -> str:
@@ -177,7 +190,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     moves = dict(re.findall(r"(S&P|Nasdaq|Russell|VIX|Oil|TLT)\s+([+-]?\d+(?:\.\d+)?%)", executive))
     if quote_day is None:
         moves = {}
-    prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now)}\n{market_takeaway(moves, is_open)}"
+    analysis = analyze_report(research_report)
+    insights = analysis["insights"]
+    lead = next((row["text"] for row in insights if row["section"] == "lead"), market_takeaway(moves, is_open))
+    prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now)}\n{lead}"
     indices = [direction(label, moves[key]) for key, label in (("S&P", "the S&P 500"), ("Nasdaq", "the Nasdaq Composite"), ("Russell", "the Russell 2000")) if key in moves]
     if indices:
         session = ("During the " if is_open else "In the last completed U.S. regular session, ") + (display_day(quote_day[1]) if quote_day else "latest available snapshot")
@@ -191,20 +207,18 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         other_text = sentence(other)
         market.append(other_text[0].upper() + other_text[1:] + "." + (" TLT is a bond-price proxy; Treasury yields are not verified here." if "TLT" in moves else ""))
     breadth = re.search(r"Breadth: (\d+) up / (\d+) down / (\d+) quoted", snapshot)
-    if breadth and quote_day:
+    if breadth and quote_day and not any(row["id"] == "participation" for row in insights):
         market.append(f"Within the {breadth[3]}-symbol research watchlist, {breadth[1]} finished higher and {breadth[2]} lower." if not is_open
                       else f"Within the {breadth[3]}-symbol research watchlist, {breadth[1]} are higher and {breadth[2]} lower.")
-    rankings = re.findall(r"^\d+\. ([A-Z][A-Z0-9.\-]{0,9}) - Opportunity (\d+(?:\.\d+)?)/100 \| Structural (\d+(?:\.\d+)?)/100", sections["Top Opportunities"], re.M)[:3]
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
     plan = editor.build_editorial_plan(brief, now)
     story_paragraphs = {story["id"]: editor.render_story(story, zone, NAMES) for story in editor.selected_stories(plan)}
     if brief.get("market_events"):
         market.insert(1, "An active market-alert record reports " + brief["market_events"][0]["fact"]
                       + " This is dated price evidence; it does not establish the cause of the move.")
-    leaders = [name(row[0]) for row in rankings]
-    leader_text = ", ".join(leaders[:-1]) + " and " + leaders[-1] if len(leaders) > 1 else "".join(leaders)
-    companies = [(leader_text + (" lead" if len(leaders) > 1 else " leads") + " our research rankings.")
-                 if rankings else "Company rankings were unavailable for this edition; no leading setup is being inferred."]
+    market.extend(row["text"] for row in insights if row["section"] == "market")
+    companies = [row["text"] for row in insights if row["section"] == "company"] or [
+        "Company rankings were unavailable for this edition; no leading setup is being inferred."]
     no_company_story = "No new source-confirmed company report met the editorial checks for this edition."
     ahead = []
     # The cached Nasdaq rows are estimates, not issuer-confirmed schedules.
@@ -212,7 +226,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     families = {"fomc_decision": "the Federal Reserve's interest-rate decision", "cpi": "consumer inflation", "ppi": "producer inflation",
                 "jobs": "the employment report", "pce": "PCE inflation and personal income", "gdp": "gross domestic product",
                 "claims": "weekly jobless claims", "eci": "employment costs", "jolts": "job openings"}
-    macro, used = [], set()
+    macro, used, macro_families = [], set(), []
     for row in sorted(brief.get("macro", []), key=lambda value: value["event_at"]):
         if row.get("time_status") not in {"verified", "cached"}:
             continue
@@ -220,16 +234,21 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         if family not in families or family in used:
             continue
         used.add(family)
+        macro_families.append(family)
         at = checked_time(row["event_at"]).astimezone(zone)
         status = "A previously checked, cached schedule lists" if row["time_status"] == "cached" else "The publisher schedule lists"
         macro.append(f"{status} {families[family]} for {at.strftime('%A, %B %d at %I:%M %p %Z')}."
                      + (" Recheck the publisher because live coverage is limited." if row["time_status"] == "cached" else ""))
     ahead.extend(macro[:2])
+    implication = calendar_implication(set(macro_families[:2]))
+    if implication:
+        ahead.append(implication)
     if not ahead:
         ahead.append("The available company announcements and calendars did not establish a dated catalyst. Check company sources before planning around an event.")
     if plan["issues"]:
         ahead.append("Calendar or company-news coverage is incomplete; unverified dates and times remain uncertain.")
-    notes = ["Sources and full evidence: /storylog · /fullreport · /catalysts · /calendar · /specialalerts", "Research only. Not financial advice."]
+    notes = ["The full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans",
+             "Sources and full evidence: /storylog · /catalysts · /calendar · /specialalerts", "Research only. Not financial advice."]
     initial_stories = editor.selected_stories(plan)
     chosen = None
     last_result = None
@@ -241,10 +260,16 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             market_body, company_body, ahead_body = list(market), list(companies), list(ahead)
             for story in retained:
                 (company_body if story["kind"] == "company" else market_body).append(story_paragraphs[story["id"]])
-            if not any(story["kind"] == "company" for story in retained):
+            if not any(story["kind"] == "company" for story in retained) and not analysis["evidence"]["companies"]:
                 company_body.append(no_company_story)
-            watching = [market_outlook(moves, breadth if quote_day else None)] + company_followup(retained)
-            groups = list(zip(HEADERS, (market_body, company_body, ahead_body, watching, notes)))
+            watching = [row["text"] for row in insights if row["section"] == "watch"]
+            if not watching:
+                watching.append(market_outlook(moves, breadth if quote_day else None))
+            watching += company_followup(retained)
+            notes_body = list(notes)
+            if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:
+                notes_body.insert(-1, no_company_story)
+            groups = list(zip(HEADERS, (market_body, company_body, ahead_body, watching, notes_body)))
 
             def render():
                 return prefix + "\n\n" + "\n\n".join(header + "\n" + "\n\n".join(body) for header, body in groups)
@@ -258,7 +283,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 body.append(paragraph)
                 text = render()
 
-            protected = set(story_paragraphs.values()) | {no_company_story}
+            protected = set(story_paragraphs.values()) | {no_company_story} | {row["text"] for row in insights}
             if brief.get("market_events"):
                 protected.add(market[1])
             if plan["issues"]:
@@ -294,5 +319,5 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     for story in initial_stories:
         if story["id"] not in retained_ids:
             story.update(decision="skip", reason="Narration length budget; sufficient spoken context and complete source qualifications retained")
-    editor.review_and_record(plan, text, story_paragraphs, research_report)
+    editor.review_and_record(plan, text, story_paragraphs, research_report, analyst_review=retained_review(analysis, text))
     return text

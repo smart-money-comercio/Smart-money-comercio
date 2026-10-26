@@ -14,6 +14,83 @@ from src.utils.score_display import (
 DEFAULT_MAX_ITEMS = 5
 
 
+def review_daily_brief(evidence: dict) -> list[dict]:
+    """Explain report facts and entry conditions without fetching or rescoring."""
+    moves, breadth = evidence["moves"], evidence["breadth"]
+    companies = evidence["companies"]
+    insights = []
+
+    def add(key, section, text, sources):
+        insights.append({"id": key, "section": section, "text": text, "sources": sources})
+
+    indexes = [moves[key] for key in ("S&P", "Nasdaq", "Russell") if key in moves]
+    if len(indexes) == 3:
+        if moves["Nasdaq"] <= -2:
+            lead = f"The Nasdaq's {abs(moves['Nasdaq']):.2f} percent decline puts growth-stock risk at the center of today's brief. Our research leaders still need entry confirmation."
+        elif moves.get("Oil", 0) >= 1.5:
+            lead = f"Oil jumped {moves['Oil']:.2f} percent in the latest session. Our focus is the pressure higher energy costs could put on margins as investors assess the next policy and earnings signals."
+        elif all(value > 0 for value in indexes) and breadth and breadth["down"] > breadth["up"]:
+            lead = "U.S. indexes advanced, but most of our research watchlist declined. The gap between index strength and company participation is today's key tension."
+        elif all(value > 0 for value in indexes):
+            lead = "U.S. indexes advanced in the latest snapshot. Our focus is which research leaders have the price support to follow through."
+        elif all(value < 0 for value in indexes):
+            lead = "All three tracked U.S. indexes declined. Our focus is whether the strongest research ideas can regain price support."
+        else:
+            lead = "U.S. indexes are sending a mixed signal. Our focus is the company-level evidence behind the research rankings."
+        add("lead", "lead", lead, ["Executive Summary", "Market Snapshot"])
+        if breadth:
+            up, down, total = (breadth[key] for key in ("up", "down", "total"))
+            scope = (f"Within the {total}-symbol research watchlist, {up} are higher and {down} lower. " if evidence["is_open"] else
+                     f"Within the {total}-symbol research watchlist, {up} finished higher and {down} lower. ")
+            if down > up:
+                read = scope + "Our analysis: Weak participation keeps the focus on selective confirmation before adding conviction to a high research score."
+            elif up > down:
+                read = scope + "Our analysis: Participation supports the price picture within our coverage; the next test is whether the leading companies sustain it."
+            else:
+                read = scope + "Our analysis: Advancers and decliners are balanced. Company-specific confirmation matters more than assuming one direction fits every setup."
+            add("participation", "market", read, ["Market Snapshot"])
+    if companies:
+        top = companies[0]
+        changed = evidence.get("leadership")
+        if changed:
+            introduction = f"{top['name']} moved ahead of {changed['previous_name']} in our research ranking, at {top['opportunity']:g} out of 100."
+        else:
+            introduction = f"{top['name']} leads our research ranking at {top['opportunity']:g} out of 100."
+        if abs(top["opportunity"] - top["structural"]) >= 5:
+            introduction += f" Its structural support score is {top['structural']:g}; the opportunity ranking also reflects shorter-term research inputs."
+        if top["delta"]:
+            introduction += f" Its opportunity score {'rose' if top['delta'] > 0 else 'fell'} {abs(top['delta']):g} points versus the prior report."
+        if len(companies) > 1:
+            introduction += f" {companies[1]['name']} follows at {companies[1]['opportunity']:g}."
+        if len(companies) > 2:
+            introduction += f" {companies[2]['name']} is third."
+        introduction += " Research scores express priority rather than expected returns."
+        add("ranking", "company", introduction, ["Top Opportunities"] + (["What Changed Today"] if changed else []))
+        if top["price"] is not None:
+            change = top["price"]
+            price = f"{top['name']} {'rose' if change > 0 else 'fell'} {abs(change):.1f} percent in the quoted regular session." if change else f"{top['name']} was unchanged in the quoted regular session."
+            if change < 0:
+                price += " Its high ranking therefore still needs stronger price confirmation."
+            elif change > 0:
+                price += " That adds price support to the research case; volume still needs a separate check."
+            add("company_price", "company", price, ["Top Opportunities", "Market Snapshot"])
+        risk_words = {"Low": "low", "Medium": "medium", "High": "high", "Medium-High": "medium to high", "Low-Medium": "low to medium"}
+        if top["setup_risk"]:
+            risk = f"Our analysis rates {top['name']}'s setup risk {risk_words[top['setup_risk']]}"
+            if top["score_risk"]:
+                risk += f", with {top['score_risk'].lower()} score risk"
+            risk += "."
+            add("setup_risk", "watch", risk, ["Top Opportunities", "Trade Plan Snapshot"])
+        if top["action"] == "wait":
+            condition = f"Our trade plan for {top['name']} calls for waiting for price, volume and news confirmation. A high rank alone does not satisfy those checks."
+        elif top["action"] == "constructive":
+            condition = f"Our trade plan for {top['name']} favors confirmed strength. Watch for price and volume to improve together, then recheck the company's news and setup risk."
+        else:
+            condition = "The research ranking supplies a review order. Current price, volume and company disclosures still need to support the case before conviction increases."
+        add("confirmation", "watch", condition, ["Top Opportunities"] + (["Trade Plan Snapshot"] if top["action"] else []))
+    return insights
+
+
 def review_company_catalyst(evidence: dict) -> dict:
     """Explain the next research checks without changing numerical scores."""
     calendar = evidence.get("calendar", {})
@@ -35,6 +112,22 @@ def review_company_catalyst(evidence: dict) -> dict:
         interpretation = "No dated company catalyst is established in the available cached window. Check investor relations and current news."
     return {"focus": focus, "interpretation": interpretation,
             "confirmation": "Price and volume confirmation still need a fresh check.", "score_changes": False}
+
+
+def reported_development_focus(topic: str) -> str:
+    """Investor follow-up appropriate to the type of original-source report."""
+    return {
+        "earnings": "Investor focus: compare revenue, margins and cash flow with prior guidance, then check management's outlook.",
+        "guidance": "Investor focus: check what changed in the outlook and which demand, pricing or cost assumptions support it.",
+        "contract": "Investor focus: check funded commitments and revenue timing; the announced contract value may be recognized over several periods.",
+        "acquisition": "Investor focus: examine the funding, approvals and integration risks before assuming the deal will close.",
+        "risk": "Investor focus: establish the affected business and potential financial exposure before changing the investment case.",
+        "regulation": "Investor focus: establish the affected products, markets and compliance costs before estimating the earnings impact.",
+        "operations": "Investor focus: check the effect on capacity, costs and the company's revenue outlook.",
+        "capital": "Investor focus: compare the capital commitment with cash generation, debt and other funding needs.",
+        "investment": "Investor focus: compare the spending timetable with expected capacity and future cash generation.",
+        "leadership": "Investor focus: watch whether the leadership change alters strategy, capital allocation or guidance.",
+    }.get(topic, "Commercial timing and impact still require review.")
 
 
 def safe_float(value: Any, default: float = 0) -> float:

@@ -424,26 +424,26 @@ class NewsChecks(IsolatedChecks):
 
     def test_oil_theme_has_plain_language_outlook_without_a_claimed_market_cause(self):
         text = build_daily_news_brief(self.research())
-        self.assertIn("Oil and inflation are on the watch list", text)
-        self.assertIn("Our view: Higher energy costs can put pressure on company margins", text)
+        self.assertIn("Oil jumped 4.32 percent", text)
+        self.assertIn("higher energy costs could put on margins", text)
         self.assertNotIn("caused", text.lower())
         self.assertNotIn("Here is your Smart Money Daily News Brief", text)
 
     def test_selloff_outlook_uses_dated_market_evidence(self):
         text = build_daily_news_brief(self.research(replacements={"Executive Summary": "- Main theme: Growth pressure.\n- Market moves: S&P -1.6%, Nasdaq -2.6%, Russell -0.4%, VIX +12%, Oil +0.4%, TLT +1%."}))
-        self.assertIn("The Nasdaq's decline leads", text)
-        self.assertIn("whether the Nasdaq stabilizes", text)
+        self.assertIn("The Nasdaq's 2.60 percent decline", text)
+        self.assertIn("growth-stock risk", text)
         self.assertNotIn("energy costs can put pressure", text)
 
     def test_index_gains_and_watchlist_declines_are_explained_with_scope(self):
         text = build_daily_news_brief(self.research(replacements={"Executive Summary": "- Main theme: Macro / earnings setup.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.1%."}))
-        self.assertIn("gains across the indexes we track", text)
-        self.assertIn("Index gains are not shared by most names in this research watchlist", text)
+        self.assertIn("U.S. indexes advanced, but most of our research watchlist declined", text)
+        self.assertIn("Weak participation", text)
 
     def test_undated_data_cannot_drive_the_theme_or_interpretation(self):
         text = build_daily_news_brief(self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"}), self.confirmed_news_without_prices())
         self.assertIn("Market coverage is incomplete", text)
-        self.assertIn("A complete, dated market snapshot", text)
+        self.assertIn("Verified market returns are unavailable", text)
         self.assertNotIn("energy costs can put pressure", text)
         self.assertNotIn("Oil and inflation are on", text)
 
@@ -488,12 +488,13 @@ class NewsChecks(IsolatedChecks):
         text = "Title\nDate: 2026-10-25\n\nGood afternoon.\nMarket Update\nStocks changed. /report https://example.com\nResearch Notes\nLinks and disclaimer."
         self.assertEqual(spoken_text(text).split(), ["Good", "afternoon.", "Stocks", "changed."])
 
-    def test_quiet_edition_reaches_a_minute_with_derived_dated_market_context(self):
+    def test_quiet_edition_uses_agent_analysis_rather_than_padding_for_duration(self):
         text = build_daily_news_brief(self.research())
         result = validate_news_brief(text)
         self.assertGreaterEqual(result["spoken_words"], 180)
         self.assertGreaterEqual(result["estimated_narration_seconds"], 60)
-        self.assertIn("0.31 percentage points", text)
+        self.assertIn("Nvidia leads our research ranking", text)
+        self.assertIn("setup risk medium to high", text)
         self.assertNotIn("headline-only", text)
 
     def test_confirmed_calendar_context_is_used_before_other_duration_expansion(self):
@@ -501,9 +502,10 @@ class NewsChecks(IsolatedChecks):
         brief = companies.build_company_catalyst_brief()
         brief["macro"] = [{"eventName": title, "event_at": f"2026-10-{day}T12:30:00+00:00", "time_status": "verified"}
                           for day, title in ((28, "Fed Interest Rate Decision"), (29, "Initial Jobless Claims"), (30, "CPI"))]
-        with patch.object(news, "MIN_NARRATION_WORDS", 220):
+        baseline = news.narration_metrics(build_daily_news_brief(self.research(), brief))["spoken_words"]
+        with patch.object(news, "MIN_NARRATION_WORDS", baseline + 10):
             text = build_daily_news_brief(self.research(), brief)
-            self.assertGreaterEqual(news.narration_metrics(text)["spoken_words"], 220)
+            self.assertGreaterEqual(news.narration_metrics(text)["spoken_words"], baseline + 10)
         self.assertIn("consumer inflation", text)
 
     def test_insufficient_evidence_is_withheld_instead_of_padding_or_adding_unconfirmed_news(self):
@@ -541,6 +543,142 @@ class NewsChecks(IsolatedChecks):
             result = check.main(offline_fixture=True)
         self.assertEqual(result, 0, output.getvalue())
         self.assertEqual(live.read_text(), '{"keep":"live status"}')
+
+
+class AnalystBriefChecks(IsolatedChecks):
+    def investor_research(self, price="+1.5%", delta="up +4.0"):
+        opportunities = f"""1. TSM - Opportunity 88.2/100 | Structural 86.2/100 | {delta}
+   Price: {price} | News signals: 0
+   Why now: structural support; earnings estimate 2026-10-29; company confirmation pending
+   Score Risk: Balanced | Action: Watch Closely
+
+2. MSFT - Opportunity 88.0/100 | Structural 87.3/100 | up +1.0
+   Price: +0.7% | News signals: 0
+   Score Risk: Controlled | Action: Review First
+
+3. NVDA - Opportunity 85.3/100 | Structural 85.3/100 | unchanged
+   Price: -0.6% | News signals: 0
+   Score Risk: Balanced | Action: Watch Closely"""
+        plans = "\n".join(f"{index}. {symbol} — Medium-High conviction, {score}/100 | Score Risk: {risk} | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan {symbol}"
+                          for index, (symbol, score, risk) in enumerate((("TSM", 86.2, "Balanced"), ("MSFT", 87.3, "Controlled"), ("NVDA", 85.3, "Balanced")), 1))
+        return self.research(replacements={"Top Opportunities": opportunities, "Trade Plan Snapshot": plans,
+            "What Changed Today": "• Leadership: TSM moved ahead of MSFT.\n• New mover focus: AMD.\n• Tone stayed defensive / mildly bearish."})
+
+    def test_ranking_change_and_price_support_reach_the_spoken_edition(self):
+        text = build_daily_news_brief(self.investor_research())
+        self.assertIn("Taiwan Semiconductor moved ahead of Microsoft", text)
+        self.assertIn("at 88.2 out of 100", text)
+        self.assertIn("rose 4 points versus the prior report", text)
+        self.assertIn("Taiwan Semiconductor rose 1.5 percent", text)
+        self.assertIn("adds price support", text)
+        self.assertNotIn("earnings estimate 2026-10-29", text)
+
+    def test_strong_rank_with_falling_price_gets_a_confirmation_caveat(self):
+        text = build_daily_news_brief(self.investor_research(price="-4.5%", delta="down -2.0"))
+        self.assertIn("fell 2 points versus the prior report", text)
+        self.assertIn("Taiwan Semiconductor fell 4.5 percent", text)
+        self.assertIn("still needs stronger price confirmation", text)
+        self.assertNotIn("adds price support", text)
+
+    def test_undated_company_prices_cannot_inflate_the_analysis(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        report = self.investor_research().replace("Quote session: 2026-10-23", "Quote session unavailable")
+        review = analyze_report(report)
+        text = "\n".join(row["text"] for row in review["insights"])
+        self.assertNotIn("Taiwan Semiconductor rose 1.5", text)
+        self.assertEqual(review["evidence"]["moves"], {})
+        self.assertIn("rose 4 points versus the prior report", text)
+
+    def test_tradeplan_risk_and_action_belong_to_the_actual_leading_company(self):
+        text = build_daily_news_brief(self.research())
+        self.assertIn("Nvidia's setup risk medium to high, with elevated score risk", text)
+        self.assertIn("Our trade plan for Nvidia calls for waiting", text)
+        self.assertNotIn("Our trade plan for Nvidia favors confirmed strength", text)
+
+    def test_controlled_score_risk_does_not_become_a_low_risk_setup(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        report = self.investor_research().replace("Score Risk: Balanced", "Score Risk: Controlled")
+        review = analyze_report(report)
+        risk = next(row["text"] for row in review["insights"] if row["id"] == "setup_risk")
+        self.assertIn("medium to high, with controlled score risk", risk)
+        self.assertNotIn("low risk", risk)
+
+    def test_structural_support_is_distinct_from_opportunity_priority(self):
+        text = build_daily_news_brief(self.research())
+        self.assertIn("ranking at 92 out of 100", text)
+        self.assertIn("structural support score is 80.1", text)
+        self.assertIn("rather than expected returns", text)
+
+    def test_analyst_inputs_are_saved_with_the_matching_edition_and_status(self):
+        from src.intelligence import news_editor, news_editor_store
+        report = self.investor_research(); before = self.ranking.read_bytes()
+        text = build_daily_news_brief(report)
+        record = news_editor_store.read_editions(report=text)[0]
+        review = record["analyst_review"]
+        self.assertEqual(review["research_sha256"], hashlib.sha256(report.encode()).hexdigest())
+        self.assertEqual(review["evidence"]["companies"][0]["symbol"], "TSM")
+        self.assertGreaterEqual(len(review["insights"]), 4)
+        self.assertTrue(all(text.count(row["text"]) == 1 for row in review["insights"]))
+        self.assertFalse(review["score_changes"])
+        self.assertEqual(before, self.ranking.read_bytes())
+        self.assertIn("analyst insights grounded", news_editor.review_daily_edition(text))
+        self.assertIn("Analyst inputs:", news_editor.build_editor_status())
+
+    def test_invented_analyst_figures_or_altered_wording_are_rejected(self):
+        from src.intelligence.daily_brief_analysis import analyze_report, retained_review, validate_review
+        report = self.investor_research(); text = build_daily_news_brief(report)
+        review = retained_review(analyze_report(report), text)
+        altered = deepcopy(review); altered["evidence"]["companies"][0]["opportunity"] = 99.9
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            validate_review(altered, report, text)
+        with self.assertRaisesRegex(ValueError, "changed or lost"):
+            validate_review(review, report, text.replace("rose 4 points", "rose 20 points"))
+        omitted = deepcopy(review); omitted["insights"].pop()
+        with self.assertRaisesRegex(ValueError, "omitted"):
+            validate_review(omitted, report, text)
+
+    def test_raw_headline_or_unconfirmed_date_cannot_enter_through_research_prose(self):
+        report = self.investor_research().replace("Why now: structural support;", "Why now: Bitcoin will double tomorrow;")
+        text = build_daily_news_brief(report)
+        self.assertNotIn("Bitcoin", text)
+        self.assertNotIn("2026-10-29", text)
+
+    def test_broken_leader_row_does_not_promote_the_second_company_to_first(self):
+        from src.intelligence.daily_brief_analysis import report_evidence
+        report = self.investor_research().replace("Opportunity 88.2/100", "Opportunity NaN/100")
+        self.assertEqual(report_evidence(report)["companies"], [])
+
+    def test_inconsistent_change_sign_and_conflicting_tradeplan_are_not_narrated(self):
+        from src.intelligence.daily_brief_analysis import report_evidence
+        self.assertEqual(report_evidence(self.investor_research(delta="up -4.0"))["companies"], [])
+        report = self.investor_research().replace("86.2/100 | Score Risk: Balanced", "86.2/100 | Score Risk: Elevated")
+        row = report_evidence(report)["companies"][0]
+        self.assertIsNone(row["setup_risk"]); self.assertIsNone(row["action"])
+
+    def test_confirmed_calendar_has_an_investor_question_without_a_forecast(self):
+        text = build_daily_news_brief(self.investor_research())
+        self.assertIn("Why it matters: Watch the Fed's guidance", text)
+        self.assertNotIn("will cut rates", text)
+        self.assertNotIn("Treasury yields rose", text)
+
+    def test_earnings_and_contract_news_have_different_investor_followups(self):
+        from src.intelligence import news_editor
+        from scripts.check_news_editor import candidate
+        for title, expected in (("Microsoft reports quarterly financial results", "revenue, margins and cash flow"),
+                                ("Microsoft signs a strategic cloud partnership", "funded commitments and revenue timing")):
+            story = candidate(title=title)
+            paragraph = news_editor.render_story(story, calendar.publishers.NY, {"MSFT": "Microsoft"})
+            self.assertIn(expected, paragraph)
+            self.assertIn(title, paragraph)
+
+    def test_quiet_news_day_still_has_substantive_analysis_and_a_route_to_depth(self):
+        from src.reports.daily_news_brief import narration_metrics
+        text = build_daily_news_brief(self.investor_research())
+        self.assertGreaterEqual(narration_metrics(text)["spoken_words"], 180)
+        self.assertLessEqual(len(text), 3800)
+        self.assertIn("trade-plan conditions and risk checks", text)
+        self.assertIn("/fullreport · /tradeplans", text)
+        self.assertNotIn("premium membership", text.lower())
 
 
 class CommandChecks(unittest.IsolatedAsyncioTestCase):
