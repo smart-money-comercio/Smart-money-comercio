@@ -23,32 +23,18 @@ def review_daily_brief(evidence: dict) -> list[dict]:
     def add(key, section, text, sources):
         insights.append({"id": key, "section": section, "text": text, "sources": sources})
 
-    indexes = [moves[key] for key in ("S&P", "Nasdaq", "Russell") if key in moves]
-    if len(indexes) == 3:
-        if moves["Nasdaq"] <= -2:
-            lead = f"The Nasdaq's {abs(moves['Nasdaq']):.2f} percent decline puts growth-stock risk at the center of today's brief. Our research leaders still need entry confirmation."
-        elif moves.get("Oil", 0) >= 1.5:
-            lead = f"Oil jumped {moves['Oil']:.2f} percent in the latest session. Our focus is the pressure higher energy costs could put on margins as investors assess the next policy and earnings signals."
-        elif all(value > 0 for value in indexes) and breadth and breadth["down"] > breadth["up"]:
-            lead = "U.S. indexes advanced, but most of our research watchlist declined. The gap between index strength and company participation is today's key tension."
-        elif all(value > 0 for value in indexes):
-            lead = "U.S. indexes advanced in the latest snapshot. Our focus is which research leaders have the price support to follow through."
-        elif all(value < 0 for value in indexes):
-            lead = "All three tracked U.S. indexes declined. Our focus is whether the strongest research ideas can regain price support."
-        else:
-            lead = "U.S. indexes are sending a mixed signal. Our focus is the company-level evidence behind the research rankings."
-        add("lead", "lead", lead, ["Executive Summary", "Market Snapshot"])
-        if breadth:
-            up, down, total = (breadth[key] for key in ("up", "down", "total"))
-            scope = (f"Within the {total}-symbol research watchlist, {up} are higher and {down} lower. " if evidence["is_open"] else
-                     f"Within the {total}-symbol research watchlist, {up} finished higher and {down} lower. ")
-            if down > up:
-                read = scope + "Our analysis: Weak participation keeps the focus on selective confirmation before adding conviction to a high research score."
-            elif up > down:
-                read = scope + "Our analysis: Participation supports the price picture within our coverage; the next test is whether the leading companies sustain it."
-            else:
-                read = scope + "Our analysis: Advancers and decliners are balanced. Company-specific confirmation matters more than assuming one direction fits every setup."
-            add("participation", "market", read, ["Market Snapshot"])
+    from src.intelligence.market_brief import market_segment, defense_segment
+    add("market_pulse", "market", market_segment(evidence), ["Executive Summary", "Market Snapshot"]
+        + (["Verified story decisions"] if evidence.get("stories") else []))
+    add("defense_watch", "global", defense_segment(evidence.get("stories", [])),
+        ["Verified story decisions"] if evidence.get("stories") else ["Research coverage policy"])
+    if breadth:
+        up, down, total = (breadth[key] for key in ("up", "down", "total"))
+        scope = (f"Within the {total}-symbol research watchlist, {up} are higher and {down} lower." if evidence["is_open"] else
+                 f"Within the {total}-symbol research watchlist, {up} finished higher and {down} lower.")
+        if down > up and all(key in moves and moves[key] > 0 for key in ("S&P", "Nasdaq", "Russell")):
+            scope += " Index gains are not shared by most names in this research watchlist."
+        add("participation", "watch", scope, ["Market Snapshot"])
     if companies:
         top = companies[0]
         changed = evidence.get("leadership")

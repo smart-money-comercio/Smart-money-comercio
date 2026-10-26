@@ -115,6 +115,40 @@ class EditorChecks(IsolatedChecks):
         reasons = editor.hold_reasons([{"decision": "wait", "reason": "Original publication time is future-dated or older than 24 hours"}])
         self.assertEqual(reasons, [("Publication outside allowed time window", 1)])
 
+    def test_darpa_original_feed_is_admitted_only_with_an_original_agency_link(self):
+        source = next(index for index, row in enumerate(editor.feeds.NEWS_SOURCES) if row["name"] == "DARPA")
+        title = "DARPA demonstrates an autonomous flight prototype"
+        self.cache(source, title=title, link="https://www.darpa.mil/news/flight-fixture")
+        text = build_daily_news_brief(self.research())
+        record = store.read_editions(report=text)[0]
+        story = next(row for row in record["candidates"] if row["title"] == title)
+        self.assertEqual(story["confirmed_by"], "DARPA")
+        self.assertEqual(story["materiality"], "defense innovation")
+        self.assertIn(title, text)
+        self.cache(source, title=title, link="https://darpa.mil.example.com/news/flight-fixture")
+        plan = editor.build_editorial_plan(self.brief(), NOW)
+        self.assertFalse(editor.selected_stories(plan))
+
+    def test_lockheed_original_feed_uses_the_monitored_issuer_provenance(self):
+        source = next(index for index, row in enumerate(editor.feeds.NEWS_SOURCES) if row.get("company_symbol") == "LMT")
+        title = "Lockheed Martin unveils a new autonomous defense system"
+        self.cache(source, title=title, link="https://news.lockheedmartin.com/fixture-release")
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "MSFT,NVDA,PLTR,LMT"}):
+            text = build_daily_news_brief(self.research())
+        story = next(row for row in store.read_editions(report=text)[0]["candidates"] if row["title"] == title)
+        self.assertEqual(story["confirmed_by"], "LMT")
+        self.assertIn("Lockheed Martin's company announcement", text)
+        self.assertIn("Global and Defense Watch", text)
+
+    def test_new_feed_fetch_time_does_not_replace_a_missing_original_date(self):
+        source = next(index for index, row in enumerate(editor.feeds.NEWS_SOURCES) if row["name"] == "DARPA")
+        title = "DARPA demonstrates an autonomous flight prototype"
+        self.cache(source, title=title, link="https://www.darpa.mil/news/fixture", published="")
+        text = build_daily_news_brief(self.research())
+        self.assertNotIn(title, text)
+        story = next(row for row in store.read_editions(report=text)[0]["candidates"] if row["title"] == title)
+        self.assertEqual(story["decision"], "wait")
+
     def test_duplicate_company_cannot_take_all_three_slots(self):
         values = [candidate(url="https://www.microsoft.com/news/" + str(index), title="Microsoft launches product " + str(index)) for index in range(4)]
         values += [candidate("NVDA"), candidate("PLTR")]

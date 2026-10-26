@@ -328,7 +328,7 @@ class NewsChecks(IsolatedChecks):
     def test_intraday_language_does_not_call_the_open_session_finished(self):
         research = self.research(replacements={"Market Snapshot": "Market Session: Open — live session.\nQuote session: 2026-10-23\nBreadth: 8 up / 10 down / 18 quoted"})
         text = build_daily_news_brief(research)
-        self.assertIn("During the Friday, October 23 session", text)
+        self.assertIn("During the Friday, October 23 regular session", text)
         self.assertIn("8 are higher", text)
         self.assertNotIn("finished higher", text)
 
@@ -424,32 +424,32 @@ class NewsChecks(IsolatedChecks):
 
     def test_oil_theme_has_plain_language_outlook_without_a_claimed_market_cause(self):
         text = build_daily_news_brief(self.research())
-        self.assertIn("Oil jumped 4.32 percent", text)
-        self.assertIn("higher energy costs could put on margins", text)
+        self.assertIn("oil rose 4.32 percent", text)
+        self.assertIn("Higher energy costs could squeeze margins", text)
         self.assertNotIn("caused", text.lower())
         self.assertNotIn("Here is your Smart Money Daily News Brief", text)
 
     def test_selloff_outlook_uses_dated_market_evidence(self):
         text = build_daily_news_brief(self.research(replacements={"Executive Summary": "- Main theme: Growth pressure.\n- Market moves: S&P -1.6%, Nasdaq -2.6%, Russell -0.4%, VIX +12%, Oil +0.4%, TLT +1%."}))
-        self.assertIn("The Nasdaq's 2.60 percent decline", text)
-        self.assertIn("growth-stock risk", text)
+        self.assertIn("the Nasdaq Composite fell 2.60 percent", text)
+        self.assertIn("sentiment read is cautious", text)
         self.assertNotIn("energy costs can put pressure", text)
 
     def test_index_gains_and_watchlist_declines_are_explained_with_scope(self):
         text = build_daily_news_brief(self.research(replacements={"Executive Summary": "- Main theme: Macro / earnings setup.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.1%."}))
-        self.assertIn("U.S. indexes advanced, but most of our research watchlist declined", text)
-        self.assertIn("Weak participation", text)
+        self.assertIn("sentiment read is constructive", text)
+        self.assertIn("Index gains are not shared by most names in this research watchlist", text)
 
     def test_undated_data_cannot_drive_the_theme_or_interpretation(self):
         text = build_daily_news_brief(self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"}), self.confirmed_news_without_prices())
-        self.assertIn("Market coverage is incomplete", text)
-        self.assertIn("Verified market returns are unavailable", text)
+        self.assertIn("A dated broad-market snapshot is unavailable", text)
+        self.assertIn("an overall sentiment call would be premature", text)
         self.assertNotIn("energy costs can put pressure", text)
         self.assertNotIn("Oil and inflation are on", text)
 
     def test_research_outlook_does_not_convert_a_bond_fund_into_verified_yields(self):
         text = build_daily_news_brief(self.research())
-        self.assertIn("TLT is a bond-price proxy; Treasury yields are not verified", text)
+        self.assertIn("TLT tracks bond prices; yields are unverified", text)
         self.assertNotIn("Treasury yields rose", text)
         self.assertNotIn("Treasury yields fell", text)
 
@@ -465,8 +465,9 @@ class NewsChecks(IsolatedChecks):
 
     def timed_fixture(self, words):
         prefix = f"{TITLE}\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\nMarket data: unavailable\n\nGood afternoon.\n\n"
-        return prefix + "\n\n".join(header + ("\n" + " ".join(["spoken"] * (words - 2)) if index == 0 else "")
-                                       for index, header in enumerate(HEADERS)) + "\nResearch only. Not financial advice."
+        return prefix + "\n\n".join(header + ("\n" + " ".join(["spoken"] * (60 if index == 0 else max(0, words - 62))))
+                                       if index < 2 else header for index, header in enumerate(HEADERS)) + "\nResearch only. Not financial advice."
+
 
     def test_179_spoken_words_fails_and_180_passes_the_one_minute_boundary(self):
         short, ready = validate_news_brief(self.timed_fixture(179)), validate_news_brief(self.timed_fixture(180))
@@ -511,8 +512,9 @@ class NewsChecks(IsolatedChecks):
     def test_insufficient_evidence_is_withheld_instead_of_padding_or_adding_unconfirmed_news(self):
         from src.intelligence import news_editor_store
         brief = companies.build_company_catalyst_brief(); brief["macro"] = []
-        report = self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"})
-        with self.assertRaisesRegex(ValueError, "Narration minimum not met"):
+        report = self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted",
+                                            "Top Opportunities": "Scoring unavailable", "Trade Plan Snapshot": "Trade plans unavailable."})
+        with self.assertRaisesRegex(ValueError, "Insufficient admitted evidence"):
             build_daily_news_brief(report, brief)
         self.assertFalse(news_editor_store.state_path().exists())
 
@@ -798,7 +800,7 @@ class RankingRationaleChecks(IsolatedChecks):
         from src.intelligence import news_editor_store
         report = self.research_with_basis(); text = build_daily_news_brief(report)
         review = news_editor_store.read_editions(report=text)[0]["analyst_review"]
-        self.assertEqual(len(review["insights"]), 8)
+        self.assertEqual(len(review["insights"]), 9)
         self.assertEqual(review["evidence"]["companies"][0]["basis"]["price"], 2)
         self.assertEqual(review["evidence"]["companies"][0]["inputs"]["core"], 88)
         self.assertEqual(review["research_sha256"], hashlib.sha256(report.encode()).hexdigest())
@@ -818,8 +820,157 @@ class RankingRationaleChecks(IsolatedChecks):
         self.assertIn(story["title"], text)
         self.assertIn("Why it leads:", text)
         self.assertTrue(any(row["decision"] == "selected" for row in record["candidates"]))
-        self.assertLess(len(record["analyst_review"]["insights"]), 8)
+        self.assertLess(len(record["analyst_review"]["insights"]), 9)
         self.assertTrue(news.validate_news_brief(text)["passes"])
+
+
+class MarketDefenseChecks(IsolatedChecks):
+    def story(self, source="DARPA", title="DARPA demonstrates an autonomous flight prototype", **changes):
+        from scripts.check_news_editor import candidate
+        host = {"DARPA": "www.darpa.mil", "Federal Reserve": "www.federalreserve.gov", "U.S. Treasury": "home.treasury.gov"}[source]
+        return candidate(kind="macro", symbols=[], publisher_symbol="", source=source, title=title,
+                         url="https://" + host + "/news/fixture", **changes)
+
+    def render(self, stories, report=None):
+        from src.intelligence import news_editor
+        with patch.object(news_editor, "cache_candidates", return_value=(stories, [])):
+            return build_daily_news_brief(report or self.research())
+
+    def market_body(self, text):
+        return text.split("\nMarket Update\n", 1)[1].split("\n\nCompanies in Focus", 1)[0]
+
+    def test_market_segment_has_independent_15_and_30_second_boundaries(self):
+        base = NewsChecks.timed_fixture(self, 220)
+        old = self.market_body(base)
+        for words, passes in ((44, False), (45, True), (90, True), (91, False)):
+            result = validate_news_brief(base.replace(old, " ".join(["spoken"] * words), 1))
+            self.assertEqual(not result["market_segment_errors"], passes)
+            self.assertEqual(result["market_spoken_words"], words)
+            self.assertEqual(result["passes"], passes)
+
+    def test_market_links_and_commands_cannot_inflate_spoken_segment_time(self):
+        base = NewsChecks.timed_fixture(self, 220)
+        body = " ".join(["spoken"] * 44) + " /ticker https://example.com/source" * 20
+        result = validate_news_brief(base.replace(self.market_body(base), body, 1))
+        self.assertEqual(result["market_spoken_words"], 44)
+        self.assertTrue(result["market_segment_errors"])
+
+    def test_generated_market_segment_keeps_the_figures_and_portfolio_lens(self):
+        text = self.render([])
+        result = validate_news_brief(text)
+        self.assertTrue(result["passes"])
+        self.assertGreaterEqual(result["market_estimated_seconds"], 15)
+        self.assertLessEqual(result["market_estimated_seconds"], 30)
+        body = self.market_body(text)
+        self.assertIn("sentiment read is cautious", body)
+        self.assertIn("S&P 500 fell 0.52 percent", body)
+        self.assertIn("oil rose 4.32 percent", body)
+        self.assertIn("Portfolio lens:", body)
+        self.assertIn("Higher energy costs could squeeze margins", body)
+
+    def test_indicator_scenarios_remain_within_the_same_timing_budget(self):
+        from src.intelligence.daily_brief_analysis import report_evidence
+        from src.intelligence.market_brief import market_segment, word_count
+        evidence = report_evidence(self.research()); evidence["stories"] = []
+        for moves, expected in (({"S&P": 0.4, "Nasdaq": 1.1, "Russell": 0.3, "VIX": -7, "Oil": 0.1, "TLT": 0.8}, "constructive"),
+                                ({"S&P": 0.4, "Nasdaq": 0.2, "Russell": 0.3, "VIX": 10}, "mixed"),
+                                ({"S&P": -1.5, "Nasdaq": -2.5, "Russell": -0.4, "VIX": 12}, "cautious"),
+                                ({"Nasdaq": 0.3}, "incomplete coverage"), ({}, "premature")):
+            text = market_segment({**evidence, "moves": moves})
+            self.assertIn(expected, text)
+            self.assertTrue(45 <= word_count(text) <= 90, text)
+
+    def test_verified_trade_headline_changes_the_conditional_portfolio_read(self):
+        story = self.story("U.S. Treasury", "Treasury announces export restrictions on AI chips")
+        text = self.render([story])
+        self.assertIn(story["title"], text)
+        self.assertIn("Verified trade-policy news puts chip-market access", self.market_body(text))
+        self.assertNotIn("caused", text.lower())
+
+    def test_geopolitical_news_has_two_sided_portfolio_implications(self):
+        story = self.story("Federal Reserve", "Federal Reserve policy review examines shipping conflict and energy risk")
+        text = self.render([story])
+        self.assertIn("energy and shipping costs alongside defense exposure", self.market_body(text))
+        self.assertNotIn("defense stocks will rise", text.lower())
+
+    def test_unconfirmed_geopolitical_headline_cannot_drive_the_market_read(self):
+        from scripts.check_news_editor import candidate
+        story = candidate("NVDA", official=False, title="Nvidia faces export restrictions amid a shipping conflict")
+        text = self.render([story])
+        self.assertNotIn(story["title"], text)
+        self.assertNotIn("Verified trade-policy news", self.market_body(text))
+        self.assertNotIn("Verified geopolitical news", self.market_body(text))
+
+    def test_defense_innovation_keeps_the_demonstration_and_revenue_distinction(self):
+        story = self.story()
+        text = self.render([story])
+        block = text.split("Global and Defense Watch\n", 1)[1].split("\n\nWhat's Ahead", 1)[0]
+        self.assertIn(story["title"], block)
+        self.assertIn("DARPA", block)
+        self.assertIn("production readiness, funded demand and execution costs", block)
+        self.assertIn("alone does not establish orders or revenue", block)
+
+    def test_global_and_defense_reports_get_space_alongside_a_company_story(self):
+        from src.intelligence import news_editor, news_editor_store
+        from scripts.check_news_editor import candidate
+        policy = self.story("Federal Reserve", "Federal Reserve announces an interest rate policy decision")
+        defense = self.story()
+        text = self.render([candidate(), candidate("NVDA"), policy, defense])
+        record = news_editor_store.read_editions(report=text)[0]
+        selected = news_editor.selected_stories(record)
+        self.assertEqual(len(selected), 3)
+        for story in (policy, defense):
+            self.assertIn(story["title"], text)
+        self.assertTrue(any(row["kind"] == "company" for row in selected))
+
+    def test_a_dropped_market_story_cannot_leave_an_orphan_portfolio_interpretation(self):
+        from src.intelligence import news_editor, news_editor_store
+        from src.reports import daily_news_brief as news
+        baseline = self.render([])
+        story = self.story("U.S. Treasury", "Treasury announces export restrictions on AI chips " + "with published regulatory details " * 20)
+        with patch.object(news_editor, "cache_candidates", return_value=([story], [])), patch.object(news, "MAX_NEWS_CHARS", len(baseline) + 30):
+            text = build_daily_news_brief(self.research())
+        self.assertNotIn(story["title"], text)
+        self.assertNotIn("Verified trade-policy news", text)
+        record = news_editor_store.read_editions(report=text)[0]
+        self.assertEqual(record["analyst_review"]["evidence"]["stories"], [])
+
+    def test_changed_headline_context_fails_the_same_edition_evidence_check(self):
+        from src.intelligence import news_editor, news_editor_store
+        from src.intelligence.daily_brief_analysis import validate_review
+        report = self.research(); text = self.render([self.story()], report)
+        record = news_editor_store.read_editions(report=text)[0]
+        review = deepcopy(record["analyst_review"])
+        review["evidence"]["stories"][0]["title"] = "Unreviewed war claim"
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            validate_review(review, report, text, news_editor.selected_stories(record))
+
+    def test_agency_name_and_contract_verb_do_not_create_a_war_headline(self):
+        from src.intelligence.market_brief import story_topics
+        for title in ("Department of War tests autonomous prototype", "Kratos strikes a production agreement"):
+            topics = story_topics({"title": title, "source": "DARPA", "symbols": []})
+            self.assertIn("defense", topics)
+            self.assertNotIn("geopolitics", topics)
+
+    def test_raw_news_candidates_cannot_bypass_the_source_gate_via_the_analyst(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        with self.assertRaisesRegex(ValueError, "admitted original-source"):
+            analyze_report(self.research(), [self.story()])
+
+    def test_quiet_day_defense_watch_does_not_invent_an_announcement_or_holdings(self):
+        text = self.render([])
+        self.assertIn("No current verified defense development qualified", text)
+        self.assertIn("drones, counter-drone systems, cybersecurity and autonomy", text)
+        self.assertNotIn("your holdings", text.lower())
+        self.assertNotIn("your portfolio lost", text.lower())
+
+    def test_quality_card_reports_both_the_market_segment_and_full_brief_duration(self):
+        from src.commands import reportcheck_commands
+        text = self.render([])
+        with patch.object(reportcheck_commands, "build_daily_report", return_value=text):
+            card = reportcheck_commands.build_daily_report_quality_card()
+        self.assertIn("15–30-second Segment: PASS", card)
+        self.assertIn("60-second Minimum: PASS", card)
 
 
 class CommandChecks(unittest.IsolatedAsyncioTestCase):

@@ -54,6 +54,8 @@ NEWS_SOURCES = [
     },
     {"name": "Nvidia Newsroom", "url": OFFICIAL_FEEDS["NVDA"], "category": "company", "company_symbol": "NVDA"},
     {"name": "Microsoft Blog", "url": OFFICIAL_FEEDS["MSFT"], "category": "company", "company_symbol": "MSFT"},
+    {"name": "Lockheed Martin Newsroom", "url": "https://news.lockheedmartin.com/news-releases?pagetemplate=rss", "category": "company", "company_symbol": "LMT"},
+    {"name": "DARPA", "url": "https://www.darpa.mil/rss.xml", "category": "defense"},
 ]
 
 

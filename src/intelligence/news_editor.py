@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from src.intelligence import news_live_sources as feeds, news_editor_store as store
 from src.intelligence.special_alert_sources import clean, company_url
 from src.intelligence.special_alert_engine import company_event
+from src.intelligence.market_brief import story_topics
 
 
 MAX_STORIES = 3
@@ -23,7 +24,7 @@ MAX_CACHE_BYTES = 3_000_000
 MAX_CACHE_AGE = 6 * 3600
 MAX_NEWS_AGE = 24 * 3600
 MAX_HEADLINE_CHARS = 1000
-OFFICIAL_HOSTS = {"Federal Reserve": "federalreserve.gov", "U.S. Treasury": "treasury.gov", "EIA": "eia.gov"}
+OFFICIAL_HOSTS = {"Federal Reserve": "federalreserve.gov", "U.S. Treasury": "treasury.gov", "EIA": "eia.gov", "DARPA": "darpa.mil"}
 ALIASES = {**feeds.TICKER_TERMS, "TSM": ["TSM", "TSMC", "Taiwan Semiconductor"],
            "NOC": ["NOC", "Northrop Grumman"], "LMT": ["LMT", "Lockheed Martin"],
            "AVAV": ["AVAV", "AeroVironment"], "KTOS": ["KTOS", "Kratos"], "CRWD": ["CRWD", "CrowdStrike"],
@@ -64,6 +65,8 @@ def materiality(story: dict) -> str:
             "guidance": r"\b(guidance|revenue outlook|earnings outlook|revenue forecast)\b|\b(forecasts?|projects?|expects?)\b.{0,60}\b(revenue|earnings|EPS|cash flow)\b",
         }
     else:
+        if story["source"] == "DARPA" and re.search(r"\b(demonstrat\w*|tests?|prototype|autonomous|quantum|hypersonic|counter.drone|cybersecurity|research program)\b", title, re.I):
+            return "defense innovation"
         patterns = {
             "monetary policy": r"\b(FOMC|interest rates?|monetary policy|policy review|Federal Reserve policy|meeting minutes)\b",
             "economic data": r"\b(inflation|CPI|PCE|payrolls?|employment|jobless|GDP|gross domestic product)\b",
@@ -274,7 +277,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         ledger.append(story)
     selected, urls, titles, companies = [], set(), set(), set()
     company_eligible = any(story["decision"] == "eligible" and story["kind"] == "company" for story in ledger)
-    for story in sorted([item for item in ledger if item["decision"] == "eligible"], key=lambda item: (-item["priority"], -dated(item["published"]).timestamp(), item["id"])):
+    for story in coverage_order([item for item in ledger if item["decision"] == "eligible"]):
         key = title_key(story["title"])
         # Alphabet share classes represent the same issuer for coverage diversity.
         issuers = {"GOOGL" if symbol == "GOOG" else symbol for symbol in story["symbols"]}
@@ -282,7 +285,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story.update(decision="skip", reason="Duplicate article URL or headline; retained higher-priority evidence")
         elif issuers & companies:
             story.update(decision="skip", reason="Company already represented; preserve coverage diversity")
-        elif company_eligible and story["kind"] == "macro" and any(item["kind"] == "macro" for item in selected):
+        elif company_eligible and story["kind"] == "macro" and any(item["kind"] == "macro" and
+                ("defense" in story_topics(item)) == ("defense" in story_topics(story)) for item in selected):
             story.update(decision="skip", reason="Macro story already represented; preserve company coverage")
         elif len(selected) >= MAX_STORIES:
             story.update(decision="skip", reason="Edition story limit; higher-priority sourced stories selected")
@@ -292,11 +296,22 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 4, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 5, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def selected_stories(plan: dict) -> list[dict]:
-    return sorted([story for story in plan["candidates"] if story["decision"] == "selected"], key=lambda item: (-item["priority"], -dated(item["published"]).timestamp(), item["id"]))
+    return coverage_order([story for story in plan["candidates"] if story["decision"] == "selected"])
+
+
+def coverage_order(stories: list[dict]) -> list[dict]:
+    ordered = sorted(stories, key=lambda item: (-item["priority"], -dated(item["published"]).timestamp(), item["id"]))
+    preferred = []
+    for predicate in (lambda row: row["kind"] == "macro" and "defense" not in story_topics(row),
+                      lambda row: "defense" in story_topics(row)):
+        found = next((row for row in ordered if predicate(row) and row not in preferred), None)
+        if found:
+            preferred.append(found)
+    return preferred + [row for row in ordered if row not in preferred]
 
 
 def research_focus(story: dict) -> str:
@@ -346,7 +361,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
     value["research_sha256"] = hashlib.sha256(research_report.encode()).hexdigest()
     if analyst_review is not None:
         from src.intelligence.daily_brief_analysis import validate_review
-        validate_review(analyst_review, research_report, report)
+        validate_review(analyst_review, research_report, report, selected)
         value["analyst_review"] = deepcopy(analyst_review)
     snapshot = re.search(r"\nMarket Snapshot\n(.*?)\n\n", research_report, re.S)
     moves = re.search(r"^[-•] Market moves: (.+)$", research_report, re.M)

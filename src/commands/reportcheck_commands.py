@@ -37,7 +37,7 @@ def build_daily_report_quality_card() -> str:
     report = build_daily_report()
     result = validate_daily_report_quality(report)
     if result.get("format") == "news":
-        details = result["missing_headers"] + result["duplicate_headers"] + result["greeting_errors"] + result["research_context_errors"] + result["narration_errors"]
+        details = result["missing_headers"] + result["duplicate_headers"] + result["greeting_errors"] + result["research_context_errors"] + result["narration_errors"] + result["market_segment_errors"]
         return ("🧪 Smart Money Daily News Brief Quality\n\n"
                 f"Status: {status_label(result['passes'])}\nCharacters: {result['chars']} / {result['max_chars']}\n\n"
                 f"News Structure: {status_label(not result['missing_headers'] and not result['duplicate_headers'])}\n"
@@ -45,6 +45,8 @@ def build_daily_report_quality_card() -> str:
                 f"Source Qualifications: {status_label(not result['research_context_errors'])}\n"
                 f"Narration: {result['spoken_words']} spoken words · ~{result['estimated_narration_seconds']:g} seconds at {result['narration_wpm']} words/minute\n"
                 f"60-second Minimum: {status_label(not result['narration_errors'])}\n"
+                f"Market Segment: {result['market_spoken_words']} spoken words · ~{result['market_estimated_seconds']:g} seconds\n"
+                f"15–30-second Segment: {status_label(not result['market_segment_errors'])}\n"
                 + ("Details: " + "; ".join(details) + "\n" if details else "")
                 + "\n/brief · /fullreport · /catalysts\nResearch only. Not financial advice.")
 

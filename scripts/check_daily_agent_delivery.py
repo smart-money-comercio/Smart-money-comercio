@@ -43,6 +43,9 @@ Market data are unavailable.
 Companies in Focus
 Research rankings require confirmation.
 
+Global and Defense Watch
+This offline example includes no verified defense announcement. The research watch covers drones, cybersecurity and autonomy; funded demand and delivery timing would be required to establish a commercial development.
+
 What's Ahead
 Calendar evidence is unavailable.
 
@@ -62,14 +65,13 @@ Good evening.
 The indexes in this offline example finished the regular session higher.
 
 Market Update
-At the completed regular-session close, the S&P 500 rose 0.33 percent, the Nasdaq Composite rose 0.39 percent, and the Russell 2000 rose 0.33 percent.
-
-The Nasdaq had the strongest quoted return among these indexes. Its lead over the other two was 0.06 percentage points, so the difference in index performance was small in this example.
-
-These observations refer to the completed session. They describe price changes rather than establishing the cause of those changes, and the next opening may present a different pattern.
+Our indicator-based read in this offline example is constructive. At the completed regular-session close, the S&P 500 rose 0.33 percent and the Nasdaq Composite rose 0.39 percent. Portfolio lens: Improving index support may help growth exposure. Check whether company participation and volume support the move, and keep the next session's evidence separate from this completed-session snapshot.
 
 Companies in Focus
 Microsoft, Nvidia and Taiwan Semiconductor are on this fixture's research list. No new source-confirmed company report is included in the example, so no corporate development is being inferred from the index returns.
+
+Global and Defense Watch
+This offline example includes no verified defense announcement. The research watch covers drones, cybersecurity and autonomy; funded demand and delivery timing would be required to establish a commercial development.
 
 What's Ahead
 No publisher-confirmed upcoming release is included in this offline fixture. An event date would need an original publisher schedule before it could be narrated as a confirmed calendar entry.

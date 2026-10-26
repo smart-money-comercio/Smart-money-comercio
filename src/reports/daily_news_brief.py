@@ -11,6 +11,7 @@ from src.intelligence.calendar_context import checked_time, publishers
 from src.intelligence.company_catalyst_context import build_company_catalyst_brief
 from src.intelligence import news_editor as editor
 from src.intelligence.daily_brief_analysis import analyze_report, retained_review
+from src.intelligence.market_brief import MIN_MARKET_WORDS, MAX_MARKET_WORDS, story_topics, word_count
 from src.utils.report_consistency import report_greeting, validate_report_greeting
 
 
@@ -19,7 +20,7 @@ MAX_NEWS_CHARS = 3800
 NARRATION_WORDS_PER_MINUTE = 180
 MIN_NARRATION_SECONDS = 60
 MIN_NARRATION_WORDS = 180
-HEADERS = ["Market Update", "Companies in Focus", "What's Ahead", "What We're Watching", "Research Notes"]
+HEADERS = ["Market Update", "Companies in Focus", "Global and Defense Watch", "What's Ahead", "What We're Watching", "Research Notes"]
 NAMES = {"MSFT": "Microsoft", "NVDA": "Nvidia", "PLTR": "Palantir", "TSLA": "Tesla",
          "TSM": "Taiwan Semiconductor", "AVGO": "Broadcom", "AVAV": "AeroVironment", "CRWD": "CrowdStrike",
          "AAPL": "Apple", "AMZN": "Amazon", "GOOG": "Alphabet", "GOOGL": "Alphabet", "META": "Meta Platforms",
@@ -162,12 +163,23 @@ def validate_news_brief(text: str) -> dict:
     narration = narration_metrics(text)
     narration_errors = [] if narration["spoken_words"] >= MIN_NARRATION_WORDS else [
         f"Narration minimum not met: {narration['spoken_words']} spoken words; need {MIN_NARRATION_WORDS} for {MIN_NARRATION_SECONDS} seconds at {NARRATION_WORDS_PER_MINUTE} words per minute."]
+    market_lines = []
+    if "Market Update" in lines:
+        for line in lines[lines.index("Market Update") + 1:]:
+            if line in HEADERS:
+                break
+            market_lines.append(line)
+    market_words = word_count("\n".join(market_lines))
+    market_errors = [] if MIN_MARKET_WORDS <= market_words <= MAX_MARKET_WORDS else [
+        f"Market segment needs {MIN_MARKET_WORDS}–{MAX_MARKET_WORDS} spoken words for 15–30 seconds; found {market_words}."]
     return {"format": "news", "chars": len(text), "max_chars": MAX_NEWS_CHARS, "missing_headers": missing,
             "duplicate_headers": duplicates, "removed_headers_present": [], "what_changed_bullets": 0,
             "ai_summary_ok": not missing, "risk_consistency_errors": [], "greeting_errors": greeting,
             "research_context_errors": qualification, "source_qualification_errors": qualification,
             **narration, "narration_errors": narration_errors,
-            "passes": bool(text.strip()) and len(text) <= MAX_NEWS_CHARS and not (missing or duplicates or greeting or qualification or narration_errors)}
+            "market_spoken_words": market_words, "market_estimated_seconds": round(market_words * 60 / NARRATION_WORDS_PER_MINUTE, 1),
+            "market_segment_errors": market_errors,
+            "passes": bool(text.strip()) and len(text) <= MAX_NEWS_CHARS and not (missing or duplicates or greeting or qualification or narration_errors or market_errors)}
 
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None) -> str:
@@ -190,35 +202,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     moves = dict(re.findall(r"(S&P|Nasdaq|Russell|VIX|Oil|TLT)\s+([+-]?\d+(?:\.\d+)?%)", executive))
     if quote_day is None:
         moves = {}
-    analysis = analyze_report(research_report)
-    insights = analysis["insights"]
-    lead = next((row["text"] for row in insights if row["section"] == "lead"), market_takeaway(moves, is_open))
-    prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now)}\n{lead}"
-    indices = [direction(label, moves[key]) for key, label in (("S&P", "the S&P 500"), ("Nasdaq", "the Nasdaq Composite"), ("Russell", "the Russell 2000")) if key in moves]
-    if indices:
-        session = ("During the " if is_open else "In the last completed U.S. regular session, ") + (display_day(quote_day[1]) if quote_day else "latest available snapshot")
-        market = [session + (", " if not is_open else " session, ") + sentence(indices) + "."]
-        if len(indices) < 3:
-            market.append("Some major index returns were unavailable in the source snapshot.")
-    else:
-        market = ["Verified market returns are unavailable for this edition."]
-    other = [direction(label, moves[key]) for key, label in (("VIX", "the VIX volatility index"), ("Oil", "oil"), ("TLT", "the TLT Treasury-bond fund")) if key in moves]
-    if other:
-        other_text = sentence(other)
-        market.append(other_text[0].upper() + other_text[1:] + "." + (" TLT is a bond-price proxy; Treasury yields are not verified here." if "TLT" in moves else ""))
+    prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now)}"
     breadth = re.search(r"Breadth: (\d+) up / (\d+) down / (\d+) quoted", snapshot)
-    if breadth and quote_day and not any(row["id"] == "participation" for row in insights):
-        market.append(f"Within the {breadth[3]}-symbol research watchlist, {breadth[1]} finished higher and {breadth[2]} lower." if not is_open
-                      else f"Within the {breadth[3]}-symbol research watchlist, {breadth[1]} are higher and {breadth[2]} lower.")
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
     plan = editor.build_editorial_plan(brief, now)
     story_paragraphs = {story["id"]: editor.render_story(story, zone, NAMES) for story in editor.selected_stories(plan)}
-    if brief.get("market_events"):
-        market.insert(1, "An active market-alert record reports " + brief["market_events"][0]["fact"]
-                      + " This is dated price evidence; it does not establish the cause of the move.")
-    market.extend(row["text"] for row in insights if row["section"] == "market")
-    companies = [row["text"] for row in insights if row["section"] == "company"] or [
-        "Company rankings were unavailable for this edition; no leading setup is being inferred."]
     no_company_story = "No new source-confirmed company report met the editorial checks for this edition."
     ahead = []
     # The cached Nasdaq rows are estimates, not issuer-confirmed schedules.
@@ -257,9 +245,22 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     for count in range(len(initial_stories), -1, -1):
         for indexes in combinations(range(len(initial_stories)), count):
             retained = [initial_stories[index] for index in indexes]
-            market_body, company_body, ahead_body = list(market), list(companies), list(ahead)
+            analysis = analyze_report(research_report, retained)
+            insights = analysis["insights"]
+            if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
+                raise ValueError("Insufficient admitted evidence for a daily news edition")
+            market_body = [row["text"] for row in insights if row["section"] == "market"]
+            company_body = [row["text"] for row in insights if row["section"] == "company"] or [
+                "Company rankings were unavailable for this edition; no leading setup is being inferred."]
+            global_body = []
             for story in retained:
-                (company_body if story["kind"] == "company" else market_body).append(story_paragraphs[story["id"]])
+                body = global_body if story["kind"] == "macro" or "defense" in story_topics(story) else company_body
+                body.append(story_paragraphs[story["id"]])
+            if brief.get("market_events"):
+                global_body.insert(0, "An active market-alert record reports " + brief["market_events"][0]["fact"]
+                                   + " This is dated price evidence; it does not establish the cause of the move.")
+            global_body += [row["text"] for row in insights if row["section"] == "global"]
+            ahead_body = list(ahead)
             if not any(story["kind"] == "company" for story in retained) and not analysis["evidence"]["companies"]:
                 company_body.append(no_company_story)
             watching = [row["text"] for row in insights if row["section"] == "watch"]
@@ -269,14 +270,14 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             notes_body = list(notes)
             if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:
                 notes_body.insert(-1, no_company_story)
-            groups = list(zip(HEADERS, (market_body, company_body, ahead_body, watching, notes_body)))
+            groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
 
             def render():
                 return prefix + "\n\n" + "\n\n".join(header + "\n" + "\n\n".join(body) for header, body in groups)
 
             text = render()
             extras = [(ahead_body, paragraph) for paragraph in macro[2:]]
-            extras += [(market_body, paragraph) for paragraph in market_detail(moves, breadth if quote_day else None)]
+            extras += [(watching, paragraph) for paragraph in market_detail(moves, breadth if quote_day else None)]
             for body, paragraph in extras:
                 if narration_metrics(text)["spoken_words"] >= MIN_NARRATION_WORDS:
                     break
@@ -284,12 +285,12 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 text = render()
 
             protected = set(story_paragraphs.values()) | {no_company_story} | {
-                row["text"] for row in insights if row["id"] not in {"model_support", "company_price"}}
+                row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
             if brief.get("market_events"):
-                protected.add(market[1])
+                protected.add(global_body[0])
             if plan["issues"]:
                 protected.add("Calendar or company-news coverage is incomplete; unverified dates and times remain uncertain.")
-            for body, minimum in ((market_body, 1), (company_body, 1), (ahead_body, 2)):
+            for body, minimum in ((company_body, 1), (ahead_body, 2), (watching, 1)):
                 while len(text) > MAX_NEWS_CHARS and len(body) > minimum:
                     removable = [index for index in range(1, len(body)) if body[index] not in protected]
                     removed = False
@@ -306,16 +307,16 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if last_result is None or result["spoken_words"] > last_result["spoken_words"]:
                 last_result = result
             if result["passes"]:
-                chosen = (text, retained)
+                chosen = (text, retained, analysis)
                 break
         if chosen:
             break
     if not chosen:
-        errors = last_result["missing_headers"] + last_result["research_context_errors"] + last_result["greeting_errors"] + last_result["narration_errors"]
+        errors = last_result["missing_headers"] + last_result["research_context_errors"] + last_result["greeting_errors"] + last_result["narration_errors"] + last_result["market_segment_errors"]
         if last_result["chars"] > MAX_NEWS_CHARS:
             errors.append(f"A complete {MIN_NARRATION_WORDS}-word narration does not fit the {MAX_NEWS_CHARS}-character budget.")
         raise ValueError("News brief quality review failed: " + "; ".join(errors))
-    text, retained = chosen
+    text, retained, analysis = chosen
     retained_ids = {story["id"] for story in retained}
     for story in initial_stories:
         if story["id"] not in retained_ids:

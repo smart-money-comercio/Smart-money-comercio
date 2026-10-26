@@ -96,8 +96,17 @@ def report_evidence(report: str) -> dict:
             "source_sections": [key for key in ("Executive Summary", "Market Snapshot", "What Changed Today", "Top Opportunities", "Trade Plan Snapshot") if sections.get(key)]}
 
 
-def analyze_report(report: str) -> dict:
+def analyze_report(report: str, stories: list[dict] | None = None) -> dict:
     evidence = report_evidence(report)
+    from src.intelligence import news_editor
+    evidence["stories"] = []
+    for story in stories or []:
+        if story.get("decision") != "selected" or story.get("source_check") != "pass" or not news_editor.primary_source(story) or not news_editor.materiality(story):
+            raise ValueError("Market interpretation requires admitted original-source stories")
+        evidence["stories"].append({key: deepcopy(story[key]) for key in (
+            "id", "title", "kind", "symbols", "source", "url", "published", "official", "publisher_symbol", "decision", "source_check")})
+    if evidence["stories"]:
+        evidence["source_sections"].append("Verified story decisions")
     return {"schema": 1, "research_sha256": hashlib.sha256(report.encode()).hexdigest(),
             "evidence": evidence, "insights": review_daily_brief(deepcopy(evidence)), "score_changes": False}
 
@@ -109,8 +118,8 @@ def retained_review(analysis: dict, report: str) -> dict:
     return result
 
 
-def validate_review(analysis: dict, research_report: str, report: str) -> None:
-    expected = analyze_report(research_report)
+def validate_review(analysis: dict, research_report: str, report: str, stories: list[dict] | None = None) -> None:
+    expected = analyze_report(research_report, stories)
     if any(analysis.get(key) != expected[key] for key in ("schema", "research_sha256", "evidence", "score_changes")):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
@@ -119,6 +128,6 @@ def validate_review(analysis: dict, research_report: str, report: str) -> None:
         if not isinstance(row, dict) or row.get("id") in seen or allowed.get(row.get("id")) != row or report.count(row["text"]) != 1:
             raise ValueError("Analyst narration changed or lost its supporting evidence")
         seen.add(row["id"])
-    required = {key for key, row in allowed.items() if key not in {"model_support", "company_price"} or row["text"] in report}
+    required = {key for key, row in allowed.items() if key not in {"model_support", "company_price", "participation"} or row["text"] in report}
     if seen != required:
         raise ValueError("Available analyst evidence was omitted from the brief")
