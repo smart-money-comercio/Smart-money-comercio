@@ -35,7 +35,7 @@ class PublicationPage(HTMLParser):
         if tag == "meta":
             name = attrs.get("property") or attrs.get("name")
             if name == "og:title":
-                self.title = clean(attrs.get("content"))
+                self.title = clean(attrs.get("content"), 1001)
             if name == "article:published_time":
                 self.dates.append(timestamp(attrs.get("content")))
 
@@ -54,13 +54,13 @@ def publication_time(body: bytes, title: str) -> datetime:
     page = PublicationPage()
     page.feed(body.decode("utf-8"))
     page.close()
-    dates = set(page.dates) if page.title.casefold() == clean(title).casefold() else set()
+    dates = set(page.dates) if page.title.casefold() == clean(title, 1001).casefold() else set()
 
     def walk(value, depth=0):
         if depth > 20:
             return
         if isinstance(value, dict):
-            if clean(value.get("headline")).casefold() == clean(title).casefold() and "datePublished" in value:
+            if clean(value.get("headline"), 1001).casefold() == clean(title, 1001).casefold() and "datePublished" in value:
                 dates.add(timestamp(value["datePublished"]))
             for child in value.values():
                 walk(child, depth + 1)

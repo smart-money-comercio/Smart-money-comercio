@@ -20,7 +20,7 @@ from src.intelligence.market_brief import story_topics
 
 MAX_STORIES = 3
 MAX_CANDIDATES = 180
-MAX_CACHE_BYTES = 3_000_000
+MAX_CACHE_BYTES = feeds.MAX_CACHE_BYTES
 MAX_CACHE_AGE = 6 * 3600
 MAX_NEWS_AGE = 24 * 3600
 MAX_HEADLINE_CHARS = 1000
@@ -155,7 +155,7 @@ def story_type(story: dict) -> str:
     return ("announcement" if story["official"] else "reported development") if materiality(story) else "context"
 
 
-def cache_candidates(now: datetime, symbols: list[str]) -> tuple[list[dict], list[str]]:
+def cache_candidates(now: datetime, symbols: list[str], *, health: list | None = None) -> tuple[list[dict], list[str]]:
     path = Path(os.getenv("NEWS_LIVE_SOURCE_CACHE_FILE", str(feeds.CACHE_FILE)))
     try:
         if path.stat().st_size > MAX_CACHE_BYTES:
@@ -164,22 +164,31 @@ def cache_candidates(now: datetime, symbols: list[str]) -> tuple[list[dict], lis
         if not isinstance(cache, dict):
             raise ValueError("News cache is not an object")
     except (OSError, ValueError, UnicodeError) as exc:
+        if health is not None:
+            health.extend(feeds.describe_source(source, None, now) for source in feeds.NEWS_SOURCES if feeds.is_original_source(source))
         return [], ["News feed cache unavailable (" + type(exc).__name__ + ")"]
     candidates, issues = [], []
     for source in feeds.NEWS_SOURCES:
         payload = cache.get(source["url"])
+        source_health = feeds.describe_source(source, payload, now)
+        if health is not None and feeds.is_original_source(source):
+            health.append(source_health)
         try:
             if not isinstance(payload, dict) or payload.get("status") != "ok":
-                raise ValueError("missing or failed fetch")
+                raise ValueError(source_health["reason"])
             fetched = payload["fetched_at_epoch"]
             if type(fetched) not in (float, int) or not math.isfinite(fetched) or not -60 <= now.timestamp() - fetched <= MAX_CACHE_AGE:
                 raise ValueError("stale or invalid fetch time")
             body = payload["body"]
             if not isinstance(body, str) or len(body.encode()) > MAX_CACHE_BYTES:
                 raise ValueError("invalid feed body")
+            if feeds.is_original_source(source) and not feeds.originals.authorized_response(source, payload):
+                raise ValueError("Publisher redirect mismatch")
             # HTML titles and fetch times are never substituted for original RSS dates.
-            items = feeds.parse_rss_items(body, source, full_titles=True)[:30]
+            items = feeds.parse_article_items(payload, source, full_titles=True)[:30]
             if not items:
+                if source_health["status"] == "available":
+                    continue
                 raise ValueError("no dated RSS article candidates")
         except (KeyError, TypeError, ValueError) as exc:
             issues.append(source["name"] + ": " + str(exc))
@@ -211,7 +220,14 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     if now.tzinfo is None:
         raise ValueError("News editor clock needs a timezone")
     symbols = [row["symbol"] for row in brief["rows"]]
-    cached, issues = cache_candidates(now, symbols) if extra_candidates is None else (deepcopy(extra_candidates), [])
+    health = []
+    cached, issues = cache_candidates(now, symbols, health=health) if extra_candidates is None else (deepcopy(extra_candidates), [])
+    if health:
+        configured = {row["symbol"] for row in health}
+        for symbol in symbols:
+            if symbol not in configured:
+                health.append({"name": symbol, "symbol": symbol, "status": "limited", "checked_at": "", "entries": 0, "dated": 0,
+                               "fresh": 0, "undated": 0, "latest_publication": "", "reason": "Direct publisher reader not configured"})
     candidates = []
     for row in brief["rows"]:
         for event in row["events"]:
@@ -220,7 +236,11 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 "source_checked_at": event.get("source_checked_at"), "themes": []})
     candidates += cached
     # Preserve room for original reports before logging unconfirmed headline leads.
-    candidates.sort(key=lambda item: item.get("official") is not True)
+    def scan_priority(item):
+        published = timestamp_for_priority(item.get("published"))
+        fresh = published is not None and -60 <= (now - published).total_seconds() <= MAX_NEWS_AGE
+        return (item.get("official") is not True, not fresh, -published.timestamp() if published else 0)
+    candidates.sort(key=scan_priority)
     ledger = []
     for raw in candidates[:MAX_CANDIDATES]:
         raw_title = raw.get("title")
@@ -296,7 +316,14 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 5, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 6, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+
+
+def timestamp_for_priority(value):
+    try:
+        return dated(value)
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def selected_stories(plan: dict) -> list[dict]:
@@ -436,11 +463,20 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             reasons = hold_reasons(record["candidates"])
             if reasons:
                 lines.append("Hold reasons: " + "; ".join(f"{label}: {count}" for label, count in reasons))
+            if record.get("source_health"):
+                lines += ["", feeds.coverage_summary(record["source_health"])]
+                for row in record["source_health"]:
+                    label = row["symbol"] or row["name"]
+                    latest = " | newest " + row["latest_publication"][:10] if row["latest_publication"] else ""
+                    lines.append(f"{label}: {row['status']} | {row['fresh']} fresh / {row['dated']} dated{latest} | {row['reason']}")
             lines += ["", "Market evidence: " + clean(record["market_evidence"]["moves"], 400)]
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
         else:
+            for row in record.get("source_health", []):
+                if symbol and row["symbol"] == symbol:
+                    lines.append(f"Publisher coverage: {row['name']} — {row['status']}; {row['reason']}; checked {row['checked_at'] or 'not checked'}")
             stories = [story for story in record["candidates"] if not symbol or symbol in story["symbols"]]
             reasons = hold_reasons(stories)
             if reasons:

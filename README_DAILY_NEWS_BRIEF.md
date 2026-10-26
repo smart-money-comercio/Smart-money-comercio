@@ -38,6 +38,8 @@ The news edition is rendered from the same validated detailed report. `/fullrepo
 
 Ranking entries retain their complete model evidence, Score Risk and review commands when the detailed report is formatted. They are not cut by the older fixed line limit. Candidate order, risk consistency and the overall character limit are still checked; a failed build names the failing research check. Offline deployment fixtures exercise the production ranking enrichment through the detailed report builder before rendering the spoken brief.
 
+The daily agent refresh now reaches direct chip, software, drone, cybersecurity and defense publishers as well as original release services. `/editorstatus` shows which configured sources were available, how many original reports had verified dates and how many were fresh before editorial selection. `/storylog SYMBOL` includes publisher coverage when no story qualifies. A quiet, healthy feed is separate from an unavailable source or a missing publication timezone. The 24-hour article age, six-hour observation age, materiality checks and both narration-duration checks remain enforced.
+
 ## Company catalyst brief
 
 `/catalysts` covers the configured core companies plus up to ten dated cached top opportunities, using the same universe as special alerts. `/catalysts MSFT` narrows that brief to a monitored company. An outside symbol is identified as outside the current coverage rather than being silently scored. Core coverage includes TSLA, NVDA, MSFT, AVGO, PLTR, AVAV, KTOS and CRWD by default. Additional opportunities depend on valid cached rankings, whose date is shown.

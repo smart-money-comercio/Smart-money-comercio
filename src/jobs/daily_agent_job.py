@@ -176,7 +176,8 @@ def refresh_news_intelligence() -> str:
         ],
     )
 
-    return f"News Intelligence checked ({len(str(report))} chars)."
+    from src.intelligence.news_live_sources import cached_original_coverage, coverage_summary
+    return f"News Intelligence checked ({len(str(report))} chars). " + coverage_summary(cached_original_coverage())
 
 
 def refresh_morning_brief_step() -> str:

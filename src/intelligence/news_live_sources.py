@@ -1,23 +1,32 @@
 import hashlib
 import html
 import json
+import math
 import os
 import re
+import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import RLock
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from src.intelligence.special_alert_company_sources import OFFICIAL_FEEDS
+from src.intelligence.special_alert_sources import timestamp
+from src.intelligence import news_original_sources as originals
 
 
 CACHE_FILE = Path(os.getenv("NEWS_LIVE_SOURCE_CACHE_FILE", "data/news_live_source_cache.json"))
 CACHE_TTL_SECONDS = int(os.getenv("NEWS_LIVE_SOURCE_CACHE_TTL_SECONDS", "1800"))
 REQUEST_TIMEOUT = int(os.getenv("NEWS_LIVE_SOURCE_TIMEOUT_SECONDS", "12"))
+MAX_FEED_BYTES = 2_000_000
+MAX_CACHE_BYTES = 12_000_000
+CACHE_LOCK = RLock()
 TIMEZONE = os.getenv("REPORT_TIMEZONE", "America/Lima")
 
 USER_AGENT = os.getenv(
@@ -56,6 +65,15 @@ NEWS_SOURCES = [
     {"name": "Microsoft Blog", "url": OFFICIAL_FEEDS["MSFT"], "category": "company", "company_symbol": "MSFT"},
     {"name": "Lockheed Martin Newsroom", "url": "https://news.lockheedmartin.com/news-releases?pagetemplate=rss", "category": "company", "company_symbol": "LMT"},
     {"name": "DARPA", "url": "https://www.darpa.mil/rss.xml", "category": "defense"},
+    {"name": "Palantir Investor Relations", "url": OFFICIAL_FEEDS["PLTR"], "category": "company", "company_symbol": "PLTR", "format": "palantir"},
+    {"name": "Broadcom Investor Relations", "url": "https://investors.broadcom.com/rss/news-releases.xml", "category": "company", "company_symbol": "AVGO"},
+    {"name": "AeroVironment Investor Relations", "url": "https://investor.avinc.com/rss/news-releases.xml", "category": "company", "company_symbol": "AVAV"},
+    {"name": "Kratos Investor Relations", "url": "https://ir.kratosdefense.com/rss/news-releases.xml", "category": "company", "company_symbol": "KTOS"},
+    {"name": "CrowdStrike Investor Relations", "url": "https://ir.crowdstrike.com/rss/news-releases.xml", "category": "company", "company_symbol": "CRWD"},
+    {"name": "Tesla Investor Relations", "url": "https://ir.tesla.com/rss/news-releases.xml", "category": "company", "company_symbol": "TSLA"},
+    {"name": "Apple Newsroom", "url": "https://www.apple.com/newsroom/rss-feed.rss", "category": "company", "company_symbol": "AAPL"},
+    {"name": "TSMC Press Center", "url": "https://pr.tsmc.com/english/latest-news", "category": "company", "company_symbol": "TSM", "format": "index", "article_pattern": r"/english/news/\d+"},
+    {"name": "Northrop Grumman Newsroom", "url": "https://news.northropgrumman.com/News-Stream", "category": "company", "company_symbol": "NOC", "format": "index", "article_pattern": r"/news/releases/[^/]+|/releases/[^/]+"},
 ]
 
 
@@ -237,6 +255,8 @@ def load_cache() -> dict:
     try:
         if not CACHE_FILE.exists():
             return {}
+        if CACHE_FILE.stat().st_size > MAX_CACHE_BYTES:
+            return {}
 
         with CACHE_FILE.open("r", encoding="utf-8") as file:
             data = json.load(file)
@@ -248,18 +268,25 @@ def load_cache() -> dict:
 
 
 def save_cache(cache: dict) -> None:
+    temporary = None
     try:
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-        with CACHE_FILE.open("w", encoding="utf-8") as file:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=CACHE_FILE.parent, delete=False) as file:
+            temporary = file.name
             json.dump(cache, file, indent=2, sort_keys=True)
-
+        if CACHE_FILE.exists():
+            os.chmod(temporary, CACHE_FILE.stat().st_mode & 0o777)
+        os.replace(temporary, CACHE_FILE)
     except Exception:
         return
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def get_cached_source(url: str) -> dict | None:
-    cache = load_cache()
+    with CACHE_LOCK:
+        cache = load_cache()
     item = cache.get(url)
 
     if not isinstance(item, dict):
@@ -268,44 +295,54 @@ def get_cached_source(url: str) -> dict | None:
     fetched_at_epoch = item.get("fetched_at_epoch")
 
     try:
-        age = time.time() - float(fetched_at_epoch)
+        if type(fetched_at_epoch) not in (int, float) or not math.isfinite(fetched_at_epoch):
+            return None
+        age = time.time() - fetched_at_epoch
     except Exception:
         return None
 
-    if age > CACHE_TTL_SECONDS:
+    if age < -60:
         return None
-
+    if item.get("status") == "error":
+        retry = item.get("retry_after_epoch")
+        if type(retry) not in (int, float) or not math.isfinite(retry) or not fetched_at_epoch <= retry <= fetched_at_epoch + 6 * 3600 or time.time() >= retry:
+            return None
+    elif age > CACHE_TTL_SECONDS:
+        return None
     return item
 
 
 def set_cached_source(url: str, payload: dict) -> None:
-    cache = load_cache()
-    cache[url] = payload
-    save_cache(cache)
+    with CACHE_LOCK:
+        cache = load_cache()
+        cache[url] = payload
+        save_cache(cache)
 
 
-def fetch_url(url: str, force_refresh: bool = False) -> dict:
-    if not force_refresh:
-        cached = get_cached_source(url)
-
-        if cached:
-            cached["cache_hit"] = True
-            return cached
+def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = True) -> dict:
+    cached = get_cached_source(url)
+    if cached and (not force_refresh or cached.get("status") == "error"):
+        return {**cached, "cache_hit": True}
 
     try:
         request = Request(
             url,
             headers={
                 "User-Agent": USER_AGENT,
-                "Accept": "application/rss+xml, application/xml, text/xml, text/html",
+                "Accept": "application/json, application/rss+xml, application/atom+xml, application/xml, text/xml, text/html",
             },
         )
 
         with urlopen(request, timeout=REQUEST_TIMEOUT) as response:
-            raw = response.read().decode("utf-8", errors="replace")
+            raw_bytes = response.read(MAX_FEED_BYTES + 1)
+            if len(raw_bytes) > MAX_FEED_BYTES:
+                raise ValueError("Publisher response exceeds the size limit")
+            raw = raw_bytes.decode("utf-8", errors="replace")
+            final_url = response.geturl()
 
         payload = {
             "url": url,
+            "final_url": final_url,
             "status": "ok",
             "error": "",
             "fetched_at": now_text(),
@@ -314,11 +351,17 @@ def fetch_url(url: str, force_refresh: bool = False) -> dict:
             "body": raw,
         }
 
-        set_cached_source(url, payload)
+        if cache_result:
+            set_cached_source(url, payload)
         return payload
 
     except HTTPError as error:
-        return {
+        retry = 3600 if error.code in (403, 404) else 900 if error.code == 429 else 300
+        try:
+            retry = min(6 * 3600, max(retry, int(error.headers.get("Retry-After", retry))))
+        except (TypeError, ValueError, AttributeError):
+            pass
+        payload = {
             "url": url,
             "status": "error",
             "error": f"HTTPError {error.code}",
@@ -326,29 +369,43 @@ def fetch_url(url: str, force_refresh: bool = False) -> dict:
             "fetched_at_epoch": time.time(),
             "cache_hit": False,
             "body": "",
+            "http_status": error.code,
+            "retry_after_epoch": time.time() + retry,
         }
-
-    except URLError as error:
-        return {
-            "url": url,
-            "status": "error",
-            "error": f"URLError {error.reason}",
-            "fetched_at": now_text(),
-            "fetched_at_epoch": time.time(),
-            "cache_hit": False,
-            "body": "",
-        }
-
     except Exception as error:
-        return {
+        retry = 300
+        payload = {
             "url": url,
             "status": "error",
-            "error": f"{type(error).__name__}: {error}",
+            "error": type(error).__name__,
             "fetched_at": now_text(),
             "fetched_at_epoch": time.time(),
             "cache_hit": False,
             "body": "",
+            "retry_after_epoch": time.time() + 300,
         }
+    payload["retry_after_epoch"] = payload["fetched_at_epoch"] + retry
+    set_cached_source(url, payload)
+    return payload
+
+
+def fetch_source(source: dict, force_refresh: bool = False) -> dict:
+    if source.get("format") not in {"palantir", "index"}:
+        return fetch_url(source["url"], force_refresh)
+    cached = get_cached_source(source["url"])
+    if cached and (cached.get("status") == "error" or not force_refresh and cached.get("original_profile") == 1):
+        return {**cached, "cache_hit": True}
+    try:
+        payload = originals.retrieve(source, lambda url: fetch_url(url, force_refresh,
+            cache_result=source["format"] == "palantir" and url.startswith(source["url"] + "?")), datetime.now(timezone.utc))
+        # Structured release evidence is retained; large index HTML is not duplicated.
+        payload = {**payload, "body": ""}
+    except (ValueError, TypeError, KeyError) as exc:
+        payload = {"url": source["url"], "status": "error", "error": str(exc)[:160], "body": "",
+                   "fetched_at_epoch": time.time(), "fetched_at": now_text(), "cache_hit": False,
+                   "retry_after_epoch": time.time() + 300}
+    set_cached_source(source["url"], payload)
+    return payload
 
 
 def child_text(item: ET.Element, tag_name: str) -> str:
@@ -367,16 +424,23 @@ def parse_rss_items(xml_text: str, source: dict, *, full_titles: bool = False) -
     except Exception:
         return []
 
+    if root.tag.split("}")[-1].lower() not in {"rss", "rdf", "feed"}:
+        return []
     items = []
 
     for item in root.iter():
-        if item.tag.split("}")[-1].lower() != "item":
+        kind = item.tag.split("}")[-1].lower()
+        if kind not in {"item", "entry"}:
             continue
 
         title = child_text(item, "title")
         description = child_text(item, "description")
         link = child_text(item, "link")
-        published = child_text(item, "pubDate")
+        published = child_text(item, "pubDate") or child_text(item, "published") or child_text(item, "date")
+        if kind == "entry":
+            links = [node.attrib.get("href", "") for node in item if node.tag.split("}")[-1] == "link" and node.attrib.get("rel", "alternate") == "alternate"]
+            link = links[0] if len(links) == 1 else ""
+            description = child_text(item, "summary")
 
         if not title:
             continue
@@ -406,11 +470,12 @@ def extract_html_title(raw_html: str) -> str:
 
 def parse_source_payload(payload: dict, source: dict) -> list[dict]:
     body = payload.get("body", "") or ""
-
-    items = parse_rss_items(body, source)
+    items = parse_article_items(payload, source)
 
     if items:
-        return items
+        return items[:30]
+    if source.get("company_symbol") or source.get("category") not in {"market", "technology"}:
+        return []
 
     title = extract_html_title(body)
 
@@ -427,6 +492,73 @@ def parse_source_payload(payload: dict, source: dict) -> list[dict]:
         ]
 
     return []
+
+
+def parse_article_items(payload: dict, source: dict, *, full_titles: bool = False) -> list[dict]:
+    if source.get("format") in {"palantir", "index"}:
+        return originals.cached_items(payload, source)
+    return parse_rss_items(payload.get("body", ""), source, full_titles=full_titles)
+
+
+def is_original_source(source: dict) -> bool:
+    return bool(source.get("company_symbol") or source.get("category") in {"fed", "treasury", "energy", "defense"})
+
+
+def describe_source(source: dict, payload, now: datetime) -> dict:
+    """Distinguish an unavailable publisher from a healthy, quiet publication feed."""
+    row = {"name": source["name"], "symbol": source.get("company_symbol", ""), "status": "limited",
+           "checked_at": "", "entries": 0, "dated": 0, "fresh": 0, "undated": 0, "latest_publication": "", "reason": "Missing cached fetch"}
+    if not isinstance(payload, dict):
+        return row
+    fetched = payload.get("fetched_at_epoch")
+    if type(fetched) not in (int, float) or not math.isfinite(fetched) or not -60 <= now.timestamp() - fetched <= 6 * 3600:
+        return {**row, "reason": "Source observation stale or invalid"}
+    row["checked_at"] = datetime.fromtimestamp(fetched, timezone.utc).isoformat()
+    if payload.get("status") != "ok":
+        reason = str(payload.get("error") or "Failed fetch")[:100]
+        retry = payload.get("retry_after_epoch")
+        if type(retry) in (int, float) and math.isfinite(retry) and now.timestamp() < retry <= fetched + 6 * 3600:
+            reason += "; retry after " + datetime.fromtimestamp(retry, timezone.utc).strftime("%m-%d %H:%M UTC")
+        return {**row, "reason": reason}
+    if not originals.authorized_response(source, payload):
+        return {**row, "reason": "Publisher redirect mismatch"}
+    try:
+        if not source.get("format"):
+            container = ET.fromstring(payload.get("body", ""))
+            kind = container.tag.split("}")[-1].lower()
+            if kind not in {"rss", "rdf", "feed"} or kind == "rss" and container.find("channel") is None:
+                raise ValueError("no dated RSS article candidates; expected a publisher feed")
+        items = parse_article_items(payload, source, full_titles=True)[:30]
+        row["entries"] = len(items)
+        dates = [timestamp(item.get("published")) for item in items]
+        valid = [value for value in dates if value and (now - value).total_seconds() >= -60]
+        mismatches = sum(not originals.authorized_response(source, {"url": item.get("link", "")}) for item in items)
+        row.update(dated=len(valid), undated=len(items) - len(valid),
+                   fresh=sum(value is not None and 0 <= (now - value).total_seconds() <= 24 * 3600
+                             and originals.authorized_response(source, {"url": item.get("link", "")}) for item, value in zip(items, dates)),
+                   latest_publication=max(valid).isoformat() if valid else "")
+        row.update(status="limited" if row["undated"] or mismatches else "available",
+                   reason=f"{row['undated']} original publication clocks unverified" if row["undated"] else "No fresh dated reports" if not row["fresh"] else "Fresh dated reports available; editorial review still required")
+        if mismatches:
+            row["reason"] += f"; {mismatches} publisher-link mismatches"
+        if row["undated"] and payload.get("publication_problems"):
+            row["reason"] += "; " + str(payload["publication_problems"][0])[:90]
+        row["reason"] = row["reason"][:240]
+    except (ET.ParseError, ValueError, TypeError, KeyError) as exc:
+        row["reason"] = "no dated RSS article candidates; invalid publisher response" if isinstance(exc, ET.ParseError) else str(exc)[:150]
+    return row
+
+
+def coverage_summary(rows: list[dict]) -> str:
+    available = sum(row["status"] == "available" for row in rows)
+    fresh = sum(row["fresh"] for row in rows)
+    return f"Original sources: {available}/{len(rows)} available; {len(rows) - available} limited; {fresh} fresh dated reports before editorial selection."
+
+
+def cached_original_coverage(now: datetime | None = None) -> list[dict]:
+    now = now or datetime.now(timezone.utc)
+    cache = load_cache()
+    return [describe_source(source, cache.get(source["url"]), now) for source in NEWS_SOURCES if is_original_source(source)]
 
 
 def text_blob(item: dict) -> str:
@@ -556,24 +688,35 @@ def fetch_news_live_context(force_refresh: bool = False) -> dict:
     items = []
     errors = []
 
-    for source in NEWS_SOURCES:
-        payload = fetch_url(source["url"], force_refresh=force_refresh)
-        parsed_items = parse_source_payload(payload, source)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        payloads = list(pool.map(lambda source: fetch_source(source, force_refresh), NEWS_SOURCES))
+    for source, payload in zip(NEWS_SOURCES, payloads):
+        try:
+            parsed_items = parse_source_payload(payload, source) if payload.get("status") == "ok" else []
+        except (ValueError, TypeError, KeyError):
+            parsed_items = []
+        health = describe_source(source, payload, datetime.now(timezone.utc)) if is_original_source(source) else None
+        status = ("ok" if health["status"] == "available" else "limited") if health else payload.get("status", "unknown")
+        problem = health["reason"] if health and health["status"] != "available" else payload.get("error", "")
 
         source_results.append(
             {
                 "name": source.get("name", "Unknown"),
                 "category": source.get("category", "market"),
-                "status": payload.get("status", "unknown"),
+                "status": status,
                 "cache_hit": payload.get("cache_hit", False),
                 "item_count": len(parsed_items),
-                "error": payload.get("error", ""),
+                "error": problem,
             }
         )
 
-        if payload.get("status") != "ok":
-            errors.append(f"{source.get('name', 'Unknown')}: {payload.get('error', 'unknown error')}")
-
+        if status != "ok":
+            errors.append(f"{source.get('name', 'Unknown')}: {problem or 'unknown error'}")
+        if health:
+            current = datetime.now(timezone.utc)
+            parsed_items = [item for item in parsed_items if (published := timestamp(item.get("published"))) is not None
+                            and 0 <= (current - published).total_seconds() <= 24 * 3600
+                            and originals.authorized_response(source, {"url": item.get("link", "")})]
         items.extend(parsed_items)
 
     enriched = enrich_items(items)
@@ -606,7 +749,7 @@ def format_source_status(context: dict) -> str:
     if not rows:
         return "• No source status available."
 
-    return "\n".join(rows[:10])
+    return "\n".join(rows[:24])
 
 
 def filter_items_for_symbol(items: list[dict], symbol: str) -> list[dict]:

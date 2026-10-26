@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from contextlib import ExitStack, closing
+from contextlib import ExitStack, closing, nullcontext
 from copy import deepcopy
-from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 import hashlib
 import json
@@ -19,6 +20,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 from xml.sax.saxutils import escape
+from urllib.error import HTTPError
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -764,6 +766,260 @@ class EditorChecks(IsolatedChecks):
             present = story["title"].rstrip(".") in text
             self.assertEqual(present, story["decision"] == "selected")
         self.assertNotIn("unconfirmed by the company", text)
+
+
+class OriginalSourceChecks(IsolatedChecks):
+    def source(self, symbol):
+        return next(source for source in editor.feeds.NEWS_SOURCES if source.get("company_symbol") == symbol)
+
+    def payload(self, body="", **changes):
+        return {"status": "ok", "fetched_at_epoch": NOW.timestamp(), "body": body, **changes}
+
+    def rss(self, title, url, published=None):
+        published = published or (NOW - timedelta(minutes=20)).isoformat()
+        return f"<rss><channel><item><title>{escape(title)}</title><link>{escape(url)}</link><pubDate>{escape(published)}</pubDate></item></channel></rss>"
+
+    def service(self, **changes):
+        row = {"Headline": "Palantir signs a new AI defense contract", "PressReleaseDate": (NOW - timedelta(hours=1)).strftime("%m/%d/%Y %H:%M:%S"),
+               "LinkToDetailPage": "/news-details/2026/example/default.aspx", **changes}
+        return json.dumps({"GetPressReleaseListResult": [row]})
+
+    def metadata(self, title="Palantir signs a new AI defense contract", published=None):
+        return '<script type="application/ld+json">' + json.dumps({"@type": "NewsArticle", "headline": title,
+            "datePublished": published or (NOW - timedelta(hours=1)).isoformat()}) + '</script>'
+
+    def test_core_and_leading_company_readers_are_configured(self):
+        symbols = {row.get("company_symbol") for row in editor.feeds.NEWS_SOURCES}
+        self.assertTrue({"MSFT", "NVDA", "PLTR", "AVGO", "AVAV", "KTOS", "CRWD", "TSLA", "TSM", "NOC", "LMT", "AAPL"} <= symbols)
+        self.assertLessEqual(len(editor.feeds.NEWS_SOURCES), 24)
+
+    def test_atom_keeps_original_publication_and_alternate_link(self):
+        body = '<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Apple introduces an AI platform</title><link rel="alternate" href="https://www.apple.com/newsroom/release/"/><published>2026-10-25T16:00:00Z</published><updated>2026-10-25T16:59:00Z</updated></entry></feed>'
+        item = editor.feeds.parse_rss_items(body, self.source("AAPL"), full_titles=True)[0]
+        self.assertEqual(item["published"], "2026-10-25T16:00:00Z")
+        self.assertEqual(item["link"], "https://www.apple.com/newsroom/release/")
+        missing = body.replace('<published>2026-10-25T16:00:00Z</published>', '')
+        self.assertEqual(editor.feeds.parse_rss_items(missing, self.source("AAPL"))[0]["published"], "")
+
+    def test_palantir_reads_its_own_exact_release_metadata(self):
+        from src.intelligence import news_original_sources as original
+        source = self.source("PLTR")
+        calls = []
+        def fetch(url):
+            calls.append(url)
+            return self.payload(self.service() if "GetPressReleaseList?" in url else self.metadata(), url=url)
+        payload = original.retrieve(source, fetch, NOW)
+        item = original.cached_items(payload, source)[0]
+        self.assertEqual(editor.dated(item["published"]), NOW - timedelta(hours=1))
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(url.startswith("https://investors.palantir.com/") for url in calls))
+
+    def test_palantir_naive_service_date_remains_held_without_original_clock(self):
+        from src.intelligence import news_original_sources as original
+        def fetch(url):
+            return self.payload(self.service() if "GetPressReleaseList?" in url else '<html><title>Release</title></html>', url=url)
+        payload = original.retrieve(self.source("PLTR"), fetch, NOW)
+        item = original.cached_items(payload, self.source("PLTR"))[0]
+        with self.assertRaises(ValueError): editor.dated(item["published"])
+        self.assertTrue(payload["publication_problems"])
+        self.assertEqual(editor.feeds.describe_source(self.source("PLTR"), payload, NOW)["status"], "limited")
+
+    def test_palantir_does_not_borrow_another_headlines_publication_time(self):
+        from src.intelligence import news_original_sources as original
+        def fetch(url):
+            return self.payload(self.service() if "GetPressReleaseList?" in url else self.metadata(title="Different release"), url=url)
+        item = original.cached_items(original.retrieve(self.source("PLTR"), fetch, NOW), self.source("PLTR"))[0]
+        with self.assertRaises(ValueError): editor.dated(item["published"])
+
+    def test_long_original_titles_are_matched_beyond_the_first_240_characters(self):
+        from src.intelligence.special_alert_company_sources import publication_time
+        title = "Palantir introduces a research platform " + "with enterprise support " * 12
+        body = self.metadata(title=title + "for a different program").encode()
+        with self.assertRaises(ValueError): publication_time(body, title)
+        self.assertEqual(publication_time(self.metadata(title=title).encode(), title), NOW - timedelta(hours=1))
+
+    def test_malformed_publisher_service_is_rejected_without_a_homepage_fallback(self):
+        from src.intelligence import news_original_sources as original
+        for body in ('[]', '{}', '{"GetPressReleaseListResult":null}', '<html><title>Palantir</title></html>'):
+            with self.assertRaises(ValueError): original.service_items(body, self.source("PLTR"))
+
+    def test_palantir_release_redirect_cannot_confirm_a_company_story(self):
+        from src.intelligence import news_original_sources as original
+        def fetch(url):
+            return self.payload(self.service() if "GetPressReleaseList?" in url else self.metadata(), url=url,
+                                final_url=url if "GetPressReleaseList?" in url else "https://example.com/copied-release")
+        result = original.retrieve(self.source("PLTR"), fetch, NOW)
+        self.assertTrue(any("outside the issuer" in problem for problem in result["publication_problems"]))
+        with self.assertRaises(ValueError): editor.dated(result["articles"][0]["published"])
+
+    def test_service_rejects_off_issuer_links_and_bounds_detail_requests(self):
+        from src.intelligence import news_original_sources as original
+        self.assertFalse(original.service_items(self.service(LinkToDetailPage="https://example.com/news-details/fake"), self.source("PLTR")))
+        rows = [dict(Headline="Palantir signs a new AI defense contract", PressReleaseDate="10/25/2026 12:00:00",
+                     LinkToDetailPage=f"/news-details/2026/release-{index}") for index in range(50)]
+        calls = []
+        def fetch(url):
+            calls.append(url)
+            return self.payload(json.dumps({"GetPressReleaseListResult": rows}) if "GetPressReleaseList?" in url else self.metadata(), url=url)
+        payload = original.retrieve(self.source("PLTR"), fetch, NOW)
+        self.assertEqual(len(payload["articles"]), 30)
+        self.assertEqual(len(calls), 4)
+
+    def test_new_year_service_requests_cover_the_previous_year(self):
+        from src.intelligence import news_original_sources as original
+        calls = []
+        def fetch(url):
+            calls.append(url)
+            return self.payload('{"GetPressReleaseListResult":[]}', url=url)
+        original.retrieve(self.source("PLTR"), fetch, datetime(2027, 1, 1, 0, 30, tzinfo=timezone.utc))
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(any("year=2026" in url for url in calls))
+        self.assertTrue(any("year=2027" in url for url in calls))
+
+    def test_release_index_fetches_only_matching_issuer_article_paths(self):
+        from src.intelligence import news_original_sources as original
+        source = self.source("TSM")
+        body = '<a href="/english/news/123">TSMC reports monthly revenue</a><a href="/english">Home</a><a href="https://example.com/english/news/456">Copied release</a>'
+        calls = []
+        def fetch(url):
+            calls.append(url)
+            return self.payload(body if url == source["url"] else self.metadata(title="TSMC reports monthly revenue"), url=url)
+        result = original.retrieve(source, fetch, NOW)
+        self.assertEqual(len(result["articles"]), 1)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(url.startswith("https://pr.tsmc.com/") for url in calls))
+
+    def test_available_empty_feed_is_distinct_from_a_failed_or_undated_source(self):
+        source = self.source("MSFT")
+        empty = editor.feeds.describe_source(source, self.payload('<rss><channel/></rss>'), NOW)
+        failed = editor.feeds.describe_source(source, self.payload(status="error", error="HTTPError 403"), NOW)
+        missing = editor.feeds.describe_source(source, self.payload(self.rss("Microsoft introduces a platform", "https://blogs.microsoft.com/release").replace('<pubDate>','<unused>').replace('</pubDate>','</unused>')), NOW)
+        self.assertEqual((empty["status"], empty["fresh"]), ("available", 0))
+        self.assertEqual(failed["status"], "limited")
+        self.assertIn("403", failed["reason"])
+        self.assertEqual((missing["status"], missing["undated"]), ("limited", 1))
+
+    def test_old_dated_reports_are_quiet_without_becoming_fresh(self):
+        source = self.source("MSFT")
+        body = self.rss("Microsoft introduces a platform", "https://blogs.microsoft.com/release", (NOW - timedelta(days=2)).isoformat())
+        row = editor.feeds.describe_source(source, self.payload(body), NOW)
+        self.assertEqual((row["status"], row["dated"], row["fresh"]), ("available", 1, 0))
+
+    def test_source_health_rejects_stale_future_and_nonfinite_observation_clocks(self):
+        for stamp in (NOW.timestamp() - 7 * 3600, NOW.timestamp() + 3600, float("nan"), True):
+            row = editor.feeds.describe_source(self.source("MSFT"), self.payload('<rss><channel/></rss>', fetched_at_epoch=stamp), NOW)
+            self.assertEqual(row["status"], "limited")
+            self.assertEqual(row["checked_at"], "")
+
+    def test_http_403_is_cached_with_backoff_even_for_forced_refresh(self):
+        feeds = editor.feeds
+        url = self.source("TSLA")["url"]
+        error = HTTPError(url, 403, "Forbidden", {}, None)
+        with patch.object(feeds, "CACHE_FILE", self.root / "fetch.json"), patch.object(feeds.time, "time", return_value=NOW.timestamp()), patch.object(feeds, "urlopen", side_effect=error) as request:
+            first = feeds.fetch_url(url)
+            second = feeds.fetch_url(url, force_refresh=True)
+            self.assertEqual(request.call_count, 1)
+            self.assertEqual(first["body"], "")
+            self.assertTrue(second["cache_hit"])
+            self.assertGreater(first["retry_after_epoch"], NOW.timestamp())
+            with patch.object(feeds.time, "time", return_value=NOW.timestamp() + 4000):
+                feeds.fetch_url(url)
+            self.assertEqual(request.call_count, 2)
+
+    def test_concurrent_source_cache_updates_do_not_lose_other_publishers(self):
+        feeds = editor.feeds
+        with patch.object(feeds, "CACHE_FILE", self.root / "fetch.json"):
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                list(pool.map(lambda number: feeds.set_cached_source("source-" + str(number), self.payload()), range(30)))
+            self.assertEqual(len(feeds.load_cache()), 30)
+
+    def test_oversized_response_cannot_supply_a_partial_publisher_feed(self):
+        feeds = editor.feeds
+        url = self.source("MSFT")["url"]
+        response = SimpleNamespace(read=lambda limit: b"x" * limit, geturl=lambda: url)
+        with patch.object(feeds, "CACHE_FILE", self.root / "fetch.json"), patch.object(feeds, "urlopen", return_value=nullcontext(response)):
+            payload = feeds.fetch_url(url)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["body"], "")
+
+    def test_long_retry_after_is_bounded_and_does_not_disable_backoff(self):
+        feeds = editor.feeds
+        url = self.source("MSFT")["url"]
+        error = HTTPError(url, 429, "Slow down", {"Retry-After": "999999"}, None)
+        with patch.object(feeds, "CACHE_FILE", self.root / "fetch.json"), patch.object(feeds.time, "time", return_value=NOW.timestamp()), patch.object(feeds, "urlopen", side_effect=error) as request:
+            payload = feeds.fetch_url(url)
+            feeds.fetch_url(url, force_refresh=True)
+        self.assertEqual(payload["retry_after_epoch"] - payload["fetched_at_epoch"], 6 * 3600)
+        self.assertEqual(request.call_count, 1)
+
+    def test_empty_article_link_cannot_inherit_the_publishers_identity(self):
+        from src.intelligence import news_original_sources as original
+        self.assertFalse(original.authorized_response(self.source("MSFT"), {"url": ""}))
+        self.assertFalse(original.authorized_response(self.source("MSFT"), {"url": "https://microsoft.com.example.com/fake"}))
+
+    def test_legacy_news_context_does_not_treat_old_originals_as_fresh_signals(self):
+        feeds = editor.feeds
+        source = self.source("MSFT")
+        old = self.rss("Microsoft introduces an old AI platform", "https://blogs.microsoft.com/old", (NOW - timedelta(days=2)).isoformat())
+        fresh = self.rss("Microsoft introduces a new AI platform", "https://blogs.microsoft.com/new")
+        body = old.replace('</channel></rss>', '') + fresh.split('<channel>', 1)[1]
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None): return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+        with patch.object(feeds, "NEWS_SOURCES", [source]), patch.object(feeds, "datetime", Clock), patch.object(feeds, "fetch_source", return_value=self.payload(body)):
+            context = feeds.fetch_news_live_context()
+        self.assertEqual(len(context["items"]), 1)
+        self.assertIn("new AI platform", context["items"][0]["title"])
+
+    def test_fresh_originals_are_scanned_before_a_large_old_publication_backlog(self):
+        values = [candidate(url=f"https://www.microsoft.com/old-{index}", published=(NOW - timedelta(days=2)).isoformat()) for index in range(190)]
+        values.append(candidate("PLTR", title="Palantir signs an AI defense contract"))
+        plan = editor.build_editorial_plan(companies.build_company_catalyst_brief(), NOW, values)
+        self.assertEqual(len(plan["candidates"]), 180)
+        self.assertEqual(editor.selected_stories(plan)[0]["publisher_symbol"], "PLTR")
+        self.assertEqual(plan["truncated_candidates"], 11)
+
+    def test_source_health_and_filtered_history_are_recorded_without_network_or_cache_writes(self):
+        source = self.source("MSFT")
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+        path.write_text(json.dumps({source["url"]: self.payload(self.rss("Microsoft introduces a new enterprise AI platform", "https://blogs.microsoft.com/release"))}))
+        before = path.read_bytes()
+        text = build_daily_news_brief(self.research())
+        record = store.read_editions(report=text)[0]
+        self.assertTrue(record["source_health"])
+        with patch.object(editor.feeds, "fetch_source") as request:
+            status = editor.build_editor_status()
+            history = editor.build_editor_status("NVDA", True)
+        request.assert_not_called()
+        self.assertIn("Original sources:", status)
+        self.assertIn("MSFT: available | 1 fresh / 1 dated", status)
+        self.assertIn("Missing cached fetch", history)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_invalid_source_health_cannot_be_read_as_a_valid_edition_record(self):
+        text = build_daily_news_brief(self.research())
+        record = store.read_editions(report=text)[0]
+        record.pop("id")
+        self.assertTrue(record["source_health"])
+        record["source_health"][0]["fresh"] = "unverified"
+        store.save_edition(record, text + " altered")
+        self.assertFalse(store.read_editions(report=text + " altered"))
+
+    def test_publisher_redirect_mismatch_is_visible_and_cannot_supply_news(self):
+        source = self.source("MSFT")
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+        path.write_text(json.dumps({source["url"]: self.payload(self.rss("Microsoft introduces an AI platform", "https://blogs.microsoft.com/release"), final_url="https://example.com/fake-feed")}))
+        rows, issues = editor.cache_candidates(NOW, ["MSFT"])
+        self.assertFalse(rows)
+        self.assertTrue(any("Publisher redirect mismatch" in issue for issue in issues))
+
+    def test_daily_agent_refresh_includes_actual_source_coverage(self):
+        from src.jobs import daily_agent_job as job
+        row = editor.feeds.describe_source(self.source("MSFT"), self.payload('<rss><channel/></rss>'), NOW)
+        with patch.object(job, "call_first_available", return_value="News report"), patch.object(editor.feeds, "cached_original_coverage", return_value=[row]):
+            result = job.refresh_news_intelligence()
+        self.assertIn("1/1 available", result)
+        self.assertIn("0 fresh dated reports", result)
 
 
 class SQLiteCleanupChecks(unittest.TestCase):

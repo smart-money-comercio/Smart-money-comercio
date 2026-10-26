@@ -71,6 +71,13 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
                 continue
             if any(not isinstance(step, dict) or any(not isinstance(step.get(key), str) for key in ("name", "status", "detail")) for step in value["stages"]):
                 continue
+            health = value.get("source_health", [])
+            if (not isinstance(health, list) or len(health) > 48 or any(
+                    not isinstance(row, dict) or row.get("status") not in {"available", "limited"}
+                    or any(not isinstance(row.get(key), str) or len(row[key]) > 250 for key in ("name", "symbol", "checked_at", "latest_publication", "reason"))
+                    or any(type(row.get(key)) is not int or not 0 <= row[key] <= 10000 for key in ("entries", "dated", "fresh", "undated"))
+                    for row in health)):
+                continue
             analysis = value.get("analyst_review")
             if analysis is not None and (not isinstance(analysis, dict) or analysis.get("schema") != 1
                     or not isinstance(analysis.get("evidence"), dict) or not isinstance(analysis["evidence"].get("source_sections"), list)
