@@ -517,6 +517,36 @@ class NewsChecks(IsolatedChecks):
         text = "Title\nDate: 2026-10-25\n\nGood afternoon.\nMarket Update\nStocks changed. /report https://example.com\nResearch Notes\nLinks and disclaimer."
         self.assertEqual(spoken_text(text).split(), ["Good", "afternoon.", "Stocks", "changed."])
 
+    def test_overnight_hello_starts_spoken_copy_without_counting_display_metadata(self):
+        from src.reports.daily_news_brief import spoken_text
+        text = "Title\nDate: 2026-10-26\nGenerated: 2026-10-26 00:45:38 America/New_York\n\nHello.\nMarket Update\nStocks changed. /report https://example.com\nResearch Notes\nLinks and disclaimer."
+        self.assertEqual(spoken_text(text).split(), ["Hello.", "Stocks", "changed."])
+
+    def test_overnight_179_180_boundary_preserves_the_actual_hello_word_count(self):
+        for words in (179, 180):
+            # Hello has one spoken word; Good afternoon has two.
+            text = self.timed_fixture(words + 1).replace("Good afternoon.", "Hello.")
+            text = text.replace("2026-10-25 13:00:00", "2026-10-26 00:45:38").replace("Date: October 25", "Date: October 26")
+            result = validate_news_brief(text)
+            self.assertEqual(result["spoken_words"], words)
+            self.assertEqual(result["passes"], words >= 180)
+            self.assertTrue(15 <= result["market_estimated_seconds"] <= 30)
+
+    def test_all_24_local_hours_render_with_spoken_evidence_and_both_duration_checks(self):
+        from zoneinfo import ZoneInfo
+        from src.utils.report_consistency import report_greeting
+        for hour in range(24):
+            with self.subTest(hour=hour):
+                now = datetime(2026, 10, 25, hour, 45, tzinfo=ZoneInfo("America/New_York"))
+                research = self.research(now=now, ranked=enriched_ranked_stocks())
+                text = build_daily_news_brief(research)
+                result = validate_news_brief(text)
+                self.assertTrue(result["passes"], result)
+                self.assertIn(report_greeting(now), text)
+                self.assertGreaterEqual(result["spoken_words"], 180)
+                self.assertTrue(15 <= result["market_estimated_seconds"] <= 30)
+                self.assertLessEqual(result["chars"], 3800)
+
     def test_quiet_edition_uses_agent_analysis_rather_than_padding_for_duration(self):
         text = build_daily_news_brief(self.research())
         result = validate_news_brief(text)

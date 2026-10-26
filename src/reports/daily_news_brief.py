@@ -104,7 +104,7 @@ def spoken_text(text: str) -> str:
     output, speaking = [], False
     for line in text.splitlines():
         stripped = line.strip()
-        if re.fullmatch(r"Good (morning|afternoon|evening)\.", stripped):
+        if re.fullmatch(r"(?:Hello|Good (?:morning|afternoon|evening))\.", stripped):
             speaking = True
         if stripped == "Research Notes":
             break
