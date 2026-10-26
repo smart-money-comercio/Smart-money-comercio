@@ -681,6 +681,147 @@ class AnalystBriefChecks(IsolatedChecks):
         self.assertNotIn("premium membership", text.lower())
 
 
+class RankingRationaleChecks(IsolatedChecks):
+    def ranked(self, changes=None, movers=None, counts=None, previous=None):
+        from src.intelligence import opportunity_ranker as ranker
+        scores = [dict(ticker=symbol, final_score=base, risk_label=risk, smart_score=core, defense_score=theme,
+                       congress_score=congress, insider_score=insiders, volume_adjustment=0)
+                  for symbol, base, risk, core, theme, congress, insiders in (
+                      ("TSM", 86.2, "Balanced", 88, 83, 72, 50),
+                      ("MSFT", 87.3, "Controlled", 89, 84, 78, 51.5),
+                      ("NVDA", 85.3, "Balanced", 93, 68, 70, 50))]
+        for row in scores:
+            row.update((changes or {}).get(row["ticker"], {}))
+        before = deepcopy(scores)
+        memory = self.root / "rank-basis.json"
+        if previous:
+            memory.write_text(json.dumps({"current_date": "2026-10-22", "current": previous}))
+        original = memory.read_bytes() if memory.exists() else None
+        moves = movers or {"TSM": 1.5, "MSFT": 0.7, "NVDA": -0.6}
+        ranked = ranker.rank_daily_opportunities(scores, [{"symbol": symbol, "change_percent": value} for symbol, value in moves.items()],
+            {"tickers": counts or {"TSM": 0, "MSFT": 0, "NVDA": 0}}, record_memory=False, memory_path=memory)
+        self.assertEqual(scores, before)
+        self.assertEqual(memory.read_bytes() if memory.exists() else None, original)
+        return ranked
+
+    def research_with_basis(self, ranked=None):
+        from src.intelligence.opportunity_ranker import build_top_opportunities_section
+        report = AnalystBriefChecks.investor_research(self)
+        ranked = self.ranked() if ranked is None else ranked
+        body = build_top_opportunities_section(ranked)
+        plans = "\n".join(f"{index}. {row['ticker']} — Medium-High conviction, {row['structural_score']}/100 | Score Risk: {row['risk_label']} | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan {row['ticker']}"
+                          for index, row in enumerate(ranked[:3], 1))
+        return "\n\n".join((header + "\n" + body) if header == "Top Opportunities" else (header + "\n" + plans) if header == "Trade Plan Snapshot" else "\n".join(lines)
+                            for header, lines in split_report_sections(report))
+
+    def test_captured_components_explain_the_real_ranking_without_rescoring(self):
+        ranked = self.ranked()
+        self.assertEqual([row["ticker"] for row in ranked][:2], ["TSM", "MSFT"])
+        self.assertEqual([row["opportunity_score"] for row in ranked][:2], [88.2, 88.0])
+        self.assertEqual(ranked[0]["opportunity_components"], {"price": 2, "news": 0, "volume": 0, "risk": 0, "revision": 0})
+        self.assertEqual(ranked[1]["opportunity_components"]["risk"], 0.75)
+
+    def test_narrow_lead_explains_price_support_and_the_runner_ups_stronger_base(self):
+        text = build_daily_news_brief(self.research_with_basis())
+        self.assertIn("displayed advantage over Microsoft is 0.2 points", text)
+        self.assertIn("stronger price reading", text)
+        self.assertIn("Microsoft retains stronger structural support, 87.3 versus 86.2", text)
+        self.assertIn("a small change in the inputs could reverse it", text)
+
+    def test_model_support_does_not_become_a_claim_about_fresh_trades_or_results(self):
+        text = build_daily_news_brief(self.research_with_basis())
+        self.assertIn("draws support from core research and the theme component", text)
+        self.assertIn("The insider component does not add strong confirmation", text)
+        self.assertIn("Company disclosures remain the test", text)
+        for claim in ("insiders are buying", "Congress bought", "earnings grew", "revenue increased"):
+            self.assertNotIn(claim, text)
+
+    def test_missing_adjustments_do_not_get_invented_from_the_score_gap(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        review = analyze_report(AnalystBriefChecks.investor_research(self))
+        self.assertIsNone(review["evidence"]["companies"][0]["basis"])
+        self.assertNotIn("ranking_reason", {row["id"] for row in review["insights"]})
+
+    def test_inconsistent_and_duplicate_adjustment_lines_are_withheld(self):
+        from src.intelligence.daily_brief_analysis import report_evidence
+        report = self.research_with_basis()
+        bad = report.replace("Model adjustments: price +2.00", "Model adjustments: price +5.00", 1)
+        self.assertIsNone(report_evidence(bad)["companies"][0]["basis"])
+        line = next(line for line in report.splitlines() if "Model adjustments:" in line)
+        self.assertIsNone(report_evidence(report.replace(line, line + "\n" + line, 1))["companies"][0]["basis"])
+
+    def test_nonfinite_or_out_of_range_model_inputs_are_not_narrated(self):
+        from src.intelligence.daily_brief_analysis import report_evidence
+        from src.intelligence.opportunity_ranker import ranking_basis_lines
+        report = self.research_with_basis()
+        for bad in ("core nan", "core 101.0", "core inf"):
+            modified = report.replace("core 88.0", bad, 1)
+            self.assertIsNone(report_evidence(modified)["companies"][0]["inputs"])
+        item = self.ranked()[0]; item["opportunity_components"]["volume"] = float("nan")
+        self.assertNotIn("Model adjustments:", ranking_basis_lines(item))
+
+    def test_no_quote_session_means_no_dated_price_ranking_explanation(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        review = analyze_report(self.research_with_basis().replace("Quote session: 2026-10-23", "Quote session unavailable"))
+        self.assertIsNone(review["evidence"]["companies"][0]["basis"])
+        self.assertNotIn("ranking_reason", {row["id"] for row in review["insights"]})
+
+    def test_displayed_ties_do_not_get_a_fabricated_winning_driver(self):
+        ranked = self.ranked(changes={"TSM": {"final_score": 86}})
+        text = build_daily_news_brief(self.research_with_basis(ranked))
+        self.assertIn("tied on the displayed opportunity score", text)
+        self.assertNotIn("largest positive difference", text)
+
+    def test_capped_scores_do_not_get_an_uncapped_causal_explanation(self):
+        ranked = self.ranked(changes={"TSM": {"final_score": 94, "volume_adjustment": 10}, "MSFT": {"final_score": 90}})
+        text = build_daily_news_brief(self.research_with_basis(ranked))
+        self.assertIn("Score caps affect this comparison", text)
+        self.assertNotIn("largest positive difference", text)
+
+    def test_volume_and_news_inputs_are_explained_as_distinct_model_signals(self):
+        for changes, counts, expected in (({"TSM": {"volume_adjustment": 3}}, None, "volume input"),
+                                          (None, {"TSM": 4, "MSFT": 0, "NVDA": 0}, "Headline activity supplies")):
+            ranked = self.ranked(changes=changes, movers={"TSM": 0.2, "MSFT": 0.7, "NVDA": -0.6}, counts=counts)
+            text = build_daily_news_brief(self.research_with_basis(ranked))
+            self.assertIn(expected, text)
+            if counts:
+                self.assertIn("does not verify a company announcement", text)
+
+    def test_structural_revisions_are_not_mistaken_for_a_new_company_announcement(self):
+        ranked = self.ranked(movers={"TSM": 0.2, "MSFT": 0.7, "NVDA": -0.6},
+            previous={"TSM": {"structural_score": 80, "opportunity_score": 80}, "MSFT": {"structural_score": 87.3, "opportunity_score": 88}})
+        text = build_daily_news_brief(self.research_with_basis(ranked))
+        self.assertIn("Changes in structural model scores", text)
+        self.assertNotIn("earnings grew", text)
+
+    def test_both_score_inputs_and_ranking_explanation_are_auditable(self):
+        from src.intelligence import news_editor_store
+        report = self.research_with_basis(); text = build_daily_news_brief(report)
+        review = news_editor_store.read_editions(report=text)[0]["analyst_review"]
+        self.assertEqual(len(review["insights"]), 8)
+        self.assertEqual(review["evidence"]["companies"][0]["basis"]["price"], 2)
+        self.assertEqual(review["evidence"]["companies"][0]["inputs"]["core"], 88)
+        self.assertEqual(review["research_sha256"], hashlib.sha256(report.encode()).hexdigest())
+
+    def test_complete_verified_story_can_displace_optional_model_detail(self):
+        from src.intelligence import news_editor, news_editor_store
+        from src.reports import daily_news_brief as news
+        from scripts.check_news_editor import candidate
+        report = self.research_with_basis()
+        with patch.object(news_editor, "cache_candidates", return_value=([], [])):
+            baseline = build_daily_news_brief(report)
+        story = candidate(title="Microsoft announces an expanded strategic cloud partnership for enterprise customers")
+        budget = min(3800, len(baseline) + 100)
+        with patch.object(news_editor, "cache_candidates", return_value=([story], [])), patch.object(news, "MAX_NEWS_CHARS", budget):
+            text = build_daily_news_brief(report)
+        record = news_editor_store.read_editions(report=text)[0]
+        self.assertIn(story["title"], text)
+        self.assertIn("Why it leads:", text)
+        self.assertTrue(any(row["decision"] == "selected" for row in record["candidates"]))
+        self.assertLess(len(record["analyst_review"]["insights"]), 8)
+        self.assertTrue(news.validate_news_brief(text)["passes"])
+
+
 class CommandChecks(unittest.IsolatedAsyncioTestCase):
     async def test_catalysts_command_normalizes_symbol_and_replies_without_a_channel_send(self):
         from src.commands import company_catalyst_commands as commands

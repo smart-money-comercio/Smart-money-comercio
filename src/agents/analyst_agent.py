@@ -66,6 +66,44 @@ def review_daily_brief(evidence: dict) -> list[dict]:
             introduction += f" {companies[2]['name']} is third."
         introduction += " Research scores express priority rather than expected returns."
         add("ranking", "company", introduction, ["Top Opportunities"] + (["What Changed Today"] if changed else []))
+        inputs = top.get("inputs")
+        if inputs:
+            labels = {"core": "core research", "theme": "the theme component", "congress": "the congressional activity score", "insiders": "the insider activity score"}
+            supported = sorted((key for key, value in inputs.items() if value >= (65 if key in {"congress", "insiders"} else 75)),
+                               key=lambda key: inputs[key], reverse=True)[:2]
+            if supported:
+                factors = " and ".join(labels[key] for key in supported)
+                support = f"In our longer-term model, {top['name']} draws support from {factors}."
+                if inputs["insiders"] < 65:
+                    support += " The insider component does not add strong confirmation in this model snapshot."
+                support += " Company disclosures remain the test of the business case."
+                add("model_support", "company", support, ["Top Opportunities"])
+        if len(companies) > 1 and top.get("basis") and companies[1].get("basis"):
+            other = companies[1]
+            margin = top["opportunity"] - other["opportunity"]
+            uncapped = all(abs(sum(row["basis"].values())) <= 8 and 0 < row["structural"] + sum(row["basis"].values()) < 100
+                           for row in (top, other))
+            if abs(margin) < 0.05:
+                comparison = f"{top['name']} and {other['name']} are tied on the displayed opportunity score. Their ordering alone does not establish a meaningful advantage."
+            elif margin > 0 and uncapped:
+                differences = {key: top["basis"][key] - other["basis"][key] for key in top["basis"]}
+                differences["structural"] = top["structural"] - other["structural"]
+                driver = max(differences, key=differences.get)
+                explanations = {
+                    "price": "Its stronger price reading is the largest advantage in the scoring model.",
+                    "news": "Headline activity supplies the largest scoring advantage. This measures attention; it does not verify a company announcement.",
+                    "volume": "Its volume input supplies the largest scoring advantage; the latest volume still needs a fresh check.",
+                    "risk": "Its score-risk adjustment is more favorable in the model; setup risk still requires the trade-plan checks.",
+                    "revision": "Changes in structural model scores are more favorable for it in this comparison.",
+                    "structural": f"Its longer-term structural support is stronger, at {top['structural']:g} versus {other['structural']:g}."}
+                comparison = f"Why it leads: {top['name']}'s displayed advantage over {other['name']} is {margin:.1f} points. " + explanations[driver]
+                if driver != "structural" and other["structural"] - top["structural"] >= 0.5:
+                    comparison += f" {other['name']} retains stronger structural support, {other['structural']:g} versus {top['structural']:g}."
+                if margin < 1:
+                    comparison += " This is a narrow model lead; a small change in the inputs could reverse it."
+            else:
+                comparison = "Score caps affect this comparison, so the point adjustments alone do not establish which input explains the final ordering."
+            add("ranking_reason", "company", comparison, ["Top Opportunities"])
         if top["price"] is not None:
             change = top["price"]
             price = f"{top['name']} {'rose' if change > 0 else 'fell'} {abs(change):.1f} percent in the quoted regular session." if change else f"{top['name']} was unchanged in the quoted regular session."

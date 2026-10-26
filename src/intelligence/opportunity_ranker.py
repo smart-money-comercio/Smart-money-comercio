@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -390,6 +391,8 @@ def build_opportunity_item(
                 else None
             ),
             "news_count": news_count,
+            "opportunity_components": {"price": price_adj, "news": news_adj, "volume": volume_adj,
+                                       "risk": risk_adj, "revision": structural_adj},
             "opportunity_drivers": [
                 reason
                 for magnitude, reason in drivers
@@ -517,18 +520,39 @@ def build_top_opportunities_section(
             if price is not None
             else "unavailable"
         )
+        basis_text = ranking_basis_lines(item) if index <= 2 else ""
 
         blocks.append(
             f"{index}. {symbol} - Opportunity {opportunity:.1f}/100 | "
             f"Structural {structural:.1f}/100 | {direction_text(delta)}\n"
             f"   Price: {price_text} | News signals: {int(item.get('news_count') or 0)}\n"
             f"   Why now: {driver_text}\n"
+            f"{basis_text}"
             f"   Score Risk: {score_risk_label(item)} | "
             f"Action: {item.get('action_label') or 'Watch Closely'}\n"
             f"   Full review: /tradeplan {symbol}"
         )
 
     return "\n\n".join(blocks)
+
+
+def ranking_basis_lines(item: dict) -> str:
+    """Expose captured model inputs without recomputing or changing the score."""
+    def valid(value, lower, upper):
+        return type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper
+
+    lines = []
+    basis = item.get("opportunity_components")
+    keys = ("price", "news", "volume", "risk", "revision")
+    if isinstance(basis, dict) and all(valid(basis.get(key), -100, 100) for key in keys):
+        structural, opportunity = item.get("structural_score"), item.get("opportunity_score")
+        expected = clamp(structural + clamp(sum(basis[key] for key in keys), -8, 8), 0, 100) if valid(structural, 0, 100) else None
+        if expected is not None and valid(opportunity, 0, 100) and abs(expected - opportunity) <= 0.11:
+            lines.append("   Model adjustments: " + "; ".join(f"{key} {basis[key]:+.2f}" for key in keys))
+    values = (item.get("smart_score"), item.get("defense_score"), item.get("congress_score"), item.get("insider_score"))
+    if all(valid(value, 0, 100) for value in values):
+        lines.append("   Model inputs: " + "; ".join(f"{key} {value:.1f}" for key, value in zip(("core", "theme", "congress", "insiders"), values)))
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
 def build_fastest_rising_section(

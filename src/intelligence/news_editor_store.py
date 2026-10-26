@@ -75,7 +75,7 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
             if analysis is not None and (not isinstance(analysis, dict) or analysis.get("schema") != 1
                     or not isinstance(analysis.get("evidence"), dict) or not isinstance(analysis["evidence"].get("source_sections"), list)
                     or any(not isinstance(section, str) for section in analysis["evidence"]["source_sections"])
-                    or not isinstance(analysis.get("insights"), list) or len(analysis["insights"]) > 6):
+                    or not isinstance(analysis.get("insights"), list) or len(analysis["insights"]) > 8):
                 continue
             if any(not isinstance(story, dict) or story.get("decision") not in {"selected", "skip", "wait"}
                    or any(not isinstance(story.get(key), str) for key in ("title", "url", "source", "published", "reason"))

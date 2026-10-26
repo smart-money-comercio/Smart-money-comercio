@@ -69,6 +69,52 @@ class EditorChecks(IsolatedChecks):
         self.assertEqual({story["symbols"][0] for story in selected}, {"MSFT", "NVDA", "PLTR"})
         self.assertEqual(self.ranking.read_bytes(), before)
 
+    def test_hold_summary_separates_old_originals_and_unconfirmed_reports(self):
+        values = [candidate(official=False), candidate("NVDA", official=False),
+                  candidate("PLTR", published=(NOW - timedelta(days=2)).isoformat())]
+        plan = self.plan(values)
+        reasons = dict(editor.hold_reasons(plan["candidates"]))
+        self.assertEqual(reasons["Original-source confirmation needed"], 2)
+        self.assertEqual(reasons["Publication older than 24 hours"], 1)
+        self.assertEqual(sum(reasons.values()), 3)
+        self.assertFalse(editor.selected_stories(plan))
+
+    def test_future_publications_and_stale_observations_are_distinct(self):
+        plan = self.plan([candidate(published=(NOW + timedelta(days=1)).isoformat()),
+                          candidate("NVDA", source_checked_at=(NOW - timedelta(hours=7)).isoformat())])
+        reasons = dict(editor.hold_reasons(plan["candidates"]))
+        self.assertEqual(reasons, {"Publication outside allowed time window": 1, "Source observation stale or invalid": 1})
+
+    def test_incomplete_headlines_and_mismatched_publishers_have_clear_hold_reasons(self):
+        plan = self.plan([candidate(title="Microsoft introduces a new cloud platform…"),
+                          candidate("NVDA", url="https://finance.yahoo.com/story")])
+        self.assertEqual(dict(editor.hold_reasons(plan["candidates"])),
+                         {"Complete headline unavailable": 1, "Publisher identity mismatch": 1})
+
+    def test_publication_timezone_and_link_problems_are_reported_without_substitution(self):
+        plan = self.plan([candidate(published="2026-10-25T10:00:00"), candidate("NVDA", url="http://www.nvidia.com/news")])
+        self.assertEqual(dict(editor.hold_reasons(plan["candidates"])),
+                         {"Original publication time unavailable": 1, "Original link invalid": 1})
+
+    def test_status_and_company_history_summarize_the_recorded_holds(self):
+        text = self.render([candidate(official=False), candidate("NVDA", published=(NOW - timedelta(days=2)).isoformat())])
+        status = editor.build_editor_status()
+        self.assertIn("Original-source confirmation needed: 1", status)
+        self.assertIn("Publication older than 24 hours: 1", status)
+        history = editor.build_editor_status("NVDA", history=True)
+        self.assertIn("Publication older than 24 hours: 1", history)
+        self.assertNotIn("Original-source confirmation needed", history)
+        self.assertIn("0 sourced stories selected", editor.review_daily_edition(text))
+
+    def test_selected_and_skipped_stories_do_not_inflate_hold_counts(self):
+        plan = self.plan([candidate(), candidate("NVDA", title="Why Nvidia shares could rebound?")])
+        self.assertEqual(editor.hold_reasons(plan["candidates"]), [])
+        self.assertTrue(editor.selected_stories(plan))
+
+    def test_historical_combined_time_reason_is_not_mislabeled_as_only_old(self):
+        reasons = editor.hold_reasons([{"decision": "wait", "reason": "Original publication time is future-dated or older than 24 hours"}])
+        self.assertEqual(reasons, [("Publication outside allowed time window", 1)])
+
     def test_duplicate_company_cannot_take_all_three_slots(self):
         values = [candidate(url="https://www.microsoft.com/news/" + str(index), title="Microsoft launches product " + str(index)) for index in range(4)]
         values += [candidate("NVDA"), candidate("PLTR")]

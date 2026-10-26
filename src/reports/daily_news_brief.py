@@ -283,7 +283,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 body.append(paragraph)
                 text = render()
 
-            protected = set(story_paragraphs.values()) | {no_company_story} | {row["text"] for row in insights}
+            protected = set(story_paragraphs.values()) | {no_company_story} | {
+                row["text"] for row in insights if row["id"] not in {"model_support", "company_price"}}
             if brief.get("market_events"):
                 protected.add(market[1])
             if plan["issues"]:

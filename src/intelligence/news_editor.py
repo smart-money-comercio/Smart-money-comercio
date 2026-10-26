@@ -236,8 +236,10 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 raise ValueError("Headline or source missing")
             story["canonical_url"] = canonical_url(raw.get("url"))
             published = dated(raw.get("published"))
-            if not -60 <= (now - published).total_seconds() <= MAX_NEWS_AGE:
-                raise ValueError("Original publication time is future-dated or older than 24 hours")
+            if (now - published).total_seconds() < -60:
+                raise ValueError("Original publication time is future-dated")
+            if (now - published).total_seconds() > MAX_NEWS_AGE:
+                raise ValueError("Original publication time is older than 24 hours")
             checked = dated(raw.get("source_checked_at"))
             if not -60 <= (now - checked).total_seconds() <= MAX_CACHE_AGE:
                 raise ValueError("Original source observation is stale or future-dated")
@@ -373,6 +375,35 @@ def review_daily_edition(report: str) -> str:
     return f"{counts['selected']} sourced stories selected; {counts['skip']} skipped; {counts['wait']} held.{detail} Source wording and qualifications checked; edition {record['id']}."
 
 
+def hold_reasons(candidates: list[dict]) -> list[tuple[str, int]]:
+    """Summarize actual recorded decisions without inferring a quiet news day."""
+    counts = {}
+    for story in candidates:
+        if story["decision"] != "wait":
+            continue
+        reason = story["reason"].lower()
+        if "original company or agency report required" in reason:
+            label = "Original-source confirmation needed"
+        elif "older than 24 hours" in reason and "future-dated or" not in reason:
+            label = "Publication older than 24 hours"
+        elif "observation" in reason or "source" in reason and "stale" in reason:
+            label = "Source observation stale or invalid"
+        elif "future-dated" in reason:
+            label = "Publication outside allowed time window"
+        elif "headline" in reason and ("complete" in reason or "shortened" in reason):
+            label = "Complete headline unavailable"
+        elif "publisher" in reason or "authority" in reason:
+            label = "Publisher identity mismatch"
+        elif "publication" in reason or "timezone" in reason or "invalid date" in reason:
+            label = "Original publication time unavailable"
+        elif "url" in reason or "https" in reason:
+            label = "Original link invalid"
+        else:
+            label = "Other evidence gaps"
+        counts[label] = counts.get(label, 0) + 1
+    return sorted(counts.items(), key=lambda row: (-row[1], row[0]))
+
+
 def build_editor_status(symbol: str = "", history: bool = False) -> str:
     try:
         records = store.read_editions(limit=3 if history else 1)
@@ -387,12 +418,18 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             lines += [step["name"] + ": " + step["status"].upper() + " — " + step["detail"] for step in record["stages"]]
             if record["issues"]:
                 lines.append("Coverage: " + "; ".join(clean(issue, 120) for issue in record["issues"][:3]))
+            reasons = hold_reasons(record["candidates"])
+            if reasons:
+                lines.append("Hold reasons: " + "; ".join(f"{label}: {count}" for label, count in reasons))
             lines += ["", "Market evidence: " + clean(record["market_evidence"]["moves"], 400)]
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
         else:
             stories = [story for story in record["candidates"] if not symbol or symbol in story["symbols"]]
+            reasons = hold_reasons(stories)
+            if reasons:
+                lines.append("Hold reasons: " + "; ".join(f"{label}: {count}" for label, count in reasons))
             for story in stories[:12]:
                 lines += ["", story["decision"].upper() + " — " + story["title"], "Reason: " + story["reason"],
                           "Source: " + story["source"] + " | Published: " + story["published"],

@@ -20,6 +20,15 @@ NAMES = {"MSFT": "Microsoft", "NVDA": "Nvidia", "PLTR": "Palantir", "TSLA": "Tes
          "KTOS": "Kratos Defense", "CACI": "CACI International"}
 
 
+def model_values(block: str, label: str, keys: tuple[str, ...], lower: float, upper: float) -> dict | None:
+    pattern = r"^[ \t]*" + re.escape(label) + ": " + "; ".join(re.escape(key) + " (" + NUMBER + ")" for key in keys) + "$"
+    rows = re.findall(pattern, block, re.M)
+    if len(rows) != 1:
+        return None
+    values = tuple(map(float, rows[0]))
+    return dict(zip(keys, values)) if all(math.isfinite(v) and lower <= v <= upper for v in values) else None
+
+
 def report_evidence(report: str) -> dict:
     from src.reports.report_quality import split_report_sections
     sections = {header: "\n".join(lines[1:]) for header, lines in split_report_sections(report) if header}
@@ -52,6 +61,12 @@ def report_evidence(report: str) -> dict:
         delta = float(change.split()[-1]) if change != "unchanged" else 0.0
         if not math.isfinite(delta) or abs(delta) > 100 or (change.startswith("up") and delta <= 0) or (change.startswith("down") and delta >= 0):
             break
+        basis = model_values(block, "Model adjustments", ("price", "news", "volume", "risk", "revision"), -100, 100)
+        if basis:
+            expected = min(100, max(0, structural + min(8, max(-8, sum(basis.values())))))
+            if not session or abs(expected - opportunity) > 0.11:
+                basis = None
+        inputs = model_values(block, "Model inputs", ("core", "theme", "congress", "insiders"), 0, 100)
         price = re.search(r"^\s*Price: (" + NUMBER + r")% \|", block, re.M)
         score_risk = re.search(r"^\s*Score Risk: (Controlled|Balanced|Elevated) \|", block, re.M)
         plans = re.findall(r"^\d+\. " + re.escape(symbol) + r" — (.+)$", sections.get("Trade Plan Snapshot", ""), re.M)
@@ -63,6 +78,7 @@ def report_evidence(report: str) -> dict:
         action = re.search(r"\| Action: (.+?) Entry:", plan)
         companies.append({"symbol": symbol, "name": NAMES.get(symbol, symbol), "opportunity": opportunity,
                           "structural": structural, "delta": delta,
+                          "basis": basis, "inputs": inputs,
                           "price": float(price[1]) if session and price and math.isfinite(float(price[1])) else None,
                           "score_risk": score_risk[1] if score_risk else None,
                           "setup_risk": setup[1] if setup else None,
@@ -103,5 +119,6 @@ def validate_review(analysis: dict, research_report: str, report: str) -> None:
         if not isinstance(row, dict) or row.get("id") in seen or allowed.get(row.get("id")) != row or report.count(row["text"]) != 1:
             raise ValueError("Analyst narration changed or lost its supporting evidence")
         seen.add(row["id"])
-    if seen != set(allowed):
+    required = {key for key, row in allowed.items() if key not in {"model_support", "company_price"} or row["text"] in report}
+    if seen != required:
         raise ValueError("Available analyst evidence was omitted from the brief")
