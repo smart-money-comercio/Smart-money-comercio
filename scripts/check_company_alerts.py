@@ -30,7 +30,7 @@ CORE = ['TSLA', 'NVDA', 'MSFT', 'AVGO', 'PLTR', 'AVAV', 'KTOS', 'CRWD']
 
 
 def config():
-    return {**settings(), 'symbols': CORE.copy(), 'top_count': 10}
+    return {**settings(), 'symbols': CORE.copy(), 'top_count': 10, 'ipo_enabled': False}
 
 
 def feed(symbol='MSFT', title='Introducing a new cloud platform', link=None, published='Tue, 20 Oct 2026 17:00:00 GMT'):

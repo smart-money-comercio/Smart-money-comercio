@@ -66,7 +66,7 @@ async def special_alert_job(context) -> None:
         company_sent = dict.fromkeys(chats, 0)
         for alert in snapshot["alerts"]:
             for chat_id in chats:
-                if alert["kind"] == "company" and company_sent[chat_id] >= 3:
+                if alert["kind"] in {"company", "ipo"} and company_sent[chat_id] >= 3:
                     continue
                 now = datetime.now(timezone.utc).timestamp()
                 if alert["expires"] < now:
@@ -85,7 +85,7 @@ async def special_alert_job(context) -> None:
                 else:
                     store.finish(chat_id, alert, now, True)
                     sent += 1
-                    if alert["kind"] == "company":
+                    if alert["kind"] in {"company", "ipo"}:
                         company_sent[chat_id] += 1
         store.save_settings(last_scan=snapshot["asof"], last_issues=snapshot["issues"],
                             last_candidates=len(snapshot["alerts"]), last_sent=sent, last_failed=failed,

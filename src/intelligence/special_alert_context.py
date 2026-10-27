@@ -17,6 +17,15 @@ def active_events(symbol: str = "", now: datetime | None = None) -> list[dict]:
 
 
 def event_fact(event: dict) -> str:
+    if event["kind"] == "ipo":
+        from src.intelligence.ipo_monitor import checked, STAGES
+        evidence = event["evidence"]
+        try:
+            issuer = checked(evidence)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return "IPO source evidence unavailable; review /specialalerts before using this event."
+        at = timestamp(evidence["published"]).strftime("%Y-%m-%d %H:%M UTC")
+        return f"{at}: {issuer['name']} — {STAGES[evidence['ipo']['stage']]} ({evidence['source']}; original source)."
     if event["kind"] == "company":
         evidence = event["evidence"]
         time = timestamp(evidence["published"]).strftime("%Y-%m-%d %H:%M UTC")

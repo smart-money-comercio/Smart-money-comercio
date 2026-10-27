@@ -23,6 +23,8 @@ def settings() -> dict:
     nasdaq = number("SPECIAL_ALERT_NASDAQ_DROP", 2.0, 0.1, 30)
     return {
         "enabled": os.getenv("SPECIAL_ALERTS_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
+        "ipo_enabled": os.getenv("AI_IPO_ALERTS_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
+        "ipo_hours": number("AI_IPO_NEWS_MAX_HOURS", 24, 1, 24),
         "symbols": symbols,
         "top_count": int(number("SPECIAL_ALERT_TOP_COUNT", 10, 0, 10)),
         "interval": int(number("SPECIAL_ALERT_INTERVAL_SECONDS", 300, 60, 3600)),

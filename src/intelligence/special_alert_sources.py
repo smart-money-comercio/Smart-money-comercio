@@ -9,6 +9,7 @@ import html
 from html.parser import HTMLParser
 import json
 import math
+import os
 import re
 from urllib.error import HTTPError
 from urllib.parse import quote, urljoin, urlsplit
@@ -101,9 +102,17 @@ def safe_url(value: str) -> str:
     return ""
 
 
-def request_bytes(url: str) -> bytes:
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0 SmartMoneyAI/1.4", "Accept": "application/json,application/rss+xml,application/atom+xml,text/xml"})
+def request_bytes(url: str, *, prefix_bytes: int | None = None, authority_domain: str = "") -> bytes:
+    if prefix_bytes is not None and (type(prefix_bytes) is not int or not 1 <= prefix_bytes <= 1_000_000):
+        raise ValueError("Invalid bounded excerpt size")
+    user_agent = os.getenv("SEC_USER_AGENT", "SmartMoneyAI/1.5 public IPO monitor") if authority_domain == "sec.gov" else "Mozilla/5.0 SmartMoneyAI/1.4"
+    request = Request(url, headers={"User-Agent": user_agent, "Accept": "application/json,application/rss+xml,application/atom+xml,text/xml,text/html"})
     with urlopen(request, timeout=10) as response:
+        if authority_domain:
+            final = urlsplit(response.geturl())
+            host = final.hostname or ""
+            if final.scheme != "https" or final.username or final.password or final.port not in (None, 443) or not (host == authority_domain or host.endswith("." + authority_domain)):
+                raise ValueError("IPO source redirected outside its original authority")
         if urlsplit(url).hostname == "ir.tesla.com":
             final = urlsplit(response.geturl())
             if final.scheme != "https" or final.netloc.lower() not in {"ir.tesla.com", "ir.tesla.com:443"}:
@@ -117,8 +126,8 @@ def request_bytes(url: str) -> bytes:
                 final = urlsplit(response.geturl())
                 if final.scheme != "https" or final.hostname not in {"www.businesswire.com", "businesswire.com"}:
                     raise ValueError("Release timestamp source redirected outside Business Wire")
-        body = response.read(2_000_001)
-    if len(body) > 2_000_000:
+        body = response.read(prefix_bytes or 2_000_001)
+    if prefix_bytes is None and len(body) > 2_000_000:
         raise ValueError("Source response too large")
     return body
 
@@ -325,6 +334,8 @@ def collect_inputs(now: datetime, config: dict, source_status: dict | None = Non
     observations, news, issues = {}, [], []
     tasks = [("index", symbol, "https://query1.finance.yahoo.com/v8/finance/chart/" + quote(symbol, safe="") + "?range=1mo&interval=1d")
              for symbol in INDEX_NAMES]
+    if config.get("ipo_enabled"):
+        tasks.append(("ipo", "AI IPOs", ""))
     for symbol in config["symbols"]:
         tasks.append(("news", symbol + " news", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=" + quote(symbol, safe="") + "&region=US&lang=en-US"))
     if "TSLA" in config["symbols"]:
@@ -336,6 +347,13 @@ def collect_inputs(now: datetime, config: dict, source_status: dict | None = Non
     def fetch(task):
         kind, name, url = task
         try:
+            if kind == "ipo":
+                from src.intelligence import ipo_monitor
+                def request_ipo(url, prefix=False):
+                    domain = "sec.gov" if (urlsplit(url).hostname or "").endswith(".sec.gov") else next(row["domain"] for row in ipo_monitor.issuers().values() if ipo_monitor.issuer_url(row, url))
+                    return request_bytes(url, prefix_bytes=1_000_000 if prefix else None, authority_domain=domain)
+                items, detail, problems = ipo_monitor.collect(now, config, request_ipo)
+                return kind, name, items, problems, detail
             if kind == "tesla_ir":
                 items, detail, problems = tesla_ir_news(now, config)
                 return kind, name, items, problems, detail

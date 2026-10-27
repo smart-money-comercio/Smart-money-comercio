@@ -16,6 +16,7 @@ export SPECIAL_ALERT_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/special_alerts.sqlit
 export CALENDAR_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/calendar_snapshot.json"
 export CALENDAR_SOURCE_CACHE_FILE="$ALERT_PREFLIGHT_STATE_DIR/calendar_source_cache.json"
 export NEWS_EDITOR_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/news_editor.sqlite3"
+export AI_IPO_CACHE_FILE="$ALERT_PREFLIGHT_STATE_DIR/ai_ipo_cache.json"
 
 echo "Running Smart Money AI preflight checks..."
 
@@ -27,6 +28,7 @@ fi
 echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
 "$PYTHON_BIN" scripts/check_special_alerts.py
+"$PYTHON_BIN" scripts/check_ipo_alerts.py
 "$PYTHON_BIN" scripts/check_daily_agent_delivery.py
 "$PYTHON_BIN" scripts/check_watchlist_quotes.py
 "$PYTHON_BIN" scripts/check_company_alerts.py

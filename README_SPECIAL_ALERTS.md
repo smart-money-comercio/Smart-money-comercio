@@ -96,3 +96,5 @@ python scripts/check_watchlist_quotes.py
 The GitHub alert-regression workflow runs these checks on Linux/Python 3.12 and Windows/Python 3.14. Tests use synthetic publisher evidence and mocked delivery; source reachability checks do not send alerts.
 
 After committing and deploying through the existing workflow, check `/specialalerts`, `/specialalerts preview`, `/agentstatus`, and `/reportcheck`. The daily-agent status gains its event-review step after its next run. Automatic messages begin only when the updated bot is running with a configured destination. Tests use offline fixtures and mocked Telegram delivery; they do not establish live-feed coverage or a server deployment.
+
+AI IPO milestones now run within this scheduler, independently of the ticker watchlist. Anthropic and OpenAI are configured by default; additional issuer identities can be configured. Only original issuer reports or explicit IPO prospectus evidence can notify. `/specialalerts` shows this separate coverage and source status. See `README_AI_IPO_ALERTS.md` for clocks, stages, backoff, delivery limits and settings.

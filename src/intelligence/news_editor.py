@@ -35,6 +35,12 @@ STAGE_NAMES = ("Scan", "Source Check", "Relevance", "Selection", "Editorial Revi
 
 def primary_source(story: dict) -> str:
     """Require both publisher provenance and an original issuer/agency link."""
+    if story.get("ipo"):
+        from src.intelligence.ipo_monitor import checked
+        try:
+            return checked(story)["name"]
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return ""
     if not story["official"]:
         return ""
     url = story.get("canonical_url", story["url"])
@@ -48,6 +54,8 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    if story.get("ipo"):
+        return "IPO" if primary_source(story) else ""
     if story["kind"] == "company":
         if re.search(r"\b(earnings|results) (date|call|webcast)\b|\bannounces? (?:its |the )?date\b|\b(?:will|to) (?:report|release)\b.{0,60}\b(results|earnings)\b", title, re.I):
             return ""
@@ -236,6 +244,11 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     symbols = [row["symbol"] for row in brief["rows"]]
     health = []
     cached, issues = cache_candidates(now, symbols, health=health) if extra_candidates is None else (deepcopy(extra_candidates), [])
+    if extra_candidates is None:
+        from src.config.special_alerts import settings
+        from src.intelligence.ipo_monitor import cached_items
+        if settings().get("ipo_enabled"):
+            cached += [{**value, "kind": "macro", "origin": "IPO original-source cache", "relevant": True} for value in cached_items(now)]
     if health:
         configured = {row["symbol"] for row in health}
         for symbol in symbols:
@@ -268,6 +281,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                  "publisher_symbol": raw.get("publisher_symbol", ""),
                  "source_checked_at": raw.get("source_checked_at"), "decision": "wait", "reason": "Source checks pending"}
         story["id"] = hashlib.sha256(json.dumps([story["title"], story["url"], story["published"]]).encode()).hexdigest()[:16]
+        if raw.get("ipo") is not None:
+            story["ipo"] = deepcopy(raw["ipo"])
         try:
             if not isinstance(raw_title, str) or not title or not story["source"]:
                 raise ValueError("Headline or source missing")
@@ -321,11 +336,13 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         key = title_key(story["title"])
         # Alphabet share classes represent the same issuer for coverage diversity.
         issuers = {"GOOGL" if symbol == "GOOG" else symbol for symbol in story["symbols"]}
+        if story.get("ipo"):
+            issuers.add("IPO:" + story["ipo"]["issuer_id"])
         if story["canonical_url"] in urls or key in titles:
             story.update(decision="skip", reason="Duplicate article URL or headline; retained higher-priority evidence")
         elif issuers & companies:
             story.update(decision="skip", reason="Company already represented; preserve coverage diversity")
-        elif company_eligible and story["kind"] == "macro" and any(item["kind"] == "macro" and
+        elif company_eligible and story["kind"] == "macro" and not story.get("ipo") and any(item["kind"] == "macro" and not item.get("ipo") and
                 ("defense" in story_topics(item)) == ("defense" in story_topics(story)) for item in selected):
             story.update(decision="skip", reason="Macro story already represented; preserve company coverage")
         elif len(selected) >= MAX_STORIES:
@@ -341,7 +358,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["event_evidence"] = build_evidence(story, text, scope)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 8, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 9, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def timestamp_for_priority(value):
@@ -358,7 +375,7 @@ def selected_stories(plan: dict) -> list[dict]:
 def news_order(story: dict) -> tuple:
     """Editorial categories set reading order, without asserting price impact."""
     topic = materiality(story)
-    tier = {"monetary policy": 4, "economic data": 4, "guidance": 3, "regulation": 3,
+    tier = {"IPO": 4, "monetary policy": 4, "economic data": 4, "guidance": 3, "regulation": 3,
             "earnings": 2, "acquisition": 2, "divestiture": 2, "restructuring": 2,
             "contract": 1, "product": 1, "defense innovation": 1}.get(topic, 0)
     return (-tier, -story.get("priority", 0), -dated(story["published"]).timestamp(), story["id"])
@@ -367,7 +384,8 @@ def news_order(story: dict) -> tuple:
 def coverage_order(stories: list[dict]) -> list[dict]:
     ordered = sorted(stories, key=news_order)
     preferred = []
-    for predicate in (lambda row: row["kind"] == "macro" and "defense" not in story_topics(row),
+    for predicate in (lambda row: bool(row.get("ipo")),
+                      lambda row: row["kind"] == "macro" and not row.get("ipo") and "defense" not in story_topics(row),
                       lambda row: "defense" in story_topics(row)):
         found = next((row for row in ordered if predicate(row) and row not in preferred), None)
         if found:
@@ -386,6 +404,16 @@ def render_story(story: dict, zone, company_names: dict) -> str:
     at = f"{published:%B} {published.day} at {published.strftime('%I:%M').lstrip('0')} {published:%p %Z}"
     headline = "“" + story["title"].rstrip(".") + "”"
     punctuation = "" if story["title"].endswith(("?", "!")) else "."
+    if story.get("ipo"):
+        from src.intelligence.ipo_monitor import checked, interpretation, STAGES
+        issuer = checked(story)
+        stage = STAGES[story["ipo"]["stage"]]
+        clock = "accepted" if story["ipo"]["form"] else "published"
+        text = (f"{issuer['name']}: {stage}, accepted {at} on Form {story['ipo']['form']}, according to SEC EDGAR." if story["ipo"]["form"] else
+                f"{issuer['name']}: {stage}. The original company announcement, published {at}, is headlined {headline}{punctuation}")
+        if story["ipo"]["proposed_symbol"]:
+            text += " The symbol described in the source is " + story["ipo"]["proposed_symbol"] + "; trading status requires separate confirmation."
+        return text + " Our analysis: " + interpretation(story)
     if story["kind"] == "company":
         issuer = story.get("confirmed_by") or story["symbols"][0]
         company = company_names.get(issuer, issuer)
@@ -519,14 +547,14 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             for row in record.get("source_health", []):
                 if symbol and row["symbol"] == symbol:
                     lines.append(f"Publisher coverage: {row['name']} — {row['status']}; {row['reason']}; checked {row['checked_at'] or 'not checked'}")
-            stories = [story for story in record["candidates"] if not symbol or symbol in story["symbols"]]
+            stories = [story for story in record["candidates"] if not symbol or symbol in story["symbols"] or symbol.casefold() == story.get("ipo", {}).get("issuer_id", "").casefold()]
             reasons = hold_reasons(stories)
             if reasons:
                 lines.append("Hold reasons: " + "; ".join(f"{label}: {count}" for label, count in reasons))
             for story in stories[:12]:
                 lines += ["", story["decision"].upper() + " — " + story["title"], "Reason: " + story["reason"],
                           "Source: " + story["source"] + " | Published: " + story["published"],
-                          "Evidence: " + ("publisher/company announcement" if story["official"] else "headline only; confirmation pending"),
+                          "Evidence: " + ("public SEC filing" if story.get("ipo", {}).get("form") else "publisher/company announcement" if story["official"] else "headline only; confirmation pending"),
                           "Source check: " + story.get("source_check", "hold") + " | Cached at: " + str(story.get("source_checked_at") or "unavailable")]
                 if story.get("story_type"):
                     lines.append("Story type: " + story["story_type"])
@@ -541,6 +569,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     if review["facts"]:
                         lines.append("Disclosed excerpt facts: " + review["facts"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]
+                if story.get("ipo"):
+                    from src.intelligence.ipo_monitor import STAGES
+                    lines.append("IPO stage: " + STAGES[story["ipo"]["stage"]])
                 if story.get("source_check") == "pass":
                     lines.append(story["url"])
                 if story["decision"] == "selected":

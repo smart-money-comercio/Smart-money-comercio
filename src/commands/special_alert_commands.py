@@ -35,10 +35,18 @@ def status_report() -> str:
     config, state = settings(), store.get_settings()
     coverage = company_universe(config)
     active = config["enabled"] and state.get("enabled", True)
+    from src.intelligence.ipo_monitor import issuers
+    try:
+        ipo_scope = ", ".join(row["name"] for row in issuers().values())
+    except ValueError:
+        ipo_scope = "configuration invalid"
     lines = ["🚨 Special Alerts", "Monitoring: " + ("ON" if active else "OFF"),
              f"Scan interval: {config['interval'] // 60} minutes · company news also after hours/weekends",
              "Market checks: regular session plus 20 minutes for delayed closing quotes",
              f"Destinations: {len(destinations())} configured", "",
+             "AI IPO monitoring: " + ("ON" if config.get("ipo_enabled") else "OFF") + " · " + ipo_scope,
+             f"IPO milestone window: {config.get('ipo_hours', 24):g} hours · original issuer/SEC evidence required",
+             "AI IPO sources: " + state.get("last_source_status", {}).get("AI IPOs", "not scanned yet"),
              f"Selloff: S&P 500 -{config['sp_drop']:g}% / Nasdaq -{config['nasdaq_drop']:g}%",
              f"Severe: S&P 500 -{config['sp_severe']:g}% / Nasdaq -{config['nasdaq_severe']:g}%",
              f"Two negative sessions: S&P 500 -{config['sp_two_day']:g}% / Nasdaq -{config['nasdaq_two_day']:g}% compounded",

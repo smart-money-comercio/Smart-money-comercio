@@ -189,9 +189,13 @@ def market_alert(observations: dict, now: datetime, config: dict) -> dict | None
 def evaluate(observations: dict, news: list[dict], now: datetime, config: dict) -> list[dict]:
     candidates = {}
     for item in news:
-        alert = company_alert(item, now, config)
+        if item.get("kind") == "ipo":
+            from src.intelligence.ipo_monitor import alert as ipo_alert
+            alert = ipo_alert(item, now, config) if config.get("ipo_enabled") else None
+        else:
+            alert = company_alert(item, now, config)
         if alert and (alert["key"] not in candidates or alert["level"] > candidates[alert["key"]]["level"]):
             candidates[alert["key"]] = alert
-    result = sorted(candidates.values(), key=lambda a: a["published"], reverse=True)
+    result = sorted(candidates.values(), key=lambda a: (a["kind"] == "ipo", a["published"]), reverse=True)
     market = market_alert(observations, now, config)
     return ([market] if market else []) + result

@@ -784,6 +784,12 @@ def review_special_event(event: dict, scores: Any) -> dict:
                     if any(term in get_category(stock).lower() for term in ("ai", "growth", "semiconductor", "cyber"))][:4]
         interpretation = "Review growth/AI concentration and confirmation before adding risk. Price data alone does not establish the cause."
         checks = "Confirm price/volume, near-term earnings and macro releases; review position size and thesis invalidation."
+    elif event.get("kind") == "ipo":
+        from src.intelligence.ipo_monitor import checked, interpretation as ipo_interpretation
+        checked(event["evidence"])
+        selected = []
+        interpretation = ipo_interpretation(event["evidence"])
+        checks = "Verify the original filing, offering terms, revenue quality, losses, cash requirements, dilution and governance. Review AI concentration separately from any decision to buy the IPO."
     else:
         selected = [stock for stock in stocks if clean_symbol(stock.get("ticker") or stock.get("symbol")) in wanted][:3]
         official = event.get("evidence", {}).get("official", False)
@@ -813,7 +819,7 @@ def review_special_event(event: dict, scores: Any) -> dict:
         # Use the same risk measures as /report, /tradeplan and /scorecard.
         context.append(f"{ticker} — Score Risk: {score_risk}; Setup Risk: {setup}")
     if not context:
-        context = ["Existing score coverage unavailable for the affected company."]
+        context = ["No IPO score inferred; related public stocks are separate research."] if event.get("kind") == "ipo" else ["Existing score coverage unavailable for the affected company."]
     return {"interpretation": interpretation, "checks": checks,
             "model_context": context, "symbols": [clean_symbol(stock.get("ticker") or stock.get("symbol")) for stock in selected] or sorted(wanted),
             "mode": "existing analyst rules", "score_changes": False}

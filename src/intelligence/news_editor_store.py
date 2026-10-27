@@ -92,8 +92,11 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
             for story in value["candidates"]:
                 if story.get("event_evidence") is not None:
                     checked_evidence(story)
+                if story.get("ipo") is not None:
+                    from src.intelligence.ipo_monitor import checked
+                    checked(story)
             value["id"] = edition
             records.append(value)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, KeyError, AttributeError):
             continue
     return records
