@@ -447,6 +447,165 @@ class SECResearchChecks(ResearchFixture):
         self.assertEqual(desk.approved(NOW+timedelta(hours=1)), [])
 
 
+class FollowupChecks(ResearchFixture):
+    def held(self, url=URL):
+        def blocked(_): raise HTTPError(url, 403, "Denied", {}, None)
+        self.run_desk(Client(leads=[{"title": TITLE, "url": url, "topic": "AI"}]), fetch=blocked)
+        return desk.read_history()[0]
+
+    def test_empty_search_revisits_a_held_lead_with_two_total_model_requests(self):
+        parent = self.held(); client = Client(leads=[])
+        value = self.run_desk(client, NOW+timedelta(hours=1))
+        self.assertEqual(len(client.calls), 2)
+        self.assertEqual(value["details"]["search_leads"], 0); self.assertEqual(value["details"]["retried"], 1)
+        self.assertEqual(value["details"]["candidates"], 1); self.assertEqual(value["details"]["approved"], 1)
+        record = desk.read_history()[0]
+        self.assertEqual(record["discovered_at"], parent["discovered_at"])
+        self.assertEqual(record["last_attempt_at"], (NOW+timedelta(hours=1)).isoformat())
+        self.assertEqual(record["retry_count"], 1); self.assertEqual(record["origin"], "held retry")
+        self.assertEqual(record["prior_review_response_id"], parent["review_response_id"])
+        self.assertEqual(json.loads(client.calls[1]["input"])["candidates"][0]["lead_origin"], "held retry")
+
+    def test_recovered_held_sec_filing_reaches_the_brief_after_empty_search(self):
+        self.held(SEC_INDEX); client = Client(leads=[], quote=SEC_QUOTE)
+        calls = []; fetch = SECResearchChecks.fetch(self, calls=calls)
+        value = self.run_desk(client, NOW+timedelta(hours=1), fetch)
+        self.assertEqual(value["details"]["approved"], 1); self.assertEqual(len(calls), 2)
+        text = build_daily_news_brief(self.research(now=NOW+timedelta(hours=1)))
+        self.assertIn("approximately $12 billion", text); self.assertTrue(validate_news_brief(text)["passes"])
+        self.assertEqual(len(client.calls), 2)
+
+    def test_retry_failure_never_reuses_previously_verified_text_for_approval(self):
+        self.run_desk(Client(decision="hold"))
+        self.assertIsNotNone(desk.read_history()[0]["verified"])
+        def blocked(_): raise HTTPError(URL, 403, "Denied", {}, None)
+        value = self.run_desk(Client(leads=[]), NOW+timedelta(hours=1), blocked)
+        self.assertEqual(value["details"]["approved"], 0); self.assertEqual(desk.approved(NOW+timedelta(hours=1)), [])
+        self.assertIsNone(desk.read_history()[0]["verified"])
+
+    def test_retry_requires_a_new_successful_independent_model_review(self):
+        self.held()
+        value = self.run_desk(Client(leads=[], fail_review=True), NOW+timedelta(hours=1))
+        self.assertEqual(value["status"], "limited"); self.assertEqual(desk.approved(NOW+timedelta(hours=1)), [])
+        self.assertEqual(desk.read_history()[0]["review"]["final"], "hold")
+
+    def test_retry_still_rejects_an_invented_evidence_quote(self):
+        self.held()
+        value = self.run_desk(Client(leads=[], quote="A quotation that never appeared in the original source text."), NOW+timedelta(hours=1))
+        self.assertEqual(value["details"]["approved"], 0); self.assertEqual(desk.read_history()[0]["review"]["final"], "hold")
+
+    def test_skipped_and_approved_findings_do_not_enter_the_retry_queue(self):
+        self.run_desk()
+        self.assertEqual(desk.retry_candidates(NOW+timedelta(hours=1), [], desk.read_history()), [])
+        self.run_desk(Client(decision="skip"), NOW+timedelta(hours=1))
+        self.assertEqual(desk.retry_candidates(NOW+timedelta(hours=2), [], desk.read_history()), [])
+
+    def test_empty_search_without_pending_findings_uses_one_request(self):
+        client = Client(leads=[]); value = self.run_desk(client)
+        self.assertEqual(len(client.calls), 1); self.assertEqual(value["details"]["retried"], 0)
+
+    def test_three_retry_limit_preserves_the_original_discovery_clock(self):
+        parent = self.held()
+        def blocked(_): raise HTTPError(URL, 403, "Denied", {}, None)
+        for hour in range(1, 4):
+            value = self.run_desk(Client(leads=[]), NOW+timedelta(hours=hour), blocked)
+            self.assertEqual(value["details"]["retried"], 1)
+            self.assertEqual(desk.read_history()[0]["retry_count"], hour)
+            self.assertEqual(desk.read_history()[0]["discovered_at"], parent["discovered_at"])
+        client = Client(leads=[]); value = self.run_desk(client, NOW+timedelta(hours=4), blocked)
+        self.assertEqual(value["details"]["retried"], 0); self.assertEqual(len(client.calls), 1)
+
+    def test_retry_does_not_bypass_the_once_per_hour_claim(self):
+        self.held(); client = Client(leads=[])
+        self.assertEqual(self.run_desk(client)["status"], "already attempted this hour")
+        self.assertEqual(client.calls, [])
+
+    def test_expired_future_and_malformed_first_seen_clocks_are_excluded(self):
+        parent = self.held()
+        for discovered in ((NOW-timedelta(hours=25)).isoformat(), (NOW+timedelta(hours=2)).isoformat(), "unknown"):
+            value = deepcopy(parent); value["discovered_at"] = discovered
+            self.assertEqual(desk.retry_candidates(NOW+timedelta(hours=1), [], [value]), [])
+
+    def test_known_stale_publication_is_not_freshened_by_retry(self):
+        self.run_desk(Client(decision="hold")); value = desk.read_history()[0]
+        value["verified"]["published"] = (NOW-timedelta(hours=25)).isoformat()
+        self.assertEqual(desk.retry_candidates(NOW+timedelta(hours=1), [], [value]), [])
+
+    def test_legacy_hold_without_new_fields_can_be_revisited(self):
+        parent = self.held()
+        for key in ("retry_count", "last_attempt_at", "origin", "discovery_response_id", "prior_review_response_id"):
+            parent.pop(key, None)
+        self.assertEqual(len(desk.retry_candidates(NOW+timedelta(hours=1), [], [parent])), 1)
+        raw = json.dumps(parent, sort_keys=True)
+        with closing(sqlite3.connect(desk.state_path())) as db, db:
+            db.execute("UPDATE findings SET payload=?,digest=?", (raw, hashlib.sha256(raw.encode()).hexdigest()))
+        value = self.run_desk(Client(leads=[]), NOW+timedelta(hours=1))
+        self.assertEqual(value["details"]["approved"], 1)
+        self.assertEqual(desk.read_history()[0]["retry_count"], 1)
+
+    def test_latest_skip_suppresses_an_older_hold(self):
+        parent = self.held(); skipped = deepcopy(parent); skipped["review"] = {"final": "skip"}
+        self.assertEqual(desk.retry_candidates(NOW+timedelta(hours=1), [], [skipped, parent]), [])
+
+    def test_current_discovery_is_not_duplicated_as_a_retry(self):
+        self.held()
+        value = self.run_desk(Client(), NOW+timedelta(hours=1))
+        self.assertEqual(value["details"]["candidates"], 1); self.assertEqual(value["details"]["retried"], 0)
+        self.assertEqual(desk.read_history()[0]["discovered_at"], NOW.isoformat())
+
+    def test_sec_index_and_document_aliases_are_not_retried_twice(self):
+        self.held(SEC_INDEX)
+        lead = {"title": "Current report", "url": SEC_PRIMARY, "topic": "AI"}
+        self.assertEqual(desk.retry_candidates(NOW+timedelta(hours=1), [lead], desk.read_history()), [])
+
+    def test_followup_is_bounded_and_uses_the_existing_six_source_reads(self):
+        old = [{"title": TITLE, "url": URL+str(i), "topic": "AI"} for i in range(3)]
+        self.run_desk(Client(leads=old, decision="hold"))
+        fresh = [{"title": TITLE, "url": URL+"new"+str(i), "topic": "AI"} for i in range(6)]
+        calls = []; value = self.run_desk(Client(leads=fresh), NOW+timedelta(hours=1), lambda url: calls.append(url) or html())
+        self.assertEqual(value["details"]["retried"], 2); self.assertEqual(value["details"]["candidates"], 8)
+        self.assertEqual(len(calls), 6); self.assertEqual(value["details"]["original_reads"], 6)
+
+    def test_full_new_batch_keeps_all_search_results_and_defers_retries(self):
+        self.held(URL+"held")
+        fresh = [{"title": TITLE, "url": URL+str(i), "topic": "AI"} for i in range(8)]
+        value = self.run_desk(Client(leads=fresh), NOW+timedelta(hours=1))
+        self.assertEqual(value["details"]["candidates"], 8); self.assertEqual(value["details"]["retried"], 0)
+        candidates = desk.retry_candidates(NOW+timedelta(hours=2), [], desk.read_history())
+        self.assertEqual(candidates[0]["lead"]["url"], URL+"held")
+
+    def test_malformed_history_does_not_hide_a_usable_pending_finding(self):
+        parent = self.held()
+        for invalid in ({}, {**deepcopy(parent), "retry_count": True}, {**deepcopy(parent), "lead": {"url": "http://127.0.0.1/private"}}):
+            rows = desk.retry_candidates(NOW+timedelta(hours=1), [], [invalid])
+            self.assertEqual(rows, [])
+        self.assertEqual(len(desk.retry_candidates(NOW+timedelta(hours=1), [], [{}, parent])), 1)
+
+    def test_original_decision_and_production_receipts_remain_unchanged(self):
+        self.held(); before = {path: path.read_bytes() for path in (self.db, self.ranking)}
+        with closing(sqlite3.connect(desk.state_path())) as db:
+            original = db.execute("SELECT payload,digest FROM findings").fetchone()
+        self.run_desk(Client(leads=[]), NOW+timedelta(hours=1))
+        with closing(sqlite3.connect(desk.state_path())) as db:
+            self.assertEqual(db.execute("SELECT payload,digest FROM findings ORDER BY slot LIMIT 1").fetchone(), original)
+        self.assertEqual(before, {path: path.read_bytes() for path in before})
+
+    def test_read_only_history_labels_old_decisions_after_an_empty_scan(self):
+        import asyncio
+        from src.commands import hourly_research_commands as command
+        self.held(); when = NOW+timedelta(hours=1)
+        self.assertTrue(desk.claim(when)); desk.finish(when, "complete", [], {"candidates": 0, "approved": 0})
+        async def check():
+            update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+            with patch.object(command, "reply_long_message", new_callable=AsyncMock) as reply, patch.object(desk, "run") as run:
+                await command.researchdesk_command(update, SimpleNamespace(args=["history"]))
+            run.assert_not_called()
+            text = reply.call_args.args[1]
+            self.assertIn("latest scan recorded no story decisions", text)
+            self.assertIn("Last checked (UTC): "+NOW.isoformat(), text)
+        asyncio.run(check())
+
+
 class ContractChecks(unittest.TestCase):
     def test_discovery_rejects_url_without_actual_search_provenance(self):
         client = Client(); client.responses.create = lambda **_: response({"candidates": client.leads}, searched=True, urls=[URL+"/other"])
@@ -560,7 +719,7 @@ if __name__ == "__main__":
         if args.windows_socketpair:
             stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))
         traffic = stack.enter_context(offline_network_guard())
-        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks))
+        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks, FollowupChecks))
         result = unittest.TextTestRunner(verbosity=1).run(suite)
     ok = result.wasSuccessful() and not traffic["blocked"]
     print(f"Hourly Research Check: {'PASS' if ok else 'FAIL'} ({result.testsRun} tests)")

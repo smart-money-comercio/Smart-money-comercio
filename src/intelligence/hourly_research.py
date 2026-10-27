@@ -21,6 +21,8 @@ from src.intelligence import sec_research
 ROOT = Path(__file__).resolve().parents[2]
 AGENCIES = {"Federal Reserve": "federalreserve.gov", "U.S. Treasury": "treasury.gov", "EIA": "eia.gov", "DARPA": "darpa.mil",
             "BLS": "bls.gov", "BEA": "bea.gov", "DOL": "dol.gov"}
+MAX_HELD_RETRIES = 3
+MAX_RETRIES_PER_RUN = 2
 
 
 def settings() -> dict:
@@ -193,6 +195,48 @@ def read_history(limit: int = 40) -> list[dict]:
     return result
 
 
+def latest_findings(records: list[dict]) -> dict[str, dict]:
+    """Use the latest dated decision for each source, including SEC URL aliases."""
+    result = {}
+    for row in records:
+        try:
+            lead = row["lead"]
+            url = research_agents.url_key(lead["url"])
+            if (not isinstance(lead["title"], str) or not 1 <= len(lead["title"]) <= 1000
+                    or lead["topic"] not in research_agents.TOPICS or row["id"] != hashlib.sha256(url.encode()).hexdigest()[:20]):
+                continue
+            result.setdefault(finding_key(url), row)
+        except (KeyError, ValueError, TypeError, AttributeError):
+            continue
+    return result
+
+
+def retry_candidates(now: datetime, fresh: list[dict], history: list[dict]) -> list[dict]:
+    """Read-only bounded follow-up queue; rechecks never change the first-seen clock."""
+    current = {finding_key(lead["url"]) for lead in fresh}
+    eligible = []
+    for key, row in latest_findings(history).items():
+        try:
+            discovered = timestamp(row["discovered_at"])
+            attempted = timestamp(row.get("last_attempt_at", row["discovered_at"]))
+            retries = row.get("retry_count", 0)
+            if (key in current or row["review"]["final"] != "hold" or discovered is None or attempted is None
+                    or not 0 <= (now-discovered).total_seconds() <= 86400
+                    or int(attempted.timestamp() // 3600) >= int(now.timestamp() // 3600)
+                    or type(retries) is not int or not 0 <= retries < MAX_HELD_RETRIES):
+                continue
+            if row.get("verified"):
+                published = timestamp(row["verified"].get("published"))
+                if published is None or not 0 <= (now-published).total_seconds() <= 86400:
+                    continue
+            eligible.append((attempted, row))
+        except (KeyError, ValueError, TypeError, AttributeError, OverflowError, OSError):
+            continue
+    eligible.sort(key=lambda item: item[0])
+    room = min(MAX_RETRIES_PER_RUN, max(0, 8-len(fresh)))
+    return [row for _, row in eligible[:room]]
+
+
 def approved(now: datetime) -> list[dict]:
     if not settings()["enabled"]:
         return []
@@ -257,9 +301,18 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         from src.intelligence.special_alert_universe import company_universe
         symbols = company_universe(alert_settings(), now)["symbols"]
         domains = list(dict.fromkeys(row["domain"] for row in identities())) + ["reuters.com", "apnews.com", "sec.gov"]
-        seen_urls = [row["lead"]["url"] for row in read_history(16) if row.get("review", {}).get("final") in {"approved", "skip"}]
+        history = read_history(80)
+        latest = latest_findings(history)
+        seen_urls = [row["lead"]["url"] for row in latest.values() if row.get("review", {}).get("final") in {"approved", "skip"}][:16]
         leads, metadata = research_agents.discover(client, config["discovery_model"], now.isoformat(), symbols, domains, previous, seen_urls)
-        details["agents"].append(metadata); details["candidates"] = len(leads)
+        details["agents"].append(metadata)
+        fresh = {}
+        for lead in leads:
+            fresh.setdefault(finding_key(lead["url"]), lead)
+        leads = list(fresh.values())
+        pending = retry_candidates(now, leads, history)
+        work = [(row["lead"], row, True) for row in pending] + [(lead, latest.get(finding_key(lead["url"])), False) for lead in leads]
+        details.update(candidates=len(work), search_leads=len(leads), retried=len(pending))
         reads = 0
         def bounded_fetch(url):
             nonlocal reads
@@ -267,8 +320,15 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                 raise ValueError("Original-source read budget reached")
             reads += 1
             return fetch(url)
-        for lead in leads:
-            record = {"id": hashlib.sha256(lead["url"].encode()).hexdigest()[:20], "discovered_at": now.isoformat(), "lead": lead,
+        for lead, parent, retry in work:
+            first_seen = timestamp(parent.get("discovered_at")) if parent else None
+            count = parent.get("retry_count", 0) if parent else 0
+            count = count if type(count) is int and 0 <= count <= MAX_HELD_RETRIES else 0
+            record = {"id": hashlib.sha256(lead["url"].encode()).hexdigest()[:20],
+                      "discovered_at": first_seen.isoformat() if first_seen is not None and first_seen <= now else now.isoformat(),
+                      "last_attempt_at": now.isoformat(), "retry_count": count + int(retry), "origin": "held retry" if retry else "discovery",
+                      "discovery_response_id": (parent or {}).get("discovery_response_id", "") if retry else details["agents"][0]["response_id"],
+                      "prior_review_response_id": (parent or {}).get("review_response_id", ""), "lead": lead,
                       "verified": None, "verification": "Original source not verified", "review": {"final": "hold"}}
             excluded = routine_page(lead["url"])
             if excluded:
@@ -288,7 +348,8 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         if reviewable:
             handoff = [{"id": row["id"], "title": (row["verified"] or row["lead"])["title"], "topic": row["lead"]["topic"],
                         "url": row["lead"]["url"], "published": (row["verified"] or {}).get("published", "unverified"),
-                        "verification": row["verification"], "source_text": (row["verified"] or {}).get("source_excerpt", "")} for row in reviewable]
+                        "verification": row["verification"], "lead_origin": row["origin"],
+                        "source_text": (row["verified"] or {}).get("source_excerpt", "")} for row in reviewable]
             decisions, metadata = research_agents.review(client, config["review_model"], handoff, symbols)
             details["agents"].append(metadata)
             by_id = {row["id"]: row for row in records}
@@ -307,7 +368,8 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
     except Exception as exc:
         details["error"] = type(exc).__name__
         for record in records:
-            record["review"] = {"final": "hold", "reason": "AI review incomplete; publication withheld"}
+            if not record.get("screened_out"):
+                record["review"] = {"final": "hold", "reason": "AI review incomplete; publication withheld"}
         finish(now, "limited", records, details)
     finally:
         if owned:
@@ -318,7 +380,8 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
 def summary() -> str:
     value = status()
     details = value.get("details", {})
-    return (f"Hourly Research Desk: {value['status']}; {details.get('candidates', 0)} leads, {details.get('approved', 0)} approved, "
+    return (f"Hourly Research Desk: {value['status']}; {details.get('search_leads', details.get('candidates', 0))} search leads, "
+            f"{details.get('retried', 0)} held leads revisited, {details.get('approved', 0)} approved, "
             f"{details.get('source_verified', 0)} source-verified. Cached review only.")
 
 

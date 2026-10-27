@@ -15,6 +15,16 @@ The audit retains discovered URLs, publication and observation clocks, source ex
 
 Discovery now receives two complementary investor searches covering AI/capital markets and defense/macro/global risk, together with recently approved or skipped URLs. Search instructions exclude routine product help, tutorials and modification-time claims. Status distinguishes execution completion from editorial success and shows original-source checks, holds, skips and actual source-read counts. Zero approved findings is valid and does not establish that no market news exists.
 
+## Follow-up on held leads
+
+A source failure or incomplete review can leave a useful lead on HOLD. The next hourly attempt can revisit up to two of the latest held findings even when discovery returns an empty list. Older, unresolved findings are prioritized when space remains in the eight-candidate batch. Current search results take up to eight slots; a full new batch leaves no retry slots. Approved or skipped decisions suppress an older hold, and SEC index/document aliases share one identity.
+
+Automatic follow-up is limited to three retries per finding within 24 hours of its original discovery. A known original publication older than 24 hours is ineligible. The initial discovery time is preserved, and each follow-up records its own last-checked time, retry count and link to the prior review. Existing records without these fields remain readable and can receive bounded follow-up.
+
+Every follow-up fetches and verifies fresh original evidence, then passes it through a new independent relevance review. Previous HOLD decisions or stale source text cannot establish approval. All work shares the existing hourly attempt, two-model-request, eight-candidate and six-source-read caps; a SEC retry still consumes two source reads. A model/search failure does not trigger additional model requests. Report/status rendering never runs the queue.
+
+Status separates current search leads from held findings revisited. History identifies first discovery and last check and explicitly labels older entries when the latest empty scan recorded no decisions. Historical entries are preserved; deploying this change does not itself recheck or publish them. The next eligible hourly attempt performs the follow-up.
+
 ## SEC current-report leads
 
 SEC 8-K, 8-K/A, 6-K and 6-K/A leads can now be verified independently of the IPO cache. Filing-index, primary-document and inline-viewer URLs resolve through the issuer's authoritative SEC submissions JSON. The accession, primary-document path, issuer CIK, registrant name, form and explicit acceptance timestamp must match the actual inline-XBRL document. The event date, filing-date label and model-written title never establish publication time or issuer identity. Unsupported forms or reports without usable issuer identity remain held.

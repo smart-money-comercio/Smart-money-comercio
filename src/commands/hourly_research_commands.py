@@ -33,6 +33,8 @@ async def researchdesk_command(update, context):
              "Original-source checks and existing alert rules determine publication and delivery."]
     details = value.get("details", {})
     lines += [f"Latest: {details.get('candidates', 0)} leads / {details.get('approved', 0)} approved"]
+    if "search_leads" in details:
+        lines.append(f"Search returned: {details['search_leads']} leads · held leads revisited: {details.get('retried', 0)}")
     if "source_verified" in details:
         lines += [f"Checks: {details['source_verified']} original sources verified / {details.get('held', 0)} held / {details.get('skipped', 0)} skipped; {details.get('original_reads', 0)} source reads"]
     if value["status"] == "complete" and not details.get("approved"):
@@ -43,9 +45,16 @@ async def researchdesk_command(update, context):
             records = desk.read_history(16)
         except Exception:
             records = []; lines.append("Decision history is temporarily unavailable.")
+        lines += ["", "Decision history — entries can be older than the latest scan."]
+        scan_at = desk.timestamp(value.get("started"))
+        checked_at = [desk.timestamp(record.get("last_attempt_at", record.get("discovered_at"))) for record in records]
+        if records and scan_at is not None and all(at is not None and at < scan_at for at in checked_at):
+            lines.append("The latest scan recorded no story decisions; the entries below are from earlier runs.")
         for record in records:
             lines += ["", record["review"]["final"].upper() + " — " + (record.get("verified") or record["lead"])["title"],
-                      "Discovered (UTC): " + record["discovered_at"],
+                      "First discovered (UTC): " + record["discovered_at"],
+                      "Last checked (UTC): " + record.get("last_attempt_at", record["discovered_at"]),
+                      "Follow-up retries: " + str(record.get("retry_count", 0)) + "/" + str(desk.MAX_HELD_RETRIES),
                       "Published: " + (record.get("verified") or {}).get("published", "unverified"),
                       "Original source: " + record["verification"], "Reviewer: " + record["review"].get("reason", "Review unavailable"),
                       "Evidence: " + (record["review"].get("evidence_quote") or "unavailable"), record["lead"]["url"]]
