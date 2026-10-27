@@ -8,10 +8,18 @@ from src.intelligence import special_alert_store as store
 from src.intelligence.special_alert_sources import clean, timestamp
 
 
+def current_evidence(events: list[dict]) -> list[dict]:
+    from src.config.special_alerts import settings
+    from src.intelligence.special_alert_engine import confirmed_company
+    if not settings()["confirmed_only"]:
+        return events
+    return [event for event in events if event.get("kind") != "company" or confirmed_company(event.get("evidence", {}))]
+
+
 def active_events(symbol: str = "", now: datetime | None = None) -> list[dict]:
     now = now or datetime.now(timezone.utc)
     try:
-        return store.recent_events(now.timestamp(), symbol.upper())
+        return current_evidence(store.recent_events(now.timestamp(), symbol.upper()))
     except Exception:
         return []
 
@@ -102,7 +110,7 @@ def attach_daily_special_alerts(report: str, max_chars: int = 7600, now: datetim
 
 def daily_agent_event_review() -> str:
     # Let the workflow record a cache error rather than silently report zero events.
-    events = store.recent_events(datetime.now(timezone.utc).timestamp())
+    events = current_evidence(store.recent_events(datetime.now(timezone.utc).timestamp()))
     if not events:
         return "0 active events in the special-alert evidence cache. No network fetch or Telegram send."
     return f"{len(events)} active sourced events reviewed by the analyst agent. " + clean(build_event_review(), 800)

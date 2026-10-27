@@ -12,6 +12,8 @@ Each issuer's current milestone is delivered through the existing destination, p
 
 The analyst reviews offering stage, valuation, revenue quality, losses, cash needs, dilution, governance and AI concentration. It assigns no inferred stock score to an unlisted issuer and does not infer direct holdings, funded orders, guaranteed returns or a cause for index moves. The daily news editor can admit these same verified IPO records without requiring a ticker. Rendering and history read cached evidence only.
 
+New prospectus reads also retain bounded financial-table evidence. Annual revenue and comparable growth, operating loss, net loss, operating cash flow and financing-related fair-value changes keep their original periods and units. Ambiguous and pro forma tables are withheld. Net loss does not establish cash burn. Explicit governance and dated customer-concentration disclosures are retained when available. IPO coverage has its own **IPO & Capital Markets** brief section. See `README_HOURLY_RESEARCH.md` for the new two-model discovery/relevance workflow and limits.
+
 ## Settings
 
 - `AI_IPO_ALERTS_ENABLED=true` enables this coverage under the existing special-alert monitoring switch.

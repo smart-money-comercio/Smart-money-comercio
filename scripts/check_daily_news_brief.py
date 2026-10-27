@@ -60,6 +60,7 @@ class IsolatedChecks(unittest.TestCase):
             "CALENDAR_SOURCE_CACHE_FILE": str(self.root / "publishers.json"), "SPECIAL_ALERT_STATE_FILE": str(self.db),
             "NEWS_EDITOR_STATE_FILE": str(self.root / "editor.sqlite3"), "NEWS_LIVE_SOURCE_CACHE_FILE": str(self.root / "news.json"),
             "AI_IPO_CACHE_FILE": str(self.root / "ipo.json"),
+            "HOURLY_RESEARCH_STATE_FILE": str(self.root / "hourly.sqlite3"),
             "REPORT_TIMEZONE": "America/New_York", "SPECIAL_ALERT_SYMBOLS": "TSLA,NVDA,MSFT,PLTR", "SPECIAL_ALERT_TOP_COUNT": "10"}))
         self.stack.enter_context(patch.object(companies, "utc_now", return_value=NOW))
         self.stack.enter_context(patch.object(calendar, "utc_now", return_value=NOW))
@@ -902,7 +903,8 @@ class MarketDefenseChecks(IsolatedChecks):
             return build_daily_news_brief(report or self.research())
 
     def market_body(self, text):
-        return re.split(r"\n\n(?:" + "|".join(map(re.escape, HEADERS)) + r")\n", text.split("\nMarket Update\n", 1)[1], maxsplit=1)[0]
+        from src.reports.daily_news_brief import ALL_HEADERS
+        return re.split(r"\n\n(?:" + "|".join(map(re.escape, ALL_HEADERS)) + r")\n", text.split("\nMarket Update\n", 1)[1], maxsplit=1)[0]
 
     def test_market_segment_has_independent_15_and_30_second_boundaries(self):
         base = NewsChecks.timed_fixture(self, 220)

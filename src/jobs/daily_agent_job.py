@@ -306,6 +306,8 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
 
     from src.intelligence.special_alert_context import daily_agent_event_review
     run_step(steps, "Special Alerts Agent", daily_agent_event_review)
+    from src.intelligence.hourly_research import status as research_status, summary as research_summary
+    add_step(steps, "Hourly Research Desk", "pass" if research_status()["status"] == "complete" else "skip", research_summary())
     run_step(steps, "Trade Plans", build_tradeplans_step)
     run_step(steps, "Portfolio Allocation", build_allocation_step)
 

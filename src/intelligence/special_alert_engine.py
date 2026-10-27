@@ -93,6 +93,8 @@ def company_alert(item: dict, now: datetime, config: dict) -> dict | None:
     symbol = item.get("symbol", "")
     if symbol not in config["symbols"]:
         return None
+    if config.get("confirmed_only", True) and not confirmed_company(item):
+        return None
     event = company_event(title)
     if not event:
         return None
@@ -137,6 +139,13 @@ def company_alert(item: dict, now: datetime, config: dict) -> dict | None:
             "published": published.isoformat(), "text": text, "ttl": 48 * 3600,
             "symbols": [symbol], "stage": stage, "evidence": item,
             "expires": published.timestamp() + config["news_hours"] * 3600}
+
+
+def confirmed_company(item: dict) -> bool:
+    try:
+        return item.get("official") is True and item.get("publisher_symbol") == item.get("symbol") and company_url(item["symbol"], item["url"])
+    except (ValueError, TypeError, KeyError):
+        return False
 
 
 def market_alert(observations: dict, now: datetime, config: dict) -> dict | None:

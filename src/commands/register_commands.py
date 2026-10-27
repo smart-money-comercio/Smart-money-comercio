@@ -3,6 +3,7 @@ from telegram.ext import CommandHandler
 from src.commands.special_alert_commands import specialalerts_command
 from src.commands.company_catalyst_commands import catalysts_command, fullreport_command
 from src.commands.news_editor_commands import editorstatus_command, storylog_command
+from src.commands.hourly_research_commands import researchdesk_command
 
 from src.commands.admin_commands import (
     admin_command,
@@ -98,6 +99,7 @@ from src.commands.source_refresh_commands import refreshsources_command
 from src.commands.commandcenter_commands import commandcenter_command
 
 def register_commands(app):
+    app.add_handler(CommandHandler("researchdesk", researchdesk_command))
     # Core
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))

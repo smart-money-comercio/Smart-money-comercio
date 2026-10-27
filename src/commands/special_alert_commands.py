@@ -47,6 +47,8 @@ def status_report() -> str:
              "AI IPO monitoring: " + ("ON" if config.get("ipo_enabled") else "OFF") + " · " + ipo_scope,
              f"IPO milestone window: {config.get('ipo_hours', 24):g} hours · original issuer/SEC evidence required",
              "AI IPO sources: " + state.get("last_source_status", {}).get("AI IPOs", "not scanned yet"),
+             "Company confirmation: " + ("original source required" if config.get("confirmed_only", True) else "headline leads enabled"),
+             "Hourly AI research: " + state.get("last_source_status", {}).get("Hourly Research", "not scanned yet"),
              f"Selloff: S&P 500 -{config['sp_drop']:g}% / Nasdaq -{config['nasdaq_drop']:g}%",
              f"Severe: S&P 500 -{config['sp_severe']:g}% / Nasdaq -{config['nasdaq_severe']:g}%",
              f"Two negative sessions: S&P 500 -{config['sp_two_day']:g}% / Nasdaq -{config['nasdaq_two_day']:g}% compounded",

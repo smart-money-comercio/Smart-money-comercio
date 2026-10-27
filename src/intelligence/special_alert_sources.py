@@ -378,4 +378,9 @@ def collect_inputs(now: datetime, config: dict, source_status: dict | None = Non
                 observations[name] = result
             elif result is not None:
                 news.extend(result)
+    from src.intelligence.hourly_research import approved
+    reviewed = approved(now)
+    news.extend(value for value in reviewed if value["kind"] == "company")
+    if source_status is not None:
+        source_status["Hourly Research"] = f"{len(reviewed)} fresh original-source findings approved by AI relevance review"
     return observations, news, issues

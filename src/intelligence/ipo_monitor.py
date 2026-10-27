@@ -100,7 +100,9 @@ def company_stage(title: str) -> str | None:
 
 
 def item(issuer_id: str, row: dict, title: str, url: str, published: str, excerpt: str,
-         observed: str, *, form: str = "", accession: str = "") -> dict | None:
+         observed: str, *, form: str = "", accession: str = "", schema: int = 2, filing_source: dict | None = None) -> dict | None:
+    if type(schema) is not int or schema not in {1, 2}:
+        raise ValueError("Unknown IPO evidence schema")
     publication, observation = timestamp(published), timestamp(observed)
     if publication is None or observation is None:
         return None
@@ -122,10 +124,13 @@ def item(issuer_id: str, row: dict, title: str, url: str, published: str, excerp
     if stage is None:
         return None
     symbol = re.search(r"\bunder (?:the )?(?:trading )?symbol\s+[\"“']([A-Z][A-Z0-9.\-]{0,9})[\"”']", excerpt)
-    profile = {"schema": 1, "issuer_id": issuer_id, "stage": stage, "form": form, "accession": accession,
+    profile = {"schema": schema, "issuer_id": issuer_id, "stage": stage, "form": form, "accession": accession,
                "source_url": url, "published": published, "observed": observed, "title": title,
                "excerpt": excerpt, "sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
                "proposed_symbol": symbol[1].rstrip(".") if symbol else ""}
+    if filing_source is not None and schema >= 2:
+        from src.intelligence.ipo_filing_analysis import analyze
+        profile.update(filing_source=filing_source, filing_analysis=analyze(filing_source))
     return {"title": title, "original_title": title, "url": url, "published": published,
             "source_checked_at": observed, "official": True, "source": "SEC EDGAR" if form else row["name"],
             "kind": "ipo", "symbols": [], "ipo": profile}
@@ -134,7 +139,7 @@ def item(issuer_id: str, row: dict, title: str, url: str, published: str, excerp
 def checked(value: dict, now: datetime | None = None, hours: float = 24) -> dict:
     p = value["ipo"]
     row = issuers()[p["issuer_id"]]
-    if p.get("schema") != 1 or p.get("stage") not in STAGES or not isinstance(value.get("title"), str) or len(value["title"]) > 1000:
+    if type(p.get("schema")) is not int or p["schema"] not in {1, 2} or p.get("stage") not in STAGES or not isinstance(value.get("title"), str) or len(value["title"]) > 1000:
         raise ValueError("Invalid IPO evidence")
     published, observed = timestamp(value["published"]), timestamp(value["source_checked_at"])
     if published is None or observed is None:
@@ -151,7 +156,8 @@ def checked(value: dict, now: datetime | None = None, hours: float = 24) -> dict
             raise ValueError("IPO filing does not belong to the configured issuer")
     elif not issuer_url(row, value["url"]):
         raise ValueError("IPO announcement is not an original issuer source")
-    expected = item(p["issuer_id"], row, value["title"], value["url"], value["published"], p["excerpt"], value["source_checked_at"], form=form, accession=accession)
+    expected = item(p["issuer_id"], row, value["title"], value["url"], value["published"], p["excerpt"], value["source_checked_at"], form=form, accession=accession,
+                    schema=p["schema"], filing_source=p.get("filing_source"))
     if expected is None or expected["ipo"] != p or value.get("official") is not True or value.get("source") != expected["source"]:
         raise ValueError("IPO stage or terms changed from the original evidence")
     return row
@@ -173,14 +179,17 @@ def sec_items(issuer_id: str, row: dict, raw: bytes, request, now: datetime, hou
         if reads >= 2:
             break
         url = f"https://www.sec.gov/Archives/edgar/data/{int(row['cik'])}/{accession.replace('-', '')}/{document}"
-        body = visible(request(url, prefix=True))
+        raw_document = request(url, prefix=True)
+        body = visible(raw_document)
         reads += 1
         match = re.search(r"\bthis is (?:an|the) initial public offering\b", body[:20_000], re.I)
         if match is None:
             continue
         excerpt = body[max(0, match.start() - 500):match.start() + 4500]
         title = f"{row['name']}: Form {form} filed for a proposed initial public offering"
-        record = item(issuer_id, row, title, url, published.isoformat(), excerpt, now.isoformat(), form=form, accession=accession)
+        from src.intelligence.ipo_filing_analysis import evidence
+        record = item(issuer_id, row, title, url, published.isoformat(), excerpt, now.isoformat(), form=form, accession=accession,
+                      filing_source=evidence(raw_document))
         if record:
             result.append(record)
     return result
@@ -311,6 +320,11 @@ def collect(now: datetime, config: dict, request) -> tuple[list[dict], str, list
 
 
 def interpretation(value: dict) -> str:
+    from src.intelligence.ipo_filing_analysis import narration
+    analysis = value["ipo"].get("filing_analysis")
+    if analysis and (text := narration(analysis)):
+        caution = " Public trading is not established by this filing." if value["ipo"]["stage"] != "trading" else ""
+        return text + caution + " Our investor read: weigh growth against operating losses, funding needs and the disclosed governance before judging valuation."
     stage = value["ipo"]["stage"]
     if stage == "trading":
         return "Trading has been reported by the issuer. Review liquidity, valuation, dilution and lockup terms before considering a position."

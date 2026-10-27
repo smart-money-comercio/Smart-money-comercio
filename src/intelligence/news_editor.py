@@ -35,6 +35,12 @@ STAGE_NAMES = ("Scan", "Source Check", "Relevance", "Selection", "Editorial Revi
 
 def primary_source(story: dict) -> str:
     """Require both publisher provenance and an original issuer/agency link."""
+    if story.get("discovery_evidence"):
+        from src.intelligence.hourly_research import check_proof
+        try:
+            return check_proof(story)["name"]
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return ""
     if story.get("ipo"):
         from src.intelligence.ipo_monitor import checked
         try:
@@ -56,6 +62,9 @@ def materiality(story: dict) -> str:
     title = story["title"]
     if story.get("ipo"):
         return "IPO" if primary_source(story) else ""
+    if story.get("discovery_evidence") and story["discovery_evidence"].get("publisher", {}).get("kind") == "issuer":
+        proxy = {key: value for key, value in story.items() if key != "discovery_evidence"}
+        return materiality({**proxy, "kind": "company"})
     if story["kind"] == "company":
         if re.search(r"\b(earnings|results) (date|call|webcast)\b|\bannounces? (?:its |the )?date\b|\b(?:will|to) (?:report|release)\b.{0,60}\b(results|earnings)\b", title, re.I):
             return ""
@@ -249,6 +258,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         from src.intelligence.ipo_monitor import cached_items
         if settings().get("ipo_enabled"):
             cached += [{**value, "kind": "macro", "origin": "IPO original-source cache", "relevant": True} for value in cached_items(now)]
+        from src.intelligence.hourly_research import approved
+        cached += approved(now)
     if health:
         configured = {row["symbol"] for row in health}
         for symbol in symbols:
@@ -283,6 +294,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         story["id"] = hashlib.sha256(json.dumps([story["title"], story["url"], story["published"]]).encode()).hexdigest()[:16]
         if raw.get("ipo") is not None:
             story["ipo"] = deepcopy(raw["ipo"])
+        if raw.get("discovery_evidence") is not None:
+            story["discovery_evidence"] = deepcopy(raw["discovery_evidence"])
         try:
             if not isinstance(raw_title, str) or not title or not story["source"]:
                 raise ValueError("Headline or source missing")
@@ -358,7 +371,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["event_evidence"] = build_evidence(story, text, scope)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 9, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 10, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def timestamp_for_priority(value):
@@ -572,6 +585,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if story.get("ipo"):
                     from src.intelligence.ipo_monitor import STAGES
                     lines.append("IPO stage: " + STAGES[story["ipo"]["stage"]])
+                    for fact in story["ipo"].get("filing_analysis", {}).get("facts", [])[:10]:
+                        lines.append(f"Filing fact: {fact['field']} | {fact['period']} | {fact['source_value']} {fact['unit']}")
                 if story.get("source_check") == "pass":
                     lines.append(story["url"])
                 if story["decision"] == "selected":

@@ -10,6 +10,7 @@ START_COMMANDS = [
 
 
 CORE_COMMANDS = [
+    ("/researchdesk [status|history|run|on|off]", "Hourly discovery agent and independent relevance review"),
     ("/editorstatus", "News edition stages, source coverage and review status"),
     ("/storylog [SYMBOL]", "Selected, skipped and held news stories with reasons"),
     ("/brief", "Smart Money Daily News Brief"),

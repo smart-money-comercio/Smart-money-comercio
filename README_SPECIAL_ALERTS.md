@@ -2,6 +2,8 @@
 
 This update includes the pending Document Research integration and adds a separate five-minute event monitor. It starts with the bot after deployment and uses the existing watchlist-alert destination, daily-report destination, or admin chat in that order. Set `TELEGRAM_SPECIAL_ALERT_CHAT_ID` to choose a separate destination.
 
+Company alerts now default to **original company confirmation required** (`SPECIAL_ALERT_CONFIRMED_ONLY=true`). Secondary headlines remain research leads and do not alert or supply current event context. Explicitly setting this option to `false` restores the legacy headline behavior described below. Historical records and delivery receipts are preserved. The new hourly Discovery Agent and independent Relevance Reviewer can supply verified findings to this monitor; see `README_HOURLY_RESEARCH.md` for API billing, limits and `/researchdesk` controls.
+
 ## Default triggers
 
 | Event | Trigger |
@@ -61,6 +63,7 @@ Optional server `.env` settings, with defaults:
 
 ```dotenv
 SPECIAL_ALERTS_ENABLED=true
+SPECIAL_ALERT_CONFIRMED_ONLY=true
 SPECIAL_ALERT_INTERVAL_SECONDS=300
 SPECIAL_ALERT_SYMBOLS=TSLA,NVDA,MSFT,AVGO,PLTR,AVAV,KTOS,CRWD
 SPECIAL_ALERT_TOP_COUNT=10

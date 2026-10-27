@@ -21,6 +21,8 @@ NARRATION_WORDS_PER_MINUTE = 180
 MIN_NARRATION_SECONDS = 60
 MIN_NARRATION_WORDS = 180
 HEADERS = ["Market Update", "Companies in Focus", "Global and Defense Watch", "What's Ahead", "What We're Watching", "Research Notes"]
+IPO_HEADER = "IPO & Capital Markets"
+ALL_HEADERS = [IPO_HEADER] + HEADERS
 NAMES = {"MSFT": "Microsoft", "NVDA": "Nvidia", "PLTR": "Palantir", "TSLA": "Tesla",
          "TSM": "Taiwan Semiconductor", "AVGO": "Broadcom", "AVAV": "AeroVironment", "CRWD": "CrowdStrike",
          "AAPL": "Apple", "AMZN": "Amazon", "GOOG": "Alphabet", "GOOGL": "Alphabet", "META": "Meta Platforms",
@@ -108,7 +110,7 @@ def spoken_text(text: str) -> str:
             speaking = True
         if stripped == "Research Notes":
             break
-        if speaking and stripped and stripped not in HEADERS:
+        if speaking and stripped and stripped not in ALL_HEADERS:
             output.append(re.sub(r"https?://\S+|/[A-Za-z][A-Za-z0-9_]*", "", stripped))
     return "\n\n".join(output)
 
@@ -141,7 +143,7 @@ def market_detail(moves: dict, breadth) -> list[str]:
 def validate_news_brief(text: str) -> dict:
     lines = text.splitlines()
     missing = [header for header in HEADERS if header not in lines]
-    duplicates = [header for header in HEADERS if lines.count(header) > 1]
+    duplicates = [header for header in ALL_HEADERS if lines.count(header) > 1]
     qualification = []
     for paragraph in text.split("\n\n"):
         lowered = paragraph.lower()
@@ -166,7 +168,7 @@ def validate_news_brief(text: str) -> dict:
     market_lines = []
     if "Market Update" in lines:
         for line in lines[lines.index("Market Update") + 1:]:
-            if line in HEADERS:
+            if line in ALL_HEADERS:
                 break
             market_lines.append(line)
     market_words = word_count("\n".join(market_lines))
@@ -254,8 +256,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             market_body = [row["text"] for row in insights if row["section"] == "market"]
             company_body = []
             global_body = []
+            ipo_body = []
             for story in sorted(retained, key=editor.news_order):
-                body = global_body if story["kind"] == "macro" or "defense" in story_topics(story) else company_body
+                body = ipo_body if story.get("ipo") else global_body if story["kind"] == "macro" or "defense" in story_topics(story) else company_body
                 body.append(story_paragraphs[story["id"]])
             company_body += [row["text"] for row in insights if row["section"] == "company"] or [
                 "Company rankings were unavailable for this edition; no leading setup is being inferred."]
@@ -274,10 +277,12 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:
                 notes_body.insert(-1, no_company_story)
             groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
+            if ipo_body:
+                groups.insert(0, (IPO_HEADER, ipo_body))
             if retained:
                 lead = min(retained, key=editor.news_order)
-                lead_header = "Global and Defense Watch" if lead["kind"] == "macro" or "defense" in story_topics(lead) else "Companies in Focus"
-                groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, HEADERS.index(group[0])))
+                lead_header = IPO_HEADER if lead.get("ipo") else "Global and Defense Watch" if lead["kind"] == "macro" or "defense" in story_topics(lead) else "Companies in Focus"
+                groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, ALL_HEADERS.index(group[0])))
 
             def render():
                 return prefix + "\n\n" + "\n\n".join(header + "\n" + "\n\n".join(body) for header, body in groups)

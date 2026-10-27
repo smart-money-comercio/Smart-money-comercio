@@ -115,7 +115,7 @@ def offline_network_guard():
 
 
 def config():
-    return {"enabled": True, "symbols": ["TSLA", "NVDA"], "interval": 300,
+    return {"enabled": True, "confirmed_only": False, "symbols": ["TSLA", "NVDA"], "interval": 300,
             "max_quote_age": 1200, "news_hours": 6, "sp_drop": 1.5, "nasdaq_drop": 2,
             "sp_severe": 3, "nasdaq_severe": 4, "sp_two_day": 3, "nasdaq_two_day": 4}
 
@@ -595,7 +595,9 @@ class DeliveryChecks(unittest.IsolatedAsyncioTestCase):
         temporary = tempfile.TemporaryDirectory(prefix="special-alert-check-")
         self.addCleanup(temporary.cleanup)
         self.path = Path(temporary.name) / "state.sqlite3"
-        self.env = patch.dict(os.environ, {"SPECIAL_ALERT_STATE_FILE": str(self.path), "SPECIAL_ALERTS_ENABLED": "true"})
+        # These fixtures explicitly exercise the retained legacy headline mode.
+        self.env = patch.dict(os.environ, {"SPECIAL_ALERT_STATE_FILE": str(self.path), "SPECIAL_ALERTS_ENABLED": "true",
+            "SPECIAL_ALERT_CONFIRMED_ONLY": "false", "HOURLY_RESEARCH_STATE_FILE": str(self.path.with_name("hourly.sqlite3"))})
         self.env.start(); self.addCleanup(self.env.stop)
         clock = patch.object(job, "datetime").start()
         clock.now.return_value = NOW
