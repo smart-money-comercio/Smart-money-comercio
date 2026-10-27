@@ -96,7 +96,7 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
         published = timestamp(row["published"])
         if (published and 0 <= (now - published).total_seconds() <= 24 * 3600
                 and company_url(source["company_symbol"], row["link"])
-                and event_type(row["title"])[0] in {"acquisition", "divestiture", "contract", "product", "guidance", "earnings"}):
+                and event_type(row["title"])[0] in {"acquisition", "divestiture", "contract", "product", "guidance", "earnings", "restructuring"}):
             candidates.append((published, row))
     candidates.sort(key=lambda value: value[0], reverse=True)
     details, issues = [], []

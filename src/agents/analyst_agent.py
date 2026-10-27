@@ -14,7 +14,7 @@ from src.utils.score_display import (
 DEFAULT_MAX_ITEMS = 5
 
 
-def review_daily_brief(evidence: dict) -> list[dict]:
+def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[dict]:
     """Explain report facts and entry conditions without fetching or rescoring."""
     moves, breadth = evidence["moves"], evidence["breadth"]
     companies = evidence["companies"]
@@ -112,6 +112,11 @@ def review_daily_brief(evidence: dict) -> list[dict]:
         else:
             condition = "The research ranking supplies a review order. Current price, volume and company disclosures still need to support the case before conviction increases."
         add("confirmation", "watch", condition, ["Top Opportunities"] + (["Trade Plan Snapshot"] if top["action"] else []))
+    if presentation == "news":
+        insights = [row for row in insights if row["id"] not in {"model_support", "ranking_reason"}]
+        for row in insights:
+            if row["id"] == "company_price":
+                row["section"] = "watch"
     return insights
 
 

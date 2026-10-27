@@ -96,7 +96,9 @@ def report_evidence(report: str) -> dict:
             "source_sections": [key for key in ("Executive Summary", "Market Snapshot", "What Changed Today", "Top Opportunities", "Trade Plan Snapshot") if sections.get(key)]}
 
 
-def analyze_report(report: str, stories: list[dict] | None = None) -> dict:
+def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full") -> dict:
+    if presentation not in {"full", "news"}:
+        raise ValueError("Unknown analyst presentation")
     evidence = report_evidence(report)
     from src.intelligence import news_editor
     evidence["stories"] = []
@@ -110,10 +112,15 @@ def analyze_report(report: str, stories: list[dict] | None = None) -> dict:
             checked_evidence(story)
             evidence["stories"][-1].update({key: deepcopy(story[key]) for key in (
                 "event_evidence", "materiality", "evidence_checked_at", "source_checked_at") if key in story})
+    if presentation == "news":
+        evidence["stories"].sort(key=lambda story: story["id"])
     if evidence["stories"]:
         evidence["source_sections"].append("Verified story decisions")
-    return {"schema": 1, "research_sha256": hashlib.sha256(report.encode()).hexdigest(),
-            "evidence": evidence, "insights": review_daily_brief(deepcopy(evidence)), "score_changes": False}
+    value = {"schema": 1, "research_sha256": hashlib.sha256(report.encode()).hexdigest(),
+             "evidence": evidence, "insights": review_daily_brief(deepcopy(evidence), presentation=presentation), "score_changes": False}
+    if presentation != "full":
+        value["presentation"] = presentation
+    return value
 
 
 def retained_review(analysis: dict, report: str) -> dict:
@@ -124,7 +131,7 @@ def retained_review(analysis: dict, report: str) -> dict:
 
 
 def validate_review(analysis: dict, research_report: str, report: str, stories: list[dict] | None = None) -> None:
-    expected = analyze_report(research_report, stories)
+    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"))
     if any(analysis.get(key) != expected[key] for key in ("schema", "research_sha256", "evidence", "score_changes")):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}

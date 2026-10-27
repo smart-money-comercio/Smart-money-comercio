@@ -52,7 +52,9 @@ def materiality(story: dict) -> str:
         if re.search(r"\b(earnings|results) (date|call|webcast)\b|\bannounces? (?:its |the )?date\b|\b(?:will|to) (?:report|release)\b.{0,60}\b(results|earnings)\b", title, re.I):
             return ""
         kind, stage = event_type(title)
-        if kind in {"acquisition", "divestiture"}:
+        if kind == "restructuring" and re.search(r"\b(no|denies|rules out)\b.{0,30}\b(layoffs?|job cuts|staff reductions?)\b", title, re.I):
+            return ""
+        if kind in {"acquisition", "divestiture", "restructuring"}:
             return "" if re.search(r"\b(rumou?r\w*|reportedly|could|might|may|considering)\b|\?", title, re.I) else kind
         if kind == "contract" and stage == "cooperation":
             return "contract"
@@ -339,7 +341,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["event_evidence"] = build_evidence(story, text, scope)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 7, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 8, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def timestamp_for_priority(value):
@@ -353,8 +355,17 @@ def selected_stories(plan: dict) -> list[dict]:
     return coverage_order([story for story in plan["candidates"] if story["decision"] == "selected"])
 
 
+def news_order(story: dict) -> tuple:
+    """Editorial categories set reading order, without asserting price impact."""
+    topic = materiality(story)
+    tier = {"monetary policy": 4, "economic data": 4, "guidance": 3, "regulation": 3,
+            "earnings": 2, "acquisition": 2, "divestiture": 2, "restructuring": 2,
+            "contract": 1, "product": 1, "defense innovation": 1}.get(topic, 0)
+    return (-tier, -story.get("priority", 0), -dated(story["published"]).timestamp(), story["id"])
+
+
 def coverage_order(stories: list[dict]) -> list[dict]:
-    ordered = sorted(stories, key=lambda item: (-item["priority"], -dated(item["published"]).timestamp(), item["id"]))
+    ordered = sorted(stories, key=news_order)
     preferred = []
     for predicate in (lambda row: row["kind"] == "macro" and "defense" not in story_topics(row),
                       lambda row: "defense" in story_topics(row)):

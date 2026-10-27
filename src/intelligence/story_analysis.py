@@ -48,12 +48,14 @@ def release_text(value) -> str:
     return text.strip()
 
 
-def event_type(title: str, fallback: str = "") -> tuple[str, str]:
+def event_type(title: str, fallback: str = "", *, version: int = 2) -> tuple[str, str]:
     title = str(title or "")
     guidance = re.search(r"\b(raises?|cuts?|lowers?|reduces?|withdraws?|reaffirms?|maintains?|updates?)\b.{0,40}\b(guidance|revenue outlook|earnings outlook)\b", title, re.I)
     acquisition = re.search(r"\b(acquisitions?|acquir\w*|merger|buyout)\b", title, re.I)
     if guidance and (not acquisition or guidance.start() < acquisition.start()):
         return "guidance", "reaffirmed" if re.search(r"\b(reaffirms?|maintains?)\b", guidance[0], re.I) else "lowered" if re.search(r"\b(cuts?|lowers?|reduces?|withdraws?)\b", guidance[0], re.I) else "updated"
+    if version >= 2 and re.search(r"\b(voluntary (?:exit|retirement) (?:offer|program)|layoffs?|job cuts|reduction in force|workforce restructur\w*|staff reductions?)\b", title, re.I):
+        return "restructuring", "voluntary offer" if re.search(r"\bvoluntary\b", title, re.I) else "announced"
     corporate = not re.search(r"\b(contract|task order)\b", title, re.I) or re.search(r"\b(acquir\w*|merger|buyout|acquisition of|closes? .{0,80}acquisition|completes? .{0,80}acquisition)\b", title, re.I)
     if acquisition and corporate:
         if re.search(r"\b(terminat\w*|cancel\w*|abandons?|withdraws?)\b", title, re.I):
@@ -130,15 +132,26 @@ def disclosed_facts(text: str, kind: str, stage: str = "") -> list[dict]:
             period = re.search(r"\b(?:(?:first|second|third|fourth)[- ]quarter|Q[1-4]|fiscal year)(?:\s+20\d{2})?\b", sentence, re.I)
             if match and period:
                 add("reported_" + match[1].lower().replace(" ", "_"), match[2] + " (" + period[0] + ")", sentence)
+        if kind == "restructuring":
+            match = re.search(r"\bvoluntary (?:exit|retirement) (?:offer|program)\b", sentence, re.I)
+            if match:
+                add("program_type", match[0].lower(), sentence)
+            match = re.search(r"\b(?:restructuring|severance) (?:charges?|costs?)\b.{0,35}?\b(?:of|at|totaling|totalled)\s+(" + MONEY + r")", sentence, re.I)
+            if match and not re.match(r"\s*(?:[-–]|to|and)\s*\$?\d", sentence[match.end():]):
+                field = "restructuring_cost_estimate" if re.search(r"\b(expects?|estimat\w*|plans?|anticipat\w*|will|up to)\b", sentence, re.I) else "restructuring_charge"
+                add(field, match[1], sentence)
+            match = re.search(r"\bannual(?:ized)? (?:cost )?savings\b.{0,25}?\b(?:of|at|totaling)\s+(" + MONEY + r")", sentence, re.I)
+            if match and not re.match(r"\s*(?:[-–]|to|and)\s*\$?\d", sentence[match.end():]) and re.search(r"\b(target\w*|expects?|plans?|anticipat\w*|estimat\w*)\b", sentence, re.I):
+                add("annual_savings_target", match[1], sentence)
     return facts
 
 
-def build_evidence(story: dict, text: str = "", scope: str = "headline only") -> dict:
-    if scope not in SCOPES:
+def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int = 2) -> dict:
+    if type(schema) is not int or schema not in {1, 2} or scope not in SCOPES:
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
-    kind, stage = event_type(story["title"], story.get("materiality", ""))
-    return {"schema": 1, "event": kind, "stage": stage, "scope": scope if text else "headline only",
+    kind, stage = event_type(story["title"], story.get("materiality", ""), version=schema)
+    return {"schema": schema, "event": kind, "stage": stage, "scope": scope if text else "headline only",
             "source_url": story["url"], "published": story["published"], "source_text": text,
             "observed_at": story.get("evidence_checked_at", story.get("source_checked_at")),
             "source_sha256": hashlib.sha256(text.encode()).hexdigest(), "facts": disclosed_facts(text, kind, stage)}
@@ -148,7 +161,7 @@ def checked_evidence(story: dict) -> dict:
     value = story.get("event_evidence")
     if value is None:
         return build_evidence(story)
-    if not isinstance(value, dict) or value != build_evidence(story, value.get("source_text", ""), value.get("scope", "headline only")):
+    if not isinstance(value, dict) or value != build_evidence(story, value.get("source_text", ""), value.get("scope", "headline only"), schema=value.get("schema")):
         raise ValueError("Story facts or event stage do not match the admitted original evidence")
     return value
 
@@ -191,6 +204,10 @@ def investor_read(story: dict) -> dict:
         else:
             why = "A reveal establishes product direction; commercial timing, demand and execution costs still require evidence."
         watch = "Watch customer commitments, commercial availability, pricing, margins and company guidance."
+    elif kind == "restructuring":
+        why = ("A voluntary exit offer leaves the scale of departures dependent on employee participation. Cost savings and operational effects still need evidence." if stage == "voluntary offer" else
+               "Workforce changes can affect costs and delivery capacity; announced reductions alone do not establish savings or stronger demand.")
+        watch = "Check participation, disclosed severance costs, savings targets and timing, service capacity and any guidance change."
     elif kind == "guidance":
         why = "Reaffirmed guidance keeps the stated assumptions in place; delivery against them remains the test." if stage == "reaffirmed" else "A lower outlook warrants revisiting the demand, pricing and cost assumptions." if stage == "lowered" else "Updated guidance changes the forward assumptions to test against company execution."
         watch = "Compare the revised outlook with prior guidance and the next reported results; a price response is not established here."
@@ -203,6 +220,8 @@ def investor_read(story: dict) -> dict:
     labels = {"transaction_value": "Stated deal amount", "enterprise_value": "Announced enterprise value", "equity_value": "Announced equity value", "financing": "Financing described in the release", "financing_plan": "Financing plan described in the release",
               "business_focus": "Business focus described in the release", "contract_ceiling": "Announced ceiling",
               "obligated_amount": "Amount described as obligated", "reported_revenue": "Reported revenue",
-              "reported_sales": "Reported sales", "reported_net_sales": "Reported net sales"}
+              "reported_sales": "Reported sales", "reported_net_sales": "Reported net sales",
+              "program_type": "Program described in the release", "restructuring_charge": "Restructuring cost described in the release",
+              "restructuring_cost_estimate": "Estimated restructuring cost", "annual_savings_target": "Annual savings target"}
     facts = "; ".join(labels[row["field"]] + ": " + row["value"] for row in evidence["facts"])
     return {"evidence": evidence, "facts": facts + "." if facts else "", "why": why, "watch": watch}

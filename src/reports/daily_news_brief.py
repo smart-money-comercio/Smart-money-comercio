@@ -239,7 +239,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         ahead.append("Calendar or company-news coverage is incomplete; unverified dates and times remain uncertain.")
     notes = ["The full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans",
              "Sources and full evidence: /storylog · /catalysts · /calendar · /specialalerts", "Research only. Not financial advice."]
-    initial_stories = editor.selected_stories(plan)
+    initial_stories = sorted(editor.selected_stories(plan), key=editor.news_order)
     chosen = None
     last_result = None
     # At most three stories: try the fuller, higher-priority editions first.
@@ -247,19 +247,20 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     for count in range(len(initial_stories), -1, -1):
         for indexes in combinations(range(len(initial_stories)), count):
             retained = [initial_stories[index] for index in indexes]
-            analysis = analyze_report(research_report, retained)
+            analysis = analyze_report(research_report, retained, presentation="news")
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")
             market_body = [row["text"] for row in insights if row["section"] == "market"]
-            company_body = [row["text"] for row in insights if row["section"] == "company"] or [
-                "Company rankings were unavailable for this edition; no leading setup is being inferred."]
+            company_body = []
             global_body = []
-            for story in retained:
+            for story in sorted(retained, key=editor.news_order):
                 body = global_body if story["kind"] == "macro" or "defense" in story_topics(story) else company_body
                 body.append(story_paragraphs[story["id"]])
+            company_body += [row["text"] for row in insights if row["section"] == "company"] or [
+                "Company rankings were unavailable for this edition; no leading setup is being inferred."]
             if brief.get("market_events"):
-                global_body.insert(0, "An active market-alert record reports " + brief["market_events"][0]["fact"]
+                global_body.append("An active market-alert record reports " + brief["market_events"][0]["fact"]
                                    + " This is dated price evidence; it does not establish the cause of the move.")
             global_body += [row["text"] for row in insights if row["section"] == "global"]
             ahead_body = list(ahead)
@@ -273,6 +274,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:
                 notes_body.insert(-1, no_company_story)
             groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
+            if retained:
+                lead = min(retained, key=editor.news_order)
+                lead_header = "Global and Defense Watch" if lead["kind"] == "macro" or "defense" in story_topics(lead) else "Companies in Focus"
+                groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, HEADERS.index(group[0])))
 
             def render():
                 return prefix + "\n\n" + "\n\n".join(header + "\n" + "\n\n".join(body) for header, body in groups)
@@ -289,7 +294,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             protected = set(story_paragraphs.values()) | {no_company_story} | {
                 row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
             if brief.get("market_events"):
-                protected.add(global_body[0])
+                protected.update(paragraph for paragraph in global_body if paragraph.startswith("An active market-alert record reports "))
             if plan["issues"]:
                 protected.add("Calendar or company-news coverage is incomplete; unverified dates and times remain uncertain.")
             for body, minimum in ((company_body, 1), (ahead_body, 2), (watching, 1)):
@@ -319,6 +324,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             errors.append(f"A complete {MIN_NARRATION_WORDS}-word narration does not fit the {MAX_NEWS_CHARS}-character budget.")
         raise ValueError("News brief quality review failed: " + "; ".join(errors))
     text, retained, analysis = chosen
+    plan["lead_story_id"] = min(retained, key=editor.news_order)["id"] if retained else ""
     retained_ids = {story["id"] for story in retained}
     for story in initial_stories:
         if story["id"] not in retained_ids:

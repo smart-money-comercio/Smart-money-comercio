@@ -11,6 +11,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import sqlite3
@@ -408,7 +409,7 @@ class NewsChecks(IsolatedChecks):
         self.assertGreaterEqual(result["spoken_words"], 180)
         self.assertTrue(15 <= result["market_estimated_seconds"] <= 30)
         self.assertIn("Global and Defense Watch", text)
-        self.assertIn("displayed advantage over Microsoft is 0.2 points", text)
+        self.assertNotIn("Why it leads:", text)
 
     def test_underlying_failure_names_the_actual_risk_or_missing_section(self):
         research = self.research(ranked=enriched_ranked_stocks())
@@ -742,6 +743,10 @@ class AnalystBriefChecks(IsolatedChecks):
 
 
 class RankingRationaleChecks(IsolatedChecks):
+    def full_analysis(self, report):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        return "\n".join(row["text"] for row in analyze_report(report)["insights"])
+
     def ranked(self, changes=None, movers=None, counts=None, previous=None):
         from src.intelligence import opportunity_ranker as ranker
         scores = [dict(ticker=symbol, final_score=base, risk_label=risk, smart_score=core, defense_score=theme,
@@ -782,14 +787,14 @@ class RankingRationaleChecks(IsolatedChecks):
         self.assertEqual(ranked[1]["opportunity_components"]["risk"], 0.75)
 
     def test_narrow_lead_explains_price_support_and_the_runner_ups_stronger_base(self):
-        text = build_daily_news_brief(self.research_with_basis())
+        text = self.full_analysis(self.research_with_basis())
         self.assertIn("displayed advantage over Microsoft is 0.2 points", text)
         self.assertIn("stronger price reading", text)
         self.assertIn("Microsoft retains stronger structural support, 87.3 versus 86.2", text)
         self.assertIn("a small change in the inputs could reverse it", text)
 
     def test_model_support_does_not_become_a_claim_about_fresh_trades_or_results(self):
-        text = build_daily_news_brief(self.research_with_basis())
+        text = self.full_analysis(self.research_with_basis())
         self.assertIn("draws support from core research and the theme component", text)
         self.assertIn("The insider component does not add strong confirmation", text)
         self.assertIn("Company disclosures remain the test", text)
@@ -828,13 +833,13 @@ class RankingRationaleChecks(IsolatedChecks):
 
     def test_displayed_ties_do_not_get_a_fabricated_winning_driver(self):
         ranked = self.ranked(changes={"TSM": {"final_score": 86}})
-        text = build_daily_news_brief(self.research_with_basis(ranked))
+        text = self.full_analysis(self.research_with_basis(ranked))
         self.assertIn("tied on the displayed opportunity score", text)
         self.assertNotIn("largest positive difference", text)
 
     def test_capped_scores_do_not_get_an_uncapped_causal_explanation(self):
         ranked = self.ranked(changes={"TSM": {"final_score": 94, "volume_adjustment": 10}, "MSFT": {"final_score": 90}})
-        text = build_daily_news_brief(self.research_with_basis(ranked))
+        text = self.full_analysis(self.research_with_basis(ranked))
         self.assertIn("Score caps affect this comparison", text)
         self.assertNotIn("largest positive difference", text)
 
@@ -842,7 +847,7 @@ class RankingRationaleChecks(IsolatedChecks):
         for changes, counts, expected in (({"TSM": {"volume_adjustment": 3}}, None, "volume input"),
                                           (None, {"TSM": 4, "MSFT": 0, "NVDA": 0}, "Headline activity supplies")):
             ranked = self.ranked(changes=changes, movers={"TSM": 0.2, "MSFT": 0.7, "NVDA": -0.6}, counts=counts)
-            text = build_daily_news_brief(self.research_with_basis(ranked))
+            text = self.full_analysis(self.research_with_basis(ranked))
             self.assertIn(expected, text)
             if counts:
                 self.assertIn("does not verify a company announcement", text)
@@ -850,7 +855,7 @@ class RankingRationaleChecks(IsolatedChecks):
     def test_structural_revisions_are_not_mistaken_for_a_new_company_announcement(self):
         ranked = self.ranked(movers={"TSM": 0.2, "MSFT": 0.7, "NVDA": -0.6},
             previous={"TSM": {"structural_score": 80, "opportunity_score": 80}, "MSFT": {"structural_score": 87.3, "opportunity_score": 88}})
-        text = build_daily_news_brief(self.research_with_basis(ranked))
+        text = self.full_analysis(self.research_with_basis(ranked))
         self.assertIn("Changes in structural model scores", text)
         self.assertNotIn("earnings grew", text)
 
@@ -858,7 +863,8 @@ class RankingRationaleChecks(IsolatedChecks):
         from src.intelligence import news_editor_store
         report = self.research_with_basis(); text = build_daily_news_brief(report)
         review = news_editor_store.read_editions(report=text)[0]["analyst_review"]
-        self.assertEqual(len(review["insights"]), 9)
+        self.assertEqual(review["presentation"], "news")
+        self.assertNotIn("ranking_reason", {row["id"] for row in review["insights"]})
         self.assertEqual(review["evidence"]["companies"][0]["basis"]["price"], 2)
         self.assertEqual(review["evidence"]["companies"][0]["inputs"]["core"], 88)
         self.assertEqual(review["research_sha256"], hashlib.sha256(report.encode()).hexdigest())
@@ -876,7 +882,7 @@ class RankingRationaleChecks(IsolatedChecks):
             text = build_daily_news_brief(report)
         record = news_editor_store.read_editions(report=text)[0]
         self.assertIn(story["title"], text)
-        self.assertIn("Why it leads:", text)
+        self.assertNotIn("Why it leads:", text)
         self.assertTrue(any(row["decision"] == "selected" for row in record["candidates"]))
         self.assertLess(len(record["analyst_review"]["insights"]), 9)
         self.assertTrue(news.validate_news_brief(text)["passes"])
@@ -895,7 +901,7 @@ class MarketDefenseChecks(IsolatedChecks):
             return build_daily_news_brief(report or self.research())
 
     def market_body(self, text):
-        return text.split("\nMarket Update\n", 1)[1].split("\n\nCompanies in Focus", 1)[0]
+        return re.split(r"\n\n(?:" + "|".join(map(re.escape, HEADERS)) + r")\n", text.split("\nMarket Update\n", 1)[1], maxsplit=1)[0]
 
     def test_market_segment_has_independent_15_and_30_second_boundaries(self):
         base = NewsChecks.timed_fixture(self, 220)

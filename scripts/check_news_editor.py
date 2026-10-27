@@ -1225,6 +1225,122 @@ class StoryAnalysisChecks(IsolatedChecks):
         self.assertTrue(store.read_editions(report=text))
 
 
+class NewsFirstChecks(IsolatedChecks):
+    def setUp(self):
+        super().setUp()
+        self.stack.enter_context(patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "MSFT,NVDA,PLTR,LMT,AVAV,KTOS"}))
+
+    story = StoryAnalysisChecks.story
+    profile = StoryAnalysisChecks.profile
+
+    def render(self, values, report=None):
+        with patch.object(editor, "cache_candidates", return_value=(values, [])):
+            return build_daily_news_brief(report or self.research())
+
+    # Reuse the isolated evidence fixture without rerunning the parent suite.
+    def test_voluntary_offer_has_workforce_analysis_without_implied_departures(self):
+        text = self.render([self.story("Introducing a Voluntary Exit Offer", "The company introduces a voluntary exit offer for eligible employees.", "MSFT")])
+        self.assertIn("dependent on employee participation", text)
+        self.assertIn("disclosed severance costs", text)
+        self.assertNotIn("employees departed", text)
+        self.assertNotIn("AI spending caused", text)
+        row = editor.selected_stories(store.read_editions(report=text)[0])[0]
+        self.assertEqual(row["materiality"], "restructuring")
+        self.assertEqual(row["event_evidence"]["stage"], "voluntary offer")
+
+    def test_cost_estimates_and_savings_targets_are_not_realized_results(self):
+        value = self.profile("Example announces job cuts", "The company expects restructuring costs of $25 million. It targets annual savings of $40 million.")
+        self.assertEqual([(row["field"], row["value"]) for row in value["facts"]], [("restructuring_cost_estimate", "$25 million"), ("annual_savings_target", "$40 million")])
+        self.assertNotIn("restructuring_charge", {row["field"] for row in value["facts"]})
+
+    def test_reported_workforce_cost_and_missing_terms_stay_distinct(self):
+        value = self.profile("Example announces workforce restructuring", "The company recorded restructuring charges of $15 million.")
+        self.assertEqual(value["facts"][0]["field"], "restructuring_charge")
+        self.assertEqual(self.profile("Introducing a Voluntary Exit Offer", "Eligible employees may choose to leave.")["facts"], [])
+
+    def test_speculation_negation_and_old_savings_do_not_become_current_costs(self):
+        for text in ("The company may incur restructuring costs of $20 million.", "Last year, annual savings of $40 million were targeted.", "No restructuring costs of $25 million were recorded.", "Estimated restructuring costs of $25 million to $40 million are anticipated.", "The company targets annual savings of $10 million to $20 million."):
+            self.assertFalse(self.profile("Example announces layoffs", text)["facts"])
+        plan = editor.build_editorial_plan(companies.build_company_catalyst_brief(), NOW, extra_candidates=[candidate(title="Microsoft denies layoffs")])
+        self.assertFalse(editor.selected_stories(plan))
+
+    def test_workforce_buyout_is_distinct_from_acquiring_a_business(self):
+        from src.intelligence.story_analysis import event_type
+        self.assertEqual(event_type("Example agrees to acquire a business")[0], "acquisition")
+        self.assertEqual(event_type("Example introduces a voluntary retirement program")[0], "restructuring")
+        self.assertEqual(event_type("Example cuts revenue guidance after layoffs"), ("guidance", "lowered"))
+
+    def test_company_news_and_its_analysis_lead_before_market_and_rankings(self):
+        title = "Microsoft reports quarterly financial results"
+        text = self.render([self.story(title, symbol="MSFT")])
+        self.assertLess(text.index(title), text.index("Market Update"))
+        self.assertLess(text.index("Our analysis:"), text.index("Market Update"))
+        self.assertLess(text.index(title), text.index("research ranking"))
+
+    def test_completed_defense_deal_leads_before_product_reveal(self):
+        product = self.story("Microsoft introduces an AI product", symbol="MSFT")
+        deal = self.story("Example Defense completes a maritime acquisition")
+        text = self.render([product, deal])
+        self.assertLess(text.index(deal["title"]), text.index("Market Update"))
+        self.assertLess(text.index("After the reported close"), text.index("Market Update"))
+        self.assertLess(text.index(deal["title"]), text.index(product["title"]))
+
+    def test_guidance_story_takes_the_same_issuer_slot_before_a_product(self):
+        values = [candidate(title="Microsoft introduces an AI product"), candidate(title="Microsoft cuts revenue guidance", url="https://blogs.microsoft.com/guidance")]
+        text = self.render(values)
+        self.assertIn(values[1]["title"], text)
+        self.assertNotIn(values[0]["title"], text)
+
+    def test_compact_rankings_keep_underlying_model_evidence_and_durations(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        from src.reports.daily_news_brief import validate_news_brief
+        from scripts.check_report_consistency import enriched_ranked_stocks
+        report = self.research(ranked=enriched_ranked_stocks())
+        text = self.render([], report=report)
+        record = store.read_editions(report=text)[0]
+        company = text.split("Companies in Focus\n")[1].split("\n\nGlobal and Defense Watch")[0]
+        self.assertEqual(len(company.split("\n\n")), 1)
+        self.assertNotIn("Why it leads:", text)
+        self.assertNotIn("In our longer-term model", text)
+        self.assertIn("ranking_reason", {row["id"] for row in analyze_report(report)["insights"]})
+        self.assertEqual(record["analyst_review"]["presentation"], "news")
+        quality = validate_news_brief(text)
+        self.assertTrue(quality["passes"], quality)
+        self.assertGreaterEqual(quality["spoken_words"], 180)
+        self.assertTrue(15 <= quality["market_estimated_seconds"] <= 30)
+
+    def test_news_presentation_and_its_evidence_are_validated_together(self):
+        from src.intelligence.daily_brief_analysis import analyze_report, retained_review, validate_review
+        from scripts.check_report_consistency import enriched_ranked_stocks
+        report = self.research(ranked=enriched_ranked_stocks())
+        text = self.render([], report=report)
+        review = retained_review(analyze_report(report, presentation="news"), text)
+        validate_review(review, report, text)
+        altered = deepcopy(review); altered["presentation"] = "full"
+        with self.assertRaises(ValueError):
+            validate_review(altered, report, text)
+        with self.assertRaises(ValueError):
+            analyze_report(report, presentation="unchecked")
+
+    def test_previous_event_profiles_remain_readable_after_classification_changes(self):
+        from src.intelligence.story_analysis import build_evidence, checked_evidence
+        story = self.story("Introducing a Voluntary Exit Offer", symbol="MSFT")
+        story["materiality"] = "product"
+        story["event_evidence"] = build_evidence(story, schema=1)
+        self.assertEqual(checked_evidence(story)["event"], "product")
+        self.assertEqual(build_evidence(story)["event"], "restructuring")
+
+    def test_reordering_selected_stories_keeps_the_same_news_evidence(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        values = [self.story("Microsoft reports financial results", symbol="MSFT"), self.story("Nvidia introduces an AI product", symbol="NVDA"), self.story("Example Defense completes an acquisition")]
+        text = self.render(values)
+        record = store.read_editions(report=text)[0]
+        selected = editor.selected_stories(record)
+        first = analyze_report(self.research(), selected, presentation="news")
+        second = analyze_report(self.research(), list(reversed(selected)), presentation="news")
+        self.assertEqual(first, second)
+
+
 class SQLiteCleanupChecks(unittest.TestCase):
     def test_audit_corruption_fixture_explicitly_closes_the_database(self):
         assert_fixture_connections_closed(self, EditorChecks("test_corrupted_audit_payload_does_not_pass_the_report_review"))
