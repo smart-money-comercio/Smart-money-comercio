@@ -95,6 +95,9 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
                 if story.get("ipo") is not None:
                     from src.intelligence.ipo_monitor import checked
                     checked(story)
+                if story.get("sec_filing") is not None:
+                    from src.intelligence.sec_research import checked
+                    checked(story)
                 if story.get("discovery_evidence") is not None:
                     from src.intelligence.hourly_research import check_proof
                     check_proof(story)

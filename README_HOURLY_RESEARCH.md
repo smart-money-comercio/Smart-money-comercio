@@ -7,11 +7,21 @@ Coverage prioritizes the core companies and dated top opportunities, AI chips/cl
 ## Evidence and handoff
 
 1. Discovery uses the OpenAI Responses API's hosted `web_search` tool. Returned candidate URLs must also appear in the API's retrieved search sources or citations.
-2. Code reads at most six original reports from configured publisher identities. It checks the HTTPS host and redirects, matching original title, explicit publication timezone, 24-hour publication window and bounded source text. Secondary reports remain leads; they do not become confirmed stories. SEC IPO links use the existing issuer/CIK/accession-verified IPO cache.
+2. Code makes at most six original-source HTTP reads per attempt. It checks the HTTPS host and redirects, matching original title, explicit publication timezone, 24-hour publication window and bounded source text. Secondary reports remain leads; they do not become confirmed stories. Routine help/documentation/service pages are screened out before source reads or a paid relevance review. SEC IPO links use the existing issuer/CIK/accession-verified IPO cache.
 3. The reviewer makes one decision per candidate. Approval also requires a relevance score of at least 65, a verified original report and a quote of 20–500 characters copied exactly from its text. Model approval alone cannot pass these checks. Missing metadata, source denials, incomplete outputs and model failures withhold promotion.
 4. Approved findings enter the existing cache-only news editor, intelligence context and five-minute company-alert scanner. Existing materiality, monitored-company, freshness, deduplication, pause and delivery limits still apply. An approved discovery is not automatically a channel message. Macro findings are available to the brief; market selloff alerts still require actual index quote thresholds.
 
 The audit retains discovered URLs, publication and observation clocks, source excerpts and hashes, both model response IDs and token usage, final decisions and reasons for 30 days. `/researchdesk history` shows the latest 16 findings. The latest review of a URL takes precedence over an older approval. Brief/report/status rendering never starts a model request or source fetch. Existing investment scores, portfolio holdings and delivery receipts are unchanged.
+
+Discovery now receives two complementary investor searches covering AI/capital markets and defense/macro/global risk, together with recently approved or skipped URLs. Search instructions exclude routine product help, tutorials and modification-time claims. Status distinguishes execution completion from editorial success and shows original-source checks, holds, skips and actual source-read counts. Zero approved findings is valid and does not establish that no market news exists.
+
+## SEC current-report leads
+
+SEC 8-K, 8-K/A, 6-K and 6-K/A leads can now be verified independently of the IPO cache. Filing-index, primary-document and inline-viewer URLs resolve through the issuer's authoritative SEC submissions JSON. The accession, primary-document path, issuer CIK, registrant name, form and explicit acceptance timestamp must match the actual inline-XBRL document. The event date, filing-date label and model-written title never establish publication time or issuer identity. Unsupported forms or reports without usable issuer identity remain held.
+
+Each current-report verification uses **two** of the existing six source reads: submissions metadata and the primary document. No index-page read, extra model request or increase in the hourly budget is added. SEC reads use `SEC_USER_AGENT` when configured and never bypass a denial. Reads and redirects stay within the original permitted authority.
+
+Only admitted, materially relevant financing disclosures enter the brief's **IPO & Capital Markets** section. A current report is distinct from an IPO milestone. GPU lease financing keeps its expected aggregate principal payments separate from annual expense, revenue and valuation; forward-looking and conditional wording is retained. These SEC findings can feed cached research and the brief; the existing market/company/IPO alert rules still determine which events may notify. `/storylog` keeps the publication decision separately from `/researchdesk history`. Index and document URLs share one filing identity for deduplication and newer holds supersede older approvals.
 
 ## Runtime and cost limits
 

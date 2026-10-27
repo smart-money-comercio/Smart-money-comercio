@@ -111,6 +111,10 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
             from src.intelligence.ipo_monitor import checked
             checked(story)
             evidence["stories"][-1].update(ipo=deepcopy(story["ipo"]), source_checked_at=story["source_checked_at"])
+        if story.get("sec_filing"):
+            from src.intelligence.sec_research import checked
+            checked(story)
+            evidence["stories"][-1].update(sec_filing=deepcopy(story["sec_filing"]), source_checked_at=story["source_checked_at"])
         if story.get("discovery_evidence"):
             from src.intelligence.hourly_research import check_proof
             check_proof(story)

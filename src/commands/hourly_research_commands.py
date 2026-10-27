@@ -33,6 +33,10 @@ async def researchdesk_command(update, context):
              "Original-source checks and existing alert rules determine publication and delivery."]
     details = value.get("details", {})
     lines += [f"Latest: {details.get('candidates', 0)} leads / {details.get('approved', 0)} approved"]
+    if "source_verified" in details:
+        lines += [f"Checks: {details['source_verified']} original sources verified / {details.get('held', 0)} held / {details.get('skipped', 0)} skipped; {details.get('original_reads', 0)} source reads"]
+    if value["status"] == "complete" and not details.get("approved"):
+        lines.append("Review outcome: no findings cleared all relevance and original-source checks.")
     if details.get("error"): lines.append("Run limited: " + details["error"] + "; review API access and server logs.")
     if action == "history":
         try:
@@ -44,6 +48,6 @@ async def researchdesk_command(update, context):
                       "Discovered (UTC): " + record["discovered_at"],
                       "Published: " + (record.get("verified") or {}).get("published", "unverified"),
                       "Original source: " + record["verification"], "Reviewer: " + record["review"].get("reason", "Review unavailable"),
-                      "Evidence: " + record["review"].get("evidence_quote", "unavailable"), record["lead"]["url"]]
+                      "Evidence: " + (record["review"].get("evidence_quote") or "unavailable"), record["lead"]["url"]]
     lines += ["", "/researchdesk history · /researchdesk run · /researchdesk off · /researchdesk on"]
     await reply_long_message(update, "\n".join(lines), title="Hourly Research Desk", parse_mode=None)

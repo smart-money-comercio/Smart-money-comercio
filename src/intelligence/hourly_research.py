@@ -15,6 +15,7 @@ from src.agents import research_agents
 from src.intelligence.special_alert_sources import OFFICIAL_DOMAINS, timestamp
 from src.intelligence.special_alert_company_sources import PublicationPage, publication_time
 from src.intelligence.story_analysis import VisibleText
+from src.intelligence import sec_research
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -64,14 +65,16 @@ def identity(url: str) -> dict | None:
 
 def fetch_original(url: str) -> bytes:
     expected = identity(url)
-    if expected is None:
+    sec = sec_research.authority(url)
+    if expected is None and not sec:
         raise ValueError("Original publisher is not configured")
     class Redirects(HTTPRedirectHandler):
         def redirect_request(self, request, fp, code, msg, headers, newurl):
-            if identity(newurl) != expected:
+            if (sec and (not sec_research.authority(newurl) or urlsplit(newurl).hostname != urlsplit(url).hostname)) or (not sec and identity(newurl) != expected):
                 raise ValueError("Research source redirected outside its original publisher")
             return super().redirect_request(request, fp, code, msg, headers, newurl)
-    request = Request(url, headers={"User-Agent": "SmartMoneyAI/1.6 original-source research", "Accept": "text/html,application/xhtml+xml"})
+    agent = os.getenv("SEC_USER_AGENT", "SmartMoneyAI/1.7 public filing research") if sec else "SmartMoneyAI/1.7 original-source research"
+    request = Request(url, headers={"User-Agent": agent, "Accept": "text/html,application/xhtml+xml,application/json"})
     with build_opener(Redirects()).open(request, timeout=10) as response:
         body = response.read(2_000_001)
     if len(body) > 2_000_000:
@@ -85,6 +88,8 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
     ipo = next((item for item in ipo_monitor.cached_items(now) if research_agents.url_key(item["url"]) == url), None)
     if ipo:
         return {**ipo, "kind": "macro", "publisher_symbol": "", "source_excerpt": ipo["ipo"]["excerpt"], "relevant": True}
+    if urlsplit(url).hostname == "www.sec.gov":
+        return sec_research.verify(url, now, fetch)
     publisher = identity(url)
     if publisher is None:
         raise ValueError("Lead requires an original configured publisher")
@@ -118,6 +123,8 @@ def check_proof(value: dict, now: datetime | None = None) -> dict:
     if value.get("ipo"):
         from src.intelligence.ipo_monitor import checked
         return checked(value, now)
+    if value.get("sec_filing"):
+        return sec_research.checked(value, now)
     proof = value["discovery_evidence"]
     publisher = identity(value["url"])
     if (not isinstance(proof, dict) or publisher is None or proof.get("schema") != 1 or proof.get("publisher") != publisher
@@ -198,17 +205,22 @@ def approved(now: datetime) -> list[dict]:
         try:
             value, decision = record["verified"], record["review"]
             url = record["lead"]["url"]
-            if url in seen:
+            key = finding_key(url)
+            if key in seen:
                 continue
-            seen.add(url)
+            seen.add(key)
             if decision["final"] != "approved" or not value:
                 continue
             check_proof(value, now)
+            canonical = finding_key(value["url"])
+            if canonical != key and canonical in seen:
+                continue
             quote = decision["evidence_quote"]
             source_text = value.get("source_excerpt", "")
             if len(quote) < 20 or quote not in source_text or not record.get("review_response_id"):
                 continue
             result.append({**value, "origin": "Hourly AI research review"})
+            seen.add(canonical)
         except (ValueError, TypeError, KeyError, AttributeError):
             continue
     return result[:8]
@@ -245,23 +257,38 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         from src.intelligence.special_alert_universe import company_universe
         symbols = company_universe(alert_settings(), now)["symbols"]
         domains = list(dict.fromkeys(row["domain"] for row in identities())) + ["reuters.com", "apnews.com", "sec.gov"]
-        leads, metadata = research_agents.discover(client, config["discovery_model"], now.isoformat(), symbols, domains, previous)
+        seen_urls = [row["lead"]["url"] for row in read_history(16) if row.get("review", {}).get("final") in {"approved", "skip"}]
+        leads, metadata = research_agents.discover(client, config["discovery_model"], now.isoformat(), symbols, domains, previous, seen_urls)
         details["agents"].append(metadata); details["candidates"] = len(leads)
-        for index, lead in enumerate(leads):
+        reads = 0
+        def bounded_fetch(url):
+            nonlocal reads
+            if reads >= 6:
+                raise ValueError("Original-source read budget reached")
+            reads += 1
+            return fetch(url)
+        for lead in leads:
             record = {"id": hashlib.sha256(lead["url"].encode()).hexdigest()[:20], "discovered_at": now.isoformat(), "lead": lead,
                       "verified": None, "verification": "Original source not verified", "review": {"final": "hold"}}
-            if index < 6:
-                try:
-                    record["verified"] = verified(lead, now, fetch); record["verification"] = "Original source verified"
-                except Exception as exc:
-                    record["verification"] = "Original source unavailable: " + type(exc).__name__
+            excluded = routine_page(lead["url"])
+            if excluded:
+                record["verification"] = excluded
+                record["review"] = {"final": "skip", "reason": excluded}
+                record["screened_out"] = True
             else:
-                record["verification"] = "Original read budget reached"
+                try:
+                    record["verified"] = verified(lead, now, bounded_fetch); record["verification"] = "Original source verified"
+                except Exception as exc:
+                    from urllib.error import HTTPError
+                    reason = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else str(exc)[:180] if isinstance(exc, ValueError) else type(exc).__name__
+                    record["verification"] = "Original source unavailable: " + reason
             records.append(record)
-        if records:
+        details["original_reads"] = reads
+        reviewable = [row for row in records if not row.get("screened_out")]
+        if reviewable:
             handoff = [{"id": row["id"], "title": (row["verified"] or row["lead"])["title"], "topic": row["lead"]["topic"],
                         "url": row["lead"]["url"], "published": (row["verified"] or {}).get("published", "unverified"),
-                        "verification": row["verification"], "source_text": (row["verified"] or {}).get("source_excerpt", "")} for row in records]
+                        "verification": row["verification"], "source_text": (row["verified"] or {}).get("source_excerpt", "")} for row in reviewable]
             decisions, metadata = research_agents.review(client, config["review_model"], handoff, symbols)
             details["agents"].append(metadata)
             by_id = {row["id"]: row for row in records}
@@ -272,7 +299,9 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                 final = "approved" if decision["decision"] == "accept" and decision["score"] >= 65 and eligible else "skip" if decision["decision"] == "skip" else "hold"
                 record["review"] = {**decision, "final": final}
                 record["review_response_id"] = metadata["response_id"]
-            details["approved"] = sum(row["review"]["final"] == "approved" for row in records)
+        details.update(approved=sum(row["review"]["final"] == "approved" for row in records),
+            source_verified=sum(row["verified"] is not None for row in records),
+            held=sum(row["review"]["final"] == "hold" for row in records), skipped=sum(row["review"]["final"] == "skip" for row in records))
         final_status = "complete" if settings()["enabled"] else "paused"
         finish(now, final_status, records, details)
     except Exception as exc:
@@ -289,7 +318,23 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
 def summary() -> str:
     value = status()
     details = value.get("details", {})
-    return f"Hourly Research Desk: {value['status']}; {details.get('candidates', 0)} leads, {details.get('approved', 0)} approved. Cached review only."
+    return (f"Hourly Research Desk: {value['status']}; {details.get('candidates', 0)} leads, {details.get('approved', 0)} approved, "
+            f"{details.get('source_verified', 0)} source-verified. Cached review only.")
+
+
+def routine_page(url: str) -> str:
+    p = urlsplit(url)
+    if (p.hostname or "").split(".")[0] in {"help", "support", "docs", "developers"} or re.match(r"^/(?:help|docs|documentation|support|careers|jobs|pricing)(?:/|$)", p.path, re.I):
+        return "Routine help, documentation or service page; no investor report established"
+    return ""
+
+
+def finding_key(url: str) -> str:
+    try:
+        cik, accession, _ = sec_research.location(url)
+        return "sec:" + cik + ":" + accession
+    except (ValueError, TypeError):
+        return url
 
 
 def context_provider():

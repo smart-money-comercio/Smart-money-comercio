@@ -21,6 +21,8 @@ def story_topics(story: dict) -> set[str]:
     topics = set()
     if story.get("ipo"):
         topics.add("IPO")
+    if story.get("sec_filing", {}).get("disclosure", {}).get("gpu_lease"):
+        topics.add("AI financing")
     if set(story.get("symbols", [])) & DEFENSE_SYMBOLS or story.get("source") == "DARPA" or re.search(r"\b(defen[cs]e|military|missile|counter.drone|drones?|munitions?|hypersonic|battlefield)\b", title, re.I):
         topics.add("defense")
     if re.search(r"\b(innovations?|introduces?|launch(?:es)?|unveils?|prototype|demonstrat\w*|flight test|autonomous|quantum|new .{0,25}(?:chip|platform|system))\b", title, re.I):
@@ -62,6 +64,8 @@ def portfolio_lens(moves: dict, topics: set[str], mood: str) -> str:
         return "Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs."
     if "IPO" in topics:
         return "AI IPO news adds a valuation comparison; review capital needs and AI exposure. A filing alone does not establish tradable shares."
+    if "AI financing" in topics:
+        return "AI infrastructure financing warrants checking funding costs, delivery conditions and capital commitments; announced plans do not establish completed deployments."
     if mood == "cautious":
         return "Review concentrated growth exposure and upcoming catalysts; stronger price and volume confirmation would improve the research case."
     if mood == "constructive":

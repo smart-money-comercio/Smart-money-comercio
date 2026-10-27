@@ -35,6 +35,12 @@ STAGE_NAMES = ("Scan", "Source Check", "Relevance", "Selection", "Editorial Revi
 
 def primary_source(story: dict) -> str:
     """Require both publisher provenance and an original issuer/agency link."""
+    if story.get("sec_filing"):
+        from src.intelligence.sec_research import checked
+        try:
+            return checked(story)["issuer"]
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return ""
     if story.get("discovery_evidence"):
         from src.intelligence.hourly_research import check_proof
         try:
@@ -60,6 +66,8 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    if story.get("sec_filing"):
+        return story["sec_filing"]["disclosure"]["topic"] if primary_source(story) else ""
     if story.get("ipo"):
         return "IPO" if primary_source(story) else ""
     if story.get("discovery_evidence") and story["discovery_evidence"].get("publisher", {}).get("kind") == "issuer":
@@ -294,6 +302,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         story["id"] = hashlib.sha256(json.dumps([story["title"], story["url"], story["published"]]).encode()).hexdigest()[:16]
         if raw.get("ipo") is not None:
             story["ipo"] = deepcopy(raw["ipo"])
+        if raw.get("sec_filing") is not None:
+            story["sec_filing"] = deepcopy(raw["sec_filing"])
         if raw.get("discovery_evidence") is not None:
             story["discovery_evidence"] = deepcopy(raw["discovery_evidence"])
         try:
@@ -371,7 +381,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["event_evidence"] = build_evidence(story, text, scope)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 10, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 11, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def timestamp_for_priority(value):
@@ -389,6 +399,7 @@ def news_order(story: dict) -> tuple:
     """Editorial categories set reading order, without asserting price impact."""
     topic = materiality(story)
     tier = {"IPO": 4, "monetary policy": 4, "economic data": 4, "guidance": 3, "regulation": 3,
+            "AI infrastructure financing": 3, "financing disclosure": 2,
             "earnings": 2, "acquisition": 2, "divestiture": 2, "restructuring": 2,
             "contract": 1, "product": 1, "defense innovation": 1}.get(topic, 0)
     return (-tier, -story.get("priority", 0), -dated(story["published"]).timestamp(), story["id"])
@@ -417,6 +428,10 @@ def render_story(story: dict, zone, company_names: dict) -> str:
     at = f"{published:%B} {published.day} at {published.strftime('%I:%M').lstrip('0')} {published:%p %Z}"
     headline = "“" + story["title"].rstrip(".") + "”"
     punctuation = "" if story["title"].endswith(("?", "!")) else "."
+    if story.get("sec_filing"):
+        from src.intelligence.sec_research import checked, narration
+        filing = checked(story)
+        return f"{filing['issuer']} filed Form {filing['form']}, accepted {at} according to SEC EDGAR. " + narration(story)
     if story.get("ipo"):
         from src.intelligence.ipo_monitor import checked, interpretation, STAGES
         issuer = checked(story)
@@ -567,7 +582,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             for story in stories[:12]:
                 lines += ["", story["decision"].upper() + " — " + story["title"], "Reason: " + story["reason"],
                           "Source: " + story["source"] + " | Published: " + story["published"],
-                          "Evidence: " + ("public SEC filing" if story.get("ipo", {}).get("form") else "publisher/company announcement" if story["official"] else "headline only; confirmation pending"),
+                          "Evidence: " + ("public SEC filing" if story.get("ipo", {}).get("form") or story.get("sec_filing") else "publisher/company announcement" if story["official"] else "headline only; confirmation pending"),
                           "Source check: " + story.get("source_check", "hold") + " | Cached at: " + str(story.get("source_checked_at") or "unavailable")]
                 if story.get("story_type"):
                     lines.append("Story type: " + story["story_type"])

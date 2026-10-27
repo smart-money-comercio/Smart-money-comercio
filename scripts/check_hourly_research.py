@@ -23,6 +23,7 @@ from scripts.check_special_alerts import offline_network_guard, portable_tcp_soc
 from src.agents import research_agents as agents
 from src.config.special_alerts import settings
 from src.intelligence import hourly_research as desk, ipo_filing_analysis as financials, ipo_monitor as ipo
+from src.intelligence import sec_research as sec
 from src.intelligence import special_alert_engine as engine, special_alert_context as alert_context, news_editor
 from src.jobs import hourly_research_scheduler as scheduler
 from src.reports.daily_news_brief import build_daily_news_brief, validate_news_brief, IPO_HEADER
@@ -64,7 +65,7 @@ class Client:
             "reason": "Discrete AI infrastructure development; review deployment and revenue timing.", "evidence_quote": self.quote} for row in rows]})
 
 
-class ResearchChecks(IsolatedChecks):
+class ResearchFixture(IsolatedChecks):
     def setUp(self):
         super().setUp()
         self.stack.enter_context(patch.dict(os.environ, {"HOURLY_RESEARCH_STATE_FILE": str(self.root / "research.sqlite3"),
@@ -74,6 +75,8 @@ class ResearchChecks(IsolatedChecks):
     def run_desk(self, client=None, now=NOW, fetch=None):
         return desk.run(now, client=client or Client(), fetch=fetch or (lambda _: html()))
 
+
+class ResearchChecks(ResearchFixture):
     def test_two_separate_model_roles_and_search_budget(self):
         client = Client(); value = self.run_desk(client)
         self.assertEqual(value["status"], "complete"); self.assertEqual(value["details"]["approved"], 1)
@@ -138,7 +141,7 @@ class ResearchChecks(IsolatedChecks):
         def blocked(_): raise HTTPError(URL, 403, "Denied", {}, None)
         self.run_desk(fetch=blocked)
         self.assertEqual(desk.approved(NOW), [])
-        self.assertIn("HTTPError", desk.read_history()[0]["verification"])
+        self.assertIn("HTTP 403", desk.read_history()[0]["verification"])
 
     def test_unconfigured_secondary_lead_is_held_without_fetch(self):
         client = Client(leads=[{"title": TITLE, "url": "https://reuters.com/fixture", "topic": "AI"}])
@@ -298,6 +301,151 @@ class ResearchChecks(IsolatedChecks):
                     self.assertIn("Unauthorized", update.message.reply_text.call_args.args[0])
         asyncio.run(check())
 
+    def test_routine_help_lead_is_skipped_without_reads_or_paid_review(self):
+        lead = {"title": "Projects product help updated five hours ago", "url": "https://help.openai.com/en/articles/fixture", "topic": "AI"}
+        client = Client(leads=[lead])
+        value = self.run_desk(client, fetch=lambda _: self.fail("Routine help page fetched"))
+        self.assertEqual(len(client.calls), 1); self.assertEqual(value["details"]["original_reads"], 0)
+        self.assertEqual(value["details"]["skipped"], 1); self.assertEqual(desk.approved(NOW), [])
+
+    def test_discovery_receives_two_investor_search_tasks_and_reviewed_urls(self):
+        self.run_desk(); client = Client(); self.run_desk(client, NOW+timedelta(hours=1))
+        payload = json.loads(client.calls[0]["input"])
+        self.assertEqual(len(payload["search_tasks"]), 2); self.assertIn(URL, payload["recently_reviewed_urls"])
+        self.assertIn("Defense", payload["search_tasks"][1]); self.assertIn("product-help", client.calls[0]["instructions"])
+
+    def test_routine_paths_are_filtered_but_company_news_is_preserved(self):
+        for url in ("https://docs.microsoft.com/cloud", "https://openai.com/pricing", "https://nvidia.com/support/article"):
+            self.assertTrue(desk.routine_page(url))
+        self.assertFalse(desk.routine_page("https://blogs.microsoft.com/blog/layoffs-announced"))
+
+
+SEC_CIK = "1234567"
+SEC_ACCESSION = "0000000001-26-000001"
+SEC_COMPACT = SEC_ACCESSION.replace("-", "")
+SEC_ROOT = f"https://www.sec.gov/Archives/edgar/data/{SEC_CIK}/{SEC_COMPACT}/"
+SEC_INDEX = SEC_ROOT + SEC_ACCESSION + "-index.htm"
+SEC_PRIMARY = SEC_ROOT + "report.htm"
+SEC_QUOTE = "The Company entered into a binding commitment letter for a finance lease covering GPU equipment."
+SEC_TEXT = ("Item 8.01. Other Events. " + SEC_QUOTE + " The Company expects aggregate principal payments under the lease schedules over their respective terms to total approximately $12 billion. "
+            "The transaction is subject to specified closing conditions and expected equipment delivery.")
+
+
+def sec_metadata(**changes):
+    value = {"cik": int(SEC_CIK), "name": "EXAMPLE ORBITAL SYSTEMS CORP", "tickers": ["XORB"], "filings": {"recent": {
+        "accessionNumber": [SEC_ACCESSION], "form": ["8-K"], "acceptanceDateTime": [(NOW-timedelta(minutes=20)).isoformat()], "primaryDocument": ["report.htm"]}}}
+    for field, changed in changes.items():
+        if field in {"cik", "name", "tickers"}: value[field] = changed
+        else: value["filings"]["recent"][field] = changed
+    return json.dumps(value).encode()
+
+
+def sec_document(*, cik=SEC_CIK, name="Example Orbital Systems Corp.", form="8-K", text=SEC_TEXT):
+    fields = {"EntityCentralIndexKey": cik.zfill(10), "EntityRegistrantName": name, "DocumentType": form, "TradingSymbol": "XORB"}
+    return ('<html><body>'+''.join(f'<ix:nonNumeric name="dei:{key}">{value}</ix:nonNumeric>' for key, value in fields.items())
+            +'<p>'+text+'</p><p>Forward-Looking Statements</p><p>Other unrelated boilerplate.</p></body></html>').encode()
+
+
+class SECResearchChecks(ResearchFixture):
+    def fetch(self, metadata=None, document=None, calls=None):
+        def get(url):
+            if calls is not None: calls.append(url)
+            if url == f"https://data.sec.gov/submissions/CIK{int(SEC_CIK):010d}.json": return metadata if metadata is not None else sec_metadata()
+            if url == SEC_PRIMARY: return document if document is not None else sec_document()
+            if url.startswith(URL): return html()
+            self.fail("Unexpected original URL: " + url)
+        return get
+
+    def test_sec_index_is_resolved_using_issuer_submissions_and_primary_document(self):
+        calls = []; value = desk.verified({"url": SEC_INDEX}, NOW, self.fetch(calls=calls))
+        self.assertEqual(value["url"], SEC_PRIMARY); self.assertEqual(len(calls), 2)
+        self.assertEqual(sec.checked(value, NOW)["issuer"], "EXAMPLE ORBITAL SYSTEMS CORP")
+        self.assertEqual(value["symbols"], ["XORB"]); self.assertIn("AI infrastructure financing", value["title"])
+
+    def test_direct_and_inline_viewer_leads_resolve_to_the_same_document(self):
+        viewer = "https://www.sec.gov/ix?doc=" + SEC_PRIMARY.removeprefix("https://www.sec.gov")
+        for url in (SEC_PRIMARY, viewer):
+            self.assertEqual(desk.verified({"url": url}, NOW, self.fetch())["url"], SEC_PRIMARY)
+
+    def test_model_title_does_not_supply_issuer_identity(self):
+        value = desk.verified({"url": SEC_INDEX, "title": "An unrelated company announces a completed deal"}, NOW, self.fetch())
+        self.assertNotIn("unrelated", value["title"]); self.assertIn("EXAMPLE ORBITAL", value["title"])
+
+    def test_sec_acceptance_is_used_instead_of_event_or_filing_date(self):
+        value = desk.verified({"url": SEC_INDEX}, NOW, self.fetch())
+        self.assertEqual(value["published"], (NOW-timedelta(minutes=20)).isoformat())
+
+    def test_wrong_cik_name_form_and_document_are_rejected(self):
+        fixtures = [(sec_metadata(cik=1), sec_document()), (sec_metadata(), sec_document(cik="1")),
+            (sec_metadata(), sec_document(name="Different Issuer")), (sec_metadata(), sec_document(form="10-Q")),
+            (sec_metadata(form=["S-1"]), sec_document(form="S-1")), (sec_metadata(primaryDocument=["../other.htm"]), sec_document())]
+        for metadata, document in fixtures:
+            with self.subTest(metadata=metadata[:80]), self.assertRaises(ValueError):
+                desk.verified({"url": SEC_INDEX}, NOW, self.fetch(metadata, document))
+
+    def test_unrelated_exhibit_or_index_accession_does_not_establish_primary_report(self):
+        for url in (SEC_ROOT+"exhibit.htm", SEC_ROOT+"0000000001-26-000002-index.htm"):
+            with self.assertRaises(ValueError): desk.verified({"url": url}, NOW, self.fetch())
+
+    def test_missing_duplicate_or_stale_submission_records_are_rejected(self):
+        cases = [sec_metadata(accessionNumber=[]), sec_metadata(acceptanceDateTime=["2026-10-25"]),
+            sec_metadata(acceptanceDateTime=[(NOW-timedelta(hours=25)).isoformat()]), sec_metadata(acceptanceDateTime=[(NOW+timedelta(hours=1)).isoformat()])]
+        value = json.loads(sec_metadata())
+        for key in value["filings"]["recent"]: value["filings"]["recent"][key] *= 2
+        cases.append(json.dumps(value).encode())
+        for metadata in cases:
+            with self.assertRaises(ValueError): desk.verified({"url": SEC_INDEX}, NOW, self.fetch(metadata))
+
+    def test_sec_authentication_does_not_allow_arbitrary_urls(self):
+        for url in ("https://www.sec.gov.attacker.test/Archives/report.htm", "https://www.sec.gov/Archives/edgar/data/1/123/report.htm",
+                    "https://www.sec.gov/ix?doc=https://attacker.test/report", SEC_PRIMARY+"?redirect=attacker.test", "https://data.sec.gov/submissions/../../other"):
+            self.assertFalse(sec.authority(url))
+
+    def test_tampered_filing_facts_or_identity_are_rejected(self):
+        original = desk.verified({"url": SEC_INDEX}, NOW, self.fetch())
+        for change in ("amount", "issuer", "title", "clock", "body"):
+            value = deepcopy(original)
+            if change == "amount": value["sec_filing"]["disclosure"]["facts"][0]["value"] = "$999 billion"
+            if change == "issuer": value["sec_filing"]["issuer"] = "Another company"
+            if change == "title": value["title"] = "Closed deal"
+            if change == "clock": value["published"] = NOW.isoformat()
+            if change == "body": value["source_excerpt"] = "Invented facts"
+            with self.subTest(change=change), self.assertRaises(ValueError): sec.checked(value, NOW)
+
+    def test_financing_analysis_preserves_expected_total_and_conditions(self):
+        text = sec.narration(desk.verified({"url": SEC_INDEX}, NOW, self.fetch()))
+        self.assertIn("expected aggregate principal payments of approximately $12 billion over the lease terms", text)
+        self.assertIn("conditional", text); self.assertIn("rather than a single year's expense or revenue", text)
+        self.assertNotIn("IPO", text); self.assertNotIn("completed deal", text)
+
+    def test_both_sec_reads_count_against_the_existing_six_read_budget(self):
+        leads = [{"title": "A current SEC report", "url": SEC_INDEX, "topic": "AI"}] + [{"title": TITLE, "url": URL+str(i), "topic": "AI"} for i in range(7)]
+        calls = []; value = self.run_desk(Client(leads=leads), fetch=self.fetch(calls=calls))
+        self.assertEqual(len(calls), 6); self.assertEqual(value["details"]["original_reads"], 6)
+        self.assertEqual(value["details"]["source_verified"], 5)
+
+    def test_verified_sec_report_passes_separate_reviewer_and_cache_only_brief(self):
+        client = Client(leads=[{"title": "Material current report", "url": SEC_INDEX, "topic": "AI"}], quote=SEC_QUOTE)
+        value = self.run_desk(client, fetch=self.fetch())
+        self.assertEqual(value["details"]["approved"], 1)
+        text = build_daily_news_brief(self.research())
+        self.assertIn("approximately $12 billion", text); self.assertIn(IPO_HEADER, text.splitlines())
+        self.assertIn("conditional", text); self.assertTrue(validate_news_brief(text)["passes"])
+        from src.intelligence.news_editor_store import read_editions
+        editions = read_editions(report=text); self.assertEqual(len(editions), 1)
+        self.assertTrue(any(story.get("sec_filing") for story in news_editor.selected_stories(editions[0])))
+        self.assertEqual(len(client.calls), 2)
+
+    def test_index_and_document_urls_share_the_same_deduplication_key(self):
+        self.assertEqual(desk.finding_key(SEC_INDEX), desk.finding_key(SEC_PRIMARY))
+        self.run_desk(Client(leads=[{"title": "Current report", "url": SEC_INDEX, "topic": "AI"}, {"title": "Same report", "url": SEC_PRIMARY, "topic": "AI"}], quote=SEC_QUOTE), fetch=self.fetch())
+        self.assertEqual(len(desk.approved(NOW)), 1)
+
+    def test_newer_hold_on_index_blocks_older_approval_for_its_document(self):
+        self.run_desk(Client(leads=[{"title": "Current report", "url": SEC_PRIMARY, "topic": "AI"}], quote=SEC_QUOTE), fetch=self.fetch())
+        self.run_desk(Client(leads=[{"title": "Current report", "url": SEC_INDEX, "topic": "AI"}], decision="hold"), NOW+timedelta(hours=1), self.fetch())
+        self.assertEqual(desk.approved(NOW+timedelta(hours=1)), [])
+
 
 class ContractChecks(unittest.TestCase):
     def test_discovery_rejects_url_without_actual_search_provenance(self):
@@ -412,7 +560,7 @@ if __name__ == "__main__":
         if args.windows_socketpair:
             stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))
         traffic = stack.enter_context(offline_network_guard())
-        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks))
+        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks))
         result = unittest.TextTestRunner(verbosity=1).run(suite)
     ok = result.wasSuccessful() and not traffic["blocked"]
     print(f"Hourly Research Check: {'PASS' if ok else 'FAIL'} ({result.testsRun} tests)")

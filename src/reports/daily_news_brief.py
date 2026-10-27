@@ -258,7 +258,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             global_body = []
             ipo_body = []
             for story in sorted(retained, key=editor.news_order):
-                body = ipo_body if story.get("ipo") else global_body if story["kind"] == "macro" or "defense" in story_topics(story) else company_body
+                body = ipo_body if story.get("ipo") or story.get("sec_filing") else global_body if story["kind"] == "macro" or "defense" in story_topics(story) else company_body
                 body.append(story_paragraphs[story["id"]])
             company_body += [row["text"] for row in insights if row["section"] == "company"] or [
                 "Company rankings were unavailable for this edition; no leading setup is being inferred."]
@@ -281,7 +281,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 groups.insert(0, (IPO_HEADER, ipo_body))
             if retained:
                 lead = min(retained, key=editor.news_order)
-                lead_header = IPO_HEADER if lead.get("ipo") else "Global and Defense Watch" if lead["kind"] == "macro" or "defense" in story_topics(lead) else "Companies in Focus"
+                lead_header = IPO_HEADER if lead.get("ipo") or lead.get("sec_filing") else "Global and Defense Watch" if lead["kind"] == "macro" or "defense" in story_topics(lead) else "Companies in Focus"
                 groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, ALL_HEADERS.index(group[0])))
 
             def render():
