@@ -104,7 +104,16 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
     page = PublicationPage(); page.feed(text)
     if not page.title or len(page.title) > 1000:
         raise ValueError("Original report title unavailable")
-    published = publication_time(body, page.title)
+    from src.intelligence.policy_analysis import is_fomc_statement, release_clock
+    fed_statement = is_fomc_statement({"source": publisher["name"], "title": page.title})
+    try:
+        published = publication_time(body, page.title)
+    except ValueError:
+        if not fed_statement:
+            raise
+        from src.intelligence.news_original_sources import ArticleBody
+        article = ArticleBody(publisher["name"]); article.feed(text)
+        published = release_clock(" ".join(article.parts))
     if (now-published).total_seconds() < 0:
         raise ValueError("Original report is future-dated")
     if (now-published).total_seconds() > 86400:
@@ -113,6 +122,9 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
         raise ValueError("Original report has a date-only clock")
     parser = VisibleText(); parser.feed(text)
     visible = " ".join("".join(parser.parts).split())[:6000]
+    if fed_statement:
+        from src.intelligence.news_original_sources import article_excerpt
+        visible = " ".join(article_excerpt(text, page.title, published.isoformat(), publisher=publisher["name"]).split())
     if not visible:
         raise ValueError("Original report text unavailable")
     proof = {"schema": 1, "url": url, "title": page.title, "published": published.isoformat(), "observed": now.isoformat(),

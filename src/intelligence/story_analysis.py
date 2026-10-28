@@ -48,8 +48,10 @@ def release_text(value) -> str:
     return text.strip()
 
 
-def event_type(title: str, fallback: str = "", *, version: int = 3) -> tuple[str, str]:
+def event_type(title: str, fallback: str = "", *, version: int = 4) -> tuple[str, str]:
     title = str(title or "")
+    if version >= 4 and re.fullmatch(r"Federal Reserve issues FOMC statement\.?", title, re.I):
+        return "monetary policy", "rate decision"
     guidance = re.search(r"\b(raises?|cuts?|lowers?|reduces?|withdraws?|reaffirms?|maintains?|updates?)\b.{0,40}\b(guidance|revenue outlook|earnings outlook)\b", title, re.I)
     acquisition = re.search(r"\b(acquisitions?|acquir\w*|merger|buyout)\b", title, re.I)
     if guidance and (not acquisition or guidance.start() < acquisition.start()):
@@ -104,7 +106,10 @@ def event_type(title: str, fallback: str = "", *, version: int = 3) -> tuple[str
     return fallback or "development", "reported"
 
 
-def disclosed_facts(text: str, kind: str, stage: str = "") -> list[dict]:
+def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4) -> list[dict]:
+    if version >= 4 and kind == "monetary policy" and stage == "rate decision":
+        from src.intelligence.policy_analysis import rate_facts
+        return rate_facts(text)
     facts = []
 
     def add(field, value, sentence):
@@ -165,15 +170,15 @@ def disclosed_facts(text: str, kind: str, stage: str = "") -> list[dict]:
     return facts
 
 
-def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int = 3) -> dict:
-    if type(schema) is not int or schema not in {1, 2, 3} or scope not in SCOPES:
+def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int = 4) -> dict:
+    if type(schema) is not int or schema not in {1, 2, 3, 4} or scope not in SCOPES:
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=schema)
     return {"schema": schema, "event": kind, "stage": stage, "scope": scope if text else "headline only",
             "source_url": story["url"], "published": story["published"], "source_text": text,
             "observed_at": story.get("evidence_checked_at", story.get("source_checked_at")),
-            "source_sha256": hashlib.sha256(text.encode()).hexdigest(), "facts": disclosed_facts(text, kind, stage)}
+            "source_sha256": hashlib.sha256(text.encode()).hexdigest(), "facts": disclosed_facts(text, kind, stage, version=schema)}
 
 
 def checked_evidence(story: dict) -> dict:
@@ -188,7 +193,13 @@ def checked_evidence(story: dict) -> dict:
 def investor_read(story: dict) -> dict:
     evidence = checked_evidence(story)
     kind, stage = evidence["event"], evidence["stage"]
-    if kind == "acquisition":
+    if kind == "monetary policy" and stage == "rate decision":
+        action = next((row["value"] for row in evidence["facts"] if row["field"] == "policy_action"), "")
+        why = {"held": "The hold keeps attention on how long financing costs stay at this level, including for debt-funded AI expansion and rate-sensitive valuations.",
+               "raised": "Higher policy rates can increase refinancing pressure and the discount rates investors apply to future earnings.",
+               "lowered": "Lower policy rates can ease financing pressure over time; the effect depends on lending rates, credit availability and business demand."}.get(action, "The policy outlook matters for borrowing costs and rate-sensitive valuations.")
+        watch = "Watch the next inflation reading, Treasury yields and company financing plans."
+    elif kind == "acquisition":
         if stage == "completed":
             why = "After the reported close, integration and cash generation become the key investment checks."
             watch = "Look for integration costs, the acquired business's contribution and updated cash-flow guidance."
@@ -252,5 +263,10 @@ def investor_read(story: dict) -> dict:
               "program_type": "Program described in the release", "restructuring_charge": "Restructuring cost described in the release",
               "restructuring_cost_estimate": "Estimated restructuring cost", "annual_savings_target": "Annual savings target",
               "tested_capability": "Capability demonstrated in the reported test", "planned_capacity_scale": "Announced expansion plan"}
-    facts = "; ".join(labels[row["field"]] + ": " + row["value"] for row in evidence["facts"])
+    if kind == "monetary policy" and stage == "rate decision":
+        values = {row["field"]: row["value"] for row in evidence["facts"]}
+        facts = ("The Federal Reserve " + values["policy_action"] + " its federal funds target range "
+                 + ("at " if values["policy_action"] == "held" else "to ") + values["policy_target_range"]) if "policy_target_range" in values else ""
+    else:
+        facts = "; ".join(labels[row["field"]] + ": " + row["value"] for row in evidence["facts"])
     return {"evidence": evidence, "facts": facts + "." if facts else "", "why": why, "watch": watch}

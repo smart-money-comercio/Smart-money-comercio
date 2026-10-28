@@ -62,11 +62,11 @@ def history_context(now: datetime) -> dict:
         symbols = {issuer(row.get("symbol")) for row in selected or [] if isinstance(row, dict) and company(row.get("symbol"))}
         if symbols:
             days.setdefault(at.astimezone(NY).date().isoformat(), set()).update(symbols)
-    return {"schema": 1, "limit": 3, "recent": [{"day": day, "symbols": sorted(symbols)[:100]} for day, symbols in sorted(days.items())]}
+    return {"schema": 2, "limit": 3, "recent": [{"day": day, "symbols": sorted(symbols)[:100]} for day, symbols in sorted(days.items())]}
 
 
 def checked_context(context: dict, day) -> dict:
-    if (not isinstance(context, dict) or set(context) != {"schema", "limit", "recent"} or type(context["schema"]) is not int or context["schema"] != 1
+    if (not isinstance(context, dict) or set(context) != {"schema", "limit", "recent"} or type(context["schema"]) is not int or context["schema"] not in {1, 2}
             or type(context["limit"]) is not int or not 1 <= context["limit"] <= 3
             or not isinstance(context["recent"], list) or len(context["recent"]) > 7):
         raise ValueError("Invalid company-focus context")
@@ -93,11 +93,16 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
     checked_context(context, day)
     counts = Counter(symbol for row in context["recent"] for symbol in {issuer(value) for value in row["symbols"]})
     pool = {}
+    from src.intelligence.market_brief import story_topics
+    covered_global = {issuer(symbol) for story in evidence.get("stories", []) if context["schema"] >= 2 and "defense" in story_topics(story)
+                      for symbol in ([story["publisher_symbol"]] if company(story.get("publisher_symbol")) else story.get("symbols", []))}
 
     def add(symbol, group, role, tier, why, watch, sources, *, metric=None, story_id=""):
         if not company(symbol):
             return
         symbol = issuer(symbol)
+        if symbol in covered_global:
+            return
         value = {"symbol": symbol, "name": COMPANY_NAMES.get(symbol, symbol), "group": group, "role": role,
             "tier": tier, "why": why, "watch": watch, "sources": sources, "metric": metric,
             "story_id": story_id, "recent_days": counts[symbol]}

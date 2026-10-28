@@ -21,21 +21,26 @@ class ArticleBody(VisibleText):
     """Read identified release bodies, without treating site navigation as news."""
     VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 
-    def __init__(self):
+    def __init__(self, publisher=""):
         super().__init__()
+        self.publisher = publisher
         self.depth = 0
         self.heading_tag, self.heading_parts, self.headings = None, [], []
         self.date_depth, self.date_parts = 0, []
 
     def handle_starttag(self, tag, attrs):
-        classes = set(dict(attrs).get("class", "").split())
+        attrs = dict(attrs)
+        classes = set(attrs.get("class", "").split())
         if classes & {"article-date", "wd_date"}:
             self.date_depth = 1
         elif self.date_depth and tag not in self.VOID:
             self.date_depth += 1
-        if tag == "h1" or "wd_title" in classes:
+        if tag in {"h1", "h2", "h3"} or "wd_title" in classes:
             self.heading_tag, self.heading_parts = tag, []
-        if not self.depth and (tag == "article" or classes & {"wd_news_body", "article-body", "release-body"}):
+        fed_body = (self.publisher == "Federal Reserve" and tag == "div" and
+                    (attrs.get("id") in {"article", "article-body"} or
+                     {"col-xs-12", "col-sm-8", "col-md-8"} <= classes))
+        if not self.depth and (tag == "article" or classes & {"wd_news_body", "article-body", "release-body"} or fed_body):
             self.depth = 1
         elif self.depth and tag not in self.VOID:
             self.depth += 1
@@ -61,16 +66,21 @@ class ArticleBody(VisibleText):
             super().handle_data(data)
 
 
-def article_excerpt(body: str, title: str, published: str) -> str:
+def article_excerpt(body: str, title: str, published: str, *, publisher: str = "") -> str:
     """Bind extra facts to the same complete headline and original publication."""
     expected = timestamp(published)
     if expected is None:
         raise ValueError("Original article needs the admitted feed publication clock")
-    parser = ArticleBody()
+    parser = ArticleBody(publisher)
     parser.feed(body)
     text = release_text("".join(parser.parts))
     if not text:
         raise ValueError("Recognizable original release body unavailable")
+    from src.intelligence.policy_analysis import is_fomc_statement, release_clock
+    fed_statement = is_fomc_statement({"source": publisher, "title": title})
+    if fed_statement and (sum(value.casefold() == title.casefold() for value in parser.headings) != 1
+                          or release_clock(text) != expected):
+        raise ValueError("Original Fed statement title or release clock does not match its feed")
     try:
         actual = publication_time(body.encode(), title)
     except ValueError:
@@ -80,6 +90,8 @@ def article_excerpt(body: str, title: str, published: str) -> str:
         # may still bind an exact heading and the same explicit release date.
         if metadata.dates or 'datePublished' in body or sum(value.casefold() == title.casefold() for value in parser.headings) != 1:
             raise ValueError("Original article identity or publication clock unavailable")
+        if fed_statement:
+            return text
         try:
             original = datetime.fromisoformat(published.replace("Z", "+00:00"))
         except ValueError:
@@ -95,8 +107,9 @@ def article_excerpt(body: str, title: str, published: str) -> str:
 
 
 def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -> dict:
-    """At most one fresh company release per publisher, during refresh only."""
-    if not source.get("company_symbol") or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == 1:
+    """At most one fresh company release or Fed statement during refresh only."""
+    fed = source.get("name") == "Federal Reserve" and source.get("category") == "fed"
+    if (not source.get("company_symbol") and not fed) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == 1:
         return payload
     observed = payload.get("fetched_at_epoch")
     if not authorized_response(source, payload) or type(observed) not in (int, float) or not math.isfinite(observed) or not -60 <= now.timestamp() - observed <= 6 * 3600:
@@ -104,8 +117,11 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
     candidates = []
     for row in parse_feed(payload.get("body", ""), source, full_titles=True):
         published = timestamp(row["published"])
+        from src.intelligence.policy_analysis import is_fomc_statement
+        allowed = (is_fomc_statement({"source": source["name"], "title": row["title"]})
+                   and authorized_response(source, {"url": row["link"]})) if fed else company_url(source["company_symbol"], row["link"])
         if (published and 0 <= (now - published).total_seconds() <= 24 * 3600
-                and company_url(source["company_symbol"], row["link"])):
+                and allowed):
             candidates.append((published, row))
     candidates.sort(key=lambda value: value[0], reverse=True)
     details, issues = [], []
@@ -114,7 +130,7 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
             detail = fetch(row["link"])
             if detail.get("status") != "ok" or not authorized_response(source, detail):
                 raise ValueError(detail.get("error") or "Original release redirect mismatch")
-            excerpt = article_excerpt(detail["body"], row["title"], row["published"])
+            excerpt = article_excerpt(detail["body"], row["title"], row["published"], publisher=source["name"])
             details.append({"title": row["title"], "url": row["link"], "published": row["published"],
                             "text": excerpt, "checked_at_epoch": detail["fetched_at_epoch"]})
         except (ValueError, TypeError, KeyError, UnicodeError) as exc:

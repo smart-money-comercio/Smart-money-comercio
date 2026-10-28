@@ -119,7 +119,7 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
             from src.intelligence.hourly_research import check_proof
             check_proof(story)
             evidence["stories"][-1].update(discovery_evidence=deepcopy(story["discovery_evidence"]), source_checked_at=story["source_checked_at"])
-        if story["kind"] == "company":
+        if story["kind"] == "company" or story.get("event_evidence") is not None:
             from src.intelligence.story_analysis import checked_evidence
             checked_evidence(story)
             evidence["stories"][-1].update({key: deepcopy(story[key]) for key in (

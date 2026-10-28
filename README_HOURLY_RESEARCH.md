@@ -85,6 +85,8 @@ The brief places IPO milestones and this analysis in **IPO & Capital Markets**, 
 
 ## Verify and operate
 
+Fed statements can use their publisher's explicit release date, US Eastern release clock and exact heading alongside the matching original feed. The reader recognizes Fed press-release body containers and excludes navigation and footer text. Conflicting metadata, title, date or DST offset remains a hold. News refresh can read at most one fresh Fed statement body; report rendering stays cache-only, and the research desk retains its existing six-read and two-model-request budgets. Source access errors remain visible; this reader does not bypass publisher blocks.
+
 Run `python scripts/check_hourly_research.py` and its `--windows-socketpair` variant. Offline tests use synthetic sources and mocked model responses, including failure and publication-blocking cases. They do not establish live model or publisher availability. Deployment preflight uses temporary research state and must not create a production database as root. The service user (`smartmoney`) needs write access to its data directory and SQLite file.
 
 After deploying, use `/researchdesk run`, `/researchdesk status` and `/researchdesk history` in the admin's private chat. A manual run consumes that hour's attempt. Then use `/rundailyagent`, `/reportcheck`, `/specialalerts preview` and `/storylog` to inspect downstream results. A quiet or source-limited hour can legitimately approve no stories.

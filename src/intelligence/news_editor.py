@@ -17,6 +17,7 @@ from src.intelligence.special_alert_sources import clean, company_url
 from src.intelligence.special_alert_engine import company_event
 from src.intelligence.market_brief import story_topics
 from src.intelligence.story_analysis import build_evidence, checked_evidence, event_type
+from src.intelligence.policy_analysis import is_fomc_statement
 
 
 MAX_STORIES = 3
@@ -356,12 +357,23 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             rank = min((symbols.index(symbol) for symbol in story["symbols"]), default=len(symbols))
             story["priority"] = (100 if story["official"] else 70) + (10 if story["symbols"] else 5) + max(0, 10 - rank)
             story.update(decision="eligible", reason="Dated source and research relevance checks passed")
-            if story["kind"] == "company":
+            if not story.get("ipo") and not story.get("sec_filing"):
                 scope = raw.get("excerpt_scope", "headline only")
                 text = raw.get("source_excerpt", "")
                 if scope not in {"headline only", "publisher feed excerpt", "original release excerpt"}:
                     text, scope = "", "headline only"
-                excerpts[story["id"]] = (text, scope, raw.get("evidence_checked_at") or story["source_checked_at"])
+                observed = raw.get("evidence_checked_at") or story["source_checked_at"]
+                excerpts[story["id"]] = (text, scope, observed)
+                if is_fomc_statement(story):
+                    try:
+                        evidence_clock = dated(observed)
+                        fresh = -60 <= (now-evidence_clock).total_seconds() <= MAX_CACHE_AGE and (published-evidence_clock).total_seconds() <= 60
+                    except (ValueError, TypeError, OverflowError):
+                        fresh = False
+                    profile = build_evidence(story, text, scope)
+                    if not fresh or scope == "headline only" or not profile["facts"]:
+                        story.update(decision="wait", confirmation_check="hold",
+                                     reason="Original Fed decision text and a current source observation are required; the announcement headline alone is insufficient")
         ledger.append(story)
     selected, urls, titles, companies = [], set(), set(), set()
     company_eligible = any(story["decision"] == "eligible" and story["kind"] == "company" for story in ledger)
@@ -385,13 +397,13 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             selected.append(story)
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
     for story in selected:
-        if story["kind"] == "company":
+        if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
             story["event_evidence"] = build_evidence(story, text, scope)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 13, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 14, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def timestamp_for_priority(value):
@@ -471,6 +483,14 @@ def render_story(story: dict, zone, company_names: dict) -> str:
                 "This is a headline-only report, unconfirmed by the company.")
     else:
         if story["official"]:
+            if is_fomc_statement(story):
+                from src.intelligence.story_analysis import investor_read
+                review = investor_read(story)
+                if not review["facts"]:
+                    raise ValueError("Original Fed decision facts are required for narration")
+                return (f"According to the Federal Reserve's original statement, published {at}, "
+                        + review["facts"][0].lower() + review["facts"][1:]
+                        + " Our analysis: " + review["why"] + " Watch next: " + review["watch"])
             return (f"A publisher announcement from {story['source']}, published {at}, is headlined {headline}{punctuation} "
                     "Review the original release for scope and context.")
         return (f"In market news, {story['source']}'s headline, published {at}, reads {headline}{punctuation} "
@@ -484,7 +504,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Selected story headline is incomplete")
         if not primary_source(story) or story.get("story_type") != "announcement" or not materiality(story):
             raise ValueError("Selected story needs a material original-source report")
-        if story["kind"] == "company":
+        if story["kind"] == "company" or story.get("event_evidence") is not None:
             checked_evidence(story)
         if report.count(paragraphs[story["id"]]) != 1:
             raise ValueError("Selected story evidence or qualification changed during narration")

@@ -1131,6 +1131,26 @@ class DynamicFocusChecks(IsolatedChecks):
             self.assertTrue(row["sources"])
         self.assertNotIn("follows at",text)
 
+    def test_defense_story_has_one_full_segment_and_frees_a_company_focus_slot(self):
+        source=self.source("LMT");source["title"]="Lockheed Martin demonstrates a missile system during an Army test"
+        with patch.dict(os.environ,{"SPECIAL_ALERT_SYMBOLS":"MSFT,NVDA,TSM,LMT"}):
+            text=self.render([source])
+        focus=self.record(text)["analyst_review"]["evidence"]["company_focus"]
+        self.assertNotIn("LMT",focus["featured_symbols"])
+        self.assertEqual(len(focus["selected"]),3)
+        self.assertIn(source["title"],text)
+        self.assertNotIn("Development to watch — Lockheed Martin",text)
+
+    def test_previous_company_focus_rules_remain_valid_for_built_editions(self):
+        source=self.source("LMT");source["title"]="Lockheed Martin demonstrates a missile system during an Army test"
+        with patch.dict(os.environ,{"SPECIAL_ALERT_SYMBOLS":"MSFT,NVDA,TSM,LMT"}):
+            text=self.render([source],context=self.context())
+        record=self.record(text)
+        self.assertIn("LMT",record["analyst_review"]["evidence"]["company_focus"]["featured_symbols"])
+        from src.intelligence.daily_brief_analysis import validate_review
+        from src.intelligence.news_editor import selected_stories
+        validate_review(record["analyst_review"],self.research(),text,selected_stories(record))
+
     def test_growth_strength_brings_infrastructure_companies_into_focus(self):
         report=self.research(replacements={"Executive Summary":"- Main theme: Growth.\n- Market moves: S&P +0.8%, Nasdaq +1.2%, Russell +0.6%, VIX -4%, Oil +0.1%, TLT +0.2%.",
             "Market Snapshot":"Market Session: Open.\nQuote session: 2026-10-25\nBreadth: 15 up / 3 down / 18 quoted"})

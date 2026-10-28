@@ -22,7 +22,8 @@ MIN_NARRATION_SECONDS = 60
 MIN_NARRATION_WORDS = 180
 HEADERS = ["Market Update", "Companies in Focus", "Global and Defense Watch", "What's Ahead", "What We're Watching", "Research Notes"]
 IPO_HEADER = "IPO & Capital Markets"
-ALL_HEADERS = [IPO_HEADER] + HEADERS
+POLICY_HEADER = "Policy & Economy"
+ALL_HEADERS = [IPO_HEADER, POLICY_HEADER] + HEADERS
 NAMES = {"MSFT": "Microsoft", "NVDA": "Nvidia", "PLTR": "Palantir", "TSLA": "Tesla",
          "TSM": "Taiwan Semiconductor", "AVGO": "Broadcom", "AVAV": "AeroVironment", "CRWD": "CrowdStrike",
          "AAPL": "Apple", "AMZN": "Amazon", "GOOG": "Alphabet", "GOOGL": "Alphabet", "META": "Meta Platforms",
@@ -259,8 +260,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             company_body = []
             global_body = []
             ipo_body = []
+            policy_body = []
             for story in sorted(retained, key=editor.news_order):
-                body = ipo_body if story.get("ipo") or story.get("sec_filing") else global_body if story["kind"] == "macro" or "defense" in story_topics(story) else company_body
+                body = (ipo_body if story.get("ipo") or story.get("sec_filing") else
+                        global_body if "defense" in story_topics(story) else
+                        policy_body if story["kind"] == "macro" else company_body)
                 body.append(story_paragraphs[story["id"]])
             company_body += [row["text"] for row in insights if row["section"] == "company"]
             if not company_body:
@@ -282,9 +286,13 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
             if ipo_body:
                 groups.insert(0, (IPO_HEADER, ipo_body))
+            if policy_body:
+                groups.insert(0, (POLICY_HEADER, policy_body))
             if retained:
                 lead = min(retained, key=editor.news_order)
-                lead_header = IPO_HEADER if lead.get("ipo") or lead.get("sec_filing") else "Global and Defense Watch" if lead["kind"] == "macro" or "defense" in story_topics(lead) else "Companies in Focus"
+                lead_header = (IPO_HEADER if lead.get("ipo") or lead.get("sec_filing") else
+                               "Global and Defense Watch" if "defense" in story_topics(lead) else
+                               POLICY_HEADER if lead["kind"] == "macro" else "Companies in Focus")
                 groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, ALL_HEADERS.index(group[0])))
 
             def render():

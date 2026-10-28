@@ -1282,6 +1282,141 @@ class StoryAnalysisChecks(IsolatedChecks):
         self.assertTrue(store.read_editions(report=text))
 
 
+class PolicyBriefChecks(IsolatedChecks):
+    TITLE = "Federal Reserve issues FOMC statement"
+    TARGET = "The Committee decided to maintain the target range for the federal funds rate at 3-3/4 to 4 percent."
+
+    def source(self, **changes):
+        return candidate(kind="macro", symbols=[], publisher_symbol="", source="Federal Reserve",
+            title=self.TITLE, url="https://www.federalreserve.gov/newsevents/pressreleases/monetary20261025a.htm",
+            published=NOW.replace(hour=16).isoformat(), source_excerpt=self.TARGET,
+            excerpt_scope="original release excerpt", **changes)
+
+    def body(self, wrapper='id="article"'):
+        return (f'<html><head><meta property="og:title" content="{self.TITLE}"></head><body>'
+                f'<nav>Navigation is not release evidence.</nav><div {wrapper}>'
+                f'<p>October 25, 2026</p><h3>{self.TITLE}</h3><p>For release at 12:00 p.m. EDT</p>'
+                f'<p>{self.TARGET}</p></div><footer>Footer is not release evidence.</footer></body></html>')
+
+    def plan(self, source=None):
+        return editor.build_editorial_plan(companies.build_company_catalyst_brief(), NOW, [source or self.source()])
+
+    def test_fractional_rate_and_action_come_from_the_original_decision_sentence(self):
+        from src.intelligence.policy_analysis import rate_facts
+        facts = rate_facts(self.TARGET)
+        self.assertEqual([row["value"] for row in facts], ["held", "3.75 to 4 percent"])
+        self.assertTrue(all(row["evidence"] == self.TARGET for row in facts))
+
+    def test_rate_increases_and_cuts_keep_their_direction(self):
+        from src.intelligence.policy_analysis import rate_facts
+        for verb, action in (("raise", "raised"), ("lower", "lowered")):
+            self.assertEqual(rate_facts(self.TARGET.replace("maintain", verb).replace("at 3-3/4", "to 3.75"))[0]["value"], action)
+
+    def test_decision_with_explicit_change_and_fractional_zero_bound_range(self):
+        from src.intelligence.policy_analysis import rate_facts
+        sentence=self.TARGET.replace("maintain", "lower").replace("at 3-3/4 to 4", "by 1/4 percentage point to 0 to 1/4")
+        self.assertEqual([row["value"] for row in rate_facts(sentence)], ["lowered", "0 to 0.25 percent"])
+
+    def test_forecasts_preferences_negation_and_unattributed_ranges_are_not_decisions(self):
+        from src.intelligence.policy_analysis import rate_facts
+        for text in (self.TARGET.replace("decided", "expects"), self.TARGET.replace("decided", "preferred"),
+                     self.TARGET.replace("decided to", "decided not to"), "Analysts expect a target range of 3.75 to 4 percent."):
+            self.assertEqual(rate_facts(text), [])
+
+    def test_conflicting_or_implausible_decision_ranges_are_withheld(self):
+        from src.intelligence.policy_analysis import rate_facts
+        for text in (self.TARGET + "\n" + self.TARGET.replace("3-3/4 to 4", "4 to 4.25"),
+                     self.TARGET.replace("3-3/4 to 4", "5 to 4"), self.TARGET.replace("3-3/4 to 4", "0 to 20")):
+            self.assertEqual(rate_facts(text), [])
+
+    def test_fed_body_supports_original_press_release_containers(self):
+        from src.intelligence.news_original_sources import article_excerpt
+        for wrapper in ('id="article"', 'class="col-xs-12 col-sm-8 col-md-8"'):
+            excerpt = article_excerpt(self.body(wrapper), self.TITLE, NOW.replace(hour=16).isoformat(), publisher="Federal Reserve")
+            self.assertIn(self.TARGET, excerpt)
+            self.assertNotIn("Navigation", excerpt); self.assertNotIn("Footer", excerpt)
+
+    def test_fed_container_fallback_does_not_extend_to_other_publishers(self):
+        from src.intelligence.news_original_sources import article_excerpt
+        with self.assertRaises(ValueError):
+            article_excerpt(self.body(), self.TITLE, NOW.replace(hour=16).isoformat(), publisher="EIA")
+
+    def test_fed_title_date_time_and_timezone_must_match(self):
+        from src.intelligence.news_original_sources import article_excerpt
+        for body in (self.body().replace(self.TITLE, "Different release"), self.body().replace("October 25", "October 24"),
+                     self.body().replace("12:00", "11:00"), self.body().replace("EDT", "EST"),
+                     self.body().replace("</h3>", "</h3><h3>" + self.TITLE + "</h3>")):
+            with self.assertRaises(ValueError):
+                article_excerpt(body, self.TITLE, NOW.replace(hour=16).isoformat(), publisher="Federal Reserve")
+
+    def test_explicit_conflicting_metadata_is_not_overridden_by_the_feed(self):
+        from src.intelligence.news_original_sources import article_excerpt
+        body = self.body().replace("</head>", '<meta property="article:published_time" content="2026-10-25T15:00:00+00:00"></head>')
+        with self.assertRaises(ValueError):
+            article_excerpt(body, self.TITLE, NOW.replace(hour=16).isoformat(), publisher="Federal Reserve")
+
+    def test_fed_refresh_enriches_one_statement_and_keeps_both_clocks(self):
+        from src.intelligence.news_original_sources import enrich_feed
+        source = next(row for row in editor.feeds.NEWS_SOURCES if row["name"] == "Federal Reserve")
+        story = self.source(); published = format_datetime(NOW.replace(hour=16))
+        rss = f'<rss><channel><item><title>{self.TITLE}</title><link>{story["url"]}</link><pubDate>{published}</pubDate></item></channel></rss>'
+        payload = {"status":"ok", "body":rss, "fetched_at_epoch":NOW.timestamp()-30}
+        fetch = Mock(return_value={"status":"ok", "url":story["url"], "body":self.body(), "fetched_at_epoch":NOW.timestamp()})
+        enriched = enrich_feed(source, payload, editor.feeds.parse_rss_items, fetch, NOW)
+        fetch.assert_called_once_with(story["url"])
+        self.assertEqual(enriched["fetched_at_epoch"], payload["fetched_at_epoch"])
+        self.assertEqual(enriched["release_evidence"][0]["published"], published)
+        self.assertIs(enrich_feed(source, enriched, editor.feeds.parse_rss_items, fetch, NOW), enriched)
+
+    def test_fed_refresh_ignores_calendar_and_non_statement_items(self):
+        from src.intelligence.news_original_sources import enrich_feed
+        source = next(row for row in editor.feeds.NEWS_SOURCES if row["name"] == "Federal Reserve")
+        payload = {"status":"ok", "fetched_at_epoch":NOW.timestamp(), "body":f'<rss><channel><item><title>FOMC calendar</title><link>https://www.federalreserve.gov/calendar</link><pubDate>{format_datetime(NOW)}</pubDate></item></channel></rss>'}
+        fetch = Mock()
+        enrich_feed(source, payload, editor.feeds.parse_rss_items, fetch, NOW)
+        fetch.assert_not_called()
+
+    def test_statement_without_a_verified_decision_stays_held(self):
+        for changes in ({"source_excerpt":""}, {"source_excerpt":"The Committee will discuss policy."}, {"excerpt_scope":"headline only"}):
+            source = self.source(); source.update(changes)
+            plan = self.plan(source)
+            self.assertFalse(editor.selected_stories(plan))
+            self.assertIn("decision text", plan["candidates"][0]["reason"])
+
+    def test_old_excerpt_observation_cannot_publish_a_current_fed_headline(self):
+        source = self.source(); source["evidence_checked_at"] = (NOW-timedelta(hours=7)).isoformat()
+        self.assertFalse(editor.selected_stories(self.plan(source)))
+
+    def test_publisher_feed_can_supply_the_actual_decision_without_an_extra_read(self):
+        source = self.source(); source["excerpt_scope"] = "publisher feed excerpt"
+        self.assertEqual(len(editor.selected_stories(self.plan(source))), 1)
+
+    def test_policy_segment_explains_decision_and_financing_lens_separately_from_defense(self):
+        from src.reports.daily_news_brief import POLICY_HEADER, validate_news_brief
+        with patch.object(editor, "cache_candidates", return_value=([self.source()], [])):
+            text = build_daily_news_brief(self.research())
+        self.assertIn(POLICY_HEADER, text)
+        self.assertIn("held its federal funds target range at 3.75 to 4 percent", text)
+        self.assertIn("debt-funded AI expansion", text)
+        self.assertNotIn("Review the original release for scope", text)
+        defense = text.split("Global and Defense Watch\n",1)[1].split("\n\nWhat's Ahead",1)[0]
+        self.assertNotIn("federal funds target range", defense)
+        self.assertTrue(validate_news_brief(text)["passes"])
+
+    def test_altered_policy_fact_or_analyst_wording_cannot_pass_review(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        story = editor.selected_stories(self.plan())[0]
+        story["event_evidence"]["facts"][1]["value"] = "0 to 0.25 percent"
+        with self.assertRaises(ValueError):
+            analyze_report(self.research(), [story])
+
+    def test_historical_schema_three_profiles_keep_their_original_interpretation(self):
+        from src.intelligence.story_analysis import build_evidence, checked_evidence
+        story = self.source(); story["materiality"] = "monetary policy"
+        story["event_evidence"] = build_evidence(story, self.TARGET, "original release excerpt", schema=3)
+        self.assertEqual(checked_evidence(story)["facts"], [])
+
+
 class NewsFirstChecks(IsolatedChecks):
     def setUp(self):
         super().setUp()

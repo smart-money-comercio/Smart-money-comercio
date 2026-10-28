@@ -752,6 +752,52 @@ class PublisherEvidenceChecks(ResearchFixture):
 class SourceRoutingChecks(ResearchFixture):
     seed = PublisherEvidenceChecks.seed
 
+    def test_direct_fed_statement_uses_original_zoned_release_clock_and_body(self):
+        from scripts.check_news_editor import PolicyBriefChecks
+        fixture=PolicyBriefChecks();source=fixture.source()
+        value=desk.verified({"url":source["url"]},NOW,fetch=lambda _:fixture.body().encode())
+        self.assertEqual(desk.timestamp(value["published"]),NOW.replace(hour=16))
+        self.assertIn(fixture.TARGET,value["discovery_evidence"]["text"])
+        self.assertNotIn("Navigation",value["discovery_evidence"]["text"])
+        desk.check_proof(value,NOW)
+
+    def test_cached_fed_reference_resolves_without_relaxing_identity_or_read_limits(self):
+        from scripts.check_news_editor import PolicyBriefChecks
+        from src.intelligence.research_source_routes import SourceResolver
+        fixture=PolicyBriefChecks();value=fixture.source();published=value["published"]
+        value["publisher_reference"]={"url":value["url"],"title":value["title"],"published":published,
+            "observed":NOW.isoformat(),"publisher_clock":published,"feed_url":"https://www.federalreserve.gov/feeds/press_all.xml"}
+        calls=[]
+        resolver=SourceResolver(NOW,[value],lambda url:calls.append(url) or fixture.body().encode(),desk.identity,agents.url_key,[],{})
+        result=resolver.verify(value)
+        self.assertEqual(calls,[value["url"]]);desk.check_proof(result,NOW)
+        self.assertEqual(result["source_checked_at"],value["source_checked_at"])
+        self.assertIn(fixture.TARGET,result["source_excerpt"])
+
+    def test_direct_fed_statement_rejects_a_conflicting_explicit_publication_clock(self):
+        from scripts.check_news_editor import PolicyBriefChecks
+        fixture=PolicyBriefChecks();body=fixture.body().replace("</head>",'<meta property="article:published_time" content="2026-10-25T15:00:00+00:00"></head>')
+        with self.assertRaises(ValueError):
+            desk.verified({"url":fixture.source()["url"]},NOW,fetch=lambda _:body.encode())
+
+    def test_fed_publisher_candidate_reaches_independent_review_and_the_policy_brief(self):
+        from scripts.check_news_editor import PolicyBriefChecks
+        from src.intelligence import news_live_sources as feeds
+        from html import escape
+        fixture=PolicyBriefChecks();story=fixture.source()
+        source=next(row for row in feeds.NEWS_SOURCES if row["name"]=="Federal Reserve")
+        rss=f'<rss><channel><item><title>{story["title"]}</title><link>{story["url"]}</link><pubDate>{escape(story["published"])}</pubDate></item></channel></rss>'
+        path=Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+        path.write_text(json.dumps({source["url"]:{"status":"ok","fetched_at_epoch":NOW.timestamp(),"body":rss}}))
+        before=path.read_bytes();calls=[];client=Client(leads=[]);client.quote=fixture.TARGET
+        result=self.run_desk(client,fetch=lambda url:calls.append(url) or fixture.body().encode())
+        self.assertEqual(len(client.calls),2);self.assertEqual(calls,[story["url"]])
+        self.assertEqual(result["details"]["approved"],1)
+        text=build_daily_news_brief(self.research())
+        self.assertIn("Policy & Economy",text)
+        self.assertIn("held its federal funds target range at 3.75 to 4 percent",text)
+        self.assertEqual(path.read_bytes(),before)
+
     def setUp(self):
         super().setUp()
         self.stack.enter_context(patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "TSLA,NVDA,MSFT,PLTR,LMT"}))
@@ -1051,7 +1097,7 @@ class QuoteSelectionChecks(ResearchFixture):
         self.assertIn("customer commitments",report);self.assertTrue(validate_news_brief(report)["passes"])
         from src.intelligence.news_editor_store import read_editions
         selected=news_editor.selected_stories(read_editions(report=report)[0])
-        self.assertEqual(len(selected),2);self.assertTrue(all(row["event_evidence"]["schema"]==3 for row in selected))
+        self.assertEqual(len(selected),2);self.assertTrue(all(row["event_evidence"]["schema"]==4 for row in selected))
 
     def test_new_quote_protocol_preserves_time_gates_and_hourly_attempt_limit(self):
         client=self.client();self.run_desk(client)
