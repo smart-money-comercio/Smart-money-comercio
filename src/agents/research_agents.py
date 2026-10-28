@@ -62,6 +62,8 @@ def discover(client, model: str, now: str, symbols: list[str], domains: list[str
             "A quiet scan may return zero leads. Do not fill the budget with product-help pages, API documentation, pricing pages, tutorials, changelogs, "
             "support articles, career pages, stock-pick lists, price predictions or promotional roundups. An 'updated hours ago' label is not an original publication time. "
             "Return the specific dated release, article or filing URL, never a company homepage, business overview, product catalog or search landing page. "
+            "Calendars, investor FAQs, topic/news indexes, recurring data dashboards and lists of newly added FAQs are background, not discrete news releases. "
+            "Use links to the actual release; do not return a meeting schedule as a fresh policy decision. "
             "The supplied publisher reports have already been collected and will receive a separate relevance review; search for additional material reports. "
             "Look for earnings/guidance, funded orders, acquisitions, financing commitments, material deployments, policy changes and original IPO filings. "
             "Avoid already reviewed URLs unless a discrete new disclosure requires follow-up. Media reports are leads requiring verification. "

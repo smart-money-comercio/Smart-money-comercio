@@ -41,6 +41,8 @@ async def researchdesk_command(update, context):
         lines.append(f"Publisher cache coverage: {coverage.get('available', 0)} available / {coverage.get('limited', 0)} limited")
     if "source_verified" in details:
         lines += [f"Checks: {details['source_verified']} original sources verified / {details.get('held', 0)} held / {details.get('skipped', 0)} skipped; {details.get('original_reads', 0)} source reads"]
+    if details.get("resolved_releases"):
+        lines.append(f"Discovery links resolved to specific original releases: {details['resolved_releases']}")
     if details.get("expired"):
         lines.append(f"Expired reports retired from active follow-up: {details['expired']}")
     if value["status"] == "complete" and not details.get("approved"):
@@ -65,6 +67,8 @@ async def researchdesk_command(update, context):
                       "Follow-up retries: " + str(record.get("retry_count", 0)) + "/" + str(desk.MAX_HELD_RETRIES),
                       "Published: " + ((record.get("verified") or {}).get("published") or outcome.get("published") or "unverified"),
                       "Original source: " + record["verification"], "Decision reason: " + record["review"].get("reason", "Review unavailable"),
-                      "Evidence: " + (record["review"].get("evidence_quote") or "unavailable"), record["lead"]["url"]]
+                      "Evidence: " + (record["review"].get("evidence_quote") or "unavailable"), (record.get("verified") or record["lead"])["url"]]
+            if record.get("verified") and record["verified"]["url"] != record["lead"]["url"]:
+                lines.append("Discovered link: " + record["lead"]["url"])
     lines += ["", "/researchdesk history · /researchdesk run · /researchdesk off · /researchdesk on"]
     await reply_long_message(update, "\n".join(lines), title="Hourly Research Desk", parse_mode=None)

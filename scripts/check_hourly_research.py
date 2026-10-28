@@ -672,12 +672,12 @@ class PublisherEvidenceChecks(ResearchFixture):
         client = Client(leads=[]); value = self.run_desk(client, NOW+timedelta(hours=1))
         self.assertEqual(value["details"]["publisher_candidates"], 0); self.assertEqual(len(client.calls), 1)
 
-    def test_secondary_feed_body_and_headline_only_records_are_excluded(self):
+    def test_secondary_feed_and_unread_headlines_never_establish_approval(self):
         self.seed(symbol=None)
         self.assertEqual(self.run_desk(Client(leads=[]))["details"]["approved"], 0)
         Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"]).unlink(); desk.state_path().unlink()
         self.seed(description="")
-        self.assertEqual(self.run_desk(Client(leads=[]))["details"]["publisher_candidates"], 0)
+        self.assertEqual(self.run_desk(Client(leads=[]))["details"]["approved"], 0)
 
     def test_stale_future_unzoned_and_impossible_cache_clocks_are_rejected(self):
         cases = [{"published": (NOW-timedelta(hours=25)).isoformat()}, {"published": (NOW+timedelta(minutes=1)).isoformat()},
@@ -747,6 +747,195 @@ class PublisherEvidenceChecks(ResearchFixture):
 
     def test_unknown_terminal_outcome_is_rejected(self):
         with self.assertRaises(ValueError): SourceRejected("not a terminal decision", status="approve")
+
+
+class SourceRoutingChecks(ResearchFixture):
+    seed = PublisherEvidenceChecks.seed
+
+    def setUp(self):
+        super().setUp()
+        self.stack.enter_context(patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "TSLA,NVDA,MSFT,PLTR,LMT"}))
+
+    def brief(self):
+        from src.intelligence.company_catalyst_context import build_company_catalyst_brief
+        return build_company_catalyst_brief()
+
+    def release(self, title=TITLE, text=QUOTE, *, day="October 25, 2026"):
+        return (f'<html><body><h1>{title}</h1><div class="article-date">{day}</div>'
+                f'<article><p>{text}</p><p>Deployment depends on customer commitments and the production schedule.</p></article></body></html>').encode()
+
+    def catalogue(self):
+        return desk.publisher_reports(NOW, ["NVDA", "MSFT", "LMT"], {}, desk.identity, desk.finding_key, include_unread=True)[0]
+
+    def test_background_pages_do_not_spend_source_reads_or_request_ai_review(self):
+        urls = ["https://www.federalreserve.gov/newsevents/2026-october.htm?view=calendar",
+            "https://www.microsoft.com/en-us/investor/faq?CollectionId=null",
+            "https://www.eia.gov/petroleum/gasdiesel/?os=yahoo.com", "https://ofac.treasury.gov/faqs/added",
+            "https://www.apple.com/newsroom/topics/mac/"]
+        client = Client(leads=[{"title": "Potential material report", "url": url, "topic": "company"} for url in urls])
+        value = self.run_desk(client, fetch=lambda _: self.fail("Background page must not be fetched"))
+        self.assertEqual(value["details"]["skipped"], 5); self.assertEqual(value["details"]["original_reads"], 0)
+        self.assertEqual(len(client.calls), 1); self.assertFalse(desk.retry_candidates(NOW+timedelta(hours=1), [], desk.read_history()))
+
+    def test_news_index_resolves_to_original_cached_release_and_retains_feed_clock(self):
+        title = "Nvidia and Oracle expand cloud infrastructure to multi gigawatt scale"
+        self.seed(title=title, description="")
+        calls = []; client = Client(leads=[{"title": title, "url": "https://nvidianews.nvidia.com/news/?c=21926", "topic": "AI"}])
+        value = self.run_desk(client, fetch=lambda url: calls.append(url) or self.release(title))
+        self.assertEqual(calls, [URL]); self.assertEqual(value["details"]["resolved_releases"], 1)
+        self.assertEqual(value["details"]["approved"], 1)
+        item = desk.approved(NOW)[0]
+        self.assertEqual(item["published"], (NOW-timedelta(minutes=20)).isoformat())
+        self.assertEqual(item["source_checked_at"], (NOW-timedelta(minutes=5)).isoformat())
+        handoff = json.loads(client.calls[1]["input"])["candidates"][0]
+        self.assertEqual(handoff["url"], URL); self.assertEqual(handoff["title"], title)
+
+    def test_approved_body_based_development_enters_the_brief_and_editor_history(self):
+        title = "Lockheed Martin Welcomes Dedicated Missile Maintenance Facility in Poland"
+        url = "https://news.lockheedmartin.com/2026-10-25-missile-maintenance-facility"
+        self.seed(symbol="LMT", url=url, title=title, description="")
+        client = Client(leads=[]); client.quote = "The new facility adds missile maintenance capacity in Poland."
+        self.run_desk(client, fetch=lambda _: self.release(title, client.quote))
+        self.assertEqual(len(desk.approved(NOW)), 1)
+        text = build_daily_news_brief(self.research())
+        self.assertIn(title, text); self.assertTrue(validate_news_brief(text)["passes"])
+        from src.intelligence.news_editor_store import read_editions
+        edition = read_editions()[0]
+        selected = next(row for row in edition["candidates"] if row["decision"] == "selected" and row["title"] == title)
+        self.assertEqual(selected["research_review"]["quote"], client.quote)
+        self.assertEqual(selected["event_evidence"]["scope"], "original release excerpt")
+        self.assertIn("Global and Defense Watch", text)
+
+    def test_ir_mirror_is_replaced_by_the_canonical_publisher_link_before_http(self):
+        title = "Lockheed Martin to Add Air Launched Hypersonic Missile to the American Arsenal of Freedom"
+        actual = "https://news.lockheedmartin.com/2026-10-25-Lockheed-Martin-to-Add-Air-Launched-Hypersonic-Missile-to-the-American-Arsenal-of-Freedom"
+        mirror = "https://investors.lockheedmartin.com/news-releases/news-release-details/lockheed-martin-add-air-launched-hypersonic-missile-american"
+        self.seed(symbol="LMT", url=actual, title=title, description="")
+        client = Client(leads=[{"title": "Lockheed Martin awarded a hypersonic missile contract", "url": mirror, "topic": "defense"}]); calls=[]
+        value = self.run_desk(client, fetch=lambda url: calls.append(url) or self.release(title))
+        self.assertEqual(calls, [actual]); self.assertEqual(value["details"]["approved"], 1)
+        self.assertEqual(desk.approved(NOW)[0]["url"], actual)
+        self.assertEqual(len(desk.latest_findings(desk.read_history())), 2)
+
+    def test_missing_cached_feed_can_resolve_a_specific_ir_mirror_within_existing_budget(self):
+        from html import escape
+        title = "Nvidia expands Oracle cloud infrastructure with new systems"
+        actual = "https://nvidianews.nvidia.com/news/nvidia-expands-oracle-cloud-infrastructure-with-new-systems"
+        mirror = "https://investor.nvidia.com/news/press-release-details/2026/Nvidia-expands-Oracle-cloud-infrastructure-with-new-systems/default.aspx"
+        rss = f'<rss><channel><item><title>{title}</title><link>{actual}</link><pubDate>{(NOW-timedelta(minutes=20)).isoformat()}</pubDate></item></channel></rss>'.encode()
+        calls=[]
+        def fetch(url):
+            calls.append(url)
+            if url == actual: return self.release(title)
+            if url == "https://nvidianews.nvidia.com/releases.xml": return rss
+            self.fail("Unresolved investor mirror fetched")
+        value = self.run_desk(Client(leads=[{"title": title, "url": mirror, "topic": "AI"}]), fetch=fetch)
+        self.assertEqual(value["details"]["original_reads"], 2); self.assertEqual(value["details"]["approved"], 1)
+        self.assertEqual(len(calls), 2); self.assertFalse(Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"]).exists())
+
+    def test_ambiguous_or_issuer_only_matching_does_not_choose_a_release(self):
+        from src.intelligence.research_source_routes import matching_release
+        self.seed(title="Nvidia expands Oracle cloud infrastructure to large scale")
+        self.seed(url=URL+"2", title="Nvidia expands Oracle cloud infrastructure for large deployments")
+        values = self.catalogue()
+        for title in ("Nvidia publishes report", "Nvidia expands Oracle cloud infrastructure"):
+            self.assertIsNone(matching_release({"title": title, "url": "https://nvidianews.nvidia.com/news/"}, values, desk.identity))
+        self.assertIsNone(matching_release({"title": TITLE, "url": "https://www.microsoft.com/news/"}, values, desk.identity))
+
+    def test_unmatched_news_index_is_skipped_without_inventing_publication(self):
+        self.seed()
+        client = Client(leads=[{"title": "Nvidia another unrelated announcement", "url": "https://nvidianews.nvidia.com/news/", "topic": "AI"}])
+        value = self.run_desk(client, fetch=lambda _: b"<rss><channel></channel></rss>")
+        record = next(row for row in desk.read_history() if row["lead"]["url"].endswith("/news/"))
+        self.assertEqual(record["review"]["final"], "skip"); self.assertIsNone(record["verified"])
+        self.assertLessEqual(value["details"]["original_reads"], 6)
+
+    def test_date_only_release_must_match_the_identified_header_not_an_incidental_body_date(self):
+        from src.intelligence.news_original_sources import article_excerpt
+        body = self.release(text=QUOTE+" The old contract was signed October 25, 2026.", day="October 24, 2026")
+        with self.assertRaisesRegex(ValueError, "date does not match"):
+            article_excerpt(body.decode(), TITLE, NOW.isoformat())
+
+    def test_original_feed_local_day_is_preserved_when_utc_day_differs(self):
+        from src.intelligence.research_source_routes import SourceResolver
+        published = "2026-10-24T23:45:00-04:00"
+        self.seed(description="", published=published)
+        resolver = SourceResolver(NOW, self.catalogue(), lambda _: self.release(day="October 24, 2026"), desk.identity, desk.finding_key, ["NVDA"], {})
+        value = resolver.verify(resolver.values[0]); desk.check_proof(value, NOW)
+        self.assertEqual(value["published"], "2026-10-25T03:45:00+00:00")
+
+    def test_original_feed_clock_cannot_override_conflicting_explicit_release_metadata(self):
+        from src.intelligence.research_source_routes import SourceResolver
+        self.seed(description="")
+        resolver = SourceResolver(NOW, self.catalogue(), lambda _: html(clock=(NOW-timedelta(hours=2)).isoformat()), desk.identity, desk.finding_key, ["NVDA"], {})
+        with self.assertRaises(ValueError): resolver.verify(resolver.values[0])
+
+    def test_failed_article_read_retains_known_publisher_clock_without_approval(self):
+        self.seed(description="")
+        value=self.run_desk(Client(leads=[]), fetch=lambda _: b"<html><h1>Access denied</h1></html>")
+        self.assertEqual(value["details"]["approved"], 0)
+        row = desk.read_history()[0]
+        self.assertEqual(row["source_outcome"]["published"], (NOW-timedelta(minutes=20)).isoformat())
+        self.assertFalse(desk.approved(NOW))
+
+    def test_explicit_publisher_denials_do_not_trigger_fallback_reads(self):
+        for status in (403, 429):
+            calls=[]
+            def fetch(url):
+                calls.append(url); raise HTTPError(url, status, "Denied", {}, None)
+            value=self.run_desk(Client(), fetch=fetch)
+            self.assertEqual(calls, [URL]); self.assertEqual(value["details"]["approved"], 0)
+            desk.state_path().unlink()
+
+    def test_review_rejection_and_invented_quotes_withhold_original_feed_candidates(self):
+        title="Nvidia and Oracle expand AI infrastructure"
+        for decision, quote in (("skip", QUOTE), ("accept", "A claim the original company release did not make.")):
+            self.seed(title=title, description="")
+            client=Client(leads=[], decision=decision); client.quote=quote
+            self.assertEqual(self.run_desk(client, fetch=lambda _: self.release(title))["details"]["approved"], 0)
+            desk.state_path().unlink(); Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"]).unlink()
+
+    def test_body_based_editor_admission_requires_a_bound_independent_review(self):
+        title="Nvidia and Oracle expand AI infrastructure"
+        self.seed(title=title); self.run_desk(Client(leads=[]))
+        value=desk.approved(NOW)[0]
+        for field, changed in (("quote", "An invented supporting quote."), ("score", 64), ("response_id", "")):
+            raw=deepcopy(value); raw["research_review"][field]=changed
+            with self.assertRaises(ValueError): desk.check_proof(raw, NOW)
+            plan=news_editor.build_editorial_plan(self.brief(), NOW, [raw])
+            self.assertFalse(news_editor.selected_stories(plan))
+
+    def test_rediscovery_counts_against_the_same_three_retry_limit(self):
+        def unavailable(_): raise ValueError("Unavailable source")
+        for index in range(5):
+            self.run_desk(Client(), NOW+timedelta(hours=index), unavailable)
+        row=desk.read_history()[0]
+        self.assertEqual(row["retry_count"], 3); self.assertEqual(row["review"]["final"], "skip")
+        self.assertIn("rediscovery", row["review"]["reason"])
+        self.assertEqual(row["discovered_at"], NOW.isoformat())
+
+    def test_canonical_and_discovered_aliases_do_not_duplicate_held_followup(self):
+        title="Nvidia and Oracle expand cloud infrastructure to multi gigawatt scale"
+        self.seed(title=title, description="")
+        client=Client(leads=[{"title": title, "url": "https://nvidianews.nvidia.com/news/", "topic": "AI"}], decision="hold")
+        self.run_desk(client, fetch=lambda _: self.release(title))
+        records=desk.read_history()
+        self.assertEqual(len(desk.retry_candidates(NOW+timedelta(hours=1), [], records)), 1)
+        self.assertFalse(desk.retry_candidates(NOW+timedelta(hours=1), [{"title": title, "url": URL, "topic": "AI"}], records))
+
+    def test_unread_publisher_candidates_share_the_six_http_read_limit(self):
+        for index in range(4):
+            self.seed(url=URL+"publisher"+str(index), title=TITLE+" "+str(index), description="")
+        calls=[]
+        leads=[{"title": TITLE, "url": "https://www.microsoft.com/news/fresh"+str(index), "topic": "AI"} for index in range(4)]
+        value=self.run_desk(Client(leads=leads), fetch=lambda url: calls.append(url) or html())
+        self.assertLessEqual(len(calls), 6); self.assertEqual(value["details"]["candidates"], 7)
+        self.assertLessEqual(value["details"]["original_reads"], 6)
+
+    def test_expired_known_feed_clock_is_not_retried_as_a_new_discovery(self):
+        self.seed(description="", published=(NOW-timedelta(hours=23)).isoformat())
+        self.run_desk(Client(leads=[]), fetch=lambda _: b"<html><h1>Unavailable</h1></html>")
+        self.assertFalse(desk.retry_candidates(NOW+timedelta(hours=2), [], desk.read_history()))
 
 
 class ContractChecks(unittest.TestCase):
@@ -862,7 +1051,7 @@ if __name__ == "__main__":
         if args.windows_socketpair:
             stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))
         traffic = stack.enter_context(offline_network_guard())
-        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks, FollowupChecks, PublisherEvidenceChecks))
+        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks, FollowupChecks, PublisherEvidenceChecks, SourceRoutingChecks))
         result = unittest.TextTestRunner(verbosity=1).run(suite)
     ok = result.wasSuccessful() and not traffic["blocked"]
     print(f"Hourly Research Check: {'PASS' if ok else 'FAIL'} ({result.testsRun} tests)")

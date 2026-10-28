@@ -27,6 +27,16 @@ Confirmed publication ages beyond 24 hours are terminal **EXPIRED** outcomes, re
 
 ## Follow-up on held leads
 
+### Resolve the actual original report
+
+Publisher handoff now includes up to three fresh, dated original feed entries that need a release-body read, even when the headline lacks the editor's materiality keywords. An unread headline is a source reference, not verified report text. Code reads the exact release and requires a matching complete heading and release date. When a page only displays a date, its own original RSS/Atom entry supplies the zoned publication clock; a conflicting explicit page timestamp is never overridden. Native feed date labels are retained across UTC day boundaries. Original publication stays within 24 hours and the source observation within six hours.
+
+A company news index or investor-site mirror can resolve to a specific report in the same publisher's feed. Matching requires a unique, specific title or URL-slug match; an issuer name or one shared topic is insufficient. The audit retains both the discovered URL and the original release actually reviewed. When needed, a configured original feed can be read once during the attempt without writing the news cache. Feed and article reads share the existing six-read budget; publisher candidates share the eight-candidate cap. A publisher denial is not followed by attempts to bypass it.
+
+The independent reviewer still must approve materiality and provide an exact source quote. Its bound review allows a material development to reach the editor even when the original title does not contain an announcement keyword. The quote, reason, model-response ID, original text and source clocks remain inspectable in the editorial record. Headline-only or failed reads cannot establish approval.
+
+Calendars, investor FAQs, FAQ indexes, topic pages and recurring price dashboards are background inputs, so they leave the news follow-up queue without a source read. Existing calendar evidence supplies scheduled events to the brief. A rediscovered held URL consumes the same three-retry allowance instead of resetting it; canonical and discovered release aliases do not create duplicate retries. Previous audit records remain intact.
+
 A source failure or incomplete review can leave a useful lead on HOLD. The next hourly attempt can revisit up to two of the latest held findings even when discovery returns an empty list. Older, unresolved findings are prioritized when space remains in the eight-candidate batch. Current search results take up to eight slots; a full new batch leaves no retry slots. Approved or skipped decisions suppress an older hold, and SEC index/document aliases share one identity.
 
 Automatic follow-up is limited to three retries per finding within 24 hours of its original discovery. A known original publication older than 24 hours is ineligible. The initial discovery time is preserved, and each follow-up records its own last-checked time, retry count and link to the prior review. Existing records without these fields remain readable and can receive bounded follow-up.

@@ -17,6 +17,7 @@ from src.intelligence.special_alert_company_sources import PublicationPage, publ
 from src.intelligence.story_analysis import VisibleText
 from src.intelligence import sec_research
 from src.intelligence.research_evidence import SourceRejected, publisher_reports
+from src.intelligence.research_source_routes import SourceResolver, background_reason, matching_release, news_index
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -156,6 +157,12 @@ def check_proof(value: dict, now: datetime | None = None) -> dict:
         raise ValueError("Original research clocks unavailable or stale")
     if "feed_url" in proof and (published-observed).total_seconds() > 60:
         raise ValueError("Publisher observation predates its purported report")
+    review = value.get("research_review")
+    if review is not None and (not isinstance(review, dict) or not isinstance(review.get("response_id"), str) or not review["response_id"]
+            or type(review.get("score")) is not int or not 65 <= review["score"] <= 100
+            or not isinstance(review.get("quote"), str) or not 20 <= len(review["quote"]) <= 500 or review["quote"] not in proof["text"]
+            or not isinstance(review.get("reason"), str) or len(review["reason"]) > 240):
+        raise ValueError("Independent research review does not match the original source")
     return publisher
 
 
@@ -221,6 +228,8 @@ def latest_findings(records: list[dict]) -> dict[str, dict]:
                     or lead["topic"] not in research_agents.TOPICS or row["id"] != hashlib.sha256(url.encode()).hexdigest()[:20]):
                 continue
             result.setdefault(finding_key(url), row)
+            if row.get("verified"):
+                result.setdefault(finding_key(row["verified"]["url"]), row)
         except (KeyError, ValueError, TypeError, AttributeError):
             continue
     return result
@@ -229,19 +238,25 @@ def latest_findings(records: list[dict]) -> dict[str, dict]:
 def retry_candidates(now: datetime, fresh: list[dict], history: list[dict]) -> list[dict]:
     """Read-only bounded follow-up queue; rechecks never change the first-seen clock."""
     current = {finding_key(lead["url"]) for lead in fresh}
-    eligible = []
+    eligible, seen = [], set()
     for key, row in latest_findings(history).items():
         try:
+            if row["id"] in seen:
+                continue
+            seen.add(row["id"])
+            aliases = {key, finding_key(row["lead"]["url"])}
+            if row.get("verified"):
+                aliases.add(finding_key(row["verified"]["url"]))
             discovered = timestamp(row["discovered_at"])
             attempted = timestamp(row.get("last_attempt_at", row["discovered_at"]))
             retries = row.get("retry_count", 0)
-            if (key in current or row["review"]["final"] != "hold" or discovered is None or attempted is None
+            if (aliases & current or row["review"]["final"] != "hold" or discovered is None or attempted is None
                     or not 0 <= (now-discovered).total_seconds() <= 86400
                     or int(attempted.timestamp() // 3600) >= int(now.timestamp() // 3600)
                     or type(retries) is not int or not 0 <= retries < MAX_HELD_RETRIES):
                 continue
-            if row.get("verified"):
-                published = timestamp(row["verified"].get("published"))
+            if row.get("verified") or row.get("source_outcome", {}).get("published"):
+                published = timestamp((row.get("verified") or row["source_outcome"]).get("published"))
                 if published is None or not 0 <= (now-published).total_seconds() <= 86400:
                     continue
             eligible.append((attempted, row))
@@ -278,7 +293,8 @@ def approved(now: datetime) -> list[dict]:
             source_text = value.get("source_excerpt", "")
             if len(quote) < 20 or quote not in source_text or not record.get("review_response_id"):
                 continue
-            result.append({**value, "origin": "Hourly AI research review"})
+            result.append({**value, "origin": "Hourly AI research review", "research_review": {
+                "response_id": record["review_response_id"], "score": decision["score"], "quote": quote, "reason": decision["reason"]}})
             seen.add(canonical)
         except (ValueError, TypeError, KeyError, AttributeError):
             continue
@@ -318,9 +334,11 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         domains = list(dict.fromkeys(row["domain"] for row in identities())) + ["reuters.com", "apnews.com", "sec.gov"]
         history = read_history(80)
         latest = latest_findings(history)
-        cached, coverage = publisher_reports(now, symbols, latest, identity, finding_key)
-        cached = [value for value in cached if not routine_page(value["url"])][:3]
-        for value in cached: check_proof(value, now)
+        catalogue, coverage = publisher_reports(now, symbols, latest, identity, finding_key, include_unread=True)
+        catalogue = [value for value in catalogue if not routine_page(value["url"]) and not news_index(value["url"])]
+        cached = catalogue[:3]
+        for value in cached:
+            if value.get("discovery_evidence"): check_proof(value, now)
         details["publisher_coverage"] = coverage
         hints = [{key: value[key] for key in ("title", "url", "published", "source")} for value in cached]
         seen_urls = [row["lead"]["url"] for row in latest.values() if row.get("review", {}).get("final") in {"approved", "skip"}][:16]
@@ -333,12 +351,15 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         pending = retry_candidates(now, leads, history)
         work = [(row["lead"], row, True) for row in pending] + [(lead, latest.get(finding_key(lead["url"])), False) for lead in leads]
         present = {finding_key(lead["url"]) for lead, _, _ in work}
+        for lead, _, _ in work:
+            resolved = matching_release(lead, catalogue, identity)
+            if resolved:
+                present.add(finding_key(resolved["url"]))
         additions = [value for value in cached if finding_key(value["url"]) not in present][:max(0, 8-len(work))]
         for value in additions:
             topic = "company" if value["kind"] == "company" else "macro"
             work.append(({key: value[key] for key in ("title", "url")} | {"topic": topic}, latest.get(finding_key(value["url"])), False))
-        cached_by_key = {finding_key(value["url"]): value for value in cached}
-        details.update(candidates=len(work), search_leads=len(leads), retried=len(pending), publisher_candidates=len(additions), publisher_cache_used=0)
+        details.update(candidates=len(work), search_leads=len(leads), retried=len(pending), publisher_candidates=len(additions), publisher_cache_used=0, resolved_releases=0)
         reads = 0
         def bounded_fetch(url):
             nonlocal reads
@@ -346,21 +367,24 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                 raise ValueError("Original-source read budget reached")
             reads += 1
             return fetch(url)
+        resolver = SourceResolver(now, catalogue, bounded_fetch, identity, finding_key, symbols, latest)
         for lead, parent, retry in work:
             first_seen = timestamp(parent.get("discovered_at")) if parent else None
             count = parent.get("retry_count", 0) if parent else 0
             count = count if type(count) is int and 0 <= count <= MAX_HELD_RETRIES else 0
+            repeat = bool(parent and parent.get("review", {}).get("final") == "hold")
+            exhausted = repeat and count >= MAX_HELD_RETRIES
             record = {"id": hashlib.sha256(lead["url"].encode()).hexdigest()[:20],
                       "discovered_at": first_seen.isoformat() if first_seen is not None and first_seen <= now else now.isoformat(),
-                      "last_attempt_at": now.isoformat(), "retry_count": count + int(retry), "origin": "held retry" if retry else "discovery",
+                      "last_attempt_at": now.isoformat(), "retry_count": count + int(repeat and not exhausted), "origin": "held retry" if retry else "discovery",
                       "discovery_response_id": (parent or {}).get("discovery_response_id", "") if retry else details["agents"][0]["response_id"],
                       "prior_review_response_id": (parent or {}).get("review_response_id", ""), "lead": lead,
                       "verified": None, "verification": "Original source not verified", "review": {"final": "hold"}}
-            cached_value = cached_by_key.get(finding_key(lead["url"]))
-            if cached_value:
+            cached_value = resolver.reference(lead)
+            if cached_value and cached_value["url"] == lead["url"]:
                 record["origin"] = "dated publisher cache"
                 record["discovery_response_id"] = ""
-            excluded = routine_page(lead["url"])
+            excluded = routine_page(lead["url"]) or ("Automatic source retry limit reached; rediscovery does not restart verification attempts" if exhausted else "")
             if excluded:
                 record["verification"] = excluded
                 record["review"] = {"final": "skip", "reason": excluded}
@@ -368,12 +392,30 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
             else:
                 try:
                     if cached_value:
-                        check_proof(cached_value, now)
-                        record["verified"] = cached_value
-                        details["publisher_cache_used"] += 1
-                        record["verification"] = "Original publisher evidence verified; cached source clocks retained"
+                        record["verified"] = resolver.verify(cached_value)
                     else:
-                        record["verified"] = verified(lead, now, bounded_fetch); record["verification"] = "Original source verified"
+                        if resolver.pre_resolve(lead):
+                            cached_value = resolver.reference(lead, read_feed=True)
+                        if cached_value:
+                            record["verified"] = resolver.verify(cached_value)
+                        elif news_index(lead["url"]):
+                            raise SourceRejected("News index did not identify a unique dated release; specific original report required", status="rejected")
+                        else:
+                            try:
+                                record["verified"] = verified(lead, now, bounded_fetch)
+                            except SourceRejected:
+                                raise
+                            except ValueError as original_error:
+                                cached_value = resolver.reference(lead, read_feed=True)
+                                if not cached_value:
+                                    raise original_error
+                                record["verified"] = resolver.verify(cached_value)
+                    if cached_value:
+                        details["publisher_cache_used"] += int(bool(cached_value.get("discovery_evidence")))
+                        details["resolved_releases"] += int(cached_value["url"] != lead["url"])
+                        record["verification"] = "Original publisher release verified; original feed clock retained"
+                    else:
+                        record["verification"] = "Original source verified"
                 except SourceRejected as exc:
                     record["source_outcome"] = {"status": exc.status, "published": exc.published}
                     record["verification"] = str(exc)
@@ -383,12 +425,14 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                     from urllib.error import HTTPError
                     reason = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else str(exc)[:180] if isinstance(exc, ValueError) else type(exc).__name__
                     record["verification"] = "Original source unavailable: " + reason
+                    if cached_value:
+                        record["source_outcome"] = {"status": "unverified", "published": cached_value["published"]}
             records.append(record)
         details["original_reads"] = reads
         reviewable = [row for row in records if not row.get("screened_out")]
         if reviewable:
             handoff = [{"id": row["id"], "title": (row["verified"] or row["lead"])["title"], "topic": row["lead"]["topic"],
-                        "url": row["lead"]["url"], "published": (row["verified"] or {}).get("published", "unverified"),
+                        "url": (row["verified"] or row["lead"])["url"], "published": (row["verified"] or {}).get("published", "unverified"),
                         "verification": row["verification"], "lead_origin": row["origin"],
                         "source_text": (row["verified"] or {}).get("source_excerpt", "")} for row in reviewable]
             decisions, metadata = research_agents.review(client, config["review_model"], handoff, symbols)
@@ -429,6 +473,9 @@ def summary() -> str:
 
 def routine_page(url: str) -> str:
     p = urlsplit(url)
+    background = background_reason(url)
+    if background:
+        return background
     if (p.hostname or "").split(".")[0] in {"help", "support", "docs", "developers"} or re.match(r"^/(?:help|docs|documentation|support|careers|jobs|pricing)(?:/|$)", p.path, re.I):
         return "Routine help, documentation or service page; no investor report established"
     if re.search(r"/(?:who-we-are/business-areas|business-areas)(?:/|$)", p.path, re.I):

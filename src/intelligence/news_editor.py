@@ -108,7 +108,10 @@ def materiality(story: dict) -> str:
         }
         if story["symbols"] and re.search(r"\b(contract|agreement|regulatory approval|investigation)\b", title, re.I):
             return "government company report"
-    return next((category for category, pattern in patterns.items() if re.search(pattern, title, re.I)), "")
+    topic = next((category for category, pattern in patterns.items() if re.search(pattern, title, re.I)), "")
+    if not topic and story.get("research_review") and story.get("discovery_evidence") and primary_source(story):
+        return "reviewed company development" if story["kind"] == "company" else "reviewed policy development"
+    return topic
 
 
 def utc_now() -> datetime:
@@ -188,12 +191,13 @@ def story_type(story: dict) -> str:
     return ("announcement" if story["official"] else "reported development") if materiality(story) else "context"
 
 
-def cache_candidates(now: datetime, symbols: list[str], *, health: list | None = None) -> tuple[list[dict], list[str]]:
+def cache_candidates(now: datetime, symbols: list[str], *, health: list | None = None, cache: dict | None = None) -> tuple[list[dict], list[str]]:
     path = Path(os.getenv("NEWS_LIVE_SOURCE_CACHE_FILE", str(feeds.CACHE_FILE)))
     try:
-        if path.stat().st_size > MAX_CACHE_BYTES:
-            raise ValueError("News cache exceeds the size limit")
-        cache = json.loads(path.read_text(encoding="utf-8-sig"))
+        if cache is None:
+            if path.stat().st_size > MAX_CACHE_BYTES:
+                raise ValueError("News cache exceeds the size limit")
+            cache = json.loads(path.read_text(encoding="utf-8-sig"))
         if not isinstance(cache, dict):
             raise ValueError("News cache is not an object")
     except (OSError, ValueError, UnicodeError) as exc:
@@ -306,6 +310,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["sec_filing"] = deepcopy(raw["sec_filing"])
         if raw.get("discovery_evidence") is not None:
             story["discovery_evidence"] = deepcopy(raw["discovery_evidence"])
+        if raw.get("research_review") is not None:
+            story["research_review"] = deepcopy(raw["research_review"])
         try:
             if not isinstance(raw_title, str) or not title or not story["source"]:
                 raise ValueError("Headline or source missing")
@@ -381,7 +387,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["event_evidence"] = build_evidence(story, text, scope)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 11, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 12, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def timestamp_for_priority(value):
@@ -589,6 +595,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if story.get("confirmed_by"):
                     lines.append("Original publisher verified: " + story["confirmed_by"])
                     lines.append("Investor topic: " + story["materiality"])
+                if story.get("research_review"):
+                    lines += ["Independent relevance review: " + story["research_review"]["reason"],
+                              "Supporting source quote: " + story["research_review"]["quote"]]
                 if story.get("event_evidence"):
                     from src.agents.analyst_agent import review_sourced_development
                     review = review_sourced_development(story)

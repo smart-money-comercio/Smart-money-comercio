@@ -15,11 +15,11 @@ class SourceRejected(ValueError):
         self.status, self.published = status, published
 
 
-def publisher_reports(now: datetime, symbols: list[str], latest: dict, identity, key_for) -> tuple[list[dict], dict]:
+def publisher_reports(now: datetime, symbols: list[str], latest: dict, identity, key_for, *, include_unread=False, cache=None) -> tuple[list[dict], dict]:
     """Reuse the brief's validated publisher cache without network or cache writes."""
     from src.intelligence import news_editor as editor, news_live_sources as feeds
     health = []
-    items, issues = editor.cache_candidates(now, symbols, health=health)
+    items, issues = editor.cache_candidates(now, symbols, health=health, **({"cache": cache} if cache is not None else {}))
     available = sum(row["status"] == "available" for row in health)
     coverage = {"available": available, "limited": len(health)-available, "issues": len(issues)}
     result, seen = [], set()
@@ -44,7 +44,9 @@ def publisher_reports(now: datetime, symbols: list[str], latest: dict, identity,
                 continue
             scope = raw.get("excerpt_scope", "headline only")
             text = " ".join(release_text(raw.get("source_excerpt", "")).split())
-            if scope not in {"publisher feed excerpt", "original release excerpt"} or len(text) < 80 or editor.story_type(raw) != "announcement":
+            kind = editor.story_type(raw)
+            usable = scope in {"publisher feed excerpt", "original release excerpt"} and len(text) >= 80
+            if (not include_unread and (not usable or kind != "announcement")) or (include_unread and kind not in {"announcement", "context"}):
                 continue
             key = key_for(url)
             previous = latest.get(key)
@@ -59,7 +61,11 @@ def publisher_reports(now: datetime, symbols: list[str], latest: dict, identity,
             value = {"title": raw["title"], "original_title": raw["title"], "url": url, "published": published.isoformat(), "source_checked_at": observed.isoformat(),
                 "source": source["name"], "official": True, "publisher_symbol": publisher["symbol"], "symbol": publisher["symbol"],
                 "symbols": [publisher["symbol"]] if publisher["symbol"] else [], "kind": "company" if publisher["symbol"] else "macro", "relevant": True,
-                "source_excerpt": text, "excerpt_scope": scope, "discovery_evidence": proof}
+                "source_excerpt": text if usable else "", "excerpt_scope": scope if usable else "headline only"}
+            value["publisher_reference"] = {key: proof[key] for key in ("url", "title", "published", "observed", "feed_url")}
+            value["publisher_reference"]["publisher_clock"] = raw["published"]
+            if usable:
+                value["discovery_evidence"] = proof
             result.append(value); seen.add(key)
         except (ValueError, KeyError, TypeError, AttributeError):
             continue

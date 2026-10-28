@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlsplit
 
 from src.intelligence.special_alert_company_sources import PublicationPage, publication_time
 from src.intelligence.special_alert_sources import company_url, timestamp
-from src.intelligence.story_analysis import VisibleText, event_type, release_text
+from src.intelligence.story_analysis import VisibleText, release_text
 
 
 MAX_ARTICLES = 30
@@ -25,9 +25,14 @@ class ArticleBody(VisibleText):
         super().__init__()
         self.depth = 0
         self.heading_tag, self.heading_parts, self.headings = None, [], []
+        self.date_depth, self.date_parts = 0, []
 
     def handle_starttag(self, tag, attrs):
         classes = set(dict(attrs).get("class", "").split())
+        if classes & {"article-date", "wd_date"}:
+            self.date_depth = 1
+        elif self.date_depth and tag not in self.VOID:
+            self.date_depth += 1
         if tag == "h1" or "wd_title" in classes:
             self.heading_tag, self.heading_parts = tag, []
         if not self.depth and (tag == "article" or classes & {"wd_news_body", "article-body", "release-body"}):
@@ -38,6 +43,8 @@ class ArticleBody(VisibleText):
             super().handle_starttag(tag, attrs)
 
     def handle_endtag(self, tag):
+        if self.date_depth and tag not in self.VOID:
+            self.date_depth -= 1
         if tag == self.heading_tag:
             self.headings.append(" ".join("".join(self.heading_parts).split()))
             self.heading_tag = None
@@ -46,6 +53,8 @@ class ArticleBody(VisibleText):
             self.depth -= 1
 
     def handle_data(self, data):
+        if self.date_depth:
+            self.date_parts.append(data)
         if self.heading_tag:
             self.heading_parts.append(data)
         if self.depth:
@@ -76,7 +85,8 @@ def article_excerpt(body: str, title: str, published: str) -> str:
         except ValueError:
             original = parsedate_to_datetime(published)
         month = f"(?:{original:%B}|{original:%b})"
-        if not re.search(r"\b" + month + rf"\.?\s+{original.day},\s+{original.year}\b", text):
+        date_text = " ".join(parser.date_parts) if parser.date_parts else text
+        if not re.search(r"\b" + month + rf"\.?\s+{original.day},\s+{original.year}\b", date_text):
             raise ValueError("Original article release date does not match its feed")
     else:
         if actual != expected:
@@ -95,8 +105,7 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
     for row in parse_feed(payload.get("body", ""), source, full_titles=True):
         published = timestamp(row["published"])
         if (published and 0 <= (now - published).total_seconds() <= 24 * 3600
-                and company_url(source["company_symbol"], row["link"])
-                and event_type(row["title"])[0] in {"acquisition", "divestiture", "contract", "product", "guidance", "earnings", "restructuring"}):
+                and company_url(source["company_symbol"], row["link"])):
             candidates.append((published, row))
     candidates.sort(key=lambda value: value[0], reverse=True)
     details, issues = [], []
