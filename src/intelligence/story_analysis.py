@@ -48,7 +48,7 @@ def release_text(value) -> str:
     return text.strip()
 
 
-def event_type(title: str, fallback: str = "", *, version: int = 2) -> tuple[str, str]:
+def event_type(title: str, fallback: str = "", *, version: int = 3) -> tuple[str, str]:
     title = str(title or "")
     guidance = re.search(r"\b(raises?|cuts?|lowers?|reduces?|withdraws?|reaffirms?|maintains?|updates?)\b.{0,40}\b(guidance|revenue outlook|earnings outlook)\b", title, re.I)
     acquisition = re.search(r"\b(acquisitions?|acquir\w*|merger|buyout)\b", title, re.I)
@@ -82,6 +82,17 @@ def event_type(title: str, fallback: str = "", *, version: int = 2) -> tuple[str
         return "guidance", "reaffirmed" if re.search(r"\b(reaffirms?|maintains?|unchanged)\b", title, re.I) else "lowered" if re.search(r"\b(cuts?|lowers?|reduces?|withdraws?)\b", title, re.I) else "updated"
     if fallback == "earnings" or re.search(r"\breports?\b.{0,70}\b(results|earnings|revenue|EPS)\b", title, re.I):
         return "earnings", "reported"
+    if version >= 3:
+        technical = re.search(r"\b(tests?|trials?|validat\w*|redirect\w*|retarget\w*)\b", title, re.I)
+        defense = re.search(r"\b(defen[cs]e|Army|Navy|military|missiles?|rockets?|GMLRS|GMRLS|hypersonic|drones?|counter.drone|autonomous)\b", title, re.I)
+        if technical and defense:
+            planned = re.search(r"\b(plans?|planned|proposed|scheduled|prepares?|will|expects?)\b|\bto test\b", title, re.I)
+            return "product", "planned test" if planned else "test milestone"
+        expands = re.search(r"\b(expand\w*|scales?|scaling)\b", title, re.I)
+        if expands and re.search(r"\bcollaborat\w*\b", title, re.I) and re.search(r"\b(models?|AI|chips?|cloud)\b", title, re.I):
+            return "technology collaboration", "announced"
+        if expands and re.search(r"\b(AI|cloud|compute|computing|GPU|CPU|infrastructure|data centers?)\b", title, re.I):
+            return "capacity expansion", "announced"
     if fallback == "product" or re.search(r"\b(introduces?|unveils?|launch(?:es)?|prototype|demonstrat\w*|begins production|first deliveries)\b", title, re.I):
         if re.search(r"\b(prototype|concept|demonstrat\w*|flight test)\b", title, re.I):
             return "product", "prototype"
@@ -105,6 +116,14 @@ def disclosed_facts(text: str, kind: str, stage: str = "") -> list[dict]:
         negative_check = re.sub(r"\bnot to exceed\b", "ceiling", sentence, flags=re.I)
         if not sentence or re.search(r"\b(previously|(?:last|prior|previous) (?:year|quarter|period)|historically|forward-looking|hypothetical|could|may|would|might|not|no|denies|rumou?r\w*)\b", negative_check, re.I):
             continue
+        if kind == "product" and stage == "test milestone":
+            if (re.search(r"\b(?:successfully redirected|demonstrated .{0,45}retarget\w*|validated .{0,45}retarget\w*)\b", sentence, re.I)
+                    and re.search(r"\bin[\s\-\u2010\u2011\u2013]flight\b", sentence, re.I)
+                    and not re.search(r"\b(plans?|expects?|will|intends?|if|failed|unsuccessful|aborted|cancelled)\b", sentence, re.I)):
+                add("tested_capability", "in-flight retargeting", sentence)
+        if kind == "capacity expansion" and re.search(r"\b(?:announced plans?|plans? to expand)\b", sentence, re.I):
+            if re.search(r"\bmulti[\s\-\u2010\u2011\u2013]gigawatt\b", sentence, re.I):
+                add("planned_capacity_scale", "multi-gigawatt scale", sentence)
         if kind in {"acquisition", "divestiture"}:
             match = re.search(r"\b(?:acquir\w*|acquisition|transaction|purchase|deal|consideration|sale)\b.{0,100}?\b(?:for|valued at|value of|price of|consideration of|at)\s+(" + MONEY + r")", sentence, re.I)
             if match and not re.match(r"\s*(?:[-–]|to|and)\s*\$?\d", sentence[match.end():]):
@@ -146,8 +165,8 @@ def disclosed_facts(text: str, kind: str, stage: str = "") -> list[dict]:
     return facts
 
 
-def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int = 2) -> dict:
-    if type(schema) is not int or schema not in {1, 2} or scope not in SCOPES:
+def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int = 3) -> dict:
+    if type(schema) is not int or schema not in {1, 2, 3} or scope not in SCOPES:
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=schema)
@@ -193,7 +212,11 @@ def investor_read(story: dict) -> dict:
             why = "An award can support future work; its earnings impact depends on funding, scope and delivery execution."
         watch = "Check affected programs, any disclosed charges and management's revised guidance." if stage == "terminated" else "Check funded commitments and revenue timing, then task orders, delivery milestones, margins and revenue recognition."
     elif kind == "product":
-        if stage == "prototype":
+        if stage == "test milestone":
+            why = "The test puts technical validation and production readiness in focus. A test milestone alone does not establish funded orders or near-term revenue."
+        elif stage == "planned test":
+            why = "A planned test outlines the next validation step; successful results and funded demand still require evidence."
+        elif stage == "prototype":
             why = "Technical progress warrants checking production readiness, funded demand and execution costs. A prototype alone does not establish orders or revenue."
         elif stage == "production":
             why = "Reported production or deliveries put manufacturing scale, product quality and costs in focus."
@@ -203,7 +226,12 @@ def investor_read(story: dict) -> dict:
             why = "Commercial availability puts customer adoption, pricing and unit economics in focus."
         else:
             why = "A reveal establishes product direction; commercial timing, demand and execution costs still require evidence."
-        watch = "Watch customer commitments, commercial availability, pricing, margins and company guidance."
+        watch = ("Watch repeat testing, procurement approvals, funded orders, integration costs and production timing." if stage in {"test milestone", "planned test"} else
+                 "Watch customer commitments, commercial availability, pricing, margins and company guidance.")
+    elif kind in {"capacity expansion", "technology collaboration"}:
+        why = ("The expansion puts future infrastructure demand in focus; its commercial impact depends on deployment, financing and customer commitments." if kind == "capacity expansion" else
+               "The collaboration puts adoption and implementation in focus; commercial commitments and revenue contribution still require evidence.")
+        watch = "Check committed spending, power and supply constraints, rollout dates and any change to revenue or margin guidance."
     elif kind == "restructuring":
         why = ("A voluntary exit offer leaves the scale of departures dependent on employee participation. Cost savings and operational effects still need evidence." if stage == "voluntary offer" else
                "Workforce changes can affect costs and delivery capacity; announced reductions alone do not establish savings or stronger demand.")
@@ -222,6 +250,7 @@ def investor_read(story: dict) -> dict:
               "obligated_amount": "Amount described as obligated", "reported_revenue": "Reported revenue",
               "reported_sales": "Reported sales", "reported_net_sales": "Reported net sales",
               "program_type": "Program described in the release", "restructuring_charge": "Restructuring cost described in the release",
-              "restructuring_cost_estimate": "Estimated restructuring cost", "annual_savings_target": "Annual savings target"}
+              "restructuring_cost_estimate": "Estimated restructuring cost", "annual_savings_target": "Annual savings target",
+              "tested_capability": "Capability demonstrated in the reported test", "planned_capacity_scale": "Announced expansion plan"}
     facts = "; ".join(labels[row["field"]] + ": " + row["value"] for row in evidence["facts"])
     return {"evidence": evidence, "facts": facts + "." if facts else "", "why": why, "watch": watch}

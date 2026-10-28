@@ -444,6 +444,10 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                 eligible = bool(record["verified"] and 20 <= len(decision["evidence_quote"]) <= 500 and decision["evidence_quote"] in evidence)
                 final = "approved" if decision["decision"] == "accept" and decision["score"] >= 65 and eligible else "skip" if decision["decision"] == "skip" else "hold"
                 record["review"] = {**decision, "final": final}
+                if decision["decision"] == "accept" and final != "approved":
+                    record["review"]["publication_gate"] = ("Original source verification is required" if not record["verified"] else
+                        "Relevance score is below the approval threshold" if decision["score"] < 65 else
+                        "Supporting evidence is not an exact passage from this candidate's original source; publication withheld")
                 record["review_response_id"] = metadata["response_id"]
         details.update(approved=sum(row["review"]["final"] == "approved" for row in records),
             source_verified=sum(row["verified"] is not None for row in records),

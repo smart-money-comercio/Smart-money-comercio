@@ -35,6 +35,17 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
         if down > up and all(key in moves and moves[key] > 0 for key in ("S&P", "Nasdaq", "Russell")):
             scope += " Index gains are not shared by most names in this research watchlist."
         add("participation", "watch", scope, ["Market Snapshot"])
+    if "company_focus" in evidence:
+        from src.intelligence.company_focus import focus_paragraph
+        selected = evidence["company_focus"]["selected"]
+        for index, row in enumerate(selected, 1):
+            text = focus_paragraph(row, evidence.get("stories", []))
+            if text:
+                add(f"company_focus_{index}", "company", text, row["sources"] + ["Company focus selection"])
+        if selected:
+            add("focus_confirmation", "watch", "For these companies, the next test is agreement between original disclosures, price and volume. Company selection reflects today's research relevance; the numerical rankings remain available in the full report.",
+                ["Company focus selection", "Market Snapshot"])
+        companies = []
     if companies:
         top = companies[0]
         changed = evidence.get("leadership")

@@ -366,8 +366,8 @@ class EditorChecks(IsolatedChecks):
 
     def test_length_cut_removes_the_dropped_storys_followup_from_narration(self):
         from src.reports import daily_news_brief as news
-        value = candidate(title="Microsoft introduces a cloud platform for China " * 5, source="Microsoft original publisher " * 3)
-        budget = len(self.render([])) + 80
+        value = candidate(title="Microsoft introduces a cloud platform for China " * 15, source="Microsoft original publisher " * 3)
+        budget = len(self.render([])) - 100
         with patch.object(news, "MAX_NEWS_CHARS", budget):
             text = self.render([value])
         record = store.read_editions(report=text)[0]
@@ -1038,6 +1038,63 @@ class StoryAnalysisChecks(IsolatedChecks):
         from src.intelligence.story_analysis import build_evidence
         return build_evidence(self.story(title, text), text, "publisher feed excerpt")
 
+    def test_defense_retargeting_test_gets_procurement_and_production_analysis(self):
+        from src.intelligence.story_analysis import investor_read
+        story=self.story("Lockheed Martin Redirects In-flight GMRLS Rocket During U.S. Army Test",
+            "Lockheed Martin successfully redirected an in-flight GMLRS rocket during a test.")
+        text=self.render([story])
+        self.assertIn("in-flight retargeting",text);self.assertIn("procurement approvals",text)
+        self.assertIn("does not establish funded orders",text)
+        self.assertNotIn("warrants reviewing its effect on the business",text)
+        self.assertTrue("test milestone"==investor_read(story)["evidence"]["stage"])
+
+    def test_planned_defense_test_does_not_claim_a_result(self):
+        from src.intelligence.story_analysis import investor_read
+        story=self.story("Example plans a hypersonic missile test", "The company will test a proposed capability.")
+        review=investor_read(story)
+        self.assertEqual(review["evidence"]["stage"],"planned test")
+        self.assertIn("planned test",review["why"]);self.assertFalse(review["evidence"]["facts"])
+
+    def test_failed_conditional_or_negated_test_passages_do_not_establish_a_demonstrated_capability(self):
+        title="Example redirects a rocket during an Army test"
+        for source in ("The company has not successfully redirected an in-flight rocket.",
+            "If the company successfully redirected an in-flight rocket, a milestone would follow.",
+            "The test failed although the company successfully redirected an in-flight rocket."):
+            self.assertFalse(self.profile(title,source)["facts"])
+
+    def test_ai_capacity_expansion_keeps_its_planned_status_and_execution_checks(self):
+        from src.intelligence.story_analysis import build_evidence,investor_read
+        story=self.story("Nvidia and Oracle expand AI cloud infrastructure to multi-gigawatt scale",
+            "Nvidia and Oracle announced plans to expand AI cloud infrastructure to multi-gigawatt scale.",symbol="NVDA")
+        story["event_evidence"]=build_evidence(story,story["source_excerpt"],"publisher feed excerpt")
+        review=investor_read(story)
+        self.assertEqual(review["evidence"]["event"],"capacity expansion")
+        self.assertEqual(review["evidence"]["facts"][0]["field"],"planned_capacity_scale")
+        self.assertIn("customer commitments",review["why"]);self.assertIn("power and supply",review["watch"])
+        self.assertNotIn("booked revenue",review["facts"])
+
+    def test_collaboration_is_distinct_from_an_awarded_contract(self):
+        from src.intelligence.story_analysis import investor_read
+        review=investor_read(self.story("Nvidia and Meta expand collaboration on AI models",symbol="NVDA"))
+        self.assertEqual(review["evidence"]["event"],"technology collaboration")
+        self.assertNotIn("An award",review["why"])
+
+    def test_schema_two_test_and_expansion_profiles_remain_readable(self):
+        from src.intelligence.story_analysis import build_evidence,checked_evidence
+        for title in ("Example redirects a rocket during an Army test","Nvidia and Oracle expand AI infrastructure"):
+            story=self.story(title)
+            story["event_evidence"]=build_evidence(story,"An original report excerpt with no additional disclosed amounts.","publisher feed excerpt",schema=2)
+            self.assertEqual(checked_evidence(story),story["event_evidence"])
+            self.assertNotEqual(build_evidence(story)["event"],story["event_evidence"]["event"])
+
+    def test_new_capability_facts_cannot_be_added_or_rewritten_in_a_saved_profile(self):
+        from src.intelligence.story_analysis import build_evidence,checked_evidence
+        story=self.story("Example redirects a rocket during an Army test")
+        story["event_evidence"]=build_evidence(story,"The company successfully redirected an in-flight rocket.","original release excerpt")
+        self.assertTrue(story["event_evidence"]["facts"])
+        story["event_evidence"]["facts"][0]["value"]="a newly funded production order"
+        with self.assertRaises(ValueError):checked_evidence(story)
+
     def article(self, title, text, clock=None, day="October 25, 2026"):
         metadata = (f'<meta property="og:title" content="{escape(title)}"><meta property="article:published_time" content="{clock}">') if clock else ""
         return (f'<html><head>{metadata}</head><nav>Unrelated purchase price $999 billion.</nav><h1>{escape(title)}</h1>'
@@ -1275,7 +1332,7 @@ class NewsFirstChecks(IsolatedChecks):
         text = self.render([self.story(title, symbol="MSFT")])
         self.assertLess(text.index(title), text.index("Market Update"))
         self.assertLess(text.index("Our analysis:"), text.index("Market Update"))
-        self.assertLess(text.index(title), text.index("research ranking"))
+        self.assertIn("Company selection reflects today's research relevance", text)
 
     def test_completed_defense_deal_leads_before_product_reveal(self):
         product = self.story("Microsoft introduces an AI product", symbol="MSFT")
@@ -1299,7 +1356,8 @@ class NewsFirstChecks(IsolatedChecks):
         text = self.render([], report=report)
         record = store.read_editions(report=text)[0]
         company = text.split("Companies in Focus\n")[1].split("\n\nGlobal and Defense Watch")[0]
-        self.assertEqual(len(company.split("\n\n")), 1)
+        self.assertGreaterEqual(len(company.split("\n\n")), 2)
+        self.assertNotIn("follows at", company)
         self.assertNotIn("Why it leads:", text)
         self.assertNotIn("In our longer-term model", text)
         self.assertIn("ranking_reason", {row["id"] for row in analyze_report(report)["insights"]})
@@ -1314,7 +1372,7 @@ class NewsFirstChecks(IsolatedChecks):
         from scripts.check_report_consistency import enriched_ranked_stocks
         report = self.research(ranked=enriched_ranked_stocks())
         text = self.render([], report=report)
-        review = retained_review(analyze_report(report, presentation="news"), text)
+        review = store.read_editions(report=text)[0]["analyst_review"]
         validate_review(review, report, text)
         altered = deepcopy(review); altered["presentation"] = "full"
         with self.assertRaises(ValueError):

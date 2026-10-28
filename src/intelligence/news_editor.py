@@ -81,6 +81,10 @@ def materiality(story: dict) -> str:
             return ""
         if kind in {"acquisition", "divestiture", "restructuring"}:
             return "" if re.search(r"\b(rumou?r\w*|reportedly|could|might|may|considering)\b|\?", title, re.I) else kind
+        if kind == "product" and stage in {"test milestone", "planned test"}:
+            return "defense innovation"
+        if kind in {"capacity expansion", "technology collaboration"}:
+            return kind
         if kind == "contract" and stage == "cooperation":
             return "contract"
         event = company_event(title)
@@ -387,7 +391,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["event_evidence"] = build_evidence(story, text, scope)
     return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 12, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 13, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
 
 
 def timestamp_for_priority(value):
@@ -577,6 +581,11 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
+                focus = analysis["evidence"].get("company_focus")
+                if focus:
+                    lines.append("Companies in focus: " + ", ".join(focus["featured_symbols"]) + ". " + focus["rule"] + ".")
+                    for company in focus["selected"]:
+                        lines.append("Focus decision: " + company["symbol"] + " — " + company["role"] + ". " + company["why"])
         else:
             for row in record.get("source_health", []):
                 if symbol and row["symbol"] == symbol:

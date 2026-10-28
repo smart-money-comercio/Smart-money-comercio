@@ -70,5 +70,7 @@ async def researchdesk_command(update, context):
                       "Evidence: " + (record["review"].get("evidence_quote") or "unavailable"), (record.get("verified") or record["lead"])["url"]]
             if record.get("verified") and record["verified"]["url"] != record["lead"]["url"]:
                 lines.append("Discovered link: " + record["lead"]["url"])
+            if record["review"].get("publication_gate"):
+                lines.append("Publication gate: " + record["review"]["publication_gate"])
     lines += ["", "/researchdesk history · /researchdesk run · /researchdesk off · /researchdesk on"]
     await reply_long_message(update, "\n".join(lines), title="Hourly Research Desk", parse_mode=None)

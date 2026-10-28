@@ -555,8 +555,9 @@ class NewsChecks(IsolatedChecks):
         result = validate_news_brief(text)
         self.assertGreaterEqual(result["spoken_words"], 180)
         self.assertGreaterEqual(result["estimated_narration_seconds"], 60)
-        self.assertIn("Nvidia leads our research ranking", text)
-        self.assertIn("setup risk medium to high", text)
+        self.assertIn("Energy spotlight", text)
+        self.assertIn("Consumer watch", text)
+        self.assertNotIn("leads our research ranking", text)
         self.assertNotIn("headline-only", text)
 
     def test_confirmed_calendar_context_is_used_before_other_duration_expansion(self):
@@ -627,20 +628,19 @@ class AnalystBriefChecks(IsolatedChecks):
         return self.research(replacements={"Top Opportunities": opportunities, "Trade Plan Snapshot": plans,
             "What Changed Today": "• Leadership: TSM moved ahead of MSFT.\n• New mover focus: AMD.\n• Tone stayed defensive / mildly bearish."})
 
-    def test_ranking_change_and_price_support_reach_the_spoken_edition(self):
+    def test_dated_price_strength_reaches_the_dynamic_company_focus(self):
         text = build_daily_news_brief(self.investor_research())
-        self.assertIn("Taiwan Semiconductor moved ahead of Microsoft", text)
-        self.assertIn("at 88.2 out of 100", text)
-        self.assertIn("rose 4 points versus the prior report", text)
-        self.assertIn("Taiwan Semiconductor rose 1.5 percent", text)
-        self.assertIn("adds price support", text)
+        self.assertIn("Momentum watch — Taiwan Semiconductor", text)
+        self.assertIn("rose 1.5 percent", text)
+        self.assertNotIn("follows at", text)
+        self.assertIn("Energy spotlight", text)
         self.assertNotIn("earnings estimate 2026-10-29", text)
 
     def test_strong_rank_with_falling_price_gets_a_confirmation_caveat(self):
         text = build_daily_news_brief(self.investor_research(price="-4.5%", delta="down -2.0"))
-        self.assertIn("fell 2 points versus the prior report", text)
-        self.assertIn("Taiwan Semiconductor fell 4.5 percent", text)
-        self.assertIn("still needs stronger price confirmation", text)
+        self.assertIn("Risk watch — Taiwan Semiconductor", text)
+        self.assertIn("fell 4.5 percent", text)
+        self.assertIn("volume and the next company disclosure", text)
         self.assertNotIn("adds price support", text)
 
     def test_undated_company_prices_cannot_inflate_the_analysis(self):
@@ -653,7 +653,8 @@ class AnalystBriefChecks(IsolatedChecks):
         self.assertIn("rose 4 points versus the prior report", text)
 
     def test_tradeplan_risk_and_action_belong_to_the_actual_leading_company(self):
-        text = build_daily_news_brief(self.research())
+        from src.intelligence.daily_brief_analysis import analyze_report
+        text = "\n".join(row["text"] for row in analyze_report(self.research())["insights"])
         self.assertIn("Nvidia's setup risk medium to high, with elevated score risk", text)
         self.assertIn("Our trade plan for Nvidia calls for waiting", text)
         self.assertNotIn("Our trade plan for Nvidia favors confirmed strength", text)
@@ -667,7 +668,8 @@ class AnalystBriefChecks(IsolatedChecks):
         self.assertNotIn("low risk", risk)
 
     def test_structural_support_is_distinct_from_opportunity_priority(self):
-        text = build_daily_news_brief(self.research())
+        from src.intelligence.daily_brief_analysis import analyze_report
+        text = "\n".join(row["text"] for row in analyze_report(self.research())["insights"])
         self.assertIn("ranking at 92 out of 100", text)
         self.assertIn("structural support score is 80.1", text)
         self.assertIn("rather than expected returns", text)
@@ -688,14 +690,15 @@ class AnalystBriefChecks(IsolatedChecks):
         self.assertIn("Analyst inputs:", news_editor.build_editor_status())
 
     def test_invented_analyst_figures_or_altered_wording_are_rejected(self):
-        from src.intelligence.daily_brief_analysis import analyze_report, retained_review, validate_review
+        from src.intelligence.daily_brief_analysis import validate_review
+        from src.intelligence.news_editor_store import read_editions
         report = self.investor_research(); text = build_daily_news_brief(report)
-        review = retained_review(analyze_report(report), text)
+        review = read_editions(report=text)[0]["analyst_review"]
         altered = deepcopy(review); altered["evidence"]["companies"][0]["opportunity"] = 99.9
         with self.assertRaisesRegex(ValueError, "does not match"):
             validate_review(altered, report, text)
         with self.assertRaisesRegex(ValueError, "changed or lost"):
-            validate_review(review, report, text.replace("rose 4 points", "rose 20 points"))
+            validate_review(review, report, text.replace(review["insights"][0]["text"], "An unsupported replacement."))
         omitted = deepcopy(review); omitted["insights"].pop()
         with self.assertRaisesRegex(ValueError, "omitted"):
             validate_review(omitted, report, text)
@@ -1085,6 +1088,188 @@ class CommandChecks(unittest.IsolatedAsyncioTestCase):
         self.assertIs(callbacks["report"], basic_commands.report)
         self.assertIs(callbacks["fullreport"], company_catalyst_commands.fullreport_command)
         self.assertIs(callbacks["catalysts"], company_catalyst_commands.catalysts_command)
+
+
+class DynamicFocusChecks(IsolatedChecks):
+    def context(self, recent=None, limit=3):
+        return {"schema":1,"limit":limit,"recent":recent or []}
+
+    def focus(self, report=None, context=None):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        return analyze_report(report or self.research(),presentation="news",focus_context=context or self.context())["evidence"]["company_focus"]
+
+    def source(self, symbol="MSFT", official=True):
+        domain=OFFICIAL_DOMAINS[symbol][0]
+        return {"kind":"company","symbols":[symbol],"title":symbol+" reports quarterly financial results",
+            "source":domain,"url":"https://www."+domain+"/news/quarterly-results","official":official,
+            "publisher_symbol":symbol if official else "","published":(NOW-timedelta(minutes=10)).isoformat(),
+            "source_checked_at":NOW.isoformat(),"source_excerpt":"Third-quarter revenue was $50 million.",
+            "excerpt_scope":"original release excerpt","relevant":True}
+
+    def render(self, sources=None, report=None, context=None):
+        from src.intelligence import news_editor
+        with patch.object(news_editor,"cache_candidates",return_value=(sources or [],[])):
+            if context is None:
+                return build_daily_news_brief(report or self.research())
+            with patch("src.intelligence.company_focus.history_context",return_value=context):
+                return build_daily_news_brief(report or self.research())
+
+    def record(self, text):
+        from src.intelligence.news_editor_store import read_editions
+        return read_editions(report=text)[0]
+
+    def test_focus_expands_beyond_the_top_three_and_has_distinct_lenses(self):
+        focus=self.focus();selected=focus["selected"]
+        self.assertTrue(any(row["symbol"] not in {"MSFT","NVDA","TSM"} for row in selected))
+        self.assertEqual(len({row["group"] for row in selected}),3)
+        self.assertTrue(any(row["group"]=="energy" for row in selected))
+
+    def test_each_company_has_a_reason_for_today_and_a_next_test(self):
+        text=self.render();record=self.record(text)
+        for row in record["analyst_review"]["evidence"]["company_focus"]["selected"]:
+            self.assertIn(row["why"],text);self.assertIn(row["watch"],text)
+            self.assertTrue(row["sources"])
+        self.assertNotIn("follows at",text)
+
+    def test_growth_strength_brings_infrastructure_companies_into_focus(self):
+        report=self.research(replacements={"Executive Summary":"- Main theme: Growth.\n- Market moves: S&P +0.8%, Nasdaq +1.2%, Russell +0.6%, VIX -4%, Oil +0.1%, TLT +0.2%.",
+            "Market Snapshot":"Market Session: Open.\nQuote session: 2026-10-25\nBreadth: 15 up / 3 down / 18 quoted"})
+        selected=self.focus(report)["selected"]
+        self.assertTrue(any(row["group"]=="infrastructure" for row in selected))
+        self.assertFalse(any(row["group"]=="energy" for row in selected))
+
+    def test_oil_decline_is_described_without_inventing_an_energy_stock_return(self):
+        text=self.render(report=self.research().replace("Oil +4.32%","Oil -4.32%"))
+        self.assertIn("Oil fell 4.32 percent",text)
+        energy=next(row for row in self.record(text)["analyst_review"]["evidence"]["company_focus"]["selected"] if row["group"]=="energy")
+        self.assertEqual(energy["metric"],{"Oil":-4.32});self.assertNotIn(energy["name"]+" fell",text)
+
+    def test_growth_pressure_adds_a_growth_risk_lens(self):
+        report=self.research().replace("Nasdaq -0.21%","Nasdaq -2.5%")
+        self.assertTrue(any(row["group"]=="growth pressure" for row in self.focus(report)["selected"]))
+
+    def test_rate_sensitive_context_brings_in_credit_companies(self):
+        report=self.research().replace("TLT -0.49%","TLT -1.0%")
+        selected=self.focus(report)["selected"]
+        self.assertTrue(any(row["group"]=="credit" for row in selected))
+        self.assertTrue(all("yields rose" not in row["why"] for row in selected))
+
+    def test_recent_featured_names_rotate_among_equally_relevant_companies(self):
+        first=self.focus()
+        recent=[{"day":"2026-10-24","symbols":first["featured_symbols"]}]
+        second=self.focus(context=self.context(recent))
+        self.assertFalse(set(first["featured_symbols"]) & set(second["featured_symbols"]))
+        self.assertEqual({row["group"] for row in first["selected"]},{row["group"] for row in second["selected"]})
+
+    def test_rebuilding_the_same_edition_does_not_rotate_companies(self):
+        report=self.research()
+        first=self.render(report=report);second=self.render(report=report)
+        self.assertEqual(first,second)
+
+    def test_a_new_trading_day_uses_the_actual_prior_edition_for_rotation(self):
+        first=self.render();first_symbols=set(self.record(first)["analyst_review"]["evidence"]["company_focus"]["featured_symbols"])
+        second=self.render(report=self.research(now=NOW+timedelta(days=1)))
+        self.assertFalse(first_symbols & set(self.record(second)["analyst_review"]["evidence"]["company_focus"]["featured_symbols"]))
+
+    def test_new_verified_company_news_overrides_recent_exposure(self):
+        context=self.context([{"day":"2026-10-24","symbols":["MSFT"]}])
+        text=self.render([self.source()],context=context)
+        selected=self.record(text)["analyst_review"]["evidence"]["company_focus"]["selected"]
+        self.assertEqual(selected[0]["symbol"],"MSFT");self.assertEqual(selected[0]["tier"],100)
+        self.assertIn("MSFT reports quarterly financial results",text)
+        self.assertNotIn("Company-specific evidence is limited",text)
+
+    def test_unconfirmed_news_cannot_become_a_fresh_development_focus(self):
+        text=self.render([self.source(official=False)])
+        selected=self.record(text)["analyst_review"]["evidence"]["company_focus"]["selected"]
+        self.assertTrue(all(not row["story_id"] for row in selected))
+        self.assertNotIn("MSFT reports quarterly financial results",text)
+
+    def test_unknown_instruments_and_funds_do_not_become_company_spotlights(self):
+        report=self.research(replacements={"Watchlist Movers":"Largest regular-session movers:\n• VOO: $500.00 (+7.0%)\n• SPCX: $100.00 (+6.0%)\n• SONY: $25.00 (+5.0%)"})
+        selected=self.focus(report)["selected"]
+        self.assertEqual(selected[0]["symbol"],"SONY")
+        self.assertTrue(all(row["symbol"] not in {"VOO","SPCX"} for row in selected))
+
+    def test_an_undated_snapshot_cannot_supply_company_price_claims(self):
+        report=self.research().replace("Quote session: 2026-10-23","Quote session unavailable")
+        selected=self.focus(report)["selected"]
+        self.assertTrue(all(row["group"]!="price move" and row["metric"] is None for row in selected))
+
+    def test_stale_or_future_sessions_do_not_drive_company_focus(self):
+        for day in ("2026-10-26","2026-10-10"):
+            report=self.research().replace("Quote session: 2026-10-23","Quote session: "+day)
+            self.assertTrue(all(row["metric"] is None for row in self.focus(report)["selected"]))
+
+    def test_the_larger_dated_price_move_has_priority_over_a_small_move(self):
+        report=self.research(replacements={"Watchlist Movers":"Largest regular-session movers:\n• MSFT: $500.00 (+1.6%)\n• AMD: $100.00 (-8.0%)"})
+        self.assertEqual(self.focus(report)["selected"][0]["symbol"],"AMD")
+
+    def test_focus_limit_is_bounded_for_spoken_copy(self):
+        for limit in (1,2,3):
+            self.assertEqual(len(self.focus(context=self.context(limit=limit))["selected"]),limit)
+        for limit in (0,4,True):
+            with self.assertRaises(ValueError):self.focus(context=self.context(limit=limit))
+
+    def test_history_uses_new_york_days_and_coalesces_repeated_builds(self):
+        from src.intelligence.company_focus import history_context
+        records=[{"generated_at":"2026-10-25T01:00:00+00:00","analyst_review":{"evidence":{"company_focus":{"selected":[{"symbol":"MSFT"}]}},"insights":[]}}]*20
+        records += [{"generated_at":"2026-10-25T05:00:00+00:00","analyst_review":{"evidence":{"company_focus":{"selected":[{"symbol":"NVDA"}]}},"insights":[]}}]
+        with patch("src.intelligence.news_editor_store.read_editions",return_value=records):
+            self.assertEqual(history_context(NOW)["recent"],[{"day":"2026-10-24","symbols":["MSFT"]}])
+
+    def test_older_ranked_briefs_supply_legacy_repeat_history(self):
+        from src.intelligence.company_focus import history_context
+        record={"generated_at":"2026-10-24T17:00:00+00:00","analyst_review":{"evidence":{"companies":[{"symbol":"NVDA"},{"symbol":"MSFT"}]},"insights":[{"id":"ranking"}]}}
+        with patch("src.intelligence.news_editor_store.read_editions",return_value=[record]):
+            self.assertEqual(history_context(NOW)["recent"][0]["symbols"],["MSFT","NVDA"])
+
+    def test_missing_or_unavailable_history_is_safe_and_read_only(self):
+        from src.intelligence.company_focus import history_context
+        from src.intelligence.news_editor_store import state_path
+        self.assertFalse(state_path().exists());self.assertEqual(history_context(NOW)["recent"],[])
+        self.assertFalse(state_path().exists())
+        with patch("src.intelligence.news_editor_store.read_editions",side_effect=sqlite3.OperationalError("Unavailable")):
+            self.assertEqual(history_context(NOW)["recent"],[])
+
+    def test_future_stale_duplicate_and_malformed_history_is_rejected(self):
+        for recent in ([{"day":"2026-10-25","symbols":["MSFT"]}],[{"day":"2026-10-10","symbols":["MSFT"]}],
+            [{"day":"2026-10-24","symbols":["VOO"]}],[{"day":"2026-10-24","symbols":["MSFT"]}]*2):
+            with self.assertRaises(ValueError):self.focus(context=self.context(recent))
+
+    def test_saved_focus_reasons_and_metrics_cannot_be_rewritten(self):
+        from src.intelligence.daily_brief_analysis import validate_review
+        report=self.research();text=self.render(report=report)
+        review=self.record(text)["analyst_review"]
+        for field,value in (("symbol","MSFT"),("why","Guaranteed returns"),("metric",{"Oil":999})):
+            changed=deepcopy(review);changed["evidence"]["company_focus"]["selected"][0][field]=value
+            with self.assertRaises(ValueError):validate_review(changed,report,text)
+
+    def test_validation_uses_the_frozen_history_not_a_later_database_view(self):
+        from src.intelligence.daily_brief_analysis import validate_review
+        report=self.research();text=self.render(report=report);review=self.record(text)["analyst_review"]
+        with patch("src.intelligence.company_focus.history_context",side_effect=AssertionError("History must stay frozen")):
+            validate_review(review,report,text)
+
+    def test_focus_is_auditable_and_does_not_change_rankings_receipts_or_calendar(self):
+        from src.intelligence.news_editor import build_editor_status
+        before={path:path.read_bytes() for path in (self.ranking,self.db,calendar.state_path())}
+        text=self.render()
+        self.assertEqual(before,{path:path.read_bytes() for path in before})
+        self.assertFalse(self.record(text)["analyst_review"]["score_changes"])
+        status=build_editor_status();self.assertIn("Companies in focus:",status);self.assertIn("Focus decision:",status)
+
+    def test_dynamic_company_selection_needs_no_extra_model_or_network_requests(self):
+        report=self.research()
+        with patch("openai.OpenAI",side_effect=AssertionError("No model request belongs in report rendering")):
+            self.assertTrue(validate_news_brief(self.render(report=report))["passes"])
+
+    def test_ranked_research_analysis_remains_available_without_dynamic_focus(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        analysis=analyze_report(self.research())
+        self.assertNotIn("company_focus",analysis["evidence"])
+        self.assertIn("ranking",{row["id"] for row in analysis["insights"]})
+        with self.assertRaises(ValueError):analyze_report(self.research(),focus_context=self.context())
 
 
 class WatchdogChecks(unittest.TestCase):

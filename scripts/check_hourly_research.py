@@ -938,6 +938,139 @@ class SourceRoutingChecks(ResearchFixture):
         self.assertFalse(desk.retry_candidates(NOW+timedelta(hours=2), [], desk.read_history()))
 
 
+class QuoteSelectionChecks(ResearchFixture):
+    seed = PublisherEvidenceChecks.seed
+
+    def setUp(self):
+        super().setUp()
+        self.stack.enter_context(patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "TSLA,NVDA,MSFT,PLTR,LMT"}))
+
+    def client(self, *, decision="accept", score=85, reference=None, leads=None):
+        client = Client(leads=leads, decision=decision)
+        original = client.responses.create
+        def create(**options):
+            if options["tools"]:
+                return original(**options)
+            client.calls.append(options)
+            candidates = json.loads(options["input"])["candidates"]
+            rows=[]
+            for candidate in candidates:
+                choices=candidate["evidence_options"]
+                ref=choices[0]["id"] if choices else ""
+                if reference is not None:
+                    ref=reference(candidate, candidates)
+                rows.append({"id": candidate["id"], "decision": decision, "score": score,
+                    "reason": "Original material development; review its deployment, funding and execution conditions.", "evidence_ref": ref})
+            return response({"decisions": rows})
+        client.responses.create=create
+        return client
+
+    def test_review_selects_a_bound_source_passage_instead_of_rewriting_a_quote(self):
+        client=self.client(); value=self.run_desk(client)
+        self.assertEqual(value["details"]["approved"], 1); self.assertEqual(len(client.calls), 2)
+        options=client.calls[1]
+        fields=options["text"]["format"]["schema"]["properties"]["decisions"]["items"]
+        self.assertIn("evidence_ref", fields["required"]); self.assertNotIn("evidence_quote", fields["properties"])
+        row=desk.read_history()[0]
+        self.assertEqual(row["review"]["evidence_quote"], QUOTE)
+        self.assertTrue(row["review"]["evidence_ref"].startswith(row["id"]+":"))
+        self.assertEqual(desk.approved(NOW)[0]["research_review"]["quote"], QUOTE)
+
+    def test_passages_keep_original_unicode_and_punctuation(self):
+        quote="The company announced an in\u2011flight demonstration."
+        value=self.run_desk(self.client(), fetch=lambda _: html(text=quote))
+        self.assertEqual(value["details"]["approved"], 1)
+        self.assertEqual(desk.read_history()[0]["review"]["evidence_quote"], quote)
+
+    def test_unknown_quote_reference_is_held_with_an_explicit_publication_gate(self):
+        client=self.client(reference=lambda *_:"invented:q99")
+        value=self.run_desk(client)
+        self.assertEqual(value["details"]["approved"], 0); self.assertEqual(value["details"]["held"], 1)
+        self.assertIn("exact passage", desk.read_history()[0]["review"]["publication_gate"])
+        self.assertFalse(desk.approved(NOW)); self.assertEqual(len(client.calls), 2)
+
+    def test_a_reference_from_another_candidate_never_establishes_support(self):
+        leads=[{"title": TITLE, "url": URL+str(index), "topic":"AI"} for index in range(2)]
+        client=self.client(leads=leads, reference=lambda row, rows:next(value for value in rows if value["id"]!=row["id"])["evidence_options"][0]["id"])
+        self.assertEqual(self.run_desk(client)["details"]["approved"], 0)
+        self.assertTrue(all(row["review"]["final"]=="hold" for row in desk.read_history()))
+
+    def test_legacy_ellipsis_or_paraphrase_remains_held(self):
+        for quote in ("The company announced...enterprise AI infrastructure.", "The company revealed AI technology for businesses."):
+            client=Client();client.quote=quote
+            self.assertEqual(self.run_desk(client)["details"]["approved"], 0)
+            self.assertIn("exact passage",desk.read_history()[0]["review"]["publication_gate"])
+            desk.state_path().unlink()
+
+    def test_selecting_a_quote_does_not_override_the_reviewer_hold(self):
+        self.assertEqual(self.run_desk(self.client(decision="hold"))["details"]["approved"],0)
+        self.assertNotIn("publication_gate",desk.read_history()[0]["review"])
+
+    def test_quote_selection_does_not_override_the_relevance_threshold(self):
+        self.assertEqual(self.run_desk(self.client(score=64))["details"]["approved"],0)
+        self.assertIn("threshold",desk.read_history()[0]["review"]["publication_gate"])
+
+    def test_unverified_original_cannot_gain_approval_from_a_quote_reference(self):
+        def failed(_):raise HTTPError(URL,403,"Denied",{},None)
+        self.assertEqual(self.run_desk(self.client(),fetch=failed)["details"]["approved"],0)
+        self.assertIn("verification",desk.read_history()[0]["review"]["publication_gate"])
+
+    def test_passage_budget_is_bounded_and_does_not_change_source_text(self):
+        text=" ".join(f"Sentence {i} describes a disclosed original development." for i in range(200))
+        candidate={"id":"fixture", "source_text":text}
+        quotes=agents.quote_options(candidate)
+        self.assertLessEqual(len(quotes),6);self.assertLessEqual(sum(len(row["text"]) for row in quotes),2000)
+        self.assertTrue(all(20<=len(row["text"])<=500 and row["text"] in text[:6000] for row in quotes))
+        self.assertEqual(candidate["source_text"],text)
+        self.assertFalse(agents.quote_options({"id":"none", "source_text":"x"*700}))
+
+    def test_united_states_abbreviation_does_not_cut_the_quoted_subject(self):
+        text="The company and the U.S. Army completed a reported test."
+        self.assertEqual(agents.quote_options({"id":"fixture","source_text":text})[0]["text"],text)
+
+    def test_new_protocol_validates_field_types_and_does_not_add_model_requests(self):
+        for ref in (None, True, "x"*101):
+            client=self.client(reference=lambda *_:ref)
+            self.assertEqual(self.run_desk(client)["status"],"limited")
+            self.assertEqual(len(client.calls),2);self.assertFalse(desk.approved(NOW))
+            desk.state_path().unlink()
+
+    def test_two_publisher_reports_reach_the_brief_with_event_specific_analysis(self):
+        title="Nvidia and Oracle Expand AI Cloud Infrastructure to Multi-Gigawatt Scale"
+        text="Nvidia and Oracle announced plans to expand their AI cloud infrastructure to multi-gigawatt scale."
+        self.seed(title=title,description=text)
+        defense="Lockheed Martin Redirects In-flight Rocket During U.S. Army Test"
+        disclosed="Lockheed Martin successfully redirected an in-flight rocket during a reported test."
+        self.seed(symbol="LMT",url="https://news.lockheedmartin.com/fixture-test",title=defense,description=disclosed)
+        client=self.client(leads=[])
+        value=self.run_desk(client,fetch=lambda _:self.fail("Cached originals must not fetch"))
+        self.assertEqual(value["details"]["approved"],2);self.assertEqual(value["details"]["original_reads"],0)
+        report=build_daily_news_brief(self.research())
+        self.assertIn(title,report);self.assertIn(defense,report)
+        self.assertIn("in-flight retargeting",report);self.assertIn("procurement approvals",report)
+        self.assertIn("customer commitments",report);self.assertTrue(validate_news_brief(report)["passes"])
+        from src.intelligence.news_editor_store import read_editions
+        selected=news_editor.selected_stories(read_editions(report=report)[0])
+        self.assertEqual(len(selected),2);self.assertTrue(all(row["event_evidence"]["schema"]==3 for row in selected))
+
+    def test_new_quote_protocol_preserves_time_gates_and_hourly_attempt_limit(self):
+        client=self.client();self.run_desk(client)
+        self.assertEqual(self.run_desk(client)["status"],"already attempted this hour")
+        self.assertEqual(len(client.calls),2);self.assertFalse(desk.approved(NOW+timedelta(hours=25)))
+
+    def test_history_explains_a_code_withheld_approval(self):
+        self.run_desk(self.client(reference=lambda *_:"unbound"))
+        import asyncio
+        from src.commands.hourly_research_commands import researchdesk_command
+        async def inspect_history():
+            update=SimpleNamespace(message=SimpleNamespace(),effective_chat=SimpleNamespace(type="private"))
+            with patch("src.commands.hourly_research_commands.reply_long_message",new_callable=AsyncMock) as reply:
+                await researchdesk_command(update,SimpleNamespace(args=["history"]))
+            self.assertIn("Publication gate:",reply.call_args.args[1])
+            self.assertIn("exact passage",reply.call_args.args[1])
+        asyncio.run(inspect_history())
+
+
 class ContractChecks(unittest.TestCase):
     def test_discovery_rejects_url_without_actual_search_provenance(self):
         client = Client(); client.responses.create = lambda **_: response({"candidates": client.leads}, searched=True, urls=[URL+"/other"])
@@ -1051,7 +1184,7 @@ if __name__ == "__main__":
         if args.windows_socketpair:
             stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))
         traffic = stack.enter_context(offline_network_guard())
-        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks, FollowupChecks, PublisherEvidenceChecks, SourceRoutingChecks))
+        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks, FollowupChecks, PublisherEvidenceChecks, SourceRoutingChecks, QuoteSelectionChecks))
         result = unittest.TextTestRunner(verbosity=1).run(suite)
     ok = result.wasSuccessful() and not traffic["blocked"]
     print(f"Hourly Research Check: {'PASS' if ok else 'FAIL'} ({result.testsRun} tests)")

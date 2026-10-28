@@ -96,7 +96,7 @@ def report_evidence(report: str) -> dict:
             "source_sections": [key for key in ("Executive Summary", "Market Snapshot", "What Changed Today", "Top Opportunities", "Trade Plan Snapshot") if sections.get(key)]}
 
 
-def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full") -> dict:
+def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
     evidence = report_evidence(report)
@@ -128,10 +128,18 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         evidence["stories"].sort(key=lambda story: story["id"])
     if evidence["stories"]:
         evidence["source_sections"].append("Verified story decisions")
+    if focus_context is not None:
+        if presentation != "news":
+            raise ValueError("Dynamic company focus belongs to the news presentation")
+        from src.intelligence.company_focus import select_focus
+        evidence["company_focus"] = select_focus(report, evidence, focus_context)
+        evidence["source_sections"].append("Company focus selection")
     value = {"schema": 1, "research_sha256": hashlib.sha256(report.encode()).hexdigest(),
              "evidence": evidence, "insights": review_daily_brief(deepcopy(evidence), presentation=presentation), "score_changes": False}
     if presentation != "full":
         value["presentation"] = presentation
+    if focus_context is not None:
+        value["focus_context"] = deepcopy(focus_context)
     return value
 
 
@@ -143,8 +151,8 @@ def retained_review(analysis: dict, report: str) -> dict:
 
 
 def validate_review(analysis: dict, research_report: str, report: str, stories: list[dict] | None = None) -> None:
-    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"))
-    if any(analysis.get(key) != expected[key] for key in ("schema", "research_sha256", "evidence", "score_changes")):
+    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"))
+    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context")):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
     seen = set()

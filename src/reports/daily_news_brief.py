@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from itertools import combinations
+from itertools import combinations, product
 import re
 from zoneinfo import ZoneInfo
 
@@ -242,14 +242,16 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     notes = ["The full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans",
              "Sources and full evidence: /storylog · /catalysts · /calendar · /specialalerts", "Research only. Not financial advice."]
     initial_stories = sorted(editor.selected_stories(plan), key=editor.news_order)
+    from src.intelligence.company_focus import history_context
+    focus_history = history_context(now)
     chosen = None
     last_result = None
     # At most three stories: try the fuller, higher-priority editions first.
     # Each attempt starts from all sourced market/calendar context.
     for count in range(len(initial_stories), -1, -1):
-        for indexes in combinations(range(len(initial_stories)), count):
+        for indexes, focus_limit in product(combinations(range(len(initial_stories)), count), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
-            analysis = analyze_report(research_report, retained, presentation="news")
+            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit})
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")
@@ -260,8 +262,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             for story in sorted(retained, key=editor.news_order):
                 body = ipo_body if story.get("ipo") or story.get("sec_filing") else global_body if story["kind"] == "macro" or "defense" in story_topics(story) else company_body
                 body.append(story_paragraphs[story["id"]])
-            company_body += [row["text"] for row in insights if row["section"] == "company"] or [
-                "Company rankings were unavailable for this edition; no leading setup is being inferred."]
+            company_body += [row["text"] for row in insights if row["section"] == "company"]
+            if not company_body:
+                company_body.append("Company-specific evidence is limited in this edition; current original disclosures are the next check.")
             if brief.get("market_events"):
                 global_body.append("An active market-alert record reports " + brief["market_events"][0]["fact"]
                                    + " This is dated price evidence; it does not establish the cause of the move.")
