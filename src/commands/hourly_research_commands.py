@@ -35,8 +35,14 @@ async def researchdesk_command(update, context):
     lines += [f"Latest: {details.get('candidates', 0)} leads / {details.get('approved', 0)} approved"]
     if "search_leads" in details:
         lines.append(f"Search returned: {details['search_leads']} leads · held leads revisited: {details.get('retried', 0)}")
+    if "publisher_candidates" in details:
+        lines.append(f"Dated publisher candidates: {details['publisher_candidates']} · cached evidence used: {details.get('publisher_cache_used', 0)}")
+        coverage = details.get("publisher_coverage", {})
+        lines.append(f"Publisher cache coverage: {coverage.get('available', 0)} available / {coverage.get('limited', 0)} limited")
     if "source_verified" in details:
         lines += [f"Checks: {details['source_verified']} original sources verified / {details.get('held', 0)} held / {details.get('skipped', 0)} skipped; {details.get('original_reads', 0)} source reads"]
+    if details.get("expired"):
+        lines.append(f"Expired reports retired from active follow-up: {details['expired']}")
     if value["status"] == "complete" and not details.get("approved"):
         lines.append("Review outcome: no findings cleared all relevance and original-source checks.")
     if details.get("error"): lines.append("Run limited: " + details["error"] + "; review API access and server logs.")
@@ -51,12 +57,14 @@ async def researchdesk_command(update, context):
         if records and scan_at is not None and all(at is not None and at < scan_at for at in checked_at):
             lines.append("The latest scan recorded no story decisions; the entries below are from earlier runs.")
         for record in records:
-            lines += ["", record["review"]["final"].upper() + " — " + (record.get("verified") or record["lead"])["title"],
+            outcome = record.get("source_outcome", {})
+            label = "EXPIRED" if outcome.get("status") == "expired" else record["review"]["final"].upper()
+            lines += ["", label + " — " + (record.get("verified") or record["lead"])["title"],
                       "First discovered (UTC): " + record["discovered_at"],
                       "Last checked (UTC): " + record.get("last_attempt_at", record["discovered_at"]),
                       "Follow-up retries: " + str(record.get("retry_count", 0)) + "/" + str(desk.MAX_HELD_RETRIES),
-                      "Published: " + (record.get("verified") or {}).get("published", "unverified"),
-                      "Original source: " + record["verification"], "Reviewer: " + record["review"].get("reason", "Review unavailable"),
+                      "Published: " + ((record.get("verified") or {}).get("published") or outcome.get("published") or "unverified"),
+                      "Original source: " + record["verification"], "Decision reason: " + record["review"].get("reason", "Review unavailable"),
                       "Evidence: " + (record["review"].get("evidence_quote") or "unavailable"), record["lead"]["url"]]
     lines += ["", "/researchdesk history · /researchdesk run · /researchdesk off · /researchdesk on"]
     await reply_long_message(update, "\n".join(lines), title="Hourly Research Desk", parse_mode=None)

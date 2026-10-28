@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from src.intelligence.special_alert_sources import timestamp
 from src.intelligence.story_analysis import VisibleText
+from src.intelligence.research_evidence import SourceRejected
 
 
 ARCHIVE = re.compile(r"/Archives/edgar/data/(\d{1,10})/(\d{18})/([A-Za-z0-9_.-]+\.html?)")
@@ -103,8 +104,10 @@ def verify(url: str, now: datetime, fetch) -> dict:
     if document not in {primary, accession+"-index.htm", accession+"-index.html"}:
         raise ValueError("SEC lead is not this accession's primary document or index")
     published = timestamp(row["acceptanceDateTime"])
-    if published is None or not 0 <= (now-published).total_seconds() <= 86400:
-        raise ValueError("SEC acceptance timestamp is unavailable, future or older than 24 hours")
+    if published is None or (now-published).total_seconds() < 0:
+        raise ValueError("SEC acceptance timestamp unavailable or future-dated")
+    if (now-published).total_seconds() > 86400:
+        raise SourceRejected("SEC report is older than the 24-hour news window; retained as dated history", status="expired", published=published.isoformat())
     canonical = f"https://www.sec.gov/Archives/edgar/data/{cik}/{compact}/{primary}"
     raw = fetch(canonical)
     if not isinstance(raw, bytes) or len(raw) > 2_000_000:

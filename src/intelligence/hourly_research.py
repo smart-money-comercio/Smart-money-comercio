@@ -16,6 +16,7 @@ from src.intelligence.special_alert_sources import OFFICIAL_DOMAINS, timestamp
 from src.intelligence.special_alert_company_sources import PublicationPage, publication_time
 from src.intelligence.story_analysis import VisibleText
 from src.intelligence import sec_research
+from src.intelligence.research_evidence import SourceRejected, publisher_reports
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -103,8 +104,10 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
     if not page.title or len(page.title) > 1000:
         raise ValueError("Original report title unavailable")
     published = publication_time(body, page.title)
-    if not 0 <= (now - published).total_seconds() <= 86400:
-        raise ValueError("Original report outside the 24-hour publication window")
+    if (now-published).total_seconds() < 0:
+        raise ValueError("Original report is future-dated")
+    if (now-published).total_seconds() > 86400:
+        raise SourceRejected("Original report is older than the 24-hour news window; retained as dated history", status="expired", published=published.isoformat())
     if published.hour == published.minute == published.second == 0 and re.search(rb'<time[^>]+datetime=[\"\']\d{4}-\d{2}-\d{2}[\"\']', body):
         raise ValueError("Original report has a date-only clock")
     parser = VisibleText(); parser.feed(text)
@@ -129,8 +132,18 @@ def check_proof(value: dict, now: datetime | None = None) -> dict:
         return sec_research.checked(value, now)
     proof = value["discovery_evidence"]
     publisher = identity(value["url"])
+    source_name = publisher["name"] if publisher else ""
+    if isinstance(proof, dict) and "feed_url" in proof:
+        from src.intelligence import news_live_sources as feeds
+        feed = next((source for source in feeds.NEWS_SOURCES if source["url"] == proof["feed_url"] and feeds.is_original_source(source)), None)
+        if (not feed or not publisher or (feed.get("company_symbol", "") != publisher["symbol"])
+                or (not publisher["symbol"] and feed["name"] != publisher["name"])
+                or proof.get("scope") not in {"publisher feed excerpt", "original release excerpt"}
+                or ("excerpt_scope" in value and value["excerpt_scope"] != proof["scope"])):
+            raise ValueError("Publisher cache proof does not match a configured original feed")
+        source_name = feed["name"]
     if (not isinstance(proof, dict) or publisher is None or proof.get("schema") != 1 or proof.get("publisher") != publisher
-            or value.get("official") is not True or value["source"] != publisher["name"]
+            or value.get("official") is not True or value["source"] != source_name
             or proof.get("url") != value["url"] or proof.get("title") != value["title"]
             or proof.get("published") != value["published"] or proof.get("observed") != value["source_checked_at"]
             or ("source_excerpt" in value and value["source_excerpt"] != proof.get("text"))
@@ -141,6 +154,8 @@ def check_proof(value: dict, now: datetime | None = None) -> dict:
     published, observed = timestamp(proof["published"]), timestamp(proof["observed"])
     if published is None or observed is None or (now and (not 0 <= (now-published).total_seconds() <= 86400 or not -60 <= (now-observed).total_seconds() <= 21600)):
         raise ValueError("Original research clocks unavailable or stale")
+    if "feed_url" in proof and (published-observed).total_seconds() > 60:
+        raise ValueError("Publisher observation predates its purported report")
     return publisher
 
 
@@ -303,8 +318,13 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         domains = list(dict.fromkeys(row["domain"] for row in identities())) + ["reuters.com", "apnews.com", "sec.gov"]
         history = read_history(80)
         latest = latest_findings(history)
+        cached, coverage = publisher_reports(now, symbols, latest, identity, finding_key)
+        cached = [value for value in cached if not routine_page(value["url"])][:3]
+        for value in cached: check_proof(value, now)
+        details["publisher_coverage"] = coverage
+        hints = [{key: value[key] for key in ("title", "url", "published", "source")} for value in cached]
         seen_urls = [row["lead"]["url"] for row in latest.values() if row.get("review", {}).get("final") in {"approved", "skip"}][:16]
-        leads, metadata = research_agents.discover(client, config["discovery_model"], now.isoformat(), symbols, domains, previous, seen_urls)
+        leads, metadata = research_agents.discover(client, config["discovery_model"], now.isoformat(), symbols, domains, previous, seen_urls, hints)
         details["agents"].append(metadata)
         fresh = {}
         for lead in leads:
@@ -312,7 +332,13 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         leads = list(fresh.values())
         pending = retry_candidates(now, leads, history)
         work = [(row["lead"], row, True) for row in pending] + [(lead, latest.get(finding_key(lead["url"])), False) for lead in leads]
-        details.update(candidates=len(work), search_leads=len(leads), retried=len(pending))
+        present = {finding_key(lead["url"]) for lead, _, _ in work}
+        additions = [value for value in cached if finding_key(value["url"]) not in present][:max(0, 8-len(work))]
+        for value in additions:
+            topic = "company" if value["kind"] == "company" else "macro"
+            work.append(({key: value[key] for key in ("title", "url")} | {"topic": topic}, latest.get(finding_key(value["url"])), False))
+        cached_by_key = {finding_key(value["url"]): value for value in cached}
+        details.update(candidates=len(work), search_leads=len(leads), retried=len(pending), publisher_candidates=len(additions), publisher_cache_used=0)
         reads = 0
         def bounded_fetch(url):
             nonlocal reads
@@ -330,6 +356,10 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                       "discovery_response_id": (parent or {}).get("discovery_response_id", "") if retry else details["agents"][0]["response_id"],
                       "prior_review_response_id": (parent or {}).get("review_response_id", ""), "lead": lead,
                       "verified": None, "verification": "Original source not verified", "review": {"final": "hold"}}
+            cached_value = cached_by_key.get(finding_key(lead["url"]))
+            if cached_value:
+                record["origin"] = "dated publisher cache"
+                record["discovery_response_id"] = ""
             excluded = routine_page(lead["url"])
             if excluded:
                 record["verification"] = excluded
@@ -337,7 +367,18 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                 record["screened_out"] = True
             else:
                 try:
-                    record["verified"] = verified(lead, now, bounded_fetch); record["verification"] = "Original source verified"
+                    if cached_value:
+                        check_proof(cached_value, now)
+                        record["verified"] = cached_value
+                        details["publisher_cache_used"] += 1
+                        record["verification"] = "Original publisher evidence verified; cached source clocks retained"
+                    else:
+                        record["verified"] = verified(lead, now, bounded_fetch); record["verification"] = "Original source verified"
+                except SourceRejected as exc:
+                    record["source_outcome"] = {"status": exc.status, "published": exc.published}
+                    record["verification"] = str(exc)
+                    record["review"] = {"final": "skip", "reason": str(exc)}
+                    record["screened_out"] = True
                 except Exception as exc:
                     from urllib.error import HTTPError
                     reason = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else str(exc)[:180] if isinstance(exc, ValueError) else type(exc).__name__
@@ -363,6 +404,7 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         details.update(approved=sum(row["review"]["final"] == "approved" for row in records),
             source_verified=sum(row["verified"] is not None for row in records),
             held=sum(row["review"]["final"] == "hold" for row in records), skipped=sum(row["review"]["final"] == "skip" for row in records))
+        details["expired"] = sum(row.get("source_outcome", {}).get("status") == "expired" for row in records)
         final_status = "complete" if settings()["enabled"] else "paused"
         finish(now, final_status, records, details)
     except Exception as exc:
@@ -381,7 +423,7 @@ def summary() -> str:
     value = status()
     details = value.get("details", {})
     return (f"Hourly Research Desk: {value['status']}; {details.get('search_leads', details.get('candidates', 0))} search leads, "
-            f"{details.get('retried', 0)} held leads revisited, {details.get('approved', 0)} approved, "
+            f"{details.get('publisher_candidates', 0)} publisher candidates, {details.get('retried', 0)} held leads revisited, {details.get('approved', 0)} approved, "
             f"{details.get('source_verified', 0)} source-verified. Cached review only.")
 
 
@@ -389,6 +431,8 @@ def routine_page(url: str) -> str:
     p = urlsplit(url)
     if (p.hostname or "").split(".")[0] in {"help", "support", "docs", "developers"} or re.match(r"^/(?:help|docs|documentation|support|careers|jobs|pricing)(?:/|$)", p.path, re.I):
         return "Routine help, documentation or service page; no investor report established"
+    if re.search(r"/(?:who-we-are/business-areas|business-areas)(?:/|$)", p.path, re.I):
+        return "Corporate business overview; a specific dated report URL is required"
     return ""
 
 

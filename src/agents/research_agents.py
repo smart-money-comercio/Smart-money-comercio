@@ -51,7 +51,7 @@ def request_options(model: str, schema: dict, name: str) -> dict:
     return options
 
 
-def discover(client, model: str, now: str, symbols: list[str], domains: list[str], previous: str = "", seen_urls: list[str] | None = None) -> tuple[list[dict], dict]:
+def discover(client, model: str, now: str, symbols: list[str], domains: list[str], previous: str = "", seen_urls: list[str] | None = None, publisher_hints: list[dict] | None = None) -> tuple[list[dict], dict]:
     response = client.responses.create(**request_options(model, LEAD_SCHEMA, "hourly_discovery"),
         tools=[{"type": "web_search", "search_context_size": "low", "filters": {"allowed_domains": domains[:100]}}],
         tool_choice="required", max_tool_calls=2, include=["web_search_call.action.sources"],
@@ -61,6 +61,8 @@ def discover(client, model: str, now: str, symbols: list[str], domains: list[str
             "Use the two complementary search tasks supplied in the input; favor investor-relations releases and actual financial/capital-market developments. "
             "A quiet scan may return zero leads. Do not fill the budget with product-help pages, API documentation, pricing pages, tutorials, changelogs, "
             "support articles, career pages, stock-pick lists, price predictions or promotional roundups. An 'updated hours ago' label is not an original publication time. "
+            "Return the specific dated release, article or filing URL, never a company homepage, business overview, product catalog or search landing page. "
+            "The supplied publisher reports have already been collected and will receive a separate relevance review; search for additional material reports. "
             "Look for earnings/guidance, funded orders, acquisitions, financing commitments, material deployments, policy changes and original IPO filings. "
             "Avoid already reviewed URLs unless a discrete new disclosure requires follow-up. Media reports are leads requiring verification. "
             "Use only actual URLs returned by web search. Do not invent publication clocks, securities, financial figures or confirmation. "
@@ -68,7 +70,8 @@ def discover(client, model: str, now: str, symbols: list[str], domains: list[str
         input=json.dumps({"now_utc": now, "prior_run": previous, "research_symbols": symbols,
             "recently_reviewed_urls": (seen_urls or [])[:16], "search_tasks": [
                 "AI infrastructure, chips, cloud and IPO/capital markets: search original issuer, investor-relations and SEC announcements for material business developments.",
-                "Defense, drones, autonomy, cybersecurity and macro/global risk: search funded procurement, production milestones, policy, trade and energy developments; prioritize original agency and company reports."]}))
+                "Defense, drones, autonomy, cybersecurity and macro/global risk: search funded procurement, production milestones, policy, trade and energy developments; prioritize original agency and company reports."],
+            "publisher_reports_already_collected": (publisher_hints or [])[:3]}))
     value = plain(response)
     payload, metadata = result(value)
     sources = set()
@@ -92,10 +95,13 @@ def discover(client, model: str, now: str, symbols: list[str], domains: list[str
     if not searched or not isinstance(rows, list) or len(rows) > 8:
         raise ValueError("Discovery lacks web-search provenance")
     candidates, seen = [], set()
+    cached_urls = {url_key(row["url"]) for row in (publisher_hints or [])[:3]}
     for row in rows:
         if not isinstance(row, dict) or set(row) != {"title", "url", "topic"} or row["topic"] not in TOPICS or not isinstance(row["title"], str) or not 1 <= len(row["title"]) <= 1000:
             raise ValueError("Invalid discovery handoff")
         url = url_key(row["url"])
+        if url in cached_urls:
+            continue  # These reports have their own publisher-backed handoff.
         if url not in sources:
             raise ValueError("Discovery URL absent from retrieved search sources")
         if url not in seen:
