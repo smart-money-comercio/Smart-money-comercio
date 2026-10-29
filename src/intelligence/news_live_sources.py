@@ -53,8 +53,9 @@ NEWS_SOURCES = [
     },
     {
         "name": "U.S. Treasury",
-        "url": "https://home.treasury.gov/rss/press-releases",
+        "url": "https://home.treasury.gov/news/press-releases",
         "category": "treasury",
+        "format": "treasury",
     },
     {
         "name": "EIA",
@@ -393,10 +394,10 @@ def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = Tru
 
 
 def fetch_source(source: dict, force_refresh: bool = False) -> dict:
-    if source.get("format") not in {"palantir", "index"}:
+    if source.get("format") not in {"palantir", "index", "treasury"}:
         return fetch_url(source["url"], force_refresh)
     cached = get_cached_source(source["url"])
-    if cached and (cached.get("status") == "error" or not force_refresh and cached.get("original_profile") == 1):
+    if cached and (cached.get("status") == "error" or not force_refresh and cached.get("original_profile") == 2):
         return {**cached, "cache_hit": True}
     try:
         payload = originals.retrieve(source, lambda url: fetch_url(url, force_refresh,
@@ -504,14 +505,14 @@ def parse_source_payload(payload: dict, source: dict) -> list[dict]:
 
 
 def parse_article_items(payload: dict, source: dict, *, full_titles: bool = False, full_text: bool = False) -> list[dict]:
-    if source.get("format") in {"palantir", "index"}:
+    if source.get("format") in {"palantir", "index", "treasury"}:
         rows = originals.cached_items(payload, source)
     else:
         rows = parse_rss_items(payload.get("body", ""), source, full_titles=full_titles, full_text=full_text)
     if full_text:
         for row in rows:
             row["evidence_scope"] = row.get("evidence_scope") or ("publisher feed excerpt" if row.get("description") else "headline only")
-            row["evidence_checked_at"] = payload.get("fetched_at_epoch")
+            row["evidence_checked_at"] = row.get("evidence_checked_at", payload.get("fetched_at_epoch"))
             details = payload.get("release_evidence", [])
             for detail in (details[:1] if isinstance(details, list) else []):
                 if (isinstance(detail, dict) and detail.get("title") == row["title"] and detail.get("url") == row["link"]
@@ -523,6 +524,15 @@ def parse_article_items(payload: dict, source: dict, *, full_titles: bool = Fals
 
 def is_original_source(source: dict) -> bool:
     return bool(source.get("company_symbol") or source.get("category") in {"fed", "treasury", "energy", "defense"})
+
+
+def original_source_for_url(url: str) -> dict | None:
+    source = next((row for row in NEWS_SOURCES if row["url"] == url and is_original_source(row)), None)
+    if source is None and url == "https://home.treasury.gov/rss/press-releases":
+        # Historical proofs retain their configured source identity. This retired
+        # endpoint is accepted only when reading evidence, never scheduled to fetch.
+        return {"name": "U.S. Treasury", "url": url, "category": "treasury"}
+    return source
 
 
 def describe_source(source: dict, payload, now: datetime) -> dict:
@@ -564,6 +574,10 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
             row["reason"] += f"; {mismatches} publisher-link mismatches"
         if row["undated"] and payload.get("publication_problems"):
             row["reason"] += "; " + str(payload["publication_problems"][0])[:90]
+        if row["undated"] and not source.get("format") and not any(dates):
+            root = ET.fromstring(payload.get("body", ""))
+            if root.tag.split("}")[-1].lower() == "feed" and any(node.tag.split("}")[-1].lower() == "updated" for node in root.iter()):
+                row["reason"] += "; update timestamps do not establish original publication"
         row["reason"] = row["reason"][:240]
     except (ET.ParseError, ValueError, TypeError, KeyError) as exc:
         row["reason"] = "no dated RSS article candidates; invalid publisher response" if isinstance(exc, ET.ParseError) else str(exc)[:150]

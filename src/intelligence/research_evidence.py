@@ -64,6 +64,8 @@ def publisher_reports(now: datetime, symbols: list[str], latest: dict, identity,
                 "source_excerpt": text if usable else "", "excerpt_scope": scope if usable else "headline only"}
             value["publisher_reference"] = {key: proof[key] for key in ("url", "title", "published", "observed", "feed_url")}
             value["publisher_reference"]["publisher_clock"] = raw["published"]
+            if raw.get("publication_url"):
+                value["publication_url"] = proof["publication_url"] = raw["publication_url"]
             if usable:
                 value["discovery_evidence"] = proof
             result.append(value); seen.add(key)

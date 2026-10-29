@@ -107,7 +107,11 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
     from src.intelligence.policy_analysis import is_fomc_statement, release_clock
     fed_statement = is_fomc_statement({"source": publisher["name"], "title": page.title})
     try:
-        published = publication_time(body, page.title)
+        if publisher["name"] == "U.S. Treasury":
+            from src.intelligence.publisher_publication import treasury_clock
+            published = treasury_clock(text, page.title)
+        else:
+            published = publication_time(body, page.title)
     except ValueError:
         if not fed_statement:
             raise
@@ -122,7 +126,7 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
         raise ValueError("Original report has a date-only clock")
     parser = VisibleText(); parser.feed(text)
     visible = " ".join("".join(parser.parts).split())[:6000]
-    if fed_statement:
+    if fed_statement or publisher["name"] == "U.S. Treasury":
         from src.intelligence.news_original_sources import article_excerpt
         visible = " ".join(article_excerpt(text, page.title, published.isoformat(), publisher=publisher["name"]).split())
     if not visible:
@@ -148,7 +152,7 @@ def check_proof(value: dict, now: datetime | None = None) -> dict:
     source_name = publisher["name"] if publisher else ""
     if isinstance(proof, dict) and "feed_url" in proof:
         from src.intelligence import news_live_sources as feeds
-        feed = next((source for source in feeds.NEWS_SOURCES if source["url"] == proof["feed_url"] and feeds.is_original_source(source)), None)
+        feed = feeds.original_source_for_url(proof["feed_url"])
         if (not feed or not publisher or (feed.get("company_symbol", "") != publisher["symbol"])
                 or (not publisher["symbol"] and feed["name"] != publisher["name"])
                 or proof.get("scope") not in {"publisher feed excerpt", "original release excerpt"}
@@ -169,6 +173,11 @@ def check_proof(value: dict, now: datetime | None = None) -> dict:
         raise ValueError("Original research clocks unavailable or stale")
     if "feed_url" in proof and (published-observed).total_seconds() > 60:
         raise ValueError("Publisher observation predates its purported report")
+    if "publication_url" in proof or "publication_url" in value:
+        from src.intelligence.publisher_publication import clock_reference_allowed
+        if (proof.get("publication_url") != value.get("publication_url") or not isinstance(proof.get("publication_url"), str)
+                or not clock_reference_allowed(publisher["symbol"], value["url"], proof["publication_url"])):
+            raise ValueError("Original publication clock reference does not match the candidate")
     review = value.get("research_review")
     if review is not None and (not isinstance(review, dict) or not isinstance(review.get("response_id"), str) or not review["response_id"]
             or type(review.get("score")) is not int or not 65 <= review["score"] <= 100

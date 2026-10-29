@@ -608,6 +608,63 @@ class FollowupChecks(ResearchFixture):
 
 
 class PublisherEvidenceChecks(ResearchFixture):
+    def publication_cache(self):
+        from src.intelligence import news_live_sources as feeds
+        values = {}
+        for name, title, url, publication_url in (
+            ("U.S. Treasury", "Treasury announces new AI export sanctions", "https://home.treasury.gov/news/press-releases/sb0999/", "https://home.treasury.gov/news/press-releases/sb0999/"),
+            ("Palantir Investor Relations", "Palantir announces a new AI defense contract", "https://investors.palantir.com/news-details/2026/fixture/default.aspx", "https://www.businesswire.com/news/home/20261025000001/en/")):
+            source = next(row for row in feeds.NEWS_SOURCES if row["name"] == name)
+            values[source["url"]] = {"status": "ok", "body": "", "url": source["url"], "final_url": source["url"],
+                "original_profile": 2, "fetched_at_epoch": NOW.timestamp(), "articles": [
+                {"title": title, "link": url, "published": (NOW-timedelta(minutes=20)).isoformat(),
+                 "description": QUOTE, "publication_url": publication_url, "evidence_checked_at": NOW.timestamp()}]}
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"]); path.write_text(json.dumps(values))
+        return path
+
+    def test_treasury_and_linked_palantir_publications_reach_the_independent_reviewer(self):
+        path = self.publication_cache(); before = path.read_bytes(); client = Client(leads=[])
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "PLTR"}):
+            result = self.run_desk(client, fetch=lambda _: self.fail("Verified publisher cache must not fetch"))
+        self.assertEqual(len(client.calls), 2)
+        self.assertEqual((result["details"]["approved"], result["details"]["original_reads"]), (2, 0))
+        approved = desk.approved(NOW)
+        self.assertEqual(len(approved), 2)
+        for row in approved:
+            desk.check_proof(row, NOW)
+            self.assertEqual(row["publication_url"], row["discovery_evidence"]["publication_url"])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_clock_provenance_cannot_be_swapped_after_an_independent_approval(self):
+        self.publication_cache()
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "PLTR"}):
+            self.run_desk(Client(leads=[]))
+        row = next(row for row in desk.approved(NOW) if row["publisher_symbol"] == "PLTR")
+        for field in ("publication_url", "proof"):
+            changed = deepcopy(row)
+            if field == "proof": changed["discovery_evidence"]["publication_url"] = "https://attacker.test/clock"
+            else: changed["publication_url"] = "https://attacker.test/clock"
+            with self.assertRaises(ValueError): desk.check_proof(changed, NOW)
+
+    def test_retired_treasury_feed_identity_is_readable_in_historical_proofs(self):
+        self.publication_cache()
+        self.run_desk(Client(leads=[]))
+        row = next(row for row in desk.approved(NOW) if row["source"] == "U.S. Treasury")
+        row["discovery_evidence"]["feed_url"] = "https://home.treasury.gov/rss/press-releases"
+        self.assertEqual(desk.check_proof(row, NOW)["name"], "U.S. Treasury")
+        row["discovery_evidence"]["feed_url"] = "https://attacker.test/press-releases"
+        with self.assertRaises(ValueError): desk.check_proof(row, NOW)
+
+    def test_direct_treasury_lead_reads_the_identified_body_and_original_publication_field(self):
+        from xml.sax.saxutils import escape
+        url, title = "https://home.treasury.gov/news/press-releases/sb0999/", "Treasury announces new AI export sanctions"
+        body = ('<meta property="og:title" content="' + escape(title) + '"><article>Navigation must not be evidence.</article>' +
+                '<div class="field--name-field-news-publication-date"><time datetime="' + (NOW-timedelta(minutes=20)).isoformat() + '"></time></div>' +
+                '<div class="field--name-field-news-body"><p>' + escape(QUOTE) + '</p></div>').encode()
+        value = desk.verified({"url": url}, NOW, lambda _: body)
+        self.assertEqual(value["source_excerpt"], QUOTE)
+        self.assertEqual(desk.check_proof(value, NOW)["name"], "U.S. Treasury")
+
     def test_added_issuer_feeds_reach_the_independent_reviewer_without_extra_reads(self):
         from html import escape
         from urllib.parse import urlsplit

@@ -11,6 +11,7 @@ from urllib.parse import urljoin, urlsplit
 from src.intelligence.special_alert_company_sources import PublicationPage, publication_time
 from src.intelligence.special_alert_sources import company_url, timestamp
 from src.intelligence.story_analysis import VisibleText, release_text
+from src.intelligence import publisher_publication as publication
 
 
 MAX_ARTICLES = 30
@@ -40,7 +41,9 @@ class ArticleBody(VisibleText):
         fed_body = (self.publisher == "Federal Reserve" and tag == "div" and
                     (attrs.get("id") in {"article", "article-body"} or
                      {"col-xs-12", "col-sm-8", "col-md-8"} <= classes))
-        if not self.depth and (tag == "article" or classes & {"wd_news_body", "article-body", "release-body"} or fed_body):
+        treasury = self.publisher == "U.S. Treasury"
+        treasury_body = treasury and "field--name-field-news-body" in classes
+        if not self.depth and (tag == "article" and not treasury or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body):
             self.depth = 1
         elif self.depth and tag not in self.VOID:
             self.depth += 1
@@ -82,8 +85,11 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
                           or release_clock(text) != expected):
         raise ValueError("Original Fed statement title or release clock does not match its feed")
     try:
-        actual = publication_time(body.encode(), title)
+        actual = (publication.treasury_clock(body, title) if publisher == "U.S. Treasury"
+                  else publication_time(body.encode(), title))
     except ValueError:
+        if publisher == "U.S. Treasury":
+            raise
         metadata = PublicationPage()
         metadata.feed(body)
         # Some publisher pages omit time metadata. A zoned original RSS clock
@@ -206,8 +212,14 @@ def service_items(body: str, source: dict) -> list[dict]:
         if not isinstance(title, str) or not title.strip() or not company_url("PLTR", link) or "/news-details/" not in urlsplit(link).path:
             continue
         # A naive service date remains naive until the exact issuer page verifies it.
-        rows.append({"title": " ".join(title.split()), "link": link, "published": value.get("PressReleaseDate", ""),
-                     "description": release_text(value.get("Body", ""))})
+        body = value.get("Body", "")
+        row = {"title": " ".join(title.split()), "link": link, "published": value.get("PressReleaseDate", ""),
+               "description": release_text(body)}
+        try:
+            row["clock_reference"] = publication.linked_wire(body) if isinstance(body, str) else ""
+        except ValueError as exc:
+            row["clock_reference_error"] = str(exc)
+        rows.append(row)
     return rows
 
 
@@ -241,42 +253,62 @@ def retrieve(source: dict, fetch, now: datetime) -> dict:
         payload = fetch(source["url"])
         if payload.get("status") != "ok" or not authorized_response(source, payload):
             return {**payload, "status": "error", "error": payload.get("error") or "Publisher redirect mismatch"}
-        rows = indexed_items(payload["body"], source)
+        rows = publication.treasury_items(payload["body"]) if source["format"] == "treasury" else indexed_items(payload["body"], source)
         if not rows:
             raise ValueError("Publisher index has no recognizable release links")
-        candidates = rows
+        candidates = ([row for row in rows if recent_hint(row["published"], now)]
+                      if source["format"] == "treasury" else rows)
     rows = rows[:MAX_ARTICLES]
     problems = []
     for row in candidates[:MAX_DETAIL_PAGES]:
         try:
-            detail = fetch(row["link"])
+            if row.get("clock_reference_error"):
+                raise ValueError(row["clock_reference_error"])
+            clock_url = row.get("clock_reference") or row["link"]
+            detail = fetch(clock_url)
             if detail.get("status") != "ok":
                 raise ValueError(detail.get("error") or "Release page unavailable")
-            if not authorized_response(source, detail):
+            wire = bool(row.get("clock_reference"))
+            if wire and not publication.matching_wire(clock_url, detail.get("final_url", detail.get("url", clock_url))):
+                raise ValueError("Publication page redirected outside the issuer-linked wire release")
+            if not wire and not authorized_response(source, detail):
                 raise ValueError("Release page redirected outside the issuer")
+            if source["format"] == "treasury":
+                if detail.get("final_url", detail.get("url", row["link"])).rstrip("/") != row["link"].rstrip("/"):
+                    raise ValueError("Original Treasury release redirect does not match its listing")
+                excerpt = article_excerpt(detail["body"], row["title"], row["published"], publisher=source["name"])
+                row.update(description=excerpt, publication_url=row["link"], evidence_checked_at=detail["fetched_at_epoch"])
+                continue
             published = publication_time(detail["body"].encode(), row["title"])
             row["published"] = published.isoformat()
-            row["publication_url"] = row["link"]
+            row["publication_url"] = clock_url
+            row["evidence_checked_at"] = detail["fetched_at_epoch"]
             try:
-                row["description"] = article_excerpt(detail["body"], row["title"], row["published"])
+                if not wire:
+                    row["description"] = article_excerpt(detail["body"], row["title"], row["published"])
             except ValueError:
                 pass
         except (ValueError, KeyError, TypeError, UnicodeError) as exc:
             problems.append(str(exc)[:160])
-    return {**payload, "url": source["url"], "final_url": source["url"], "original_profile": 1,
+            if source["format"] == "treasury":
+                row["published"] = ""
+    return {**payload, "url": source["url"], "final_url": source["url"], "original_profile": 2,
             "articles": rows, "publication_problems": list(dict.fromkeys(problems))[:3]}
 
 
 def cached_items(payload: dict, source: dict) -> list[dict]:
-    if payload.get("original_profile") != 1 or not isinstance(payload.get("articles"), list):
+    if type(payload.get("original_profile")) is not int or payload.get("original_profile") not in (1, 2) or not isinstance(payload.get("articles"), list):
         raise ValueError("Publisher index has not been parsed by the original-source reader")
     rows = []
     for item in payload["articles"][:MAX_ARTICLES]:
         if not isinstance(item, dict) or not isinstance(item.get("title"), str) or not isinstance(item.get("link"), str):
             continue
-        if not company_url(source["company_symbol"], item["link"]):
+        if not authorized_response(source, {"url": item["link"]}):
             continue
         rows.append({"title": item["title"], "link": item["link"], "published": item.get("published", ""),
-                     "description": release_text(item.get("description", "")), "source": source["name"], "category": "company",
+                     "description": release_text(item.get("description", "")), "source": source["name"], "category": source["category"],
+                     **({"publication_url": item["publication_url"]} if item.get("publication_url") else {}),
+                     **({"evidence_checked_at": item["evidence_checked_at"]} if "evidence_checked_at" in item else {}),
+                     **({"requires_original_body": True} if source.get("format") == "treasury" else {}),
                      "evidence_scope": "original release excerpt" if item.get("publication_url") == item["link"] else "publisher feed excerpt"})
     return rows

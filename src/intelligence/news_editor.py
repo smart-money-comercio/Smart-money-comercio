@@ -260,6 +260,8 @@ def cache_candidates(now: datetime, symbols: list[str], *, health: list | None =
                 "source_excerpt": item.get("description", "") if usable_excerpt else "",
                 "excerpt_scope": item.get("evidence_scope", "publisher feed excerpt") if usable_excerpt else "headline only",
                 "evidence_checked_at": datetime.fromtimestamp(evidence_stamp, timezone.utc).isoformat() if usable_excerpt else "",
+                **({"publication_url": item["publication_url"]} if item.get("publication_url") else {}),
+                **({"requires_original_body": True} if item.get("requires_original_body") else {}),
                 "relevant": bool(company_symbols or themes or official_host), "authority_mismatch": bool(official_host and not official)})
     return candidates, issues
 
@@ -318,6 +320,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["discovery_evidence"] = deepcopy(raw["discovery_evidence"])
         if raw.get("research_review") is not None:
             story["research_review"] = deepcopy(raw["research_review"])
+        if raw.get("publication_url"):
+            story["publication_url"] = raw["publication_url"]
         try:
             if not isinstance(raw_title, str) or not title or not story["source"]:
                 raise ValueError("Headline or source missing")
@@ -336,6 +340,12 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 raise ValueError("Complete original headline unavailable or longer than the editorial limit; shortened wording withheld")
             if story["official"] and not primary_source(story):
                 raise ValueError("Original publisher identity does not match the company or agency source")
+            if "publication_url" in story:
+                from src.intelligence.publisher_publication import clock_reference_allowed
+                if not isinstance(story["publication_url"], str) or not clock_reference_allowed(story["publisher_symbol"], story["url"], story["publication_url"]):
+                    raise ValueError("Original publication clock reference does not match the report")
+            if raw.get("requires_original_body") and (raw.get("excerpt_scope") != "original release excerpt" or len(raw.get("source_excerpt", "")) < 80):
+                raise ValueError("Original Treasury release body must match its listed title and publication time")
             story["published"] = published.isoformat()
             story["source_check"] = "pass"
         except (ValueError, TypeError, OverflowError) as exc:
@@ -643,6 +653,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                           "Source check: " + story.get("source_check", "hold") + " | Cached at: " + str(story.get("source_checked_at") or "unavailable")]
                 if story.get("story_type"):
                     lines.append("Story type: " + story["story_type"])
+                if story.get("publication_url"):
+                    lines.append("Publication clock source: " + story["publication_url"])
                 if story.get("confirmed_by"):
                     lines.append("Original publisher verified: " + story["confirmed_by"])
                     lines.append("Investor topic: " + story["materiality"])

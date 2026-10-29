@@ -111,6 +111,8 @@ class SourceResolver:
         proof = {"schema": 1, "url": value["url"], "title": value["title"], "published": value["published"],
             "observed": value["source_checked_at"], "publisher": self.identity(value["url"]), "text": text,
             "sha256": hashlib.sha256(text.encode()).hexdigest(), "feed_url": reference["feed_url"], "scope": "original release excerpt"}
+        if value.get("publication_url"):
+            proof["publication_url"] = value["publication_url"]
         result = {**value, "source_excerpt": text, "excerpt_scope": "original release excerpt", "discovery_evidence": proof}
         check_proof(result, self.now)
         self.verified_values[value["url"]] = result

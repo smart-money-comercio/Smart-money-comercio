@@ -1025,6 +1025,210 @@ class OriginalSourceChecks(IsolatedChecks):
         self.assertIn("0 fresh dated reports", result)
 
 
+class PublicationCoverageChecks(IsolatedChecks):
+    source = OriginalSourceChecks.source
+    payload = OriginalSourceChecks.payload
+    service = OriginalSourceChecks.service
+    metadata = OriginalSourceChecks.metadata
+    TITLE = "Treasury announces new AI export sanctions"
+    URL = "https://home.treasury.gov/news/press-releases/sb0999/"
+    TEXT = "Treasury announced new restrictions on designated entities. The release explains the covered transactions and the effective date of the measures."
+    WIRE = "https://www.businesswire.com/news/home/20261025000001/en/"
+
+    def treasury(self):
+        return next(row for row in editor.feeds.NEWS_SOURCES if row["name"] == "U.S. Treasury")
+
+    def listing(self, title=None, url=None, clock=None):
+        return ('<div><span class="date-format"><time datetime="' + (clock or (NOW-timedelta(hours=1)).isoformat()) +
+                '">Publisher date</time></span><h3 class="featured-stories__headline"><a href="' + (url or self.URL) + '">' +
+                escape(title or self.TITLE) + '</a></h3></div>')
+
+    def release(self, title=None, clock=None, text=None):
+        return ('<meta property="og:title" content="' + escape(title or self.TITLE) + '">' +
+                '<article><p>Navigation article must not enter the evidence.</p></article>' +
+                '<div class="field--name-field-news-publication-date"><time datetime="' +
+                (clock or (NOW-timedelta(hours=1)).isoformat()) + '">Publisher date</time></div>' +
+                '<div class="field--name-field-news-body"><p>' + escape(text or self.TEXT) + '</p></div>')
+
+    def retrieve_treasury(self, index=None, body=None, final=None):
+        from src.intelligence.news_original_sources import retrieve
+        source, calls = self.treasury(), []
+        def fetch(url):
+            calls.append(url)
+            return self.payload((index if index is not None else self.listing()) if url == source["url"] else
+                                (body if body is not None else self.release()), url=url,
+                                final_url=final if final and url != source["url"] else url)
+        return retrieve(source, fetch, NOW), calls
+
+    def palantir(self, body=None, metadata=None, final=None):
+        from src.intelligence.news_original_sources import retrieve
+        source, calls = self.source("PLTR"), []
+        if body is None:
+            body = '<p>Palantir announced a funded defense contract. The company described deployment requirements and the commercial timing of the project.</p><a href="https://cts.businesswire.com/ct/CT?newsitemid=20261025000001&amp;url=x">Source</a>'
+        def fetch(url):
+            calls.append(url)
+            content = self.service(Body=body) if "GetPressReleaseList?" in url else (metadata if metadata is not None else self.metadata())
+            return self.payload(content, url=url, final_url=final if final and url == self.WIRE else url)
+        return retrieve(source, fetch, NOW), calls
+
+    def test_treasury_row_clock_cannot_be_borrowed_from_navigation_or_the_next_row(self):
+        from src.intelligence.publisher_publication import treasury_items
+        body = '<time datetime="2026-10-25T12:00:00Z"></time>' + self.listing() + self.listing("Treasury second release", clock="not-a-time")
+        rows = treasury_items(body)
+        self.assertEqual(rows[0]["published"], "")  # Conflicting duplicate URL remains unverified.
+        rows = treasury_items(body.replace(self.URL + '">Treasury second', self.URL.replace("0999", "0998") + '">Treasury second'))
+        self.assertEqual(editor.dated(rows[0]["published"]), NOW-timedelta(hours=1))
+        self.assertEqual(rows[1]["published"], "")
+
+    def test_treasury_naive_date_only_and_off_authority_rows_are_never_admitted(self):
+        from src.intelligence.publisher_publication import treasury_items
+        for clock in ("2026-10-25", "2026-10-25T12:00:00"):
+            self.assertEqual(treasury_items(self.listing(clock=clock))[0]["published"], "")
+        for url in ("https://home.treasury.gov.attacker.test/news/press-releases/sb0999/", "http://home.treasury.gov/news/press-releases/sb0999/", "https://home.treasury.gov/news/press-releases"):
+            self.assertEqual(treasury_items(self.listing(url=url)), [])
+
+    def test_treasury_index_and_body_match_without_reading_unrelated_articles(self):
+        from src.intelligence.news_original_sources import cached_items
+        payload, calls = self.retrieve_treasury()
+        row = cached_items(payload, self.treasury())[0]
+        self.assertEqual(calls, [self.treasury()["url"], self.URL])
+        self.assertEqual(row["description"], self.TEXT)
+        self.assertEqual(row["evidence_scope"], "original release excerpt")
+        self.assertEqual(row["publication_url"], self.URL)
+        self.assertEqual(editor.feeds.describe_source(self.treasury(), payload, NOW)["fresh"], 1)
+
+    def test_treasury_page_mismatch_or_missing_body_withholds_the_report(self):
+        for body in (self.release(title="Different release"), self.release(clock=(NOW-timedelta(hours=2)).isoformat()),
+                     self.release().replace('field--name-field-news-body', 'site-description'), self.release(clock="2026-10-25")):
+            payload, _ = self.retrieve_treasury(body=body)
+            self.assertEqual(payload["articles"][0]["published"], "")
+            self.assertTrue(payload["publication_problems"])
+
+    def test_treasury_conflicting_machine_metadata_is_not_overridden_by_the_index(self):
+        body = self.release() + self.metadata(title=self.TITLE, published=(NOW-timedelta(hours=2)).isoformat())
+        self.assertEqual(self.retrieve_treasury(body=body)[0]["articles"][0]["published"], "")
+
+    def test_treasury_redirect_must_retain_the_same_release_identity(self):
+        for final in (self.URL.replace("0999", "0998"), "https://attacker.test/copied-release"):
+            payload, _ = self.retrieve_treasury(final=final)
+            self.assertEqual(payload["articles"][0]["published"], "")
+
+    def test_treasury_detail_reads_are_bounded_and_skip_old_or_future_releases(self):
+        index = ''.join(self.listing(url=self.URL.replace("0999", str(1000+i))) for i in range(12))
+        _, calls = self.retrieve_treasury(index=index)
+        self.assertEqual(len(calls), 4)
+        for clock in ((NOW-timedelta(days=2)).isoformat(), (NOW+timedelta(hours=1)).isoformat()):
+            _, calls = self.retrieve_treasury(index=self.listing(clock=clock))
+            self.assertEqual(len(calls), 1)
+
+    def test_treasury_success_survives_another_malformed_release(self):
+        index = self.listing(clock="missing") + self.listing(url=self.URL.replace("0999", "0998"))
+        payload, calls = self.retrieve_treasury(index=index)
+        self.assertEqual(len(calls), 2)
+        health = editor.feeds.describe_source(self.treasury(), payload, NOW)
+        self.assertEqual((health["fresh"], health["undated"]), (1, 1))
+
+    def test_treasury_unread_headline_cannot_enter_the_news_brief(self):
+        payload, _ = self.retrieve_treasury()
+        payload["articles"][0].pop("publication_url")
+        payload["articles"][0]["description"] = ""
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+        path.write_text(json.dumps({self.treasury()["url"]: payload}))
+        text = build_daily_news_brief(self.research())
+        record = store.read_editions(report=text)[0]
+        story = next(row for row in record["candidates"] if row["title"] == self.TITLE)
+        self.assertEqual(story["decision"], "wait")
+        self.assertIn("release body must match", story["reason"])
+
+    def test_treasury_verified_report_and_clock_source_reach_the_cache_only_brief(self):
+        payload, _ = self.retrieve_treasury()
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+        path.write_text(json.dumps({self.treasury()["url"]: payload})); before = path.read_bytes()
+        with patch.object(editor.feeds, "fetch_source", side_effect=AssertionError("Rendering must not fetch")):
+            text = build_daily_news_brief(self.research())
+        story = next(row for row in store.read_editions(report=text)[0]["candidates"] if row["title"] == self.TITLE)
+        self.assertEqual(story["decision"], "selected")
+        self.assertEqual(story["publication_url"], self.URL)
+        self.assertIn("Publication clock source: " + self.URL, editor.build_editor_status(history=True))
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_palantir_uses_only_the_exact_issuer_linked_wire_title_and_zoned_clock(self):
+        from src.intelligence.news_original_sources import cached_items
+        payload, calls = self.palantir()
+        row = cached_items(payload, self.source("PLTR"))[0]
+        self.assertEqual(calls[1:], [self.WIRE])
+        self.assertEqual(editor.dated(row["published"]), NOW-timedelta(hours=1))
+        self.assertEqual(row["publication_url"], self.WIRE)
+        self.assertIn("funded defense contract", row["description"])
+
+    def test_palantir_wire_wrong_title_and_naive_clocks_remain_held(self):
+        for metadata in (self.metadata(title="Different report"), self.metadata(published="2026-10-25T12:00:00")):
+            payload, _ = self.palantir(metadata=metadata)
+            self.assertIsNone(editor.timestamp_for_priority(payload["articles"][0]["published"]))
+            self.assertTrue(payload["publication_problems"])
+
+    def test_verified_old_or_future_wire_clocks_are_retained_but_never_become_fresh_news(self):
+        for clock in ((NOW-timedelta(days=2)).isoformat(), (NOW+timedelta(hours=1)).isoformat()):
+            payload, _ = self.palantir(metadata=self.metadata(published=clock))
+            self.assertEqual(editor.dated(payload["articles"][0]["published"]), editor.dated(clock))
+            path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+            path.write_text(json.dumps({self.source("PLTR")["url"]: payload}))
+            text = build_daily_news_brief(self.research())
+            story = next(row for row in store.read_editions(report=text)[0]["candidates"] if "Palantir signs" in row["title"])
+            self.assertEqual(story["decision"], "wait")
+            self.assertTrue("older than 24 hours" in story["reason"] or "future-dated" in story["reason"])
+
+    def test_palantir_wire_redirect_cannot_switch_release_or_publisher(self):
+        for final in (self.WIRE.replace("000001", "000002"), "https://businesswire.com.attacker.test/news/home/20261025000001/en/",
+                      "https://www.businesswire.com:444/news/home/20261025000001/en/"):
+            payload, _ = self.palantir(final=final)
+            self.assertTrue(payload["publication_problems"])
+            self.assertIsNone(editor.timestamp_for_priority(payload["articles"][0]["published"]))
+
+    def test_palantir_conflicting_wire_links_do_not_trigger_any_wire_request(self):
+        body = '<a href="https://cts.businesswire.com/ct/CT?newsitemid=20261025000001">one</a><a href="https://cts.businesswire.com/ct/CT?newsitemid=20261025000002">two</a>'
+        payload, calls = self.palantir(body=body)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(payload["publication_problems"])
+
+    def test_wire_identity_is_never_extracted_from_plain_text_or_lookalike_links(self):
+        from src.intelligence.publisher_publication import linked_wire
+        for body in ('newsitemid=20261025000001', '<a href="https://cts.businesswire.com.attacker.test/ct/CT?newsitemid=20261025000001">x</a>',
+                     '<a href="http://cts.businesswire.com/ct/CT?newsitemid=20261025000001">x</a>'):
+            self.assertEqual(linked_wire(body), "")
+
+    def test_wire_does_not_become_a_general_company_authority(self):
+        from src.intelligence.special_alert_sources import company_url
+        self.assertFalse(company_url("PLTR", self.WIRE))
+        self.assertFalse(editor.feeds.originals.authorized_response(self.source("PLTR"), {"url": self.WIRE}))
+
+    def test_palantir_clock_provenance_is_recorded_separately_from_the_issuer_report(self):
+        payload, _ = self.palantir()
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+        path.write_text(json.dumps({self.source("PLTR")["url"]: payload}))
+        text = build_daily_news_brief(self.research())
+        story = next(row for row in store.read_editions(report=text)[0]["candidates"] if "Palantir signs" in row["title"])
+        self.assertEqual(story["decision"], "selected")
+        self.assertEqual(story["publication_url"], self.WIRE)
+        self.assertTrue(story["url"].startswith("https://investors.palantir.com/"))
+
+    def test_old_structured_reader_cache_is_refreshed_without_changing_existing_bytes(self):
+        source = self.source("PLTR")
+        cached = self.payload(original_profile=1, articles=[])
+        with patch.object(editor.feeds, "get_cached_source", return_value=cached), patch.object(editor.feeds.originals, "retrieve", return_value={**cached, "original_profile": 2}) as retrieve, patch.object(editor.feeds, "set_cached_source"):
+            value = editor.feeds.fetch_source(source)
+        retrieve.assert_called_once()
+        self.assertEqual(value["original_profile"], 2)
+        self.assertEqual(cached["original_profile"], 1)
+
+    def test_apple_update_only_feed_explains_its_publication_limit(self):
+        source = self.source("AAPL")
+        body = '<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Apple introduces a product</title><link href="https://www.apple.com/newsroom/example/"/><updated>' + NOW.isoformat() + '</updated></entry></feed>'
+        health = editor.feeds.describe_source(source, self.payload(body), NOW)
+        self.assertEqual((health["fresh"], health["dated"], health["undated"]), (0, 0, 1))
+        self.assertIn("update timestamps do not establish original publication", health["reason"])
+
+
 class StoryAnalysisChecks(IsolatedChecks):
     def setUp(self):
         super().setUp()
