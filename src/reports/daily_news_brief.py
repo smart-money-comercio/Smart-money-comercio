@@ -211,7 +211,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     breadth = re.search(r"Breadth: (\d+) up / (\d+) down / (\d+) quoted", snapshot)
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
     plan = editor.build_editorial_plan(brief, now)
-    story_paragraphs = {story["id"]: editor.render_story(story, zone, NAMES) for story in editor.selected_stories(plan)}
+    story_paragraphs = {story["id"]: editor.render_story(story, zone, NAMES, style="broadcast") for story in editor.selected_stories(plan)}
     no_company_story = "No new source-confirmed company report met the editorial checks for this edition."
     ahead = []
     # The cached Nasdaq rows are estimates, not issuer-confirmed schedules.
@@ -252,7 +252,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     for count in range(len(initial_stories), -1, -1):
         for indexes, focus_limit in product(combinations(range(len(initial_stories)), count), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
-            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit})
+            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2)
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")

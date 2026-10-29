@@ -85,6 +85,8 @@ The brief places IPO milestones and this analysis in **IPO & Capital Markets**, 
 
 ## Verify and operate
 
+Additional original feeds cover AMD Investor Relations, CACI Investor Relations and Northrop Grumman Investor Relations. The Northrop IR feed complements the newsroom index; an unavailable newsroom remains visible even when its IR feed works. Each feed keeps its original zoned publication clock and issuer authority checks. Quiet, old, blocked or undated items do not become fresh news. These publishers use the existing refresh and independent-review path, with no added model requests, automatic alert-universe expansion or change to delivery receipts. News rendering remains cache-only.
+
 Fed statements can use their publisher's explicit release date, US Eastern release clock and exact heading alongside the matching original feed. The reader recognizes Fed press-release body containers and excludes navigation and footer text. Conflicting metadata, title, date or DST offset remains a hold. News refresh can read at most one fresh Fed statement body; report rendering stays cache-only, and the research desk retains its existing six-read and two-model-request budgets. Source access errors remain visible; this reader does not bypass publisher blocks.
 
 Run `python scripts/check_hourly_research.py` and its `--windows-socketpair` variant. Offline tests use synthetic sources and mocked model responses, including failure and publication-blocking cases. They do not establish live model or publisher availability. Deployment preflight uses temporary research state and must not create a production database as root. The service user (`smartmoney`) needs write access to its data directory and SQLite file.

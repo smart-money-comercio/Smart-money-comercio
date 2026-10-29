@@ -139,7 +139,7 @@ class EditorChecks(IsolatedChecks):
             text = build_daily_news_brief(self.research())
         story = next(row for row in store.read_editions(report=text)[0]["candidates"] if row["title"] == title)
         self.assertEqual(story["confirmed_by"], "LMT")
-        self.assertIn("Lockheed Martin's company announcement", text)
+        self.assertIn("Lockheed Martin's October 25 announcement", text)
         self.assertIn("Global and Defense Watch", text)
 
     def test_new_feed_fetch_time_does_not_replace_a_missing_original_date(self):
@@ -239,7 +239,7 @@ class EditorChecks(IsolatedChecks):
         self.cache(source=2, title="Federal Reserve awards Microsoft a cloud contract", link="https://www.federalreserve.gov/release.htm")
         rows, _ = editor.cache_candidates(NOW, ["MSFT"])
         text = self.render(rows)
-        self.assertIn("A publisher announcement from Federal Reserve", text)
+        self.assertIn("Federal Reserve's October 25 announcement", text)
         self.assertNotIn("company announcement", text)
 
     def test_unsafe_links_are_held_without_execution_or_fetching(self):
@@ -286,16 +286,17 @@ class EditorChecks(IsolatedChecks):
 
     def test_brief_retains_headline_attribution_date_and_research_focus(self):
         text = self.render([candidate()])
-        self.assertIn("Microsoft's company announcement", text)
-        self.assertIn("published October 25", text)
-        self.assertIn("microsoft.com", text)
+        self.assertIn("Microsoft's October 25 announcement", text)
+        selected = editor.selected_stories(store.read_editions(report=text)[0])[0]
+        self.assertEqual(selected["source"], "microsoft.com")
+        self.assertEqual(selected["published"], (NOW-timedelta(minutes=15)).isoformat())
         self.assertNotIn("Research focus:", text)
         self.assertIn("Research focus:", editor.build_editor_status(history=True))
         self.assertNotIn("caused stocks to fall", text)
 
     def test_macro_headline_stays_a_headline_and_does_not_explain_market_cause(self):
         text = self.render([candidate(kind="macro", symbols=[], title="Oil inventories report released", source="EIA", url="https://www.eia.gov/report")])
-        self.assertIn("A publisher announcement from EIA", text)
+        self.assertIn("EIA's October 25 announcement", text)
         self.assertNotIn("caused", text)
 
     def test_live_preview_roundups_are_logged_without_becoming_company_news(self):
@@ -359,15 +360,17 @@ class EditorChecks(IsolatedChecks):
     def test_publication_clock_and_source_title_are_retained_in_shorter_narration(self):
         value = candidate(title="Microsoft introduces a new cloud platform")
         text = self.render([value])
-        self.assertIn("October 25 at 12:45 PM EDT", text)
+        self.assertIn("October 25", text)
         self.assertIn("“" + value["title"] + "”", text)
-        self.assertIn("microsoft.com", text)
+        story = editor.selected_stories(store.read_editions(report=text)[0])[0]
+        self.assertEqual(story["published"], value["published"])
+        self.assertEqual(story["source"], "microsoft.com")
         self.assertNotIn("Research focus:", text)
 
     def test_length_cut_removes_the_dropped_storys_followup_from_narration(self):
         from src.reports import daily_news_brief as news
         value = candidate(title="Microsoft introduces a cloud platform for China " * 15, source="Microsoft original publisher " * 3)
-        budget = len(self.render([])) - 100
+        budget = 2300
         with patch.object(news, "MAX_NEWS_CHARS", budget):
             text = self.render([value])
         record = store.read_editions(report=text)[0]
@@ -504,8 +507,8 @@ class EditorChecks(IsolatedChecks):
         value = candidate("AAPL", title="Apple announces an example product")
         with patch.object(editor, "cache_candidates", return_value=([value], [])):
             text = build_daily_news_brief(self.research(), brief)
-        self.assertIn("Apple's company announcement", text)
-        self.assertNotIn("AAPL's company announcement", text)
+        self.assertIn("Apple's October 25 announcement", text)
+        self.assertNotIn("AAPL's October 25 announcement", text)
         self.assertIn(value["title"], text)
 
     def test_posted_bitcoin_bet_buy_question_and_unconfirmed_company_claim_are_excluded(self):
@@ -613,8 +616,8 @@ class EditorChecks(IsolatedChecks):
         value = candidate("NVDA", symbols=["NVDA", "MSFT"], source="microsoft.com", url="https://www.microsoft.com/partnership",
                           publisher_symbol="MSFT", title="Microsoft signs a strategic cloud partnership with Nvidia")
         text = self.render([value])
-        self.assertIn("Microsoft's company announcement", text)
-        self.assertNotIn("Nvidia's company announcement", text)
+        self.assertIn("Microsoft's October 25 announcement", text)
+        self.assertNotIn("Nvidia's October 25 announcement", text)
 
     def test_quiet_edition_passes_without_promoting_unconfirmed_news(self):
         from src.reports.daily_news_brief import validate_news_brief
@@ -1044,7 +1047,7 @@ class StoryAnalysisChecks(IsolatedChecks):
             "Lockheed Martin successfully redirected an in-flight GMLRS rocket during a test.")
         text=self.render([story])
         self.assertIn("in-flight retargeting",text);self.assertIn("procurement approvals",text)
-        self.assertIn("does not establish funded orders",text)
+        self.assertIn("funded orders and production costs will determine the business impact",text)
         self.assertNotIn("warrants reviewing its effect on the business",text)
         self.assertTrue("test milestone"==investor_read(story)["evidence"]["stage"])
 
@@ -1265,7 +1268,7 @@ class StoryAnalysisChecks(IsolatedChecks):
         from src.reports import daily_news_brief as news
         baseline = self.render([])
         story = self.story("Example announces an acquisition " + "with enterprise business details " * 20, "The acquisition was valued at $987 million.", "MSFT")
-        with patch.object(editor, "cache_candidates", return_value=([story], [])), patch.object(news, "MAX_NEWS_CHARS", len(baseline) + 20):
+        with patch.object(editor, "cache_candidates", return_value=([story], [])), patch.object(news, "MAX_NEWS_CHARS", 2300):
             text = build_daily_news_brief(self.research())
         self.assertNotIn("$987", text)
         self.assertNotIn("The proposed acquisition", text)
@@ -1417,6 +1420,162 @@ class PolicyBriefChecks(IsolatedChecks):
         self.assertEqual(checked_evidence(story)["facts"], [])
 
 
+class BroadcastChecks(IsolatedChecks):
+    COPILOT = "Introducing the Microsoft Copilot harness: Unlocking the potential of truly multi-model agentic work"
+    GMLRS = "Lockheed Martin Advances Joint Fires Capability by Redirecting In-flight GMLRS Rocket During U.S. Army Test"
+
+    def setUp(self):
+        super().setUp()
+        self.stack.enter_context(patch.dict(os.environ,{"SPECIAL_ALERT_SYMBOLS":"MSFT,NVDA,TSM,LMT,NOC,CACI,AMD"}))
+
+    def source(self, symbol="MSFT", title=None, excerpt=""):
+        return candidate(symbol,title=title or self.COPILOT,source_excerpt=excerpt,excerpt_scope="original release excerpt")
+
+    def render(self, values):
+        with patch.object(editor,"cache_candidates",return_value=(values,[])):
+            return build_daily_news_brief(self.research())
+
+    def test_copilot_brief_explains_product_and_commercial_test_without_reading_the_long_title(self):
+        text=self.render([self.source()])
+        self.assertIn("Microsoft introduced the Copilot harness for multi-model AI work",text)
+        self.assertIn("paid adoption and the cost of running multiple models",text)
+        self.assertIn("customer uptake, pricing and AI-related revenue or margin disclosures",text)
+        self.assertNotIn(self.COPILOT,text)
+        record=store.read_editions(report=text)[0]
+        self.assertEqual(editor.selected_stories(record)[0]["title"],self.COPILOT)
+        self.assertEqual(record["narration_version"],2)
+
+    def test_concise_test_story_requires_a_sourced_demonstration_and_keeps_funding_conditional(self):
+        text=self.render([self.source("LMT",self.GMLRS,"Lockheed Martin successfully redirected an in-flight GMLRS rocket during an Army test.")])
+        self.assertIn("reported redirecting a GMLRS rocket in flight during an Army test",text)
+        self.assertIn("could support future procurement",text)
+        self.assertIn("funded orders and production costs",text)
+        self.assertNotIn(self.GMLRS,text)
+        self.assertEqual(editor.selected_stories(store.read_editions(report=text)[0])[0]["title"],self.GMLRS)
+
+    def test_test_headline_alone_cannot_supply_the_condensed_capability_fact(self):
+        text=self.render([self.source("LMT",self.GMLRS)])
+        self.assertNotIn("reported redirecting a GMLRS rocket in flight",text)
+        self.assertIn(self.GMLRS,text)
+
+    def test_planned_test_does_not_become_a_completed_demonstration(self):
+        title="Lockheed Martin Plans GMLRS Retargeting Test With Army"
+        text=self.render([self.source("LMT",title,"Lockheed Martin plans to test in-flight GMLRS retargeting.")])
+        self.assertIn(title,text)
+        self.assertNotIn("reported redirecting",text)
+        self.assertNotIn("Capability demonstrated",text)
+
+    def test_copilot_recall_does_not_become_a_product_reveal(self):
+        title="Microsoft recalls Copilot harness for multi-model AI work"
+        text=self.render([self.source(title=title)])
+        self.assertNotIn("introduced the Copilot harness",text)
+
+    def test_follow_up_prefix_is_spoken_once_and_all_duration_checks_hold(self):
+        from src.reports.daily_news_brief import validate_news_brief
+        text=self.render([self.source()]);quality=validate_news_brief(text)
+        self.assertNotIn("Watch next: Watch",text);self.assertNotIn("Watch next:",text)
+        self.assertTrue(quality["passes"]);self.assertGreaterEqual(quality["spoken_words"],180)
+        self.assertTrue(15<=quality["market_estimated_seconds"]<=30)
+
+    def test_policy_product_and_defense_updates_fit_as_complete_stories_together(self):
+        from src.reports.daily_news_brief import validate_news_brief
+        values=[PolicyBriefChecks().source(),self.source(),
+                self.source("LMT",self.GMLRS,"Lockheed Martin successfully redirected an in-flight GMLRS rocket during an Army test.")]
+        text=self.render(values);record=store.read_editions(report=text)[0]
+        self.assertEqual(len(editor.selected_stories(record)),3)
+        self.assertTrue(validate_news_brief(text)["passes"])
+        self.assertEqual(len(record["story_narrations"]),3)
+        self.assertTrue(all(text.count(paragraph)==1 for paragraph in record["story_narrations"].values()))
+
+    def test_sector_watch_qualifications_are_scoped_to_the_named_company(self):
+        text=self.render([self.source()]);record=store.read_editions(report=text)[0]
+        focus=record["analyst_review"]["evidence"]["company_focus"]
+        sector=[row for row in focus["selected"] if row.get("basis")=="sector context"]
+        self.assertTrue(sector)
+        for row in sector:
+            self.assertIn("No fresh "+row["name"]+" announcement is included in this edition.",text)
+        self.assertNotIn("No fresh Microsoft announcement",text)
+
+    def test_audit_retains_source_clock_original_title_and_exact_spoken_passage(self):
+        value=self.source();text=self.render([value]);record=store.read_editions(report=text)[0]
+        story=editor.selected_stories(record)[0]
+        self.assertEqual(story["published"],value["published"])
+        self.assertEqual(story["url"],value["url"]);self.assertEqual(story["source"],value["source"])
+        self.assertEqual(text.count(record["story_narrations"][story["id"]]),1)
+
+    def test_an_invented_broadcast_fact_cannot_be_saved_as_a_reviewed_edition(self):
+        from src.intelligence.daily_brief_analysis import analyze_report,retained_review
+        from zoneinfo import ZoneInfo
+        from src.reports.daily_news_brief import NAMES
+        plan=editor.build_editorial_plan(companies.build_company_catalyst_brief(),NOW,[self.source()])
+        stories=editor.selected_stories(plan);story=stories[0]
+        analysis=analyze_report(self.research(),stories,presentation="news",narration_version=2)
+        fake=editor.render_story(story,ZoneInfo("America/New_York"),NAMES,style="broadcast")+" It guarantees $99 billion in revenue."
+        text=fake+"\n\n"+"\n\n".join(row["text"] for row in analysis["insights"])
+        with self.assertRaisesRegex(ValueError,"Broadcast wording"):
+            editor.review_and_record(plan,text,{story["id"]:fake},self.research(),retained_review(analysis,text))
+
+    def test_unknown_story_uses_its_complete_title_instead_of_an_invented_summary(self):
+        title="Microsoft introduces an example research platform with enterprise controls"
+        text=self.render([self.source(title=title)])
+        self.assertIn("“"+title+"”",text)
+        self.assertNotIn("…",text)
+
+    def test_source_style_and_historical_analyst_versions_remain_available(self):
+        from src.intelligence.daily_brief_analysis import analyze_report,validate_review
+        context={"schema":2,"limit":3,"recent":[]}
+        analysis=analyze_report(self.research(),presentation="news",focus_context=context)
+        text="\n\n".join(row["text"] for row in analysis["insights"])
+        validate_review(analysis,self.research(),text,[])
+        plan=editor.build_editorial_plan(companies.build_company_catalyst_brief(),NOW,[self.source()])
+        legacy=editor.render_story(editor.selected_stories(plan)[0],companies.calendar_context.report_zone(),{"MSFT":"Microsoft"})
+        self.assertIn(self.COPILOT,legacy);self.assertIn("12:45 PM EDT",legacy)
+
+    def test_unknown_narration_versions_and_unverified_publishers_are_rejected(self):
+        from src.intelligence.daily_brief_analysis import analyze_report
+        for version in (True,0,3):
+            with self.assertRaises(ValueError):analyze_report(self.research(),presentation="news",narration_version=version)
+        value=self.source();value["official"]=False
+        with self.assertRaises(ValueError):editor.render_story(value,companies.calendar_context.report_zone(),{"MSFT":"Microsoft"},style="broadcast")
+
+    def test_new_publishers_use_specific_issuer_authorities_and_original_feed_clocks(self):
+        for symbol in ("AMD","CACI","NOC"):
+            source=next(row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol")==symbol and not row.get("format"))
+            self.assertTrue(editor.feeds.is_original_source(source))
+            self.assertTrue(editor.feeds.originals.authorized_response(source,{"url":source["url"]}))
+        source=next(row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol")=="AMD")
+        rss='<rss><channel><item><title>AMD introduces an AI product</title><link>https://ir.amd.com/news-events/press-releases/detail/fixture</link><pubDate>Sun, 25 Oct 26 12:20:00 -0400</pubDate></item></channel></rss>'
+        payload={"status":"ok","body":rss,"fetched_at_epoch":NOW.timestamp()}
+        row=editor.feeds.describe_source(source,payload,NOW)
+        self.assertEqual((row["status"],row["dated"],row["fresh"]),("available",1,1))
+
+    def test_missing_new_feed_clock_is_not_replaced_with_the_fetch_time(self):
+        source=next(row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol")=="CACI")
+        payload={"status":"ok","body":'<rss><channel><item><title>CACI awarded a defense contract</title><link>https://investor.caci.com/fixture</link></item></channel></rss>',"fetched_at_epoch":NOW.timestamp()}
+        row=editor.feeds.describe_source(source,payload,NOW)
+        self.assertEqual((row["status"],row["fresh"],row["undated"]),("limited",0,1))
+
+    def test_cross_issuer_redirect_and_lookalike_caci_domains_are_rejected(self):
+        source=next(row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol")=="CACI")
+        for url in ('https://investor.caci.com.evil.example/news','https://ir.amd.com/news','http://investor.caci.com/news'):
+            self.assertFalse(editor.feeds.originals.authorized_response(source,{"final_url":url}))
+
+    def test_fund_symbols_do_not_count_as_missing_company_publishers_and_failures_stay_visible(self):
+        sources=[row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol")=="NOC"]
+        rss='<rss><channel><item><title>Northrop Grumman introduces an example defense system</title><link>https://investor.northropgrumman.com/news-releases/fixture</link><pubDate>Sun, 25 Oct 2026 12:20:00 -0400</pubDate></item></channel></rss>'
+        cache={sources[0]["url"]:{"status":"error","error":"Publisher index has no recognizable release links","fetched_at_epoch":NOW.timestamp()},
+            sources[1]["url"]:{"status":"ok","body":rss,"fetched_at_epoch":NOW.timestamp()}}
+        Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"]).write_text(json.dumps(cache))
+        brief=companies.build_company_catalyst_brief()
+        for symbol in ("VOO","ITA","SMH","ASML"):
+            if symbol not in {row["symbol"] for row in brief["rows"]}:brief["rows"].append({"symbol":symbol,"events":[],"calendar":{"dates":[]}})
+        with patch.object(editor.feeds,"NEWS_SOURCES",sources):plan=editor.build_editorial_plan(brief,NOW)
+        health=plan["source_health"]
+        self.assertEqual({row["status"] for row in health if row["symbol"]=="NOC"},{"available","limited"})
+        self.assertFalse({"VOO","ITA","SMH"}&{row["symbol"] for row in health})
+        self.assertTrue(any(row["symbol"]=="ASML" and row["status"]=="limited" for row in health))
+
+
 class NewsFirstChecks(IsolatedChecks):
     def setUp(self):
         super().setUp()
@@ -1466,8 +1625,8 @@ class NewsFirstChecks(IsolatedChecks):
         title = "Microsoft reports quarterly financial results"
         text = self.render([self.story(title, symbol="MSFT")])
         self.assertLess(text.index(title), text.index("Market Update"))
-        self.assertLess(text.index("Our analysis:"), text.index("Market Update"))
-        self.assertIn("Company selection reflects today's research relevance", text)
+        self.assertLess(text.index("Investor take:"), text.index("Market Update"))
+        self.assertIn("The full report has the rankings, risks and trade-plan conditions", text)
 
     def test_completed_defense_deal_leads_before_product_reveal(self):
         product = self.story("Microsoft introduces an AI product", symbol="MSFT")

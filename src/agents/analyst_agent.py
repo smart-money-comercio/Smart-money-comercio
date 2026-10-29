@@ -26,7 +26,8 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
     from src.intelligence.market_brief import market_segment, defense_segment
     add("market_pulse", "market", market_segment(evidence), ["Executive Summary", "Market Snapshot"]
         + (["Verified story decisions"] if evidence.get("stories") else []))
-    add("defense_watch", "global", defense_segment(evidence.get("stories", [])),
+    broadcast = evidence.get("narration_version") == 2
+    add("defense_watch", "global", defense_segment(evidence.get("stories", []), broadcast=broadcast),
         ["Verified story decisions"] if evidence.get("stories") else ["Research coverage policy"])
     if breadth:
         up, down, total = (breadth[key] for key in ("up", "down", "total"))
@@ -43,7 +44,9 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
             if text:
                 add(f"company_focus_{index}", "company", text, row["sources"] + ["Company focus selection"])
         if selected:
-            add("focus_confirmation", "watch", "For these companies, the next test is agreement between original disclosures, price and volume. Company selection reflects today's research relevance; the numerical rankings remain available in the full report.",
+            confirmation = ("Our next check is whether company disclosures, price and volume support these research ideas. The full report has the rankings, risks and trade-plan conditions." if broadcast else
+                            "For these companies, the next test is agreement between original disclosures, price and volume. Company selection reflects today's research relevance; the numerical rankings remain available in the full report.")
+            add("focus_confirmation", "watch", confirmation,
                 ["Company focus selection", "Market Snapshot"])
         companies = []
     if companies:

@@ -355,12 +355,12 @@ class NewsChecks(IsolatedChecks):
         text = build_daily_news_brief(self.research())
         self.assertNotIn("Example company introduces", text)
         self.assertNotIn("headline-only", text)
-        self.assertNotIn("Microsoft's company announcement", text)
+        self.assertNotIn("Microsoft's October 25 announcement", text)
 
     def test_official_development_keeps_the_execution_follow_up(self):
         self.event(announcement(official=True))
         text = build_daily_news_brief(self.research())
-        self.assertIn("Microsoft's company announcement", text)
+        self.assertIn("Microsoft's October 25 announcement", text)
         self.assertIn("commercial timing, demand and execution costs still require evidence", text)
 
     def test_cached_publisher_time_is_never_described_as_a_fresh_verification(self):
@@ -450,7 +450,7 @@ class NewsChecks(IsolatedChecks):
         text = build_daily_news_brief(self.research(), brief)
         self.assertLessEqual(len(text), MAX_NEWS_CHARS)
         self.assertTrue(text.endswith("Research only. Not financial advice."))
-        self.assertIn("company announcement", text)
+        self.assertIn("announcement:", text)
         self.assertNotIn("headline-only", text)
 
     def test_oil_theme_has_plain_language_outlook_without_a_claimed_market_cause(self):

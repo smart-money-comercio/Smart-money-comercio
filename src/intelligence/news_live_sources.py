@@ -74,6 +74,9 @@ NEWS_SOURCES = [
     {"name": "Apple Newsroom", "url": "https://www.apple.com/newsroom/rss-feed.rss", "category": "company", "company_symbol": "AAPL"},
     {"name": "TSMC Press Center", "url": "https://pr.tsmc.com/english/latest-news", "category": "company", "company_symbol": "TSM", "format": "index", "article_pattern": r"/english/news/\d+"},
     {"name": "Northrop Grumman Newsroom", "url": "https://news.northropgrumman.com/News-Stream", "category": "company", "company_symbol": "NOC", "format": "index", "article_pattern": r"/news/releases/[^/]+|/releases/[^/]+"},
+    {"name": "Northrop Grumman Investor Relations", "url": "https://investor.northropgrumman.com/rss/news-releases.xml", "category": "company", "company_symbol": "NOC"},
+    {"name": "CACI Investor Relations", "url": "https://investor.caci.com/news?pagetemplate=rss", "category": "company", "company_symbol": "CACI"},
+    {"name": "AMD Investor Relations", "url": "https://ir.amd.com/news-events/press-releases/rss", "category": "company", "company_symbol": "AMD"},
 ]
 
 

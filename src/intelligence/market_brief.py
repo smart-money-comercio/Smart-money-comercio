@@ -109,7 +109,7 @@ def market_segment(evidence: dict) -> str:
     return text
 
 
-def defense_segment(stories: list[dict]) -> str:
+def defense_segment(stories: list[dict], *, broadcast=False) -> str:
     defense = [story for story in stories if "defense" in story_topics(story)]
     if defense:
         companies = [story for story in defense if story.get("kind") == "company"]
@@ -120,7 +120,12 @@ def defense_segment(stories: list[dict]) -> str:
             for story in companies:
                 review = review_sourced_development(story)
                 symbol = story.get("publisher_symbol") or story["symbols"][0]
-                parts.append(f"For {NAMES.get(symbol, symbol)}, our analysis: " + review["why"] + " Watch next: " + review["watch"])
+                if broadcast:
+                    from src.intelligence.broadcast_story import company_read, next_check
+                    review = company_read(story)
+                    parts.append(f"Our view on {NAMES.get(symbol, symbol)}: " + review["why"] + " " + next_check(review["watch"]))
+                else:
+                    parts.append(f"For {NAMES.get(symbol, symbol)}, our analysis: " + review["why"] + " Watch next: " + review["watch"])
             if any(story.get("kind") != "company" and re.search(r"\b(prototype|demonstrat\w*|tests?|concept)\b", story["title"], re.I) for story in defense):
                 parts.append("The agency's technical milestone still requires evidence of production readiness and funded demand.")
             return " ".join(parts)

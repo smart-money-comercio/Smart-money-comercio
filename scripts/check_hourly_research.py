@@ -608,6 +608,28 @@ class FollowupChecks(ResearchFixture):
 
 
 class PublisherEvidenceChecks(ResearchFixture):
+    def test_added_issuer_feeds_reach_the_independent_reviewer_without_extra_reads(self):
+        from html import escape
+        from urllib.parse import urlsplit
+        from src.intelligence import news_live_sources as feeds
+        values={};symbols={"AMD","CACI","NOC"}
+        for source in feeds.NEWS_SOURCES:
+            symbol=source.get("company_symbol")
+            if symbol not in symbols or source.get("format"):continue
+            url="https://"+urlsplit(source["url"]).hostname+"/fixture-original-release"
+            title=symbol+" introduces an example AI defense product"
+            rss=f'<rss><channel><item><title>{title}</title><link>{url}</link><pubDate>{(NOW-timedelta(minutes=20)).isoformat()}</pubDate><description>{escape(QUOTE)}</description></item></channel></rss>'
+            values[source["url"]]={"status":"ok","body":rss,"fetched_at_epoch":NOW.timestamp()}
+        path=Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"]);path.write_text(json.dumps(values));before=path.read_bytes()
+        client=Client(leads=[])
+        with patch.dict(os.environ,{"SPECIAL_ALERT_SYMBOLS":"AMD,CACI,NOC"}):
+            result=self.run_desk(client,fetch=lambda _:self.fail("Dated publisher excerpts need no extra source read"))
+        self.assertEqual(len(client.calls),2)
+        self.assertEqual(result["details"]["original_reads"],0)
+        self.assertEqual(result["details"]["approved"],3)
+        self.assertEqual({row["verified"]["publisher_symbol"] for row in desk.read_history()},symbols)
+        self.assertEqual(path.read_bytes(),before)
+
     def seed(self, *, symbol="NVDA", url=URL, title=TITLE, published=None, observed=None, description=None, status="ok", final_url=None):
         from html import escape
         from src.intelligence import news_live_sources as feeds
@@ -640,10 +662,12 @@ class PublisherEvidenceChecks(ResearchFixture):
     def test_publisher_candidate_reaches_brief_with_original_clock_and_attribution(self):
         self.seed(); self.run_desk(Client(leads=[]))
         text = build_daily_news_brief(self.research())
-        self.assertIn(TITLE, text); self.assertIn("Nvidia Newsroom", text)
+        self.assertIn(TITLE, text); self.assertIn("Nvidia's October 25 announcement", text)
         self.assertTrue(validate_news_brief(text)["passes"])
         from src.intelligence.news_editor_store import read_editions
-        self.assertEqual(len(read_editions(report=text)), 1)
+        records=read_editions(report=text)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(news_editor.selected_stories(records[0])[0]["source"], "Nvidia Newsroom")
 
     def test_publisher_hints_are_input_context_not_claimed_as_new_web_results(self):
         self.seed(); client = Client(leads=[]); self.run_desk(client)

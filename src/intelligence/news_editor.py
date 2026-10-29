@@ -278,9 +278,10 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         from src.intelligence.hourly_research import approved
         cached += approved(now)
     if health:
+        from src.intelligence.company_focus import FUNDS
         configured = {row["symbol"] for row in health}
         for symbol in symbols:
-            if symbol not in configured:
+            if symbol not in configured and symbol not in FUNDS:
                 health.append({"name": symbol, "symbol": symbol, "status": "limited", "checked_at": "", "entries": 0, "dated": 0,
                                "fresh": 0, "undated": 0, "latest_publication": "", "reason": "Direct publisher reader not configured"})
     candidates = []
@@ -445,7 +446,14 @@ def research_focus(story: dict) -> str:
     return "Research focus: check the published details and rate-sensitive, energy or sector exposure; the headline does not establish a market cause."
 
 
-def render_story(story: dict, zone, company_names: dict) -> str:
+def render_story(story: dict, zone, company_names: dict, *, style="source") -> str:
+    if style not in {"source", "broadcast"}:
+        raise ValueError("Unknown story narration style")
+    if style == "broadcast" and not story.get("official"):
+        raise ValueError("Broadcast narration needs an admitted original publisher")
+    if style == "broadcast" and story.get("official") and not story.get("ipo") and not story.get("sec_filing"):
+        from src.intelligence.broadcast_story import render_story as render_broadcast
+        return render_broadcast(story, zone, company_names)
     published = dated(story["published"]).astimezone(zone)
     at = f"{published:%B} {published.day} at {published.strftime('%I:%M').lstrip('0')} {published:%p %Z}"
     headline = "“" + story["title"].rstrip(".") + "”"
@@ -499,6 +507,14 @@ def render_story(story: dict, zone, company_names: dict) -> str:
 
 def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str, analyst_review: dict | None = None) -> str:
     selected = selected_stories(plan)
+    broadcast = (analyst_review or {}).get("narration_version") == 2
+    if broadcast:
+        from zoneinfo import ZoneInfo
+        from src.reports.daily_news_brief import NAMES
+        generated = re.search(r"^Generated: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (\S+)$", research_report, re.M)
+        if generated is None:
+            raise ValueError("Broadcast evidence needs the research edition's timezone")
+        zone = ZoneInfo(generated[1])
     for story in selected:
         if story.get("title_truncated"):
             raise ValueError("Selected story headline is incomplete")
@@ -508,9 +524,14 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             checked_evidence(story)
         if report.count(paragraphs[story["id"]]) != 1:
             raise ValueError("Selected story evidence or qualification changed during narration")
+        if broadcast and paragraphs[story["id"]] != render_story(story, zone, NAMES, style="broadcast"):
+            raise ValueError("Broadcast wording does not match the admitted source facts")
     if len(selected) > MAX_STORIES:
         raise ValueError("News story budget exceeded")
     value = deepcopy(plan)
+    if broadcast:
+        value["narration_version"] = 2
+        value["story_narrations"] = {story["id"]: paragraphs[story["id"]] for story in selected}
     counts = {decision: sum(story["decision"] == decision for story in value["candidates"]) for decision in ("selected", "skip", "wait")}
     value["research_sha256"] = hashlib.sha256(research_report.encode()).hexdigest()
     if analyst_review is not None:
@@ -594,7 +615,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             if record.get("source_health"):
                 lines += ["", feeds.coverage_summary(record["source_health"])]
                 for row in record["source_health"]:
-                    label = row["symbol"] or row["name"]
+                    duplicates = sum(value["symbol"] == row["symbol"] for value in record["source_health"]) > 1
+                    label = row["symbol"] + " — " + row["name"] if row["symbol"] and duplicates else row["symbol"] or row["name"]
                     latest = " | newest " + row["latest_publication"][:10] if row["latest_publication"] else ""
                     lines.append(f"{label}: {row['status']} | {row['fresh']} fresh / {row['dated']} dated{latest} | {row['reason']}")
             lines += ["", "Market evidence: " + clean(record["market_evidence"]["moves"], 400)]
