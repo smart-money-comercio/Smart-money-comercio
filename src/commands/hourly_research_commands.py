@@ -45,6 +45,8 @@ async def researchdesk_command(update, context):
         lines.append(f"Discovery links resolved to specific original releases: {details['resolved_releases']}")
     if details.get("expired"):
         lines.append(f"Expired reports retired from active follow-up: {details['expired']}")
+    for event in details.get("market_event_attention", [])[:3]:
+        lines.append("Market-event attention: " + event["symbol"] + " — " + event["quote_status"] + "; original disclosures and corporate actions targeted")
     if value["status"] == "complete" and not details.get("approved"):
         lines.append("Review outcome: no findings cleared all relevance and original-source checks.")
     if details.get("error"): lines.append("Run limited: " + details["error"] + "; review API access and server logs.")

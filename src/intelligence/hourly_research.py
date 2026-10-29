@@ -356,6 +356,11 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         from src.config.special_alerts import settings as alert_settings
         from src.intelligence.special_alert_universe import company_universe
         symbols = company_universe(alert_settings(), now)["symbols"]
+        from src.intelligence.market_event_desk import search_hints
+        attention = search_hints(now)
+        for event in attention:
+            symbols.extend([event["symbol"]] + (["GOOG"] if event["symbol"] == "GOOGL" else []))
+        symbols = list(dict.fromkeys(symbols))
         domains = list(dict.fromkeys(row["domain"] for row in identities())) + ["reuters.com", "apnews.com", "sec.gov"]
         history = read_history(80)
         latest = latest_findings(history)
@@ -367,7 +372,8 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         details["publisher_coverage"] = coverage
         hints = [{key: value[key] for key in ("title", "url", "published", "source")} for value in cached]
         seen_urls = [row["lead"]["url"] for row in latest.values() if row.get("review", {}).get("final") in {"approved", "skip"}][:16]
-        leads, metadata = research_agents.discover(client, config["discovery_model"], now.isoformat(), symbols, domains, previous, seen_urls, hints)
+        details["market_event_attention"] = attention
+        leads, metadata = research_agents.discover(client, config["discovery_model"], now.isoformat(), symbols, domains, previous, seen_urls, hints, attention)
         details["agents"].append(metadata)
         fresh = {}
         for lead in leads:

@@ -127,9 +127,17 @@ def build_company_catalyst_brief(ranked: list[dict] | None = None, now: datetime
         event_status = "Special-alert evidence unavailable (" + type(exc).__name__ + ")"
         issues.append(event_status)
     order = list(dict.fromkeys(coverage["ranked"] + coverage["core"]))
+    from src.intelligence.company_schedule import cached_notices
+    confirmed_schedules = cached_notices(now, order)
     rows = []
     for symbol in order:
         calendar = earnings_context(symbol, snapshot, now)
+        schedules = [row for row in confirmed_schedules if row["symbol"] == symbol]
+        if schedules:
+            from src.intelligence.company_schedule import narration
+            first = schedules[0]
+            calendar = {"status": "confirmed", "dates": [first["event_date"]], "time": first["event_at"] or "time not supplied",
+                        "text": narration(first, calendar_context.report_zone(), {symbol: symbol}), "source": first["source"]["url"]}
         company_events = [event for event in events if event["kind"] == "company" and symbol in event["symbols"]][:2]
         row = {"symbol": symbol, "core": symbol in coverage["core"], "score": coverage["scores"].get(symbol),
                "calendar": calendar, "events": company_events}
@@ -142,6 +150,7 @@ def build_company_catalyst_brief(ranked: list[dict] | None = None, now: datetime
             "macro": [dict(row) for row in snapshot["economic"] if row["time_status"] in {"verified", "cached"}
                       and calendar_context.checked_time(row["event_at"]) >= now] if snapshot else [],
             "event_status": event_status, "issues": issues,
+            "company_schedules": confirmed_schedules,
             "has_evidence": any(row["calendar"]["dates"] or row["events"] for row in rows)}
 
 
@@ -149,6 +158,8 @@ def catalyst_note(row: dict) -> str:
     calendar = row["calendar"]
     if calendar["status"] == "conflict":
         return "earnings dates conflict; verify company announcement"
+    if calendar["status"] == "confirmed":
+        return "company-confirmed " + calendar["dates"][0] + " " + calendar.get("time", "time not supplied")
     if calendar["dates"]:
         return "earnings estimate " + calendar["dates"][0] + "; company confirmation pending"
     if row["events"]:

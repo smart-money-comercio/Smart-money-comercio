@@ -141,6 +141,9 @@ def review_company_catalyst(evidence: dict) -> dict:
     if calendar.get("status") == "conflict":
         focus = "Resolve earnings date"
         interpretation = "The cached calendar lists conflicting earnings dates. Check the company's investor-relations announcement."
+    elif calendar.get("status") == "confirmed":
+        focus = "Review company-confirmed schedule"
+        interpretation = "The original company announcement establishes this schedule. Review the results, guidance and current price response when released."
     elif calendar.get("dates"):
         focus = "Confirm earnings schedule"
         interpretation = "The earnings date is a Nasdaq estimate. Confirm the company announcement, release timing and guidance before changing conviction."

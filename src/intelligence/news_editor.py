@@ -266,10 +266,16 @@ def cache_candidates(now: datetime, symbols: list[str], *, health: list | None =
     return candidates, issues
 
 
-def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict] | None = None) -> dict:
+def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict] | None = None, *, event_context=None, research_report=None) -> dict:
     if now.tzinfo is None:
         raise ValueError("News editor clock needs a timezone")
     symbols = [row["symbol"] for row in brief["rows"]]
+    if event_context is not None:
+        from src.intelligence.market_event_desk import checked_context
+        checked_context(event_context, research_report, now)
+        for event in event_context["events"]:
+            symbols.extend([event["symbol"]] + (["GOOG"] if event["symbol"] == "GOOGL" else []))
+        symbols = list(dict.fromkeys(symbols))
     health = []
     cached, issues = cache_candidates(now, symbols, health=health) if extra_candidates is None else (deepcopy(extra_candidates), [])
     if extra_candidates is None:
@@ -385,6 +391,14 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                     if not fresh or scope == "headline only" or not profile["facts"]:
                         story.update(decision="wait", confirmation_check="hold",
                                      reason="Original Fed decision text and a current source observation are required; the announcement headline alone is insufficient")
+        if event_context is not None and story["decision"] == "eligible":
+            from src.intelligence.market_event_desk import story_priority
+            text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
+            if story.get("materiality") in {"earnings", "guidance", "regulation"} and scope != "headline only" and len(text) >= 80:
+                story["evidence_checked_at"] = observed
+                story["priority_evidence"] = build_evidence(story, text[:1200], scope)
+                story["priority_checked_at"] = observed
+            story["event_priority"] = story_priority(story, now, event_context["events"])
         ledger.append(story)
     selected, urls, titles, companies = [], set(), set(), set()
     company_eligible = any(story["decision"] == "eligible" and story["kind"] == "company" for story in ledger)
@@ -412,9 +426,13 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
             story["event_evidence"] = build_evidence(story, text, scope)
-    return {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
+    result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
             "rules_version": 14, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+    if event_context is not None:
+        from src.intelligence.company_schedule import notices
+        result.update(rules_version=15, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
+    return result
 
 
 def timestamp_for_priority(value):
@@ -435,12 +453,14 @@ def news_order(story: dict) -> tuple:
             "AI infrastructure financing": 3, "financing disclosure": 2,
             "earnings": 2, "acquisition": 2, "divestiture": 2, "restructuring": 2,
             "contract": 1, "product": 1, "defense innovation": 1}.get(topic, 0)
+    if type(story.get("event_priority")) is int and 0 <= story["event_priority"] <= 7:
+        tier = story["event_priority"]
     return (-tier, -story.get("priority", 0), -dated(story["published"]).timestamp(), story["id"])
 
 
 def coverage_order(stories: list[dict]) -> list[dict]:
     ordered = sorted(stories, key=news_order)
-    preferred = []
+    preferred = [ordered[0]] if ordered and any("event_priority" in row for row in ordered) else []
     for predicate in (lambda row: bool(row.get("ipo")),
                       lambda row: row["kind"] == "macro" and not row.get("ipo") and "defense" not in story_topics(row),
                       lambda row: "defense" in story_topics(row)):
@@ -517,6 +537,18 @@ def render_story(story: dict, zone, company_names: dict, *, style="source") -> s
 
 def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str, analyst_review: dict | None = None) -> str:
     selected = selected_stories(plan)
+    if "market_event_context" in plan:
+        from src.intelligence.market_event_desk import checked_context, story_priority
+        when = dated(plan["generated_at"])
+        checked_context(plan["market_event_context"], research_report, when)
+        for story in plan["candidates"]:
+            profile = story.get("priority_evidence")
+            if profile is not None and profile != build_evidence(story, profile.get("source_text", ""), profile.get("scope", "headline only")):
+                raise ValueError("Editorial priority evidence changed")
+            if "event_priority" in story and story["event_priority"] != story_priority(story, when, plan["market_event_context"]["events"]):
+                raise ValueError("Editorial event priority lost its supporting evidence")
+        if plan.get("lead_story_id") != (min(selected, key=news_order)["id"] if selected else ""):
+            raise ValueError("Lead story does not match admitted event priority")
     broadcast = (analyst_review or {}).get("narration_version") == 2
     if broadcast:
         from zoneinfo import ZoneInfo
@@ -525,6 +557,11 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         if generated is None:
             raise ValueError("Broadcast evidence needs the research edition's timezone")
         zone = ZoneInfo(generated[1])
+        from src.intelligence.company_schedule import checked_notice, narration
+        for notice in plan.get("narrated_company_schedules", []):
+            checked_notice(notice, dated(plan["generated_at"]))
+            if notice not in plan.get("company_schedules", []) or report.count(narration(notice, zone, NAMES)) != 1:
+                raise ValueError("Company schedule narration lost its original evidence")
     for story in selected:
         if story.get("title_truncated"):
             raise ValueError("Selected story headline is incomplete")
@@ -630,6 +667,10 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     latest = " | newest " + row["latest_publication"][:10] if row["latest_publication"] else ""
                     lines.append(f"{label}: {row['status']} | {row['fresh']} fresh / {row['dated']} dated{latest} | {row['reason']}")
             lines += ["", "Market evidence: " + clean(record["market_evidence"]["moves"], 400)]
+            for event in record.get("market_event_context", {}).get("events", []):
+                lines.append("Market event check: " + event["symbol"] + " — " + event["status"] + "; issuer-disclosure search cue, market cause not inferred")
+            for row in record.get("narrated_company_schedules", []):
+                lines.append("Company-confirmed calendar: " + row["symbol"] + " — " + row["event_date"] + "; " + row["source"]["url"])
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
@@ -653,6 +694,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                           "Source check: " + story.get("source_check", "hold") + " | Cached at: " + str(story.get("source_checked_at") or "unavailable")]
                 if story.get("story_type"):
                     lines.append("Story type: " + story["story_type"])
+                if "event_priority" in story:
+                    lines.append("Editorial priority: " + str(story["event_priority"]) + " — materiality, original evidence and publication age; price cause not inferred")
                 if story.get("publication_url"):
                     lines.append("Publication clock source: " + story["publication_url"])
                 if story.get("confirmed_by"):

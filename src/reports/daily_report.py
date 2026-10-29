@@ -715,6 +715,12 @@ def fetch_watchlist_quotes(context: dict | None = None) -> tuple[list[str], dict
     if not isinstance(quotes, dict):
         return symbols, {}
 
+    from src.intelligence.market_event_desk import review_quotes
+    from src.commands.watchlist_commands import fetch_chart_quote
+    try:
+        review_quotes(quotes, fetch_chart_quote)
+    except (OSError, ValueError, TypeError):
+        pass  # A missing event check never becomes confirmation or blocks the report.
     return symbols, quotes
 
 

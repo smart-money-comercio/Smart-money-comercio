@@ -96,12 +96,22 @@ def report_evidence(report: str) -> dict:
             "source_sections": [key for key in ("Executive Summary", "Market Snapshot", "What Changed Today", "Top Opportunities", "Trade Plan Snapshot") if sections.get(key)]}
 
 
-def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None, narration_version: int = 1) -> dict:
+def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None, narration_version: int = 1, event_context: dict | None = None) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
     if type(narration_version) is not int or narration_version not in {1, 2} or narration_version == 2 and presentation != "news":
         raise ValueError("Unknown analyst narration version")
     evidence = report_evidence(report)
+    if event_context is not None:
+        from src.intelligence.market_event_desk import checked_context
+        generated = re.search(r"^Generated: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\S+)$", report, re.M)
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        if presentation != "news" or generated is None:
+            raise ValueError("Market event attention belongs to a dated news edition")
+        now = datetime.strptime(generated[1], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo(generated[2]))
+        evidence["market_event_context"] = deepcopy(checked_context(event_context, report, now))
+        evidence["source_sections"].append("Market event checks")
     if narration_version == 2:
         evidence["narration_version"] = narration_version
     from src.intelligence import news_editor
@@ -144,6 +154,8 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         value["presentation"] = presentation
     if focus_context is not None:
         value["focus_context"] = deepcopy(focus_context)
+    if event_context is not None:
+        value["event_context"] = deepcopy(event_context)
     if narration_version == 2:
         value["narration_version"] = narration_version
     return value
@@ -157,8 +169,8 @@ def retained_review(analysis: dict, report: str) -> dict:
 
 
 def validate_review(analysis: dict, research_report: str, report: str, stories: list[dict] | None = None) -> None:
-    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"), narration_version=analysis.get("narration_version", 1))
-    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version")):
+    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"), narration_version=analysis.get("narration_version", 1), event_context=analysis.get("event_context"))
+    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version", "event_context")):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
     seen = set()

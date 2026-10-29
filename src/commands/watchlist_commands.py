@@ -219,7 +219,14 @@ def fetch_chart_quote(symbol: str) -> dict:
                 "error": "No chart data returned",
             }
 
-        return parse_regular_quote(symbol, results[0])
+        result = results[0]
+        quote = parse_regular_quote(symbol, result)
+        fields = ("symbol", "regularMarketPrice", "regularMarketTime", "exchangeTimezoneName", "currentTradingPeriod",
+                  "currency", "exchangeName", "instrumentType", "hasPrePostMarketData", "dataGranularity", "priceHint")
+        quote["quote_evidence"] = {"meta": {key: result["meta"][key] for key in fields if key in result["meta"]},
+            "timestamp": result["timestamp"], "indicators": {"quote": result["indicators"]["quote"]},
+            "events": result.get("events", {})}
+        return quote
 
     except QuoteDataError as error:
         return {"symbol": symbol, "ok": False, "error": str(error)}

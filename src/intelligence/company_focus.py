@@ -62,11 +62,11 @@ def history_context(now: datetime) -> dict:
         symbols = {issuer(row.get("symbol")) for row in selected or [] if isinstance(row, dict) and company(row.get("symbol"))}
         if symbols:
             days.setdefault(at.astimezone(NY).date().isoformat(), set()).update(symbols)
-    return {"schema": 3, "limit": 3, "recent": [{"day": day, "symbols": sorted(symbols)[:100]} for day, symbols in sorted(days.items())]}
+    return {"schema": 4, "limit": 3, "recent": [{"day": day, "symbols": sorted(symbols)[:100]} for day, symbols in sorted(days.items())]}
 
 
 def checked_context(context: dict, day) -> dict:
-    if (not isinstance(context, dict) or set(context) != {"schema", "limit", "recent"} or type(context["schema"]) is not int or context["schema"] not in {1, 2, 3}
+    if (not isinstance(context, dict) or set(context) != {"schema", "limit", "recent"} or type(context["schema"]) is not int or context["schema"] not in {1, 2, 3, 4}
             or type(context["limit"]) is not int or not 1 <= context["limit"] <= 3
             or not isinstance(context["recent"], list) or len(context["recent"]) > 7):
         raise ValueError("Invalid company-focus context")
@@ -119,6 +119,7 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
     except (TypeError, ValueError):
         dated_session = False
     moves, stories = evidence["moves"] if dated_session else {}, evidence.get("stories", [])
+    attention = {row["symbol"]: row for row in evidence.get("market_event_context", {}).get("events", [])} if context["schema"] >= 4 else {}
     for story in stories:
         if story.get("kind") != "company":
             continue
@@ -137,8 +138,11 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
             watch = "Watch disclosed costs, closing conditions and cash generation."
         subjects = [story["publisher_symbol"]] if company(story.get("publisher_symbol")) else story.get("symbols", [])
         for symbol in subjects:
-            add(symbol, "company development", "Development to watch", 100, why, watch,
+            add(symbol, "company development", "Development to watch", 150 if issuer(symbol) in attention and topic in {"earnings", "guidance", "regulation"} else 100, why, watch,
                 ["Verified story decisions"], story_id=story["id"])
+            if issuer(symbol) in attention and pool.get(issuer(symbol), {}).get("story_id") == story["id"]:
+                event = attention[issuer(symbol)]
+                pool[issuer(symbol)]["market_event"] = {key: event[key] for key in ("reported_move", "status")}
 
     if dated_session:
         prices = {row["symbol"]: row["price"] for row in evidence["companies"] if row.get("price") is not None}
@@ -150,6 +154,18 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
             if symbol not in COMPANY_NAMES or abs(value) < 1.5:
                 continue
             direction = "rose" if value > 0 else "fell"
+            if context["schema"] >= 4 and abs(value) >= 5:
+                event = attention.get(issuer(symbol), {})
+                if event.get("source_symbol") and event["source_symbol"] != symbol:
+                    continue
+                if event.get("status") == "rechecked":
+                    why = f"It {direction} {abs(value):.1f} percent in the quoted regular session. A repeat quote from the same provider supports the price reading."
+                else:
+                    why = "An unusually large reported move is under review; quote confirmation and corporate-action checks remain open."
+                add(symbol, "market event", "Event watch", 120, why,
+                    "Check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",
+                    ["Market event checks", "Watchlist Movers"], metric={"price": value} if event.get("status") == "rechecked" else None)
+                continue
             add(symbol, "price move", "Momentum watch" if value > 0 else "Risk watch", 70 + min(15, abs(value)*2),
                 f"It {direction} {abs(value):.1f} percent in the quoted regular session.",
                 "Watch whether volume and the next company disclosure support a lasting change in the setup.",
@@ -214,6 +230,13 @@ def focus_paragraph(row: dict, stories: list[dict]) -> str:
         story = next(value for value in stories if value["id"] == row["story_id"])
         from src.intelligence.market_brief import story_topics
         if "defense" not in story_topics(story):
+            event = row.get("market_event")
+            if event:
+                if event["status"] == "rechecked":
+                    move = event["reported_move"]
+                    return (f"Market response — {row['name']}. It {'rose' if move > 0 else 'fell'} {abs(move):.1f} percent in the quoted regular session. "
+                            "A repeat quote from the same provider supports the price reading. The company disclosure adds context; a market cause is not established.")
+                return f"Event check — {row['name']}. The unusually large reported move still needs quote and corporate-action confirmation."
             return ""  # The complete sourced story already appears in Companies in Focus.
     if row.get("basis"):
         qualifier = f" No fresh {row['name']} announcement is included in this edition." if row["basis"] == "sector context" else ""

@@ -18,7 +18,7 @@ RSS and Atom remain supported. Atom `updated`, modification times, date-only met
 
 Refresh uses at most four publisher workers. Cache updates are atomic and serialized, HTTP failures retain a bounded retry deadline, responses are capped at two megabytes, and the editor's source cache is capped at twelve megabytes. Forced refresh respects an active error backoff. Successful company or agency fetches with old reports remain distinguishable from failed fetches or unverified publication clocks. Legacy news intelligence also excludes old or undated original reports from current news inputs.
 
-Selection favors original reports and research relevance, then newer publication times. Fresh primary candidates are scanned before old publications and unconfirmed leads when the 180-candidate log reaches its bound. Duplicate article URLs and normalized titles are skipped. Tracking parameters do not make a repeated article new. Each represented company receives at most one story; Alphabet share classes count as one issuer. Selection reserves room for an eligible broad-market story and a defense/innovation story before filling the remaining slots by research priority. When company candidates are available, at most one broad-market macro story and one defense macro story can be represented. Zero, one or two stories is a valid result. The editor never fills the three-story maximum with opinion.
+Selection favors original reports and research relevance, then newer publication times. Fresh primary candidates are scanned before old publications and unconfirmed leads when the 180-candidate log reaches its bound. Duplicate article URLs and normalized titles are skipped. Tracking parameters do not make a repeated article new. Each represented company receives at most one story; Alphabet share classes count as one issuer. Event-aware editions reserve the first slot for the highest-priority admitted story, then seek broad-market and defense/innovation coverage. Fresh original earnings, guidance and regulatory reports with source text can lead; a matching rechecked large move adds attention without establishing its cause. When company candidates are available, at most one broad-market macro story and one defense macro story can be represented. Zero, one or two stories is a valid result. The editor never fills the three-story maximum with opinion.
 
 The editor reads complete titles from the existing RSS cache instead of the compact 180-character display title. It retains normalized original wording up to 1,000 characters; it never silently slices a selected headline at 160 characters. Oversized titles, explicit shortening flags and titles ending in an ellipsis are held. Older alert evidence at the unmarked 240-character title limit is treated as potentially shortened unless a separate original title is available. Whole stories can be dropped for narration length, with the decision logged. Other consumers keep their existing compact feed displays. Stored editions from earlier rule versions remain readable.
 
@@ -38,6 +38,8 @@ This update supplies news research and decision inspection. Position sizing, bro
 python scripts/check_news_editor.py
 python scripts/check_news_editor.py --windows-socketpair
 python scripts/check_daily_news_brief.py
+python scripts/check_event_news.py
+python scripts/check_event_news.py --windows-socketpair
 python scripts/check_daily_agent_delivery.py
 ```
 
@@ -55,3 +57,5 @@ Verified IPO milestones from the independent issuer monitor can enter the news e
 # Hourly research handoff
 
 Approved results from the hourly Discovery Agent and separate Relevance Reviewer join cached publisher evidence. Model recommendations do not bypass original-source or materiality checks. `/researchdesk history` records discovery, source validation and relevance decisions; `/storylog` retains the brief editor's separate choices. IPO financial facts retain their source periods and units, and IPO stories have their own brief section. See `README_HOURLY_RESEARCH.md` for request limits, API billing, state and controls.
+
+Event-aware editorial records use rules version 15. They freeze matching chart evidence and source-text priority profiles, then recompute priority during review. `/editorstatus` shows issuer event-check status and original company-calendar links; `/storylog` shows the retained story's editorial priority. A missing repeat check leaves a price cue pending. Existing rules-version records remain readable. Scheduling notices use a separate original-source calendar parser, so a routine call announcement can appear in What's Ahead without becoming material news.

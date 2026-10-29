@@ -61,6 +61,7 @@ class IsolatedChecks(unittest.TestCase):
             "NEWS_EDITOR_STATE_FILE": str(self.root / "editor.sqlite3"), "NEWS_LIVE_SOURCE_CACHE_FILE": str(self.root / "news.json"),
             "AI_IPO_CACHE_FILE": str(self.root / "ipo.json"),
             "HOURLY_RESEARCH_STATE_FILE": str(self.root / "hourly.sqlite3"),
+            "MARKET_EVENT_STATE_FILE": str(self.root / "market_event_checks.json"),
             "REPORT_TIMEZONE": "America/New_York", "SPECIAL_ALERT_SYMBOLS": "TSLA,NVDA,MSFT,PLTR", "SPECIAL_ALERT_TOP_COUNT": "10"}))
         self.stack.enter_context(patch.object(companies, "utc_now", return_value=NOW))
         self.stack.enter_context(patch.object(calendar, "utc_now", return_value=NOW))

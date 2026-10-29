@@ -209,8 +209,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         moves = {}
     prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now)}"
     breadth = re.search(r"Breadth: (\d+) up / (\d+) down / (\d+) quoted", snapshot)
+    from src.intelligence.market_event_desk import context_for_report
+    event_context = context_for_report(research_report, now)
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
-    plan = editor.build_editorial_plan(brief, now)
+    plan = editor.build_editorial_plan(brief, now, event_context=event_context, research_report=research_report)
     story_paragraphs = {story["id"]: editor.render_story(story, zone, NAMES, style="broadcast") for story in editor.selected_stories(plan)}
     no_company_story = "No new source-confirmed company report met the editorial checks for this edition."
     ahead = []
@@ -232,8 +234,12 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         status = "A previously checked, cached schedule lists" if row["time_status"] == "cached" else "The publisher schedule lists"
         macro.append(f"{status} {families[family]} for {at.strftime('%A, %B %d at %I:%M %p %Z')}."
                      + (" Recheck the publisher because live coverage is limited." if row["time_status"] == "cached" else ""))
-    ahead.extend(macro[:2])
-    implication = calendar_implication(set(macro_families[:2]))
+    from src.intelligence.company_schedule import narration as schedule_narration
+    company_schedules = plan.get("company_schedules", [])[:1]
+    macro_limit = 1 if company_schedules else 2
+    ahead.extend(macro[:macro_limit])
+    ahead.extend(schedule_narration(row, zone, NAMES) for row in company_schedules)
+    implication = calendar_implication(set(macro_families[:macro_limit]))
     if implication:
         ahead.append(implication)
     if not ahead:
@@ -252,7 +258,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     for count in range(len(initial_stories), -1, -1):
         for indexes, focus_limit in product(combinations(range(len(initial_stories)), count), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
-            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2)
+            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context)
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")
@@ -309,6 +315,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
 
             protected = set(story_paragraphs.values()) | {no_company_story} | {
                 row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
+            protected.update(schedule_narration(row, zone, NAMES) for row in company_schedules)
             if brief.get("market_events"):
                 protected.update(paragraph for paragraph in global_body if paragraph.startswith("An active market-alert record reports "))
             if plan["issues"]:
@@ -340,6 +347,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             errors.append(f"A complete {MIN_NARRATION_WORDS}-word narration does not fit the {MAX_NEWS_CHARS}-character budget.")
         raise ValueError("News brief quality review failed: " + "; ".join(errors))
     text, retained, analysis = chosen
+    plan["narrated_company_schedules"] = [row for row in company_schedules if schedule_narration(row, zone, NAMES) in text]
     plan["lead_story_id"] = min(retained, key=editor.news_order)["id"] if retained else ""
     retained_ids = {story["id"] for story in retained}
     for story in initial_stories:
