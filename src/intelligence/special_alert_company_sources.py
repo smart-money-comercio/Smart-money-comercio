@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from html.parser import HTMLParser
 import json
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from src.intelligence import special_alert_sources as sources
 from src.intelligence.special_alert_sources import (
@@ -27,11 +27,14 @@ class PublicationPage(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.scripts, self.current = [], None
         self.title, self.dates = "", []
+        self.headings, self.heading_parts = [], None
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         if tag == "script" and attrs.get("type") == "application/ld+json":
             self.current = []
+        if tag == "h1":
+            self.heading_parts = []
         if tag == "meta":
             name = attrs.get("property") or attrs.get("name")
             if name == "og:title":
@@ -42,25 +45,42 @@ class PublicationPage(HTMLParser):
     def handle_data(self, data):
         if self.current is not None:
             self.current.append(data)
+        if self.heading_parts is not None:
+            self.heading_parts.append(data)
 
     def handle_endtag(self, tag):
         if tag == "script" and self.current is not None:
             self.scripts.append("".join(self.current))
             self.current = None
+        if tag == "h1" and self.heading_parts is not None:
+            self.headings.append(clean("".join(self.heading_parts), 1001))
+            self.heading_parts = None
 
 
-def publication_time(body: bytes, title: str) -> datetime:
+def publication_time(body: bytes, title: str, *, url: str = "") -> datetime:
     """Require an original, zoned publication time for the same release title."""
     page = PublicationPage()
     page.feed(body.decode("utf-8"))
     page.close()
     dates = set(page.dates) if page.title.casefold() == clean(title, 1001).casefold() else set()
+    parts = urlsplit(url)
+    kratos_url = (parts.scheme == "https" and parts.hostname == "www.kratosdefense.com"
+                  and not parts.username and not parts.password and parts.port in (None, 443)
+                  and not parts.query and not parts.fragment and re.fullmatch(r"/newsroom/[^/]+/?", parts.path))
+    kratos = (kratos_url
+              and page.headings.count(clean(title, 1001)) == 1
+              and page.title == clean(title + " | Kratos Defense", 1001))
 
     def walk(value, depth=0):
         if depth > 20:
             return
         if isinstance(value, dict):
-            if clean(value.get("headline"), 1001).casefold() == clean(title, 1001).casefold() and "datePublished" in value:
+            if (clean(value.get("headline"), 1001).casefold() == clean(title, 1001).casefold() and "datePublished" in value
+                    and not (kratos_url and value.get("@type") == "WebPage")):
+                dates.add(timestamp(value["datePublished"]))
+            if (kratos and value.get("@type") == "WebPage" and value.get("name") == page.title
+                    and value.get("@id") == url and value.get("url") == url and "datePublished" in value):
+                dates.update(page.dates)
                 dates.add(timestamp(value["datePublished"]))
             for child in value.values():
                 walk(child, depth + 1)

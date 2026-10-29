@@ -78,6 +78,9 @@ NEWS_SOURCES = [
     {"name": "Northrop Grumman Investor Relations", "url": "https://investor.northropgrumman.com/rss/news-releases.xml", "category": "company", "company_symbol": "NOC"},
     {"name": "CACI Investor Relations", "url": "https://investor.caci.com/news?pagetemplate=rss", "category": "company", "company_symbol": "CACI"},
     {"name": "AMD Investor Relations", "url": "https://ir.amd.com/news-events/press-releases/rss", "category": "company", "company_symbol": "AMD"},
+    {"name": "Broadcom Financial News", "url": "https://investors.broadcom.com/financial-information/financial-news-releases", "category": "company", "company_symbol": "AVGO", "format": "index", "article_pattern": r"/news-releases/news-release-details/[^/]+", "requires_original_body": True},
+    {"name": "AeroVironment Newsroom", "url": "https://www.avinc.com/feed/", "category": "company", "company_symbol": "AVAV"},
+    {"name": "Kratos Newsroom", "url": "https://www.kratosdefense.com/newsroom", "category": "company", "company_symbol": "KTOS", "format": "index", "article_pattern": r"/newsroom/[^/]+", "anchor_title": True, "requires_original_body": True},
 ]
 
 

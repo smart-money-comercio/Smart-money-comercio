@@ -608,6 +608,48 @@ class FollowupChecks(ResearchFixture):
 
 
 class PublisherEvidenceChecks(ResearchFixture):
+    def test_three_alternate_issuer_sources_reach_the_reviewer_with_no_extra_model_or_source_reads(self):
+        from html import escape
+        from src.intelligence import news_live_sources as feeds
+        values = {}
+        for name, symbol, url in (
+            ("Broadcom Financial News", "AVGO", "https://investors.broadcom.com/news-releases/news-release-details/fixture-ai"),
+            ("AeroVironment Newsroom", "AVAV", "https://www.avinc.com/2026/10/25/fixture-defense/"),
+            ("Kratos Newsroom", "KTOS", "https://www.kratosdefense.com/newsroom/fixture-defense")):
+            source = next(row for row in feeds.NEWS_SOURCES if row["name"] == name)
+            title = symbol + " announces a funded AI defense contract"
+            payload = {"status": "ok", "url": source["url"], "final_url": source["url"], "fetched_at_epoch": NOW.timestamp()}
+            if source.get("format"):
+                payload.update(body="", original_profile=2, articles=[{"title": title, "link": url,
+                    "published": (NOW-timedelta(minutes=20)).isoformat(), "description": QUOTE, "publication_url": url,
+                    "evidence_checked_at": NOW.timestamp(), "release_body_verified": True}])
+            else:
+                payload["body"] = '<rss><channel><item><title>' + title + '</title><link>' + url + '</link><pubDate>' + (NOW-timedelta(minutes=20)).isoformat() + '</pubDate><description>' + escape(QUOTE) + '</description></item></channel></rss>'
+            values[source["url"]] = payload
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"]); path.write_text(json.dumps(values)); before = path.read_bytes()
+        client = Client(leads=[])
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "AVGO,AVAV,KTOS"}):
+            result = self.run_desk(client, fetch=lambda _: self.fail("Verified alternate sources must stay cache-only"))
+        self.assertEqual(len(client.calls), 2)
+        self.assertEqual((result["details"]["approved"], result["details"]["original_reads"]), (3, 0))
+        approved = desk.approved(NOW)
+        self.assertEqual({row["publisher_symbol"] for row in approved}, {"AVGO", "AVAV", "KTOS"})
+        for row in approved: desk.check_proof(row, NOW)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_direct_kratos_webpage_uses_its_original_heading_clock_and_identified_release_body(self):
+        url, title = "https://www.kratosdefense.com/newsroom/fixture-defense", "Kratos announces a funded defense contract"
+        page_title = title + " | Kratos Defense"
+        body = ('<meta property="og:title" content="' + page_title + '"><h1>' + title + '</h1>' +
+                '<script type="application/ld+json">' + json.dumps({"@type": "WebPage", "@id": url, "url": url,
+                "name": page_title, "datePublished": (NOW-timedelta(minutes=20)).isoformat()}) + '</script>' +
+                '<article>Unrelated article must not enter the report.</article><section class="wysiwyg-section"><p>' + QUOTE + '</p></section>').encode()
+        value = desk.verified({"url": url}, NOW, lambda _: body)
+        self.assertEqual(value["title"], title)
+        self.assertEqual(value["source_excerpt"], QUOTE)
+        self.assertEqual(desk.timestamp(value["published"]), NOW-timedelta(minutes=20))
+        self.assertEqual(desk.check_proof(value, NOW)["symbol"], "KTOS")
+
     def publication_cache(self):
         from src.intelligence import news_live_sources as feeds
         values = {}

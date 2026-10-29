@@ -22,9 +22,12 @@ class ArticleBody(VisibleText):
     """Read identified release bodies, without treating site navigation as news."""
     VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 
-    def __init__(self, publisher=""):
+    def __init__(self, publisher="", url=""):
         super().__init__()
         self.publisher = publisher
+        parts = urlsplit(url)
+        self.kratos = (publisher in {"KTOS", "Kratos Newsroom"} and parts.hostname == "www.kratosdefense.com"
+                       and re.fullmatch(r"/newsroom/[^/]+/?", parts.path) is not None)
         self.depth = 0
         self.heading_tag, self.heading_parts, self.headings = None, [], []
         self.date_depth, self.date_parts = 0, []
@@ -43,7 +46,9 @@ class ArticleBody(VisibleText):
                      {"col-xs-12", "col-sm-8", "col-md-8"} <= classes))
         treasury = self.publisher == "U.S. Treasury"
         treasury_body = treasury and "field--name-field-news-body" in classes
-        if not self.depth and (tag == "article" and not treasury or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body):
+        kratos = self.kratos
+        kratos_body = kratos and tag == "section" and "wysiwyg-section" in classes
+        if not self.depth and (tag == "article" and not treasury and not kratos or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body):
             self.depth = 1
         elif self.depth and tag not in self.VOID:
             self.depth += 1
@@ -69,12 +74,12 @@ class ArticleBody(VisibleText):
             super().handle_data(data)
 
 
-def article_excerpt(body: str, title: str, published: str, *, publisher: str = "") -> str:
+def article_excerpt(body: str, title: str, published: str, *, publisher: str = "", url: str = "") -> str:
     """Bind extra facts to the same complete headline and original publication."""
     expected = timestamp(published)
     if expected is None:
         raise ValueError("Original article needs the admitted feed publication clock")
-    parser = ArticleBody(publisher)
+    parser = ArticleBody(publisher, url)
     parser.feed(body)
     text = release_text("".join(parser.parts))
     if not text:
@@ -86,7 +91,7 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
         raise ValueError("Original Fed statement title or release clock does not match its feed")
     try:
         actual = (publication.treasury_clock(body, title) if publisher == "U.S. Treasury"
-                  else publication_time(body.encode(), title))
+                  else publication_time(body.encode(), title, url=url))
     except ValueError:
         if publisher == "U.S. Treasury":
             raise
@@ -136,7 +141,7 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
             detail = fetch(row["link"])
             if detail.get("status") != "ok" or not authorized_response(source, detail):
                 raise ValueError(detail.get("error") or "Original release redirect mismatch")
-            excerpt = article_excerpt(detail["body"], row["title"], row["published"], publisher=source["name"])
+            excerpt = article_excerpt(detail["body"], row["title"], row["published"], publisher=source["name"], url=row["link"])
             details.append({"title": row["title"], "url": row["link"], "published": row["published"],
                             "text": excerpt, "checked_at_epoch": detail["fetched_at_epoch"]})
         except (ValueError, TypeError, KeyError, UnicodeError) as exc:
@@ -145,15 +150,16 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
 
 
 class ReleaseLinks(HTMLParser):
-    def __init__(self, base, pattern):
+    def __init__(self, base, pattern, anchor_title=False):
         super().__init__(convert_charrefs=True)
         self.base, self.pattern = base, pattern
+        self.anchor_title = anchor_title
         self.rows, self.current = [], None
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
             url = urljoin(self.base, dict(attrs).get("href", ""))
-            self.current = [url, []] if re.fullmatch(self.pattern, urlsplit(url).path) else None
+            self.current = [url, [], dict(attrs).get("title", "") if self.anchor_title else ""] if re.fullmatch(self.pattern, urlsplit(url).path) else None
 
     def handle_data(self, data):
         if self.current is not None:
@@ -161,8 +167,8 @@ class ReleaseLinks(HTMLParser):
 
     def handle_endtag(self, tag):
         if tag == "a" and self.current is not None:
-            url, parts = self.current
-            title = " ".join(" ".join(parts).split())
+            url, parts, supplied_title = self.current
+            title = " ".join((supplied_title or " ".join(parts)).split())
             if title:
                 self.rows.append({"title": title, "link": url, "published": ""})
             self.current = None
@@ -185,7 +191,7 @@ def authorized_response(source: dict, payload: dict) -> bool:
 
 
 def indexed_items(body: str, source: dict) -> list[dict]:
-    parser = ReleaseLinks(source["url"], source["article_pattern"])
+    parser = ReleaseLinks(source["url"], source["article_pattern"], source.get("anchor_title", False))
     parser.feed(body)
     unique = {}
     for row in parser.rows:
@@ -279,15 +285,17 @@ def retrieve(source: dict, fetch, now: datetime) -> dict:
                 excerpt = article_excerpt(detail["body"], row["title"], row["published"], publisher=source["name"])
                 row.update(description=excerpt, publication_url=row["link"], evidence_checked_at=detail["fetched_at_epoch"])
                 continue
-            published = publication_time(detail["body"].encode(), row["title"])
+            published = publication_time(detail["body"].encode(), row["title"], url=row["link"])
             row["published"] = published.isoformat()
             row["publication_url"] = clock_url
             row["evidence_checked_at"] = detail["fetched_at_epoch"]
             try:
                 if not wire:
-                    row["description"] = article_excerpt(detail["body"], row["title"], row["published"])
-            except ValueError:
-                pass
+                    row["description"] = article_excerpt(detail["body"], row["title"], row["published"], publisher=source["name"], url=row["link"])
+                    row["release_body_verified"] = True
+            except ValueError as exc:
+                if source.get("requires_original_body"):
+                    problems.append(str(exc)[:160])
         except (ValueError, KeyError, TypeError, UnicodeError) as exc:
             problems.append(str(exc)[:160])
             if source["format"] == "treasury":
@@ -305,10 +313,12 @@ def cached_items(payload: dict, source: dict) -> list[dict]:
             continue
         if not authorized_response(source, {"url": item["link"]}):
             continue
+        required = source.get("requires_original_body") is True
+        body_verified = not required or item.get("release_body_verified") is True
         rows.append({"title": item["title"], "link": item["link"], "published": item.get("published", ""),
-                     "description": release_text(item.get("description", "")), "source": source["name"], "category": source["category"],
+                     "description": release_text(item.get("description", "")) if body_verified else "", "source": source["name"], "category": source["category"],
                      **({"publication_url": item["publication_url"]} if item.get("publication_url") else {}),
                      **({"evidence_checked_at": item["evidence_checked_at"]} if "evidence_checked_at" in item else {}),
-                     **({"requires_original_body": True} if source.get("format") == "treasury" else {}),
-                     "evidence_scope": "original release excerpt" if item.get("publication_url") == item["link"] else "publisher feed excerpt"})
+                     **({"requires_original_body": True} if source.get("format") == "treasury" or required else {}),
+                     "evidence_scope": "headline only" if not body_verified else "original release excerpt" if item.get("publication_url") == item["link"] else "publisher feed excerpt"})
     return rows

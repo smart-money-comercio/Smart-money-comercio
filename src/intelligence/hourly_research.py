@@ -102,6 +102,10 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
         raise ValueError("Invalid original report body")
     text = body.decode("utf-8", "replace")
     page = PublicationPage(); page.feed(text)
+    kratos = (publisher["symbol"] == "KTOS" and urlsplit(url).hostname == "www.kratosdefense.com"
+              and re.fullmatch(r"/newsroom/[^/]+/?", urlsplit(url).path) is not None)
+    if kratos and len(page.headings) == 1 and page.title == page.headings[0] + " | Kratos Defense":
+        page.title = page.headings[0]
     if not page.title or len(page.title) > 1000:
         raise ValueError("Original report title unavailable")
     from src.intelligence.policy_analysis import is_fomc_statement, release_clock
@@ -111,7 +115,7 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
             from src.intelligence.publisher_publication import treasury_clock
             published = treasury_clock(text, page.title)
         else:
-            published = publication_time(body, page.title)
+            published = publication_time(body, page.title, url=url)
     except ValueError:
         if not fed_statement:
             raise
@@ -126,9 +130,9 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
         raise ValueError("Original report has a date-only clock")
     parser = VisibleText(); parser.feed(text)
     visible = " ".join("".join(parser.parts).split())[:6000]
-    if fed_statement or publisher["name"] == "U.S. Treasury":
+    if fed_statement or publisher["name"] == "U.S. Treasury" or kratos:
         from src.intelligence.news_original_sources import article_excerpt
-        visible = " ".join(article_excerpt(text, page.title, published.isoformat(), publisher=publisher["name"]).split())
+        visible = " ".join(article_excerpt(text, page.title, published.isoformat(), publisher=publisher["name"], url=url).split())
     if not visible:
         raise ValueError("Original report text unavailable")
     proof = {"schema": 1, "url": url, "title": page.title, "published": published.isoformat(), "observed": now.isoformat(),

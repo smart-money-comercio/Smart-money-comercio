@@ -1229,6 +1229,141 @@ class PublicationCoverageChecks(IsolatedChecks):
         self.assertIn("update timestamps do not establish original publication", health["reason"])
 
 
+class IssuerCoverageChecks(IsolatedChecks):
+    payload = OriginalSourceChecks.payload
+    rss = OriginalSourceChecks.rss
+    TEXT = "The company announced a funded defense contract and described the deployment requirements. Delivery timing and production costs remain subject to the disclosed milestones."
+    TITLE = "Kratos announces a funded defense contract"
+    URL = "https://www.kratosdefense.com/newsroom/fixture-contract"
+
+    def source(self, symbol):
+        return next(row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol") == symbol and row["name"] in {
+            "Broadcom Financial News", "AeroVironment Newsroom", "Kratos Newsroom"})
+
+    def page(self, *, title=None, url=None, clock=None, metadata=None, heading=None, brand=None):
+        title, url = title or self.TITLE, url or self.URL
+        values = {"@type": "WebPage", "@id": url, "url": url, "name": title + " | Kratos Defense",
+                  "datePublished": clock or (NOW-timedelta(hours=1)).isoformat()}
+        values.update(metadata or {})
+        return ('<meta property="og:title" content="' + escape(brand or title + " | Kratos Defense") + '">' +
+                '<h1>' + escape(heading or title) + '</h1><script type="application/ld+json">' + json.dumps(values) + '</script>' +
+                '<article><p>Unrelated article must not enter this release.</p></article>' +
+                '<section class="wysiwyg-section space-lg-m"><p>' + self.TEXT + '</p></section>')
+
+    def retrieve(self, *, page=None, final=None):
+        source = self.source("KTOS"); calls = []
+        index = '<a title="' + escape(self.TITLE) + '" href="' + self.URL + '"><span>October 25, 2026</span>' + escape(self.TITLE) + '<p>Index summary</p></a>'
+        def fetch(url):
+            calls.append(url)
+            return self.payload(index if url == source["url"] else page if page is not None else self.page(), url=url,
+                                final_url=final if final and url != source["url"] else url)
+        return editor.feeds.originals.retrieve(source, fetch, NOW), calls
+
+    def test_alternate_routes_preserve_the_blocked_feed_evidence_and_issuer_authorities(self):
+        for symbol in ("AVGO", "AVAV", "KTOS"):
+            rows = [row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol") == symbol]
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(any(row["url"].endswith("/rss/news-releases.xml") for row in rows))
+            source = self.source(symbol)
+            self.assertTrue(editor.feeds.originals.authorized_response(source, {"url": source["url"]}))
+            self.assertFalse(editor.feeds.originals.authorized_response(source, {"url": "https://example.com/copied-release"}))
+
+    def test_kratos_index_retains_the_complete_title_without_date_or_summary_contamination(self):
+        payload, calls = self.retrieve()
+        row = editor.feeds.originals.cached_items(payload, self.source("KTOS"))[0]
+        self.assertEqual(row["title"], self.TITLE)
+        self.assertEqual(row["description"], self.TEXT)
+        self.assertEqual(row["evidence_scope"], "original release excerpt")
+        self.assertEqual(len(calls), 2)
+
+    def test_kratos_webpage_date_requires_its_exact_url_heading_and_publisher_title(self):
+        from src.intelligence.special_alert_company_sources import publication_time
+        self.assertEqual(publication_time(self.page().encode(), self.TITLE, url=self.URL), NOW-timedelta(hours=1))
+        for body in (self.page(metadata={"@id": self.URL + "-other"}), self.page(metadata={"url": self.URL + "-other"}),
+                     self.page(heading="Different release"), self.page(brand="Different publisher")):
+            with self.assertRaises(ValueError): publication_time(body.encode(), self.TITLE, url=self.URL)
+
+    def test_unrelated_webpage_dates_and_new_modification_times_do_not_admit_a_release(self):
+        from src.intelligence.special_alert_company_sources import publication_time
+        for body in (self.page(clock="2026-10-25"), self.page(clock="2026-10-25T12:00:00"),
+                     self.page(metadata={"datePublished": None, "dateModified": NOW.isoformat()})):
+            with self.assertRaises(ValueError): publication_time(body.encode(), self.TITLE, url=self.URL)
+        with self.assertRaises(ValueError): publication_time(self.page().encode(), self.TITLE)
+
+    def test_kratos_publication_metadata_conflicts_cannot_be_overridden(self):
+        from src.intelligence.special_alert_company_sources import publication_time
+        body = self.page() + '<meta property="article:published_time" content="' + (NOW-timedelta(hours=2)).isoformat() + '">'
+        with self.assertRaises(ValueError): publication_time(body.encode(), self.TITLE, url=self.URL)
+        body = self.page() + self.page(clock=(NOW-timedelta(hours=2)).isoformat())
+        with self.assertRaises(ValueError): publication_time(body.encode(), self.TITLE, url=self.URL)
+
+    def test_kratos_webpage_with_an_incidental_headline_still_requires_matching_canonical_identity(self):
+        from src.intelligence.special_alert_company_sources import publication_time
+        body = self.page(metadata={"@id": self.URL + "-other", "url": self.URL + "-other", "headline": self.TITLE})
+        with self.assertRaises(ValueError): publication_time(body.encode(), self.TITLE, url=self.URL)
+        for url in ("https://www.kratosdefense.com.attacker.test/newsroom/fixture-contract", "http://www.kratosdefense.com/newsroom/fixture-contract"):
+            with self.assertRaises(ValueError): publication_time(self.page().encode(), self.TITLE, url=url)
+
+    def test_a_verified_clock_without_a_recognizable_release_body_stays_held(self):
+        payload, _ = self.retrieve(page=self.page().replace("wysiwyg-section", "site-description"))
+        self.assertTrue(payload["publication_problems"])
+        self.assertEqual(editor.dated(payload["articles"][0]["published"]), NOW-timedelta(hours=1))
+        self.assertEqual(editor.feeds.originals.cached_items(payload, self.source("KTOS"))[0]["description"], "")
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"]); path.write_text(json.dumps({self.source("KTOS")["url"]: payload}))
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "KTOS"}): text = build_daily_news_brief(self.research())
+        story = next(row for row in store.read_editions(report=text)[0]["candidates"] if row["title"] == self.TITLE)
+        self.assertEqual(story["decision"], "wait")
+        self.assertIn("release body must match", story["reason"])
+
+    def test_cross_issuer_release_redirect_is_withheld(self):
+        payload, _ = self.retrieve(final="https://www.broadcom.com/copied-kratos-release")
+        self.assertTrue(payload["publication_problems"])
+        self.assertFalse(payload["articles"][0]["published"])
+
+    def test_broadcom_financial_index_requires_the_complete_release_metadata_and_body(self):
+        source = self.source("AVGO"); title = "Broadcom announces AI networking deployment"
+        url = "https://investors.broadcom.com/news-releases/news-release-details/fixture-network"
+        page = '<script type="application/ld+json">' + json.dumps({"@type": "NewsArticle", "headline": title,
+            "datePublished": (NOW-timedelta(hours=1)).isoformat()}) + '</script><article><p>' + self.TEXT + '</p></article>'
+        def fetch(target):
+            return self.payload('<a href="' + url + '">' + title + '</a>' if target == source["url"] else page, url=target)
+        value = editor.feeds.originals.retrieve(source, fetch, NOW)
+        row = editor.feeds.originals.cached_items(value, source)[0]
+        self.assertEqual(row["description"], self.TEXT)
+        self.assertEqual(editor.dated(row["published"]), NOW-timedelta(hours=1))
+        self.assertTrue(row["requires_original_body"])
+
+    def test_aerovironment_corporate_feed_keeps_full_original_text_and_zoned_clock(self):
+        source = self.source("AVAV"); title = "AV announces a new counter-drone contract"
+        url = "https://www.avinc.com/2026/10/25/fixture-contract/"
+        body = self.rss(title, url).replace('</item>', '<description>' + self.TEXT + '</description></item>')
+        row = editor.feeds.parse_article_items(self.payload(body), source, full_titles=True, full_text=True)[0]
+        self.assertEqual(row["description"], self.TEXT)
+        self.assertEqual(editor.dated(row["published"]), NOW-timedelta(minutes=20))
+        self.assertEqual(row["link"], url)
+
+    def test_old_alternate_reports_remain_quiet_even_with_a_new_cache_fetch(self):
+        payload, _ = self.retrieve(page=self.page(clock=(NOW-timedelta(days=3)).isoformat()))
+        health = editor.feeds.describe_source(self.source("KTOS"), payload, NOW)
+        self.assertEqual((health["dated"], health["fresh"]), (1, 0))
+        self.assertEqual(health["latest_publication"], (NOW-timedelta(days=3)).isoformat())
+
+    def test_blocked_ir_and_healthy_corporate_source_are_both_visible_in_the_same_edition(self):
+        payload, _ = self.retrieve(); source = self.source("KTOS")
+        old = next(row for row in editor.feeds.NEWS_SOURCES if row["name"] == "Kratos Investor Relations")
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+        path.write_text(json.dumps({source["url"]: payload, old["url"]: self.payload(status="error", error="HTTPError 403")})); before = path.read_bytes()
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "KTOS"}), patch.object(editor.feeds, "fetch_source", side_effect=AssertionError("Rendering must not fetch")):
+            text = build_daily_news_brief(self.research())
+        record = store.read_editions(report=text)[0]
+        story = next(row for row in record["candidates"] if row["title"] == self.TITLE)
+        self.assertEqual(story["decision"], "selected")
+        health = {row["name"]: row for row in record["source_health"]}
+        self.assertEqual(health[source["name"]]["status"], "available")
+        self.assertIn("403", health[old["name"]]["reason"])
+        self.assertEqual(path.read_bytes(), before)
+
+
 class StoryAnalysisChecks(IsolatedChecks):
     def setUp(self):
         super().setUp()

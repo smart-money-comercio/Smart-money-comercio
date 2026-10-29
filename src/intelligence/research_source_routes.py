@@ -105,7 +105,7 @@ class SourceResolver:
         if timestamp(clock) != published:
             raise ValueError("Publisher reference clock does not match the release")
         text = " ".join(article_excerpt(body.decode("utf-8"), value["title"], clock,
-                                        publisher=self.identity(value["url"])["name"]).split())
+                                        publisher=self.identity(value["url"])["name"], url=value["url"]).split())
         if len(text) < 80:
             raise ValueError("Usable original release text unavailable")
         proof = {"schema": 1, "url": value["url"], "title": value["title"], "published": value["published"],

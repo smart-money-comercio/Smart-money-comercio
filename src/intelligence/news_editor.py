@@ -345,7 +345,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 if not isinstance(story["publication_url"], str) or not clock_reference_allowed(story["publisher_symbol"], story["url"], story["publication_url"]):
                     raise ValueError("Original publication clock reference does not match the report")
             if raw.get("requires_original_body") and (raw.get("excerpt_scope") != "original release excerpt" or len(raw.get("source_excerpt", "")) < 80):
-                raise ValueError("Original Treasury release body must match its listed title and publication time")
+                raise ValueError("Original publisher release body must match its listed title and publication time")
             story["published"] = published.isoformat()
             story["source_check"] = "pass"
         except (ValueError, TypeError, OverflowError) as exc:
