@@ -40,6 +40,8 @@ python scripts/check_news_editor.py --windows-socketpair
 python scripts/check_daily_news_brief.py
 python scripts/check_event_news.py
 python scripts/check_event_news.py --windows-socketpair
+python scripts/check_reader_brief.py
+python scripts/check_reader_brief.py --windows-socketpair
 python scripts/check_daily_agent_delivery.py
 ```
 
@@ -59,3 +61,5 @@ Verified IPO milestones from the independent issuer monitor can enter the news e
 Approved results from the hourly Discovery Agent and separate Relevance Reviewer join cached publisher evidence. Model recommendations do not bypass original-source or materiality checks. `/researchdesk history` records discovery, source validation and relevance decisions; `/storylog` retains the brief editor's separate choices. IPO financial facts retain their source periods and units, and IPO stories have their own brief section. See `README_HOURLY_RESEARCH.md` for request limits, API billing, state and controls.
 
 Event-aware editorial records use rules version 15. They freeze matching chart evidence and source-text priority profiles, then recompute priority during review. `/editorstatus` shows issuer event-check status and original company-calendar links; `/storylog` shows the retained story's editorial priority. A missing repeat check leaves a price cue pending. Existing rules-version records remain readable. Scheduling notices use a separate original-source calendar parser, so a routine call announcement can appear in What's Ahead without becoming material news.
+
+New reader presentation records bind the opening takeaway and each plain-language watch signal to the same frozen research and retained original stories. Review recomputes the passages and requires complete, unchanged narration. `/editorstatus` identifies the opening and actual number of watch signals. This presentation changes no source gates, scoring weights, model request limits or delivery receipts.

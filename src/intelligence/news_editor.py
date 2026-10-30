@@ -585,6 +585,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         from src.intelligence.daily_brief_analysis import validate_review
         validate_review(analyst_review, research_report, report, selected)
         value["analyst_review"] = deepcopy(analyst_review)
+        if analyst_review.get("reader_version") == 1:
+            value["reader_version"] = 1
     snapshot = re.search(r"\nMarket Snapshot\n(.*?)\n\n", research_report, re.S)
     moves = re.search(r"^[-•] Market moves: (.+)$", research_report, re.M)
     value["market_evidence"] = {"snapshot": snapshot[1][:900] if snapshot else "Unavailable", "moves": moves[1][:600] if moves else "Unavailable"}
@@ -674,6 +676,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
+                if analysis.get("reader_version") == 1:
+                    signals = sum(row["section"] == "watch" for row in analysis["insights"])
+                    lines.append(f"Reader brief: opening takeaway and {signals} evidence-grounded watch signals; each explains the next check and why it matters.")
                 focus = analysis["evidence"].get("company_focus")
                 if focus:
                     lines.append("Companies in focus: " + ", ".join(focus["featured_symbols"]) + ". " + focus["rule"] + ".")

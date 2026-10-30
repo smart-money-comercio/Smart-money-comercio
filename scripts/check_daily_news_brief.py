@@ -327,7 +327,7 @@ class NewsChecks(IsolatedChecks):
         self.assertIn("oil rose 4.32 percent", text)
         self.assertIn("Market data: completed regular session 2026-10-23", text)
         self.assertIn("Friday, October 23", text)
-        self.assertIn("18-symbol research watchlist", text)
+        self.assertIn("18 stocks and funds we track", text)
 
     def test_intraday_language_does_not_call_the_open_session_finished(self):
         research = self.research(replacements={"Market Snapshot": "Market Session: Open — live session.\nQuote session: 2026-10-23\nBreadth: 8 up / 10 down / 18 quoted"})
@@ -997,9 +997,8 @@ class MarketDefenseChecks(IsolatedChecks):
     def test_a_dropped_market_story_cannot_leave_an_orphan_portfolio_interpretation(self):
         from src.intelligence import news_editor, news_editor_store
         from src.reports import daily_news_brief as news
-        baseline = self.render([])
         story = self.story("U.S. Treasury", "Treasury announces export restrictions on AI chips " + "with published regulatory details " * 20)
-        with patch.object(news_editor, "cache_candidates", return_value=([story], [])), patch.object(news, "MAX_NEWS_CHARS", len(baseline) + 30):
+        with patch.object(news_editor, "cache_candidates", return_value=([story], [])), patch.object(news, "MAX_NEWS_CHARS", 2300):
             text = build_daily_news_brief(self.research())
         self.assertNotIn(story["title"], text)
         self.assertNotIn("Verified trade-policy news", text)

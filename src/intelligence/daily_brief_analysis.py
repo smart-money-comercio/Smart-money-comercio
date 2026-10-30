@@ -96,11 +96,15 @@ def report_evidence(report: str) -> dict:
             "source_sections": [key for key in ("Executive Summary", "Market Snapshot", "What Changed Today", "Top Opportunities", "Trade Plan Snapshot") if sections.get(key)]}
 
 
-def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None, narration_version: int = 1, event_context: dict | None = None) -> dict:
+def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None, narration_version: int = 1, event_context: dict | None = None, reader_version: int = 0, reader_limit: int = 3) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
     if type(narration_version) is not int or narration_version not in {1, 2} or narration_version == 2 and presentation != "news":
         raise ValueError("Unknown analyst narration version")
+    if type(reader_version) is not int or reader_version not in {0, 1} or reader_version and (presentation != "news" or narration_version != 2):
+        raise ValueError("Unknown reader brief version")
+    if type(reader_limit) is not int or not 1 <= reader_limit <= 3:
+        raise ValueError("Invalid reader watch-signal limit")
     evidence = report_evidence(report)
     if event_context is not None:
         from src.intelligence.market_event_desk import checked_context
@@ -114,6 +118,9 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         evidence["source_sections"].append("Market event checks")
     if narration_version == 2:
         evidence["narration_version"] = narration_version
+    if reader_version:
+        evidence["reader_version"] = reader_version
+        evidence["reader_limit"] = reader_limit
     from src.intelligence import news_editor
     evidence["stories"] = []
     for story in stories or []:
@@ -158,6 +165,9 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         value["event_context"] = deepcopy(event_context)
     if narration_version == 2:
         value["narration_version"] = narration_version
+    if reader_version:
+        value["reader_version"] = reader_version
+        value["reader_limit"] = reader_limit
     return value
 
 
@@ -169,8 +179,8 @@ def retained_review(analysis: dict, report: str) -> dict:
 
 
 def validate_review(analysis: dict, research_report: str, report: str, stories: list[dict] | None = None) -> None:
-    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"), narration_version=analysis.get("narration_version", 1), event_context=analysis.get("event_context"))
-    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version", "event_context")):
+    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"), narration_version=analysis.get("narration_version", 1), event_context=analysis.get("event_context"), reader_version=analysis.get("reader_version", 0), reader_limit=analysis.get("reader_limit", 3))
+    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version", "event_context", "reader_version", "reader_limit")):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
     seen = set()

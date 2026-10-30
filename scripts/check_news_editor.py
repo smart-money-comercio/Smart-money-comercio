@@ -1965,7 +1965,7 @@ class NewsFirstChecks(IsolatedChecks):
         text = self.render([self.story(title, symbol="MSFT")])
         self.assertLess(text.index(title), text.index("Market Update"))
         self.assertLess(text.index("Investor take:"), text.index("Market Update"))
-        self.assertIn("The full report has the rankings, risks and trade-plan conditions", text)
+        self.assertIn("company rankings, trade-plan conditions and risk checks", text)
 
     def test_completed_defense_deal_leads_before_product_reveal(self):
         product = self.story("Microsoft introduces an AI product", symbol="MSFT")

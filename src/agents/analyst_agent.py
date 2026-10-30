@@ -131,6 +131,9 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
         for row in insights:
             if row["id"] == "company_price":
                 row["section"] = "watch"
+        if evidence.get("reader_version") == 1:
+            from src.intelligence.reader_brief import insights as reader_insights
+            insights = [row for row in insights if row["section"] != "watch"] + reader_insights(evidence)
     return insights
 
 

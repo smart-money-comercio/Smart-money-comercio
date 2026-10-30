@@ -256,9 +256,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     # At most three stories: try the fuller, higher-priority editions first.
     # Each attempt starts from all sourced market/calendar context.
     for count in range(len(initial_stories), -1, -1):
-        for indexes, focus_limit in product(combinations(range(len(initial_stories)), count), (3, 2, 1)):
+        for indexes, reader_limit, focus_limit in product(combinations(range(len(initial_stories)), count), (3, 2, 1), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
-            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context)
+            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=1, reader_limit=reader_limit)
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")
@@ -285,7 +285,6 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             watching = [row["text"] for row in insights if row["section"] == "watch"]
             if not watching:
                 watching.append(market_outlook(moves, breadth if quote_day else None))
-            watching += company_followup(retained)
             notes_body = list(notes)
             if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:
                 notes_body.insert(-1, no_company_story)
@@ -302,7 +301,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, ALL_HEADERS.index(group[0])))
 
             def render():
-                return prefix + "\n\n" + "\n\n".join(header + "\n" + "\n\n".join(body) for header, body in groups)
+                introduction = "\n\n".join(row["text"] for row in insights if row["section"] == "intro")
+                return prefix + "\n\n" + introduction + "\n\n" + "\n\n".join(header + "\n" + "\n\n".join(body) for header, body in groups)
 
             text = render()
             extras = [(ahead_body, paragraph) for paragraph in macro[2:]]
