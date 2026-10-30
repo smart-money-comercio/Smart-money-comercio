@@ -327,7 +327,7 @@ def set_cached_source(url: str, payload: dict) -> None:
         save_cache(cache)
 
 
-def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = True, binary: bool = False) -> dict:
+def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = True, binary: bool = False, user_agent: str | None = None) -> dict:
     cached = get_cached_source(url) if not binary else None
     if binary:
         cache_result = False
@@ -338,7 +338,7 @@ def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = Tru
         request = Request(
             url,
             headers={
-                "User-Agent": USER_AGENT,
+                "User-Agent": user_agent or USER_AGENT,
                 "Accept": "application/pdf" if binary else "application/json, application/rss+xml, application/atom+xml, application/xml, text/xml, text/html",
             },
         )
@@ -749,6 +749,10 @@ def fetch_news_live_context(force_refresh: bool = False) -> dict:
                 set_cached_source(source["url"], result)
             return result
         payloads = list(pool.map(read_release, zip(NEWS_SOURCES, payloads)))
+    earnings_backup = None
+    if any(source.get("format") == "alphabet" for source in NEWS_SOURCES):
+        from src.intelligence.alphabet_earnings import refresh, health
+        earnings_backup = health(refresh(force_refresh), datetime.now(timezone.utc))
     for source, payload in zip(NEWS_SOURCES, payloads):
         try:
             parsed_items = parse_source_payload(payload, source) if payload.get("status") == "ok" else []
@@ -793,6 +797,7 @@ def fetch_news_live_context(force_refresh: bool = False) -> dict:
         "fingerprint": fingerprint_items(enriched),
         "source_results": source_results,
         "errors": errors,
+        "earnings_backup": earnings_backup,
     }
 
 
@@ -808,7 +813,10 @@ def format_source_status(context: dict) -> str:
     if not rows:
         return "• No source status available."
 
-    return "\n".join(rows[:24])
+    backup = context.get("earnings_backup")
+    if backup:
+        rows = rows[:24] + ["• Alphabet SEC earnings context: " + backup["status"] + " | " + backup["reason"]]
+    return "\n".join(rows if backup else rows[:24])
 
 
 def filter_items_for_symbol(items: list[dict], symbol: str) -> list[dict]:

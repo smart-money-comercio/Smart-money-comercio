@@ -126,7 +126,8 @@ def retrieve(source, fetch, now, *, feed_payload=None):
         row["description"] = ""
         row["release_body_verified"] = False
     fresh = [row for row in rows if release_url(row["link"]) and timestamp(row["published"]) is not None
-             and 0 <= (now-timestamp(row["published"])).total_seconds() <= 86400
+             and 0 <= (now-timestamp(row["published"])).total_seconds() <= (
+                 72*3600 if re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", row["title"], re.I) else 86400)
              and timestamp(row["published"]).timestamp()-first <= 60]
     fresh.sort(key=lambda row: timestamp(row["published"]), reverse=True)
     problems = []

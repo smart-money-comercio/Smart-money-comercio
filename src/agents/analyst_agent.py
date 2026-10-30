@@ -41,8 +41,14 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
         selected = evidence["company_focus"]["selected"]
         for index, row in enumerate(selected, 1):
             text = focus_paragraph(row, evidence.get("stories", []))
+            contexts = evidence.get("earnings_context", [])
+            if contexts and row["symbol"] in {"GOOG", "GOOGL"}:
+                from src.intelligence.alphabet_earnings import narration
+                event = next(value for value in evidence["market_event_context"]["events"] if value["symbol"] in {"GOOG", "GOOGL"} and value["status"] == "rechecked")
+                text = narration(contexts[0], event)
             if text:
-                add(f"company_focus_{index}", "company", text, row["sources"] + ["Company focus selection"])
+                add(f"company_focus_{index}", "company", text, row["sources"] + ["Company focus selection"]
+                    + (["Recent earnings context"] if contexts and row["symbol"] in {"GOOG", "GOOGL"} else []))
         if selected:
             confirmation = ("Our next check is whether company disclosures, price and volume support these research ideas. The full report has the rankings, risks and trade-plan conditions." if broadcast else
                             "For these companies, the next test is agreement between original disclosures, price and volume. Company selection reflects today's research relevance; the numerical rankings remain available in the full report.")

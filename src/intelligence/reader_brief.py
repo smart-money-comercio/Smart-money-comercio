@@ -17,6 +17,8 @@ def opening(evidence):
         label = NAMES.get(checked["symbol"], checked["symbol"])
         down = checked["reported_move"] < 0
         text = f"The takeaway: {label}'s sharp {'decline' if down else 'advance'} stands out in the quoted session. "
+        if evidence.get("earnings_context") and checked["symbol"] in {"GOOG", "GOOGL"}:
+            return text + "Recent earnings provide dated financial context. The next test is whether later guidance changes the outlook and whether the move spreads to other companies."
         text += ("The key question is whether company disclosures change the business outlook, and whether selling spreads to other names." if down else
                  "The key question is whether company disclosures support the move, and whether other companies join the advance.")
         return text
@@ -69,6 +71,7 @@ def watching(evidence):
     events = evidence.get("market_event_context", {}).get("events", [])
     event = events[0] if events else None
     if event:
+        event_sources = ["Market event checks"]
         label = NAMES.get(event["symbol"], event["symbol"])
         reported = any(issuer(story.get("publisher_symbol", "")) == event["symbol"]
                        and story.get("event_evidence", {}).get("event") == "earnings" for story in evidence.get("stories", []))
@@ -79,7 +82,11 @@ def watching(evidence):
         if reported and event["status"] == "rechecked":
             text = (f"{label}'s next test: Compare management's outlook with the newly reported sales, profits and cash needs. "
                     "That will help judge whether spending is strengthening the business; the price move alone cannot explain it.")
-        rows.append({"id": "watch_event", "text": text, "sources": ["Market event checks"]})
+        if evidence.get("earnings_context") and event["symbol"] in {"GOOG", "GOOGL"} and event["status"] == "rechecked":
+            text = (f"{label}'s earnings follow-through: Compare the dated results with later guidance on spending and cash generation. "
+                    "Growth that produces cash would strengthen the business case; rising costs could weaken it. The earlier results alone do not explain the price move.")
+            event_sources.append("Recent earnings context")
+        rows.append({"id": "watch_event", "text": text, "sources": event_sources})
     if any(story.get("ipo") for story in evidence.get("stories", [])):
         rows.append({"id": "watch_ipo", "text": "IPO details: Watch the proposed price, share count and new shares being issued. Compare that valuation with the disclosed sales, losses and funding needs before judging the offering's business case.",
                      "sources": ["Verified story decisions"]})
@@ -128,4 +135,7 @@ def insights(evidence):
     sources = ["Executive Summary", "Market Snapshot"]
     if evidence.get("market_event_context", {}).get("events"):
         sources.append("Market event checks")
+    first = next((row for row in evidence.get("market_event_context", {}).get("events", []) if row["status"] == "rechecked"), None)
+    if evidence.get("earnings_context") and first and first["symbol"] in {"GOOG", "GOOGL"}:
+        sources.append("Recent earnings context")
     return [{"id": "opening_takeaway", "section": "intro", "text": opening(evidence), "sources": sources}, *watching(evidence)]

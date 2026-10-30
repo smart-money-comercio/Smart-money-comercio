@@ -96,7 +96,7 @@ def report_evidence(report: str) -> dict:
             "source_sections": [key for key in ("Executive Summary", "Market Snapshot", "What Changed Today", "Top Opportunities", "Trade Plan Snapshot") if sections.get(key)]}
 
 
-def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None, narration_version: int = 1, event_context: dict | None = None, reader_version: int = 0, reader_limit: int = 3) -> dict:
+def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None, narration_version: int = 1, event_context: dict | None = None, reader_version: int = 0, reader_limit: int = 3, earnings_context: list | None = None) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
     if type(narration_version) is not int or narration_version not in {1, 2} or narration_version == 2 and presentation != "news":
@@ -155,6 +155,13 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         from src.intelligence.company_focus import select_focus
         evidence["company_focus"] = select_focus(report, evidence, focus_context)
         evidence["source_sections"].append("Company focus selection")
+    if earnings_context is not None:
+        if event_context is None or not reader_version:
+            raise ValueError("Dated earnings context requires the news reader and verified market attention")
+        from src.intelligence.alphabet_earnings import retain
+        evidence["earnings_context"] = retain(earnings_context, now, event_context["events"], evidence["stories"], evidence.get("company_focus"))
+        if evidence["earnings_context"]:
+            evidence["source_sections"].append("Recent earnings context")
     value = {"schema": 1, "research_sha256": hashlib.sha256(report.encode()).hexdigest(),
              "evidence": evidence, "insights": review_daily_brief(deepcopy(evidence), presentation=presentation), "score_changes": False}
     if presentation != "full":
@@ -168,6 +175,8 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
     if reader_version:
         value["reader_version"] = reader_version
         value["reader_limit"] = reader_limit
+    if earnings_context is not None:
+        value["earnings_context"] = deepcopy(earnings_context)
     return value
 
 
@@ -179,8 +188,8 @@ def retained_review(analysis: dict, report: str) -> dict:
 
 
 def validate_review(analysis: dict, research_report: str, report: str, stories: list[dict] | None = None) -> None:
-    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"), narration_version=analysis.get("narration_version", 1), event_context=analysis.get("event_context"), reader_version=analysis.get("reader_version", 0), reader_limit=analysis.get("reader_limit", 3))
-    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version", "event_context", "reader_version", "reader_limit")):
+    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"), narration_version=analysis.get("narration_version", 1), event_context=analysis.get("event_context"), reader_version=analysis.get("reader_version", 0), reader_limit=analysis.get("reader_limit", 3), earnings_context=analysis.get("earnings_context"))
+    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version", "event_context", "reader_version", "reader_limit", "earnings_context")):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
     seen = set()

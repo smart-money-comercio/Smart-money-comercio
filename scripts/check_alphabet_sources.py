@@ -161,7 +161,7 @@ class AlphabetChecks(ResearchFixture):
             self.assertEqual(payload['articles'][0]['published'], format_datetime(NOW-timedelta(minutes=20)))
 
     def test_missing_future_or_old_publication_does_not_trigger_document_reads(self):
-        for clock in ('', 'October 25, 2026', format_datetime(NOW+timedelta(hours=1)), format_datetime(NOW-timedelta(hours=25))):
+        for clock in ('', 'October 25, 2026', format_datetime(NOW+timedelta(hours=1)), format_datetime(NOW-timedelta(hours=73))):
             payload, calls = self.retrieve({alphabet.FEED:self.rss(published=clock).encode()})
             self.assertEqual(calls, [alphabet.FEED])
             self.assertFalse(payload['articles'][0]['release_body_verified'])
@@ -290,7 +290,7 @@ class AlphabetChecks(ResearchFixture):
 
     def test_feed_can_recover_after_the_original_cooldown_expires(self):
         error = HTTPError(alphabet.FEED, 429, 'Slow down', {}, None)
-        raw = self.rss(published=format_datetime(NOW-timedelta(hours=25))).encode()
+        raw = self.rss(published=format_datetime(NOW-timedelta(hours=73))).encode()
         class Response:
             def __enter__(self): return self
             def __exit__(self, *args): return False

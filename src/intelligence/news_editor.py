@@ -450,6 +450,9 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     if event_context is not None:
         from src.intelligence.company_schedule import notices
         result.update(rules_version=15, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
+        from src.intelligence.alphabet_earnings import cached_context
+        contexts, backup_health = cached_context(cached, now, event_context["events"])
+        result.update(earnings_context_candidates=contexts, earnings_backup_health=backup_health)
     return result
 
 
@@ -601,6 +604,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
     value["research_sha256"] = hashlib.sha256(research_report.encode()).hexdigest()
     if analyst_review is not None:
         from src.intelligence.daily_brief_analysis import validate_review
+        if analyst_review.get("earnings_context") is not None and analyst_review["earnings_context"] != plan.get("earnings_context_candidates"):
+            raise ValueError("Earnings context lost its admitted source record")
         validate_review(analyst_review, research_report, report, selected)
         value["analyst_review"] = deepcopy(analyst_review)
         if analyst_review.get("reader_version") == 1:
@@ -691,9 +696,15 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 lines.append("Market event check: " + event["symbol"] + " — " + event["status"] + "; issuer-disclosure search cue, market cause not inferred")
             for row in record.get("narrated_company_schedules", []):
                 lines.append("Company-confirmed calendar: " + row["symbol"] + " — " + row["event_date"] + "; " + row["source"]["url"])
+            backup = record.get("earnings_backup_health")
+            if backup:
+                lines.append("Alphabet SEC earnings context: " + backup["status"] + " — " + backup["reason"])
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
+                for context in analysis["evidence"].get("earnings_context", []):
+                    lines.append("Dated earnings context: GOOG — " + context["source"] + "; release " + context["release_date"]
+                                 + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")
                 if analysis.get("reader_version") == 1:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
                     lines.append(f"Reader brief: opening takeaway and {signals} evidence-grounded watch signals; each explains the next check and why it matters.")
@@ -703,6 +714,11 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     for company in focus["selected"]:
                         lines.append("Focus decision: " + company["symbol"] + " — " + company["role"] + ". " + company["why"])
         else:
+            contexts = record.get("analyst_review", {}).get("evidence", {}).get("earnings_context", [])
+            if contexts and (not symbol or symbol in {"GOOG", "GOOGL"}):
+                from src.intelligence.alphabet_earnings import audit
+                for context in contexts:
+                    lines += [""] + audit(context)
             for row in record.get("source_health", []):
                 if symbol and row["symbol"] == symbol:
                     lines.append(f"Publisher coverage: {row['name']} — {row['status']}; {row['reason']}; checked {row['checked_at'] or 'not checked'}")
