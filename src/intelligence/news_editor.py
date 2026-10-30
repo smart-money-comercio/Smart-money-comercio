@@ -622,6 +622,10 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
+    if broadcast and (analyst_review or {}).get("reader_version") == 1:
+        from src.reports.daily_voiceover import build
+        value.update(report_text=report, research_text=research_report)
+        value["voiceover"] = build(value, report, research_report)
     return store.save_edition(value, report)
 
 
@@ -708,6 +712,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if analysis.get("reader_version") == 1:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
                     lines.append(f"Reader brief: opening takeaway and {signals} evidence-grounded watch signals; each explains the next check and why it matters.")
+                voice = record.get("voiceover", {}).get("quality")
+                if voice:
+                    lines.append(f"Voiceover: {'PASS' if voice['passes'] else 'HOLD'} — {voice['words']} spoken words; about {voice['estimated_seconds']:.0f} seconds at {voice['words_per_minute']} words/minute. /voiceover for the script; JSON export for ElevenLabs/YouTube.")
                 focus = analysis["evidence"].get("company_focus")
                 if focus:
                     lines.append("Companies in focus: " + ", ".join(focus["featured_symbols"]) + ". " + focus["rule"] + ".")

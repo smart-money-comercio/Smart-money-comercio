@@ -1,5 +1,7 @@
 # Smart Money news editor
 
+New reader editions freeze the validated report, research text and spoken companion in the existing edition record. `/voiceover` and `scripts/export_daily_voiceover.py` revalidate the snapshot before returning narration; they make no research or audio API calls. The text report remains fully attributed. See [README_ELEVENLABS.md](README_ELEVENLABS.md) for the existing renderer handoff.
+
 The daily brief now selects up to three current sourced stories, alongside the dated market snapshot and upcoming calendar. It uses six inspectable stages within the existing daily agent: Scan, Source Check, Relevance, Selection, Editorial Review and Decision Log. These are bounded role-specific checks; no additional model subscription is required.
 
 Company candidates come from active special-alert evidence and cached original publisher feeds and release indexes. Coverage uses configured core companies plus dated top opportunities. Source dates remain original publication times, never the time a page was fetched. The reader accepts at most six-hour-old feed fetches and 24-hour-old articles, checks HTTPS source links, and rejects HTML page-title fallbacks. Publisher feeds retain publisher authority only when article links match the publisher. Yahoo headlines stay headline-only accounts; they do not establish company confirmation.

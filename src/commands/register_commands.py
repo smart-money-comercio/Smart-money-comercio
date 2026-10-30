@@ -3,6 +3,7 @@ from telegram.ext import CommandHandler
 from src.commands.special_alert_commands import specialalerts_command
 from src.commands.company_catalyst_commands import catalysts_command, fullreport_command
 from src.commands.news_editor_commands import editorstatus_command, storylog_command
+from src.commands.voiceover_commands import voiceover_command
 from src.commands.hourly_research_commands import researchdesk_command
 
 from src.commands.admin_commands import (
@@ -129,6 +130,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("newsbrief", report))
     app.add_handler(CommandHandler("editorstatus", editorstatus_command))
     app.add_handler(CommandHandler("storylog", storylog_command))
+    app.add_handler(CommandHandler("voiceover", voiceover_command))
     app.add_handler(CommandHandler("fullreport", fullreport_command))
     app.add_handler(CommandHandler("catalysts", catalysts_command))
     app.add_handler(CommandHandler("snapshot", snapshot_command))

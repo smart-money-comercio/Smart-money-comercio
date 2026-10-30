@@ -811,6 +811,9 @@ class EditorChecks(IsolatedChecks):
         record = store.read_editions()[0]; record.pop("id"); record.pop("report_sha256")
         store.save_edition(record, text)
         self.assertEqual(len(store.read_editions()), 1)
+        # Synthetic retention records use the legacy shape; they do not claim
+        # that a modified report retains the original spoken snapshot.
+        for key in ("voiceover", "report_text", "research_text"): record.pop(key, None)
         with patch.object(store, "MAX_EDITIONS", 2):
             for index in range(4):
                 record["generated_at"] = (NOW + timedelta(minutes=index)).isoformat()
@@ -820,6 +823,7 @@ class EditorChecks(IsolatedChecks):
     def test_edition_retention_removes_records_older_than_thirty_days(self):
         text = self.render([candidate()])
         record = store.read_editions()[0]; record.pop("id"); record.pop("report_sha256")
+        for key in ("voiceover", "report_text", "research_text"): record.pop(key, None)
         record["generated_at"] = (NOW + timedelta(days=31)).isoformat()
         store.save_edition(record, text + " later")
         records = store.read_editions(200)
