@@ -557,6 +557,86 @@ class EditorChecks(IsolatedChecks):
                 self.assertEqual(story["materiality"], category)
                 self.assertEqual(story["confirmed_by"], "MSFT")
 
+    def test_original_task_order_awards_are_material_without_an_hourly_review(self):
+        titles = (
+            "CACI Awarded $185 Million U.S. Army Task Order to Advance Expeditionary Power and Mission Readiness",
+            "CACI Secures U.S. Navy Task Order to Strengthen Electromagnetic Spectrum Dominance",
+            "CACI wins a five-year task order for expeditionary power",
+            "CACI receives two Army task orders for mission support",
+        )
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "CACI,MSFT,NVDA,TSLA"}):
+            for title in titles:
+                with self.subTest(title=title):
+                    plan = self.plan([candidate("CACI", title=title)])
+                    selected = editor.selected_stories(plan)
+                    self.assertEqual(len(selected), 1)
+                    self.assertEqual(selected[0]["materiality"], "contract")
+                    self.assertEqual(selected[0]["story_type"], "announcement")
+                    self.assertNotIn("research_review", selected[0])
+                    self.assertEqual(selected[0]["event_evidence"]["event"], "contract")
+
+    def test_task_order_forecasts_guides_and_opinions_do_not_become_awards(self):
+        titles = ("CACI could be awarded a U.S. Army task order",
+                  "CACI expects to receive a U.S. Army task order",
+                  "CACI has not been awarded the Army task order",
+                  "CACI receives no new Army task orders",
+                  "CACI failed to secure an Army task order",
+                  "CACI guide to task order management",
+                  "How CACI wins task orders",
+                  "Will CACI win a U.S. Army task order?")
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "CACI,MSFT,NVDA,TSLA"}):
+            for title in titles:
+                with self.subTest(title=title):
+                    self.assertFalse(editor.selected_stories(self.plan([candidate("CACI", title=title)])))
+
+    def test_task_order_awards_still_need_original_sources_and_current_clocks(self):
+        title = "CACI Awarded $185 Million U.S. Army Task Order"
+        values = [candidate("CACI", title=title, official=False, url="https://finance.yahoo.com/example"),
+                  candidate("CACI", title=title, published=(NOW-timedelta(hours=25)).isoformat()),
+                  candidate("CACI", title=title, source_checked_at=(NOW-timedelta(hours=7)).isoformat())]
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "CACI,MSFT,NVDA,TSLA"}):
+            plan = self.plan(values)
+        self.assertFalse(editor.selected_stories(plan))
+        self.assertEqual(dict(editor.hold_reasons(plan["candidates"])),
+                         {"Original-source confirmation needed": 1, "Publication older than 24 hours": 1,
+                          "Source observation stale or invalid": 1})
+
+    def test_fresh_caci_feed_award_enters_the_brief_after_hourly_evidence_expires(self):
+        title = "CACI Awarded $185 Million U.S. Army Task Order to Advance Expeditionary Power and Mission Readiness"
+        url = "https://investor.caci.com/2026-10-29-CACI-Awarded-185-Million-U-S-Army-Task-Order-to-Advance-Expeditionary-Power-and-Mission-Readiness"
+        quote = "CACI announced it has been awarded a five-year task order valued at up to $185 million to support the U.S. Army's expeditionary power and mission readiness."
+        source = next(row for row in editor.feeds.NEWS_SOURCES if row.get("company_symbol") == "CACI")
+        body = ("<rss><channel><item><title>"+escape(title)+"</title><link>"+escape(url)+"</link><pubDate>"
+                +escape(format_datetime(NOW-timedelta(hours=13)))+"</pubDate><description>"+escape(quote)+"</description></item></channel></rss>")
+        path = Path(os.environ["NEWS_LIVE_SOURCE_CACHE_FILE"])
+        path.write_text(json.dumps({source["url"]: {"status": "ok", "fetched_at_epoch": NOW.timestamp(), "body": body}}))
+        cache_before = path.read_bytes(); rankings_before = self.ranking.read_bytes()
+        from src.intelligence import hourly_research
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "CACI,MSFT,NVDA,TSLA"}), patch.object(hourly_research, "approved", return_value=[]), patch.object(editor.feeds, "fetch_source", side_effect=AssertionError("Rendering must not fetch")):
+            text = build_daily_news_brief(self.research())
+        record = store.read_editions(report=text)[0]
+        selected = editor.selected_stories(record)
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0]["confirmed_by"], "CACI")
+        self.assertEqual(selected[0]["materiality"], "contract")
+        self.assertIn("material contract development", selected[0]["reason"])
+        self.assertEqual(selected[0]["event_evidence"]["facts"][0]["field"], "contract_ceiling")
+        self.assertIn("up to $185 million", text)
+        self.assertIn("does not establish funded orders or booked revenue", text)
+        self.assertEqual(path.read_bytes(), cache_before)
+        self.assertEqual(self.ranking.read_bytes(), rankings_before)
+
+    def test_task_order_fix_does_not_rewrite_an_earlier_skipped_edition(self):
+        value = candidate("CACI", title="CACI Awarded $185 Million U.S. Army Task Order")
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "CACI,MSFT,NVDA,TSLA"}):
+            with patch.object(editor, "materiality", return_value=""):
+                old_text = self.render([value])
+            original = deepcopy(store.read_editions(report=old_text)[0])
+            self.assertFalse(editor.selected_stories(original))
+            new_text = self.render([value])
+        self.assertEqual(editor.selected_stories(store.read_editions(report=new_text)[0])[0]["materiality"], "contract")
+        self.assertEqual(store.read_editions(report=old_text)[0], original)
+
     def test_original_agency_releases_supply_macro_news(self):
         values = [candidate(kind="macro", symbols=[], source="Federal Reserve", url="https://www.federalreserve.gov/release", title="Federal Reserve publishes FOMC meeting minutes"),
                   candidate(kind="macro", symbols=[], source="EIA", url="https://www.eia.gov/release", title="EIA releases oil inventory data")]

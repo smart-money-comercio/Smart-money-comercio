@@ -88,6 +88,11 @@ def materiality(story: dict) -> str:
             return kind
         if kind == "contract" and stage == "cooperation":
             return "contract"
+        task_award = re.search(r"\b(?:award(?:ed|s)?|wins?|won|secures?|secured|receives?|received)\b.{0,100}\btask[ -]orders?\b", title, re.I)
+        if task_award and not re.search(r"\b(?:no|not|without)\b", task_award[0], re.I) and not re.search(
+                r"\b(?:could|may|might|expects?|expected|plans?|planned|seeks?|seeking|bids?|bidding|will|to|not|no|denies|fails?|failed)\b",
+                title[:task_award.start()], re.I):
+            return "contract"
         event = company_event(title)
         if event:
             return event[0]
