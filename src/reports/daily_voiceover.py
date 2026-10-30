@@ -195,13 +195,17 @@ def build(record, report, research):
         [f"{key}: {evidence['moves'][key]:+.2f}%" for key in ("S&P","Nasdaq","VIX") if key in evidence["moves"]])
     covered = set()
     from src.intelligence.market_brief import story_topics
-    from src.intelligence.company_focus import issuer
+    from src.intelligence.company_focus import issuer, grouped_price_watch
     for story in sorted(selected, key=editor.news_order):
         defense = "defense" in story_topics(story)
         label = "Defense and Innovation" if defense else "Capital Markets" if story.get("ipo") or story.get("sec_filing") else "Policy and Economy" if story["kind"] == "macro" else "Company News"
         transition = "In defense and innovation. " if defense else "In capital markets. " if label == "Capital Markets" else "On policy. " if story["kind"] == "macro" else "In company news. "
         add(label, transition+story_copy(story,evidence), (story["title"],), (story["id"],))
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
+    group = grouped_price_watch(evidence)
+    if group:
+        add("Companies in Focus", group["text"].replace(group["label"] + " — ", "Across semiconductor companies, "), (group["label"],))
+        covered.update(group["symbols"])
     for row in evidence.get("company_focus", {}).get("selected", []):
         if issuer(row["symbol"]) in covered or row.get("basis") == "sector context" and row["group"] != "market event": continue
         text = focus_copy(row, evidence)

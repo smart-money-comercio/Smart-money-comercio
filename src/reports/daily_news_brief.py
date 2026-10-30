@@ -276,9 +276,15 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             company_body += [row["text"] for row in insights if row["section"] == "company"]
             if not company_body:
                 company_body.append("Company-specific evidence is limited in this edition; current original disclosures are the next check.")
-            if brief.get("market_events"):
-                global_body.append("An active market-alert record reports " + brief["market_events"][0]["fact"]
-                                   + " This is dated price evidence; it does not establish the cause of the move.")
+            # The dated market snapshot takes precedence over a second, older
+            # index reading. With no usable snapshot, a bounded dated alert can
+            # supply context in Market Update. It never belongs to defense.
+            if brief.get("market_events") and not analysis["evidence"]["moves"]:
+                from src.intelligence.market_brief import word_count, MAX_MARKET_WORDS
+                alert = ("An active market-alert record reports " + brief["market_events"][0]["fact"]
+                         + " This is dated price evidence; it does not establish the cause of the move.")
+                if word_count(" ".join(market_body+[alert])) <= MAX_MARKET_WORDS:
+                    market_body.append(alert)
             global_body += [row["text"] for row in insights if row["section"] == "global"]
             ahead_body = list(ahead)
             if not any(story["kind"] == "company" for story in retained) and not analysis["evidence"]["companies"]:
@@ -318,7 +324,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
             protected.update(schedule_narration(row, zone, NAMES) for row in company_schedules)
             if brief.get("market_events"):
-                protected.update(paragraph for paragraph in global_body if paragraph.startswith("An active market-alert record reports "))
+                protected.update(paragraph for paragraph in market_body if paragraph.startswith("An active market-alert record reports "))
             if plan["issues"]:
                 protected.add("Calendar or company-news coverage is incomplete; unverified dates and times remain uncertain.")
             for body, minimum in ((company_body, 1), (ahead_body, 2), (watching, 1)):

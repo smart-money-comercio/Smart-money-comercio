@@ -240,8 +240,8 @@ class CompanyChecks(IsolatedChecks):
         self.assertTrue(brief["market_events"])
         self.assertTrue(all(not row["events"] for row in brief["rows"]))
         text = build_daily_news_brief(self.research(), brief)
-        self.assertIn("active market-alert record", text)
-        self.assertIn("does not establish the cause", text)
+        self.assertNotIn("active market-alert record", text)
+        self.assertTrue(brief["market_events"])  # The alert remains in its evidence log.
 
     def test_read_only_reader_does_not_create_tables_in_a_missing_schema(self):
         self.db.unlink()

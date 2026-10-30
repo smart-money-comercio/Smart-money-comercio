@@ -82,6 +82,8 @@ NEWS_SOURCES = [
     {"name": "AeroVironment Newsroom", "url": "https://www.avinc.com/feed/", "category": "company", "company_symbol": "AVAV"},
     {"name": "Kratos Newsroom", "url": "https://www.kratosdefense.com/newsroom", "category": "company", "company_symbol": "KTOS", "format": "index", "article_pattern": r"/newsroom/[^/]+", "anchor_title": True, "requires_original_body": True},
     {"name": "Alphabet Investor Relations", "url": "https://abc.xyz/rss/pressrelease.aspx?LanguageId=1", "category": "company", "company_symbol": "GOOG", "format": "alphabet", "requires_original_body": True},
+    {"name": "Intel Investor Relations", "url": "https://www.intc.com/news-events/press-releases/rss", "category": "company", "company_symbol": "INTC", "requires_original_body": True},
+    {"name": "ASML Investor Relations", "url": "https://investor.asml.com/news/press-releases-and-announcements", "category": "company", "company_symbol": "ASML", "format": "index", "article_pattern": r"/news-releases/news-release-details/[^/]+", "requires_original_body": True},
 ]
 
 
@@ -525,6 +527,8 @@ def parse_article_items(payload: dict, source: dict, *, full_titles: bool = Fals
         rows = parse_rss_items(payload.get("body", ""), source, full_titles=full_titles, full_text=full_text)
     if full_text:
         for row in rows:
+            if source.get("requires_original_body"):
+                row["requires_original_body"] = True
             row["evidence_scope"] = row.get("evidence_scope") or ("publisher feed excerpt" if row.get("description") else "headline only")
             row["evidence_checked_at"] = row.get("evidence_checked_at", payload.get("fetched_at_epoch"))
             details = payload.get("release_evidence", [])
@@ -573,7 +577,7 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
             kind = container.tag.split("}")[-1].lower()
             if kind not in {"rss", "rdf", "feed"} or kind == "rss" and container.find("channel") is None:
                 raise ValueError("no dated RSS article candidates; expected a publisher feed")
-        items = parse_article_items(payload, source, full_titles=True)[:30]
+        items = parse_article_items(payload, source, full_titles=True, full_text=bool(source.get("requires_original_body")))[:30]
         row["entries"] = len(items)
         dates = [timestamp(item.get("published")) for item in items]
         valid = [value for value in dates if value and (now - value).total_seconds() >= -60]
@@ -590,6 +594,10 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
             row["reason"] += "; " + str(payload["publication_problems"][0])[:90]
         if source.get("format") == "alphabet" and payload.get("publication_problems"):
             row.update(status="limited", reason="Original Alphabet release text unavailable: " + str(payload["publication_problems"][0])[:150])
+        if source.get("requires_original_body") and any(
+                date and 0 <= (now-date).total_seconds() <= 86400 and item.get("evidence_scope") != "original release excerpt"
+                for item, date in zip(items, dates)):
+            row.update(status="limited", reason="Fresh publisher release text unavailable; original body verification required")
         if row["undated"] and not source.get("format") and not any(dates):
             root = ET.fromstring(payload.get("body", ""))
             if root.tag.split("}")[-1].lower() == "feed" and any(node.tag.split("}")[-1].lower() == "updated" for node in root.iter()):

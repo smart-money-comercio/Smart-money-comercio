@@ -41,6 +41,7 @@ OFFICIAL_DOMAINS = {
     "AVGO": ("broadcom.com",), "PLTR": ("palantir.com",), "AVAV": ("avinc.com",),
     "KTOS": ("kratosdefense.com",), "CRWD": ("crowdstrike.com",),
     "TSM": ("tsmc.com",), "AMD": ("amd.com",), "ASML": ("asml.com",),
+    "INTC": ("intel.com", "intc.com"),
     "NOC": ("northropgrumman.com",), "LMT": ("lockheedmartin.com",),
     "RTX": ("rtx.com",), "AMZN": ("amazon.com", "aboutamazon.com"),
     "CACI": ("caci.com",),

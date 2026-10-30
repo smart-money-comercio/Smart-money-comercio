@@ -37,9 +37,16 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
             scope += " Index gains are not shared by most names in this research watchlist."
         add("participation", "watch", scope, ["Market Snapshot"])
     if "company_focus" in evidence:
-        from src.intelligence.company_focus import focus_paragraph
+        from src.intelligence.company_focus import focus_paragraph, grouped_price_watch
         selected = evidence["company_focus"]["selected"]
+        group = grouped_price_watch(evidence)
+        group_added = False
         for index, row in enumerate(selected, 1):
+            if group and row["symbol"] in group["symbols"]:
+                if not group_added:
+                    add("company_focus_moves", "company", group["text"], group["sources"] + ["Company focus selection"])
+                    group_added = True
+                continue
             text = focus_paragraph(row, evidence.get("stories", []))
             contexts = evidence.get("earnings_context", [])
             if contexts and row["symbol"] in {"GOOG", "GOOGL"}:

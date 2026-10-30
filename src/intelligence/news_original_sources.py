@@ -138,6 +138,14 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
                 and allowed):
             candidates.append((published, row))
     candidates.sort(key=lambda value: value[0], reverse=True)
+    if source.get("requires_original_body") and source.get("company_symbol"):
+        from src.intelligence.news_editor import materiality
+        def material(row):
+            return bool(materiality({"title": row[1]["title"], "kind":"company", "symbols":[source["company_symbol"]],
+                                     "official":True,"source":source["name"],"publisher_symbol":source["company_symbol"],"url":row[1]["link"]}))
+        # Keep the single-page budget for a material release when a newer
+        # community or calendar notice would otherwise consume that read.
+        candidates.sort(key=lambda value: not material(value))
     details, issues = [], []
     for _, row in candidates[:1]:
         try:

@@ -62,11 +62,11 @@ def history_context(now: datetime) -> dict:
         symbols = {issuer(row.get("symbol")) for row in selected or [] if isinstance(row, dict) and company(row.get("symbol"))}
         if symbols:
             days.setdefault(at.astimezone(NY).date().isoformat(), set()).update(symbols)
-    return {"schema": 4, "limit": 3, "recent": [{"day": day, "symbols": sorted(symbols)[:100]} for day, symbols in sorted(days.items())]}
+    return {"schema": 5, "limit": 3, "recent": [{"day": day, "symbols": sorted(symbols)[:100]} for day, symbols in sorted(days.items())]}
 
 
 def checked_context(context: dict, day) -> dict:
-    if (not isinstance(context, dict) or set(context) != {"schema", "limit", "recent"} or type(context["schema"]) is not int or context["schema"] not in {1, 2, 3, 4}
+    if (not isinstance(context, dict) or set(context) != {"schema", "limit", "recent"} or type(context["schema"]) is not int or context["schema"] not in {1, 2, 3, 4, 5}
             or type(context["limit"]) is not int or not 1 <= context["limit"] <= 3
             or not isinstance(context["recent"], list) or len(context["recent"]) > 7):
         raise ValueError("Invalid company-focus context")
@@ -110,6 +110,8 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
             from src.intelligence.broadcast_story import next_check
             value["basis"] = "company report" if story_id else "price move" if group == "price move" else "sector context"
             value["watch"] = next_check(watch)
+        if context["schema"] >= 5 and group == "market event":
+            value["basis"] = "price move"
         if symbol not in pool or (tier, bool(story_id)) > (pool[symbol]["tier"], bool(pool[symbol]["story_id"])):
             pool[symbol] = value
 
@@ -222,7 +224,32 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
         if story.get("kind") == "company" and "defense" not in story_topics(story):
             featured.update(issuer(symbol) for symbol in [story.get("publisher_symbol")] if company(symbol))
     return {"schema": 1, "day": day.isoformat(), "selected": selected, "featured_symbols": sorted(featured), "remaining_candidates": len(pool),
-        "rule": "Original developments, dated moves and market relevance; recent exposure breaks comparable ties"}
+        "rule": "Original developments, dated moves and market relevance; recent exposure breaks comparable ties",
+        **({"grouped_narration": 1} if context["schema"] >= 5 else {})}
+
+
+def grouped_price_watch(evidence: dict) -> dict | None:
+    """Combine corroborated peer moves, keeping disclosures and pending checks separate."""
+    focus = evidence.get("company_focus", {})
+    if focus.get("grouped_narration") != 1:
+        return None
+    semiconductors = {"INTC", "AMD", "ASML", "NVDA", "AVGO", "TSM", "MU", "ARM", "MRVL"}
+    events = {row["symbol"]: row for row in evidence.get("market_event_context", {}).get("events", [])}
+    rows = [row for row in focus["selected"] if row["symbol"] in semiconductors and not row["story_id"]
+            and row["group"] in {"market event", "price move"} and (row.get("metric") or {}).get("price") is not None
+            and (row["group"] != "market event" or events.get(row["symbol"], {}).get("status") == "rechecked")]
+    if len(rows) < 2:
+        return None
+    label = "Semiconductor sell-off" if all(row["metric"]["price"] < 0 for row in rows) else "Semiconductor watch"
+    clauses = [row["name"] + (" was unchanged" if row["metric"]["price"] == 0 else
+        f" {'rose' if row['metric']['price'] > 0 else 'fell'} {abs(row['metric']['price']):.1f} percent") for row in rows]
+    prices = "; ".join(clauses) + " in the quoted regular session."
+    proof = (" Repeat quotes from the same provider support these price readings." if all(
+        events.get(row["symbol"], {}).get("status") == "rechecked" for row in rows) else "")
+    return {"symbols": [row["symbol"] for row in rows], "label": label,
+            "text": label + " — " + prices + proof + " These moves do not establish a shared cause. "
+                    "No fresh company disclosure for these moves is included here. Next, compare original results, guidance and spending plans before judging the business impact.",
+            "sources": list(dict.fromkeys(source for row in rows for source in row["sources"]))}
 
 
 def focus_paragraph(row: dict, stories: list[dict]) -> str:

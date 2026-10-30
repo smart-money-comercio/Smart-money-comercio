@@ -1,5 +1,9 @@
 # Smart Money news editor
 
+The original publisher registry includes Intel's linked investor RSS endpoint and ASML's canonical investor-relations release index. Exact release identity, original publication clocks and original bodies remain required. Intel's single detail read prefers a fresh material development when a newer calendar or community item would otherwise consume it; ASML remains bounded to three detail pages. Source refresh alone performs these requests. The hourly model, search and original-read limits do not change.
+
+Editor status shows up to five fresh original-report decisions, including reasons for skipped original items. A fresh publisher item can be a calendar notice, community feature or a story outside the configured material event categories; it is not automatically a market-moving development. EIA solar, battery-storage, electricity and natural-gas reports now fall under energy coverage. The software does not infer a price effect from those topics.
+
 New reader editions freeze the validated report, research text and spoken companion in the existing edition record. `/voiceover` and `scripts/export_daily_voiceover.py` revalidate the snapshot before returning narration; they make no research or audio API calls. The text report remains fully attributed. See [README_ELEVENLABS.md](README_ELEVENLABS.md) for the existing renderer handoff.
 
 The daily brief now selects up to three current sourced stories, alongside the dated market snapshot and upcoming calendar. It uses six inspectable stages within the existing daily agent: Scan, Source Check, Relevance, Selection, Editorial Review and Decision Log. These are bounded role-specific checks; no additional model subscription is required.

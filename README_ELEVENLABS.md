@@ -1,5 +1,7 @@
 # Smart Money narration and YouTube export
 
+New editions can combine checked semiconductor peer moves into one spoken passage, preserving company names, returns and the need for original disclosures. Pending quotes and separate sourced company announcements retain their own treatment. Euro and pound amounts keep their currency when converted to spoken English. Historical editions retain their original focus narration rules.
+
 Each new daily news edition records a separate, tightened spoken script after its source and editorial checks pass. It opens with the takeaway, gives the dated market snapshot, covers admitted developments and relevant company moves, and ends with concrete follow-up checks. The spoken companion skips sector-only company filler, repeated headline attribution, operational timestamps, URLs and bot commands. The text brief and decision log retain the full evidence.
 
 Numbers, percentages, currencies, dates, clocks and common acronyms are written as spoken English. Contract ceilings, proposed deals, test milestones, IPO stages, reporting periods and unverified causes remain qualified. The script uses plain punctuation, without SSML or voice-model-specific tags. Estimates use 160 words per minute; actual audio duration depends on the chosen voice. The companion requires at least 180 editorial spoken words and a 45–80-word market segment. If a thin edition misses those limits, its voice export is held rather than padded with invented news.

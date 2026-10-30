@@ -60,18 +60,20 @@ def normalize(text):
         return result + (", " + ZONES[zone] if zone else "")
     text = re.sub(r"\b(\d{1,2}):(\d{2})\s*(AM|PM)(?:\s+(EST|EDT|PST|PDT|UTC))?\b", time, text)
     scales = {"k":"thousand", "m":"million", "mn":"million", "b":"billion", "bn":"billion", "t":"trillion"}
-    text = re.sub(r"(\$[\d,]+(?:\.\d+)?)\s*(bn|mn|[kmbt])\b",
+    text = re.sub(r"([$€£][\d,]+(?:\.\d+)?)\s*(bn|mn|[kmbt])\b",
                   lambda m: m[1]+" "+scales[m[2].lower()], text, flags=re.I)
 
     def money(match):
-        value, scale = match[1], match[2]
-        if scale: return number(value) + " " + scale + " dollars"
+        currency, value, scale = match[1], match[2], match[3]
+        singular, plural, fraction = {"$":("dollar","dollars","cent"), "€":("euro","euros","cent"), "£":("pound","pounds","penny")}[currency]
+        if scale: return number(value) + " " + scale.lower() + " " + plural
         raw = value.replace(",", ""); whole, _, cents = raw.partition(".")
         if cents and len(cents) <= 2:
             pennies = int(cents.ljust(2, "0"))
-            return integer(whole) + (" dollar" if int(whole) == 1 else " dollars") + (" and " + integer(pennies) + (" cent" if pennies == 1 else " cents") if pennies else "")
-        return number(value) + " dollars"
-    text = re.sub(r"\$([\d,]+(?:\.\d+)?)(?:\s+(thousand|million|billion|trillion))?", money, text, flags=re.I)
+            unit = fraction if pennies == 1 else "pence" if fraction == "penny" else "cents"
+            return integer(whole) + " " + (singular if int(whole) == 1 else plural) + (" and " + integer(pennies) + " " + unit if pennies else "")
+        return number(value) + " " + plural
+    text = re.sub(r"([$€£])([\d,]+(?:\.\d+)?)(?:\s+(thousand|million|billion|trillion))?", money, text, flags=re.I)
     text = re.sub(r"([+-]?[\d,]+(?:\.\d+)?)\s*%", lambda m: number(m[1])+" percent", text)
     text = re.sub(r"(?<![A-Za-z0-9])[+-]?\d[\d,]*(?:\.\d+)?(?![A-Za-z0-9])", lambda m: number(m[0]), text)
     text = text.replace("&", "and").replace(" · ", ". ").replace("—", ". ").replace("–", "-")

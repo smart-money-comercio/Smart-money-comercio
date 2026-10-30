@@ -116,6 +116,8 @@ def materiality(story: dict) -> str:
             "energy": r"\b(oil|crude|gasoline|energy|petroleum|inventories)\b",
             "public finance": r"\b(Treasury|borrowing|debt|bond auction|buybacks?|tariffs?|sanctions|financial stability|enforcement)\b",
         }
+        if story["source"] == "EIA":
+            patterns["energy"] += r"|\b(solar|batter(?:y|ies)|natural gas|electricity|power generation|LNG)\b"
         if story["symbols"] and re.search(r"\b(contract|agreement|regulatory approval|investigation)\b", title, re.I):
             return "government company report"
     topic = next((category for category, pattern in patterns.items() if re.search(pattern, title, re.I)), "")
@@ -384,7 +386,12 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         elif story["story_type"] in {"personal wealth", "retrospective"}:
             story.update(decision="skip", reason="Personal-wealth profile or retrospective; a current company development is not established by the headline")
         elif story["story_type"] in {"commentary", "speculation", "context"}:
-            story.update(decision="skip", reason="Opinion, forecast or general context; no material sourced development admitted to the news brief")
+            reason = "Opinion, forecast or general context; no material sourced development admitted to the news brief"
+            if story["story_type"] == "context" and primary_source(story):
+                reason = ("Calendar or investor-event notice; no financial results or new business development established"
+                          if re.search(r"\b(conference call|earnings call|investor conference|webcast)\b", story["title"], re.I) else
+                          "Original publisher item; headline does not establish a material business or policy development")
+            story.update(decision="skip", reason=reason)
         elif not primary_source(story):
             story.update(decision="wait", confirmation_check="hold", reason="Original company or agency report required; unconfirmed headlines are excluded from the news brief")
         else:
@@ -688,6 +695,21 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             reasons = hold_reasons(record["candidates"])
             if reasons:
                 lines.append("Hold reasons: " + "; ".join(f"{label}: {count}" for label, count in reasons))
+            fresh = []
+            seen = set()
+            when = dated(record["generated_at"])
+            for story in sorted(record["candidates"], key=lambda row: row["decision"] != "selected"):
+                try:
+                    age = (when-dated(story["published"])).total_seconds()
+                    key = canonical_url(story["url"])
+                except (ValueError, TypeError):
+                    continue
+                if 0 <= age <= MAX_NEWS_AGE and primary_source(story) and key not in seen:
+                    seen.add(key); fresh.append(story)
+            if fresh:
+                lines.append("Fresh original-report decisions (up to 5):")
+                for story in fresh[:5]:
+                    lines.append(story["decision"].upper() + " — " + clean(story["title"], 150) + "; " + clean(story["reason"], 160))
             if record.get("source_health"):
                 lines += ["", feeds.coverage_summary(record["source_health"])]
                 for row in record["source_health"]:
