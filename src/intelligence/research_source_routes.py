@@ -61,7 +61,7 @@ class SourceResolver:
         publisher = self.identity(lead["url"])
         if not publisher:
             return None
-        source = next((row for row in feeds.NEWS_SOURCES if feeds.is_original_source(row) and not row.get("format") and
+        source = next((row for row in feeds.NEWS_SOURCES if feeds.is_original_source(row) and row.get("format") in (None, "alphabet") and
             (row.get("company_symbol") == publisher["symbol"] if publisher["symbol"] else row["name"] == publisher["name"])), None)
         if not source:
             return None
@@ -72,6 +72,13 @@ class SourceResolver:
                 if not isinstance(body, bytes) or len(body) > feeds.MAX_FEED_BYTES:
                     raise ValueError("Invalid original publisher feed")
                 payload = {"status": "ok", "body": body.decode("utf-8"), "url": source["url"], "final_url": source["url"], "fetched_at_epoch": self.now.timestamp()}
+                if source.get("format") == "alphabet":
+                    from src.intelligence.alphabet_source import retrieve, attachment_url
+                    def fetch_part(url):
+                        raw = self.fetch(url)
+                        return {"status": "ok", "body": raw if attachment_url(url) else raw.decode("utf-8"),
+                                "url": url, "final_url": url, "fetched_at_epoch": self.now.timestamp()}
+                    payload = retrieve(source, fetch_part, self.now, feed_payload=payload)
                 values, _ = publisher_reports(self.now, self.symbols, {}, self.identity, self.key_for,
                     include_unread=True, cache={source["url"]: payload})
                 self.values.extend(values)
@@ -104,8 +111,18 @@ class SourceResolver:
         clock = reference.get("publisher_clock", value["published"])
         if timestamp(clock) != published:
             raise ValueError("Publisher reference clock does not match the release")
-        text = " ".join(article_excerpt(body.decode("utf-8"), value["title"], clock,
-                                        publisher=self.identity(value["url"])["name"], url=value["url"]).split())
+        from src.intelligence.alphabet_source import release_url, release_document, attachment_url
+        document = None
+        if self.identity(value["url"])["symbol"] in {"GOOG", "GOOGL"} and release_url(value["url"]):
+            def fetch_part(url):
+                raw = self.fetch(url)
+                return {"status": "ok", "body": raw if attachment_url(url) else raw.decode("utf-8"),
+                        "url": url, "final_url": url, "fetched_at_epoch": self.now.timestamp()}
+            text, document, _ = release_document(body.decode("utf-8"), value["title"], clock, value["url"], fetch_part, self.now)
+            text = " ".join(text.split())
+        else:
+            text = " ".join(article_excerpt(body.decode("utf-8"), value["title"], clock,
+                                            publisher=self.identity(value["url"])["name"], url=value["url"]).split())
         if len(text) < 80:
             raise ValueError("Usable original release text unavailable")
         proof = {"schema": 1, "url": value["url"], "title": value["title"], "published": value["published"],
@@ -113,7 +130,10 @@ class SourceResolver:
             "sha256": hashlib.sha256(text.encode()).hexdigest(), "feed_url": reference["feed_url"], "scope": "original release excerpt"}
         if value.get("publication_url"):
             proof["publication_url"] = value["publication_url"]
-        result = {**value, "source_excerpt": text, "excerpt_scope": "original release excerpt", "discovery_evidence": proof}
+        if document:
+            proof["document_url"] = document
+        result = {**value, "source_excerpt": text, "excerpt_scope": "original release excerpt", "discovery_evidence": proof,
+                  **({"document_url": document} if document else {})}
         check_proof(result, self.now)
         self.verified_values[value["url"]] = result
         return result
@@ -121,4 +141,5 @@ class SourceResolver:
     def pre_resolve(self, lead: dict) -> bool:
         """Prefer the publisher's canonical release before reading known IR mirrors."""
         host = urlsplit(lead["url"]).hostname or ""
-        return news_index(lead["url"]) or host.split(".")[0] in {"investor", "investors", "ir"}
+        from src.intelligence.alphabet_source import release_url
+        return release_url(lead["url"]) or news_index(lead["url"]) or host.split(".")[0] in {"investor", "investors", "ir"}

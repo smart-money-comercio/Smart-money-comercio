@@ -75,7 +75,7 @@ def materiality(story: dict) -> str:
         proxy = {key: value for key, value in story.items() if key != "discovery_evidence"}
         return materiality({**proxy, "kind": "company"})
     if story["kind"] == "company":
-        if re.search(r"\b(earnings|results) (date|call|webcast)\b|\bannounces? (?:its |the )?date\b|\b(?:will|to) (?:report|release)\b.{0,60}\b(results|earnings)\b", title, re.I):
+        if re.search(r"\b(earnings|results) (?:conference )?(date|call|webcast)\b|\bannounces? (?:its |the )?date\b|\b(?:will|to) (?:report|release)\b.{0,60}\b(results|earnings)\b", title, re.I):
             return ""
         kind, stage = event_type(title)
         if kind == "restructuring" and re.search(r"\b(no|denies|rules out)\b.{0,30}\b(layoffs?|job cuts|staff reductions?)\b", title, re.I):
@@ -93,7 +93,7 @@ def materiality(story: dict) -> str:
             return event[0]
         patterns = {
             "product": r"\b(introduces?|launch(?:es)?|unveils?|ships?|rolls? out)\b.{0,100}\b(cloud|tools?|products?|platform|chips?|systems?|software|AI)\b",
-            "earnings": r"\breports?\b.{0,80}\b(results|earnings|revenue|EPS)\b",
+            "earnings": r"\b(?:reports?|announces?)\b.{0,80}\b(?:financial results|quarter(?:ly)? .{0,20}results|results|earnings|revenue|EPS)\b",
             "contract": r"\b(contract|partnership|strategic alliance|commercial agreement)\b",
             "capital": r"\b(dividend|share repurchase|buyback|stock split|compensation|pay package|share sales?|stock sales?|stake sales?)\b",
             "leadership": r"\b(appoints?|names?|named|becomes?)\b.{0,60}\b(CEO|CFO|chief executive|chairman|chairperson)\b|\b(steps down|resigns?|retires?)\b",
@@ -197,6 +197,8 @@ def story_type(story: dict) -> str:
 
 
 def cache_candidates(now: datetime, symbols: list[str], *, health: list | None = None, cache: dict | None = None) -> tuple[list[dict], list[str]]:
+    from src.intelligence.alphabet_source import aliases
+    symbols = aliases(symbols)
     path = Path(os.getenv("NEWS_LIVE_SOURCE_CACHE_FILE", str(feeds.CACHE_FILE)))
     try:
         if cache is None:
@@ -261,6 +263,7 @@ def cache_candidates(now: datetime, symbols: list[str], *, health: list | None =
                 "excerpt_scope": item.get("evidence_scope", "publisher feed excerpt") if usable_excerpt else "headline only",
                 "evidence_checked_at": datetime.fromtimestamp(evidence_stamp, timezone.utc).isoformat() if usable_excerpt else "",
                 **({"publication_url": item["publication_url"]} if item.get("publication_url") else {}),
+                **({"document_url": item["document_url"]} if item.get("document_url") else {}),
                 **({"requires_original_body": True} if item.get("requires_original_body") else {}),
                 "relevant": bool(company_symbols or themes or official_host), "authority_mismatch": bool(official_host and not official)})
     return candidates, issues
@@ -270,6 +273,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     if now.tzinfo is None:
         raise ValueError("News editor clock needs a timezone")
     symbols = [row["symbol"] for row in brief["rows"]]
+    from src.intelligence.alphabet_source import aliases
+    symbols = aliases(symbols)
     if event_context is not None:
         from src.intelligence.market_event_desk import checked_context
         checked_context(event_context, research_report, now)
@@ -288,6 +293,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     if health:
         from src.intelligence.company_focus import FUNDS
         configured = {row["symbol"] for row in health}
+        if "GOOG" in configured:
+            configured.add("GOOGL")
         for symbol in symbols:
             if symbol not in configured and symbol not in FUNDS:
                 health.append({"name": symbol, "symbol": symbol, "status": "limited", "checked_at": "", "entries": 0, "dated": 0,
@@ -328,10 +335,16 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["research_review"] = deepcopy(raw["research_review"])
         if raw.get("publication_url"):
             story["publication_url"] = raw["publication_url"]
+        if raw.get("document_url"):
+            story["document_url"] = raw["document_url"]
         try:
             if not isinstance(raw_title, str) or not title or not story["source"]:
                 raise ValueError("Headline or source missing")
             story["canonical_url"] = canonical_url(raw.get("url"))
+            if "document_url" in story:
+                from src.intelligence.alphabet_source import document_reference
+                if not document_reference(story["url"], story["document_url"]):
+                    raise ValueError("Original Alphabet document reference is invalid")
             published = dated(raw.get("published"))
             if (now - published).total_seconds() < -60:
                 raise ValueError("Original publication time is future-dated")
@@ -703,6 +716,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     lines.append("Editorial priority: " + str(story["event_priority"]) + " — materiality, original evidence and publication age; price cause not inferred")
                 if story.get("publication_url"):
                     lines.append("Publication clock source: " + story["publication_url"])
+                if story.get("document_url"):
+                    lines.append("Original release document: " + story["document_url"])
                 if story.get("confirmed_by"):
                     lines.append("Original publisher verified: " + story["confirmed_by"])
                     lines.append("Investor topic: " + story["materiality"])

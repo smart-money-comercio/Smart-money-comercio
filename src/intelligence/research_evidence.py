@@ -66,6 +66,8 @@ def publisher_reports(now: datetime, symbols: list[str], latest: dict, identity,
             value["publisher_reference"]["publisher_clock"] = raw["published"]
             if raw.get("publication_url"):
                 value["publication_url"] = proof["publication_url"] = raw["publication_url"]
+            if raw.get("document_url"):
+                value["document_url"] = proof["document_url"] = raw["document_url"]
             if usable:
                 value["discovery_evidence"] = proof
             result.append(value); seen.add(key)

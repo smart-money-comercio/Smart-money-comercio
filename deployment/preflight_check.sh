@@ -34,6 +34,7 @@ echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 "$PYTHON_BIN" scripts/check_hourly_research.py
 "$PYTHON_BIN" scripts/check_event_news.py
 "$PYTHON_BIN" scripts/check_reader_brief.py
+"$PYTHON_BIN" scripts/check_alphabet_sources.py
 "$PYTHON_BIN" scripts/check_daily_agent_delivery.py
 "$PYTHON_BIN" scripts/check_watchlist_quotes.py
 "$PYTHON_BIN" scripts/check_company_alerts.py

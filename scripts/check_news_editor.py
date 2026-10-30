@@ -794,7 +794,7 @@ class OriginalSourceChecks(IsolatedChecks):
     def test_core_and_leading_company_readers_are_configured(self):
         symbols = {row.get("company_symbol") for row in editor.feeds.NEWS_SOURCES}
         self.assertTrue({"MSFT", "NVDA", "PLTR", "AVGO", "AVAV", "KTOS", "CRWD", "TSLA", "TSM", "NOC", "LMT", "AAPL"} <= symbols)
-        self.assertLessEqual(len(editor.feeds.NEWS_SOURCES), 24)
+        self.assertLessEqual(len(editor.feeds.NEWS_SOURCES), 25)
 
     def test_atom_keeps_original_publication_and_alternate_link(self):
         body = '<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Apple introduces an AI platform</title><link rel="alternate" href="https://www.apple.com/newsroom/release/"/><published>2026-10-25T16:00:00Z</published><updated>2026-10-25T16:59:00Z</updated></entry></feed>'

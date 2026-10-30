@@ -70,10 +70,15 @@ def watching(evidence):
     event = events[0] if events else None
     if event:
         label = NAMES.get(event["symbol"], event["symbol"])
+        reported = any(issuer(story.get("publisher_symbol", "")) == event["symbol"]
+                       and story.get("event_evidence", {}).get("event") == "earnings" for story in evidence.get("stories", []))
         text = (f"{label}'s business outlook: Watch original results and guidance for changes in sales, costs and spending. "
                 "Those details will help judge whether the business outlook changed; the price move alone cannot explain it." if event["status"] == "rechecked" else
                 f"{label}'s price check: The unusually large reported move still needs quote and corporate-action confirmation. "
                 "A corrected price or a stock split could change the reading; verify that before interpreting the business impact.")
+        if reported and event["status"] == "rechecked":
+            text = (f"{label}'s next test: Compare management's outlook with the newly reported sales, profits and cash needs. "
+                    "That will help judge whether spending is strengthening the business; the price move alone cannot explain it.")
         rows.append({"id": "watch_event", "text": text, "sources": ["Market event checks"]})
     if any(story.get("ipo") for story in evidence.get("stories", [])):
         rows.append({"id": "watch_ipo", "text": "IPO details: Watch the proposed price, share count and new shares being issued. Compare that valuation with the disclosed sales, losses and funding needs before judging the offering's business case.",

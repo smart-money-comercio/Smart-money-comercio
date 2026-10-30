@@ -106,7 +106,10 @@ def event_type(title: str, fallback: str = "", *, version: int = 4) -> tuple[str
     return fallback or "development", "reported"
 
 
-def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4) -> list[dict]:
+def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4, title: str = "") -> list[dict]:
+    if version >= 5 and kind == "earnings":
+        from src.intelligence.alphabet_source import results_facts
+        return results_facts(text, title)
     if version >= 4 and kind == "monetary policy" and stage == "rate decision":
         from src.intelligence.policy_analysis import rate_facts
         return rate_facts(text)
@@ -170,15 +173,17 @@ def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4) 
     return facts
 
 
-def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int = 4) -> dict:
-    if type(schema) is not int or schema not in {1, 2, 3, 4} or scope not in SCOPES:
+def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int | None = None) -> dict:
+    if schema is None:
+        schema = 5 if story.get("publisher_symbol") in {"GOOG", "GOOGL"} and re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", story["title"], re.I) else 4
+    if type(schema) is not int or schema not in {1, 2, 3, 4, 5} or scope not in SCOPES:
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=schema)
     return {"schema": schema, "event": kind, "stage": stage, "scope": scope if text else "headline only",
             "source_url": story["url"], "published": story["published"], "source_text": text,
             "observed_at": story.get("evidence_checked_at", story.get("source_checked_at")),
-            "source_sha256": hashlib.sha256(text.encode()).hexdigest(), "facts": disclosed_facts(text, kind, stage, version=schema)}
+            "source_sha256": hashlib.sha256(text.encode()).hexdigest(), "facts": disclosed_facts(text, kind, stage, version=schema, title=story["title"])}
 
 
 def checked_evidence(story: dict) -> dict:
@@ -260,6 +265,7 @@ def investor_read(story: dict) -> dict:
               "business_focus": "Business focus described in the release", "contract_ceiling": "Announced ceiling",
               "obligated_amount": "Amount described as obligated", "reported_revenue": "Reported revenue",
               "reported_sales": "Reported sales", "reported_net_sales": "Reported net sales",
+              "reported_operating_margin": "Reported operating margin", "reported_eps": "Reported earnings per share",
               "program_type": "Program described in the release", "restructuring_charge": "Restructuring cost described in the release",
               "restructuring_cost_estimate": "Estimated restructuring cost", "annual_savings_target": "Annual savings target",
               "tested_capability": "Capability demonstrated in the reported test", "planned_capacity_scale": "Announced expansion plan"}

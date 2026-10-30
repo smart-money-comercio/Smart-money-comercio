@@ -81,6 +81,7 @@ NEWS_SOURCES = [
     {"name": "Broadcom Financial News", "url": "https://investors.broadcom.com/financial-information/financial-news-releases", "category": "company", "company_symbol": "AVGO", "format": "index", "article_pattern": r"/news-releases/news-release-details/[^/]+", "requires_original_body": True},
     {"name": "AeroVironment Newsroom", "url": "https://www.avinc.com/feed/", "category": "company", "company_symbol": "AVAV"},
     {"name": "Kratos Newsroom", "url": "https://www.kratosdefense.com/newsroom", "category": "company", "company_symbol": "KTOS", "format": "index", "article_pattern": r"/newsroom/[^/]+", "anchor_title": True, "requires_original_body": True},
+    {"name": "Alphabet Investor Relations", "url": "https://abc.xyz/rss/pressrelease.aspx?LanguageId=1", "category": "company", "company_symbol": "GOOG", "format": "alphabet", "requires_original_body": True},
 ]
 
 
@@ -326,8 +327,10 @@ def set_cached_source(url: str, payload: dict) -> None:
         save_cache(cache)
 
 
-def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = True) -> dict:
-    cached = get_cached_source(url)
+def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = True, binary: bool = False) -> dict:
+    cached = get_cached_source(url) if not binary else None
+    if binary:
+        cache_result = False
     if cached and (not force_refresh or cached.get("status") == "error"):
         return {**cached, "cache_hit": True}
 
@@ -336,7 +339,7 @@ def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = Tru
             url,
             headers={
                 "User-Agent": USER_AGENT,
-                "Accept": "application/json, application/rss+xml, application/atom+xml, application/xml, text/xml, text/html",
+                "Accept": "application/pdf" if binary else "application/json, application/rss+xml, application/atom+xml, application/xml, text/xml, text/html",
             },
         )
 
@@ -344,7 +347,7 @@ def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = Tru
             raw_bytes = response.read(MAX_FEED_BYTES + 1)
             if len(raw_bytes) > MAX_FEED_BYTES:
                 raise ValueError("Publisher response exceeds the size limit")
-            raw = raw_bytes.decode("utf-8", errors="replace")
+            raw = raw_bytes if binary else raw_bytes.decode("utf-8", errors="replace")
             final_url = response.geturl()
 
         payload = {
@@ -397,14 +400,16 @@ def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = Tru
 
 
 def fetch_source(source: dict, force_refresh: bool = False) -> dict:
-    if source.get("format") not in {"palantir", "index", "treasury"}:
+    if source.get("format") not in {"palantir", "index", "treasury", "alphabet"}:
         return fetch_url(source["url"], force_refresh)
     cached = get_cached_source(source["url"])
     if cached and (cached.get("status") == "error" or not force_refresh and cached.get("original_profile") == 2):
         return {**cached, "cache_hit": True}
     try:
+        from src.intelligence.alphabet_source import attachment_url
         payload = originals.retrieve(source, lambda url: fetch_url(url, force_refresh,
-            cache_result=source["format"] == "palantir" and url.startswith(source["url"] + "?")), datetime.now(timezone.utc))
+            cache_result=source["format"] == "palantir" and url.startswith(source["url"] + "?"),
+            **({"binary": True} if source["format"] == "alphabet" and attachment_url(url) else {})), datetime.now(timezone.utc))
         # Structured release evidence is retained; large index HTML is not duplicated.
         payload = {**payload, "body": ""}
     except (ValueError, TypeError, KeyError) as exc:
@@ -508,7 +513,7 @@ def parse_source_payload(payload: dict, source: dict) -> list[dict]:
 
 
 def parse_article_items(payload: dict, source: dict, *, full_titles: bool = False, full_text: bool = False) -> list[dict]:
-    if source.get("format") in {"palantir", "index", "treasury"}:
+    if source.get("format") in {"palantir", "index", "treasury", "alphabet"}:
         rows = originals.cached_items(payload, source)
     else:
         rows = parse_rss_items(payload.get("body", ""), source, full_titles=full_titles, full_text=full_text)
@@ -577,6 +582,8 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
             row["reason"] += f"; {mismatches} publisher-link mismatches"
         if row["undated"] and payload.get("publication_problems"):
             row["reason"] += "; " + str(payload["publication_problems"][0])[:90]
+        if source.get("format") == "alphabet" and payload.get("publication_problems"):
+            row.update(status="limited", reason="Original Alphabet release text unavailable: " + str(payload["publication_problems"][0])[:150])
         if row["undated"] and not source.get("format") and not any(dates):
             root = ET.fromstring(payload.get("body", ""))
             if root.tag.split("}")[-1].lower() == "feed" and any(node.tag.split("}")[-1].lower() == "updated" for node in root.iter()):

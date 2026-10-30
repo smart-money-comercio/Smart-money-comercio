@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
+import hashlib
 import json
 import math
 import re
@@ -28,6 +29,7 @@ class ArticleBody(VisibleText):
         parts = urlsplit(url)
         self.kratos = (publisher in {"KTOS", "Kratos Newsroom"} and parts.hostname == "www.kratosdefense.com"
                        and re.fullmatch(r"/newsroom/[^/]+/?", parts.path) is not None)
+        self.alphabet = publisher in {"GOOG", "GOOGL", "Alphabet Investor Relations"} and parts.hostname in {"abc.xyz", "www.abc.xyz"}
         self.depth = 0
         self.heading_tag, self.heading_parts, self.headings = None, [], []
         self.date_depth, self.date_parts = 0, []
@@ -35,7 +37,7 @@ class ArticleBody(VisibleText):
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         classes = set(attrs.get("class", "").split())
-        if classes & {"article-date", "wd_date"}:
+        if classes & {"article-date", "wd_date"} or self.alphabet and "evergreen-news-date-text" in classes:
             self.date_depth = 1
         elif self.date_depth and tag not in self.VOID:
             self.date_depth += 1
@@ -48,7 +50,8 @@ class ArticleBody(VisibleText):
         treasury_body = treasury and "field--name-field-news-body" in classes
         kratos = self.kratos
         kratos_body = kratos and tag == "section" and "wysiwyg-section" in classes
-        if not self.depth and (tag == "article" and not treasury and not kratos or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body):
+        alphabet_body = self.alphabet and tag == "div" and "evergreen-news-body" in classes
+        if not self.depth and (tag == "article" and not treasury and not kratos or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body):
             self.depth = 1
         elif self.depth and tag not in self.VOID:
             self.depth += 1
@@ -181,6 +184,9 @@ def authorized_response(source: dict, payload: dict) -> bool:
         parts = urlsplit(url)
         if parts.scheme != "https" or parts.username or parts.password or parts.port not in (None, 443):
             return False
+        if source.get("format") == "alphabet":
+            from src.intelligence.alphabet_source import FEED, release_url
+            return url == FEED or release_url(url)
         symbol = source.get("company_symbol")
         if symbol:
             return company_url(symbol, url)
@@ -243,6 +249,9 @@ def recent_hint(value: str, now: datetime) -> bool:
 
 def retrieve(source: dict, fetch, now: datetime) -> dict:
     """Read a public index and at most three exact release pages."""
+    if source["format"] == "alphabet":
+        from src.intelligence.alphabet_source import retrieve as alphabet_retrieve
+        return alphabet_retrieve(source, fetch, now)
     if source["format"] == "palantir":
         years = {now.year, (now - timedelta(hours=24)).year}
         rows, responses = [], []
@@ -315,10 +324,15 @@ def cached_items(payload: dict, source: dict) -> list[dict]:
             continue
         required = source.get("requires_original_body") is True
         body_verified = not required or item.get("release_body_verified") is True
+        if source.get("format") == "alphabet" and body_verified:
+            from src.intelligence.alphabet_source import document_reference
+            body_verified = (document_reference(item["link"], item.get("document_url", ""))
+                             and item.get("document_sha256") == hashlib.sha256(release_text(item.get("description", "")).encode()).hexdigest())
         rows.append({"title": item["title"], "link": item["link"], "published": item.get("published", ""),
                      "description": release_text(item.get("description", "")) if body_verified else "", "source": source["name"], "category": source["category"],
                      **({"publication_url": item["publication_url"]} if item.get("publication_url") else {}),
                      **({"evidence_checked_at": item["evidence_checked_at"]} if "evidence_checked_at" in item else {}),
+                     **({"document_url": item["document_url"]} if body_verified and item.get("document_url") else {}),
                      **({"requires_original_body": True} if source.get("format") == "treasury" or required else {}),
                      "evidence_scope": "headline only" if not body_verified else "original release excerpt" if item.get("publication_url") == item["link"] else "publisher feed excerpt"})
     return rows

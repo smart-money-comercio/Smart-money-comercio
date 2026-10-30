@@ -70,11 +70,13 @@ def identity(url: str) -> dict | None:
 def fetch_original(url: str) -> bytes:
     expected = identity(url)
     sec = sec_research.authority(url)
-    if expected is None and not sec:
+    from src.intelligence.alphabet_source import attachment_url
+    alphabet_pdf = attachment_url(url)
+    if expected is None and not sec and not alphabet_pdf:
         raise ValueError("Original publisher is not configured")
     class Redirects(HTTPRedirectHandler):
         def redirect_request(self, request, fp, code, msg, headers, newurl):
-            if (sec and (not sec_research.authority(newurl) or urlsplit(newurl).hostname != urlsplit(url).hostname)) or (not sec and identity(newurl) != expected):
+            if (alphabet_pdf and newurl != url) or (sec and (not sec_research.authority(newurl) or urlsplit(newurl).hostname != urlsplit(url).hostname)) or (not sec and not alphabet_pdf and identity(newurl) != expected):
                 raise ValueError("Research source redirected outside its original publisher")
             return super().redirect_request(request, fp, code, msg, headers, newurl)
     agent = os.getenv("SEC_USER_AGENT", "SmartMoneyAI/1.7 public filing research") if sec else "SmartMoneyAI/1.7 original-source research"
@@ -182,6 +184,10 @@ def check_proof(value: dict, now: datetime | None = None) -> dict:
         if (proof.get("publication_url") != value.get("publication_url") or not isinstance(proof.get("publication_url"), str)
                 or not clock_reference_allowed(publisher["symbol"], value["url"], proof["publication_url"])):
             raise ValueError("Original publication clock reference does not match the candidate")
+    if "document_url" in proof or "document_url" in value:
+        from src.intelligence.alphabet_source import document_reference
+        if proof.get("document_url") != value.get("document_url") or publisher["symbol"] not in {"GOOG", "GOOGL"} or not document_reference(value["url"], value.get("document_url")):
+            raise ValueError("Original Alphabet document reference does not match the candidate")
     review = value.get("research_review")
     if review is not None and (not isinstance(review, dict) or not isinstance(review.get("response_id"), str) or not review["response_id"]
             or type(review.get("score")) is not int or not 65 <= review["score"] <= 100
@@ -361,6 +367,8 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         for event in attention:
             symbols.extend([event["symbol"]] + (["GOOG"] if event["symbol"] == "GOOGL" else []))
         symbols = list(dict.fromkeys(symbols))
+        from src.intelligence.alphabet_source import aliases
+        symbols = aliases(symbols)
         domains = list(dict.fromkeys(row["domain"] for row in identities())) + ["reuters.com", "apnews.com", "sec.gov"]
         history = read_history(80)
         latest = latest_findings(history)
