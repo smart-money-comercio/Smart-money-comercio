@@ -413,9 +413,15 @@ def fetch_source(source: dict, force_refresh: bool = False) -> dict:
         # Structured release evidence is retained; large index HTML is not duplicated.
         payload = {**payload, "body": ""}
     except (ValueError, TypeError, KeyError) as exc:
-        payload = {"url": source["url"], "status": "error", "error": str(exc)[:160], "body": "",
-                   "fetched_at_epoch": time.time(), "fetched_at": now_text(), "cache_hit": False,
-                   "retry_after_epoch": time.time() + 300}
+        # A structured reader can reject the failed fetch as unusable evidence.
+        # Keep that fetch's HTTP status and cooldown instead of shortening it.
+        failure = get_cached_source(source["url"])
+        if failure and failure.get("status") == "error":
+            payload = dict(failure)
+        else:
+            payload = {"url": source["url"], "status": "error", "error": str(exc)[:160], "body": "",
+                       "fetched_at_epoch": time.time(), "fetched_at": now_text(), "cache_hit": False,
+                       "retry_after_epoch": time.time() + 300}
     set_cached_source(source["url"], payload)
     return payload
 

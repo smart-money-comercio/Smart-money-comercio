@@ -12,6 +12,7 @@ import socket
 import sys
 import unittest
 from unittest.mock import Mock, patch
+from urllib.error import HTTPError
 from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +59,7 @@ class AlphabetChecks(ResearchFixture):
     def setUp(self):
         super().setUp()
         self.stack.enter_context(patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "GOOGL,MSFT,NVDA,TSM"}))
+        self.stack.enter_context(patch.object(feeds, 'CACHE_FILE', self.root / 'news.json'))
         self.source = next(row for row in feeds.NEWS_SOURCES if row.get("format") == "alphabet")
 
     def rss(self, *, title=TITLE, url=URL, published=None):
@@ -262,6 +264,78 @@ class AlphabetChecks(ResearchFixture):
             value=feeds.fetch_url(PDF,binary=True)
         self.assertEqual(value['body'],raw)
         cached.assert_not_called()
+
+    def test_rate_limited_feed_keeps_its_cooldown_during_forced_refresh(self):
+        error = HTTPError(alphabet.FEED, 429, 'Slow down', {}, None)
+        with patch.object(feeds.time, 'time', return_value=NOW.timestamp()), patch.object(feeds, 'urlopen', side_effect=error) as request:
+            first = feeds.fetch_source(self.source)
+            self.assertEqual(first.get('http_status'), 429)
+            self.assertEqual(first['retry_after_epoch'], NOW.timestamp() + 900)
+            with patch.object(feeds.time, 'time', return_value=NOW.timestamp() + 360):
+                again = feeds.fetch_source(self.source, force_refresh=True)
+            self.assertEqual(request.call_count, 1)
+        self.assertEqual(again['fetched_at_epoch'], first['fetched_at_epoch'])
+        self.assertEqual(again['retry_after_epoch'], first['retry_after_epoch'])
+        self.assertTrue(again['cache_hit'])
+        self.assertEqual(first['body'], '')
+        self.assertEqual(feeds.describe_source(self.source, first, NOW)['status'], 'limited')
+
+    def test_structured_feed_retains_bounded_publisher_retry_after(self):
+        for supplied, seconds in (('3600', 3600), ('999999', 21600)):
+            with self.subTest(supplied=supplied), patch.object(feeds, 'CACHE_FILE', self.root / ('retry-' + supplied + '.json')):
+                error = HTTPError(alphabet.FEED, 429, 'Slow down', {'Retry-After': supplied}, None)
+                with patch.object(feeds.time, 'time', return_value=NOW.timestamp()), patch.object(feeds, 'urlopen', side_effect=error):
+                    value = feeds.fetch_source(self.source)
+                self.assertEqual(value['retry_after_epoch'], NOW.timestamp() + seconds)
+
+    def test_feed_can_recover_after_the_original_cooldown_expires(self):
+        error = HTTPError(alphabet.FEED, 429, 'Slow down', {}, None)
+        raw = self.rss(published=format_datetime(NOW-timedelta(hours=25))).encode()
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, limit): return raw[:limit]
+            def geturl(self): return alphabet.FEED
+        class Clock(type(NOW)):
+            @classmethod
+            def now(cls, tz=None): return cls.fromtimestamp(feeds.time.time(), tz)
+        with patch.object(feeds, 'datetime', Clock), patch.object(feeds.time, 'time', return_value=NOW.timestamp()) as clock, patch.object(feeds, 'urlopen', side_effect=[error, Response()]) as request:
+            feeds.fetch_source(self.source)
+            clock.return_value = NOW.timestamp() + 899
+            self.assertEqual(feeds.fetch_source(self.source)['status'], 'error')
+            self.assertEqual(request.call_count, 1)
+            clock.return_value += 1
+            value = feeds.fetch_source(self.source)
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(value['status'], 'ok')
+        self.assertEqual(value['original_profile'], 2)
+        self.assertFalse(value['articles'][0]['release_body_verified'])
+
+    def test_other_structured_publishers_keep_their_http_backoff(self):
+        sources = [next(row for row in feeds.NEWS_SOURCES if row.get('format') == kind)
+                   for kind in ('index', 'treasury', 'palantir')]
+        for source in sources:
+            with self.subTest(source=source['name']):
+                error = HTTPError(source['url'], 403, 'Forbidden', {}, None)
+                with patch.object(feeds.time, 'time', return_value=NOW.timestamp()), patch.object(feeds, 'urlopen', side_effect=error) as request:
+                    first = feeds.fetch_source(source)
+                    second = feeds.fetch_source(source, force_refresh=True)
+                self.assertEqual(first.get('http_status'), 403)
+                self.assertEqual(first['retry_after_epoch'], NOW.timestamp() + 3600)
+                self.assertTrue(second['cache_hit'])
+                self.assertEqual(request.call_count, 1)
+
+    def test_invalid_release_feed_still_has_a_short_parse_failure_retry(self):
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, limit): return b'<html>not an original release feed</html>'
+            def geturl(self): return alphabet.FEED
+        with patch.object(feeds.time, 'time', return_value=NOW.timestamp()), patch.object(feeds, 'urlopen', return_value=Response()):
+            value = feeds.fetch_source(self.source)
+        self.assertEqual(value['status'], 'error')
+        self.assertEqual(value['retry_after_epoch'], NOW.timestamp() + 300)
+        self.assertNotIn('http_status', value)
 
 
 def main():
