@@ -41,6 +41,12 @@ def render_story(story: dict, zone, names: dict) -> str:
             raise ValueError("Broadcast policy narration needs verified decision facts")
         return (review["facts"][:-1] + f", according to its {day} statement. "
                 + "Investor take: " + review["why"] + " " + next_check(review["watch"]))
+    if story.get("event_evidence", {}).get("event") == "solar storage":
+        review = investor_read(story)
+        if not review["facts"]:
+            raise ValueError("Energy narration needs verified capacity facts")
+        return (review["facts"][:-1] + f", according to its {day} report. "
+                + "Investor take: " + review["why"] + " " + next_check(review["watch"]))
     if story["kind"] == "company":
         symbol = story.get("publisher_symbol") or story.get("confirmed_by") or story["symbols"][0]
         company = names.get(symbol, symbol)

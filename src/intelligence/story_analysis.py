@@ -50,6 +50,8 @@ def release_text(value) -> str:
 
 def event_type(title: str, fallback: str = "", *, version: int = 4) -> tuple[str, str]:
     title = str(title or "")
+    if version >= 6 and re.search(r"\bsolar\b", title, re.I) and re.search(r"\bco.located battery storage\b", title, re.I):
+        return "solar storage", "capacity report"
     if version >= 4 and re.fullmatch(r"Federal Reserve issues FOMC statement\.?", title, re.I):
         return "monetary policy", "rate decision"
     guidance = re.search(r"\b(raises?|cuts?|lowers?|reduces?|withdraws?|reaffirms?|maintains?|updates?)\b.{0,40}\b(guidance|revenue outlook|earnings outlook)\b", title, re.I)
@@ -107,6 +109,9 @@ def event_type(title: str, fallback: str = "", *, version: int = 4) -> tuple[str
 
 
 def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4, title: str = "") -> list[dict]:
+    if version >= 6 and kind == "solar storage":
+        from src.intelligence.energy_analysis import storage_facts
+        return storage_facts(text)
     if version >= 5 and kind == "earnings":
         from src.intelligence.alphabet_source import results_facts
         return results_facts(text, title)
@@ -174,9 +179,10 @@ def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4, 
 
 
 def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int | None = None) -> dict:
+    from src.intelligence.energy_analysis import solar_storage_report
     if schema is None:
-        schema = 5 if story.get("publisher_symbol") in {"GOOG", "GOOGL"} and re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", story["title"], re.I) else 4
-    if type(schema) is not int or schema not in {1, 2, 3, 4, 5} or scope not in SCOPES:
+        schema = 6 if solar_storage_report(story) else 5 if story.get("publisher_symbol") in {"GOOG", "GOOGL"} and re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", story["title"], re.I) else 4
+    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6} or scope not in SCOPES or schema == 6 and not solar_storage_report(story):
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=schema)
@@ -204,6 +210,9 @@ def investor_read(story: dict) -> dict:
                "raised": "Higher policy rates can increase refinancing pressure and the discount rates investors apply to future earnings.",
                "lowered": "Lower policy rates can ease financing pressure over time; the effect depends on lending rates, credit availability and business demand."}.get(action, "The policy outlook matters for borrowing costs and rate-sensitive valuations.")
         watch = "Watch the next inflation reading, Treasury yields and company financing plans."
+    elif kind == "solar storage":
+        from src.intelligence.energy_analysis import STORAGE_WHY, STORAGE_WATCH
+        why, watch = STORAGE_WHY, STORAGE_WATCH
     elif kind == "acquisition":
         if stage == "completed":
             why = "After the reported close, integration and cash generation become the key investment checks."
@@ -273,6 +282,9 @@ def investor_read(story: dict) -> dict:
         values = {row["field"]: row["value"] for row in evidence["facts"]}
         facts = ("The Federal Reserve " + values["policy_action"] + " its federal funds target range "
                  + ("at " if values["policy_action"] == "held" else "to ") + values["policy_target_range"]) if "policy_target_range" in values else ""
+    elif kind == "solar storage":
+        from src.intelligence.energy_analysis import storage_narration
+        facts = storage_narration(evidence)
     else:
         facts = "; ".join(labels[row["field"]] + ": " + row["value"] for row in evidence["facts"])
     return {"evidence": evidence, "facts": facts + "." if facts else "", "why": why, "watch": watch}

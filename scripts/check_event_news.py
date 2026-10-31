@@ -190,16 +190,16 @@ class EventPriorityChecks(IsolatedChecks):
             event_context=events.context_for_report(report, NOW), research_report=report)
         self.assertEqual(editor.selected_stories(plan), [])
 
-    def test_original_ranking_memory_and_prior_selection_rules_are_retained(self):
+    def test_original_ranking_memory_and_unprioritized_selection_are_retained(self):
         before = self.ranking.read_bytes(); report = self.report()
         with patch.object(editor, "cache_candidates", return_value=([self.financial()], [])):
             text = build_daily_news_brief(report)
         record = store.read_editions(report=text)[0]
         self.assertFalse(record["analyst_review"]["score_changes"])
         self.assertEqual(self.ranking.read_bytes(), before)
-        historical = editor.build_editorial_plan(catalysts.build_company_catalyst_brief(), NOW, [self.financial()])
-        self.assertEqual(historical["rules_version"], 14)
-        self.assertNotIn("event_priority", historical["candidates"][0])
+        unprioritized = editor.build_editorial_plan(catalysts.build_company_catalyst_brief(), NOW, [self.financial()])
+        self.assertEqual(unprioritized["rules_version"], 16)
+        self.assertNotIn("event_priority", unprioritized["candidates"][0])
 
     def test_changed_analyst_event_proof_is_rejected_against_the_research_edition(self):
         report = self.report(); text = build_daily_news_brief(report)

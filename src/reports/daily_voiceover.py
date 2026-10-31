@@ -78,7 +78,7 @@ def price_sentence(row, evidence):
     return row['name'] + (" was unchanged" if value == 0 else f" {'rose' if value > 0 else 'fell'} {abs(value):.1f} percent") + " in the quoted session."
 
 
-def story_copy(story, evidence):
+def story_copy(story, evidence, *, modern=False):
     from src.intelligence.daily_brief_analysis import NAMES
     from src.intelligence.story_analysis import investor_read
     from src.intelligence.broadcast_story import copilot_reveal, company_read
@@ -103,6 +103,8 @@ def story_copy(story, evidence):
     if story["kind"] != "company":
         if profile["event"] == "monetary policy" and profile["stage"] == "rate decision":
             return review["facts"] + " " + review["why"]
+        if modern:
+            return review["facts"] + " " + review["why"] if profile["event"] == "solar storage" and review["facts"] else ""
         return story["source"] + " reports: " + story["title"].rstrip(".") + ". Review the original release for its scope and implications."
     symbol = story.get("publisher_symbol") or story.get("confirmed_by") or story["symbols"][0]
     name = NAMES.get(symbol, symbol)
@@ -153,11 +155,39 @@ def focus_copy(row, evidence):
     return text
 
 
-def build(record, report, research):
+def agenda_bullet(text):
+    """Short visual wording; dates, event type and timezones stay explicit."""
+    cached = text.startswith("A previously checked, cached schedule lists")
+    text = re.sub(r"^(?:The publisher schedule lists|A previously checked, cached schedule lists)\s+", "", text)
+    text = text.replace(" has scheduled its earnings conference call for ", ": earnings call — ")
+    text = re.sub(r", according to its company announcement\.$", "", text).rstrip(".")
+    for long, short in (("Monday", "Mon"), ("Tuesday", "Tue"), ("Wednesday", "Wed"), ("Thursday", "Thu"), ("Friday", "Fri"),
+                        ("January", "Jan"), ("February", "Feb"), ("March", "Mar"), ("April", "Apr"), ("August", "Aug"),
+                        ("September", "Sep"), ("October", "Oct"), ("November", "Nov"), ("December", "Dec")):
+        text = re.sub(r"\b"+long+r"\b", short, text)
+    text = re.sub(r"(?<!:)\b0(\d)(?=\b|:)", r"\1", text)
+    text = text[:1].upper() + text[1:]
+    return ("Cached schedule: " if cached else "") + text
+
+
+def focus_bullet(row, evidence):
+    event = next((event for event in evidence.get("market_event_context", {}).get("events", []) if event["symbol"] == row["symbol"]), None)
+    value = (row.get("metric") or {}).get("price")
+    if value is not None and (not event or event["status"] == "rechecked"):
+        label = row["name"] + (f" ({row['symbol']})" if row["name"] != row["symbol"] else "")
+        return label + f": {value:+.1f}%"
+    return row["role"] + ": " + row["name"]
+
+
+def build(record, report, research, *, schema=2):
     """Derive a spoken companion only after the original edition passes review."""
     from src.intelligence import news_editor as editor
     from src.intelligence.daily_brief_analysis import validate_review
+    from src.intelligence.market_brief import story_topics
     from src.reports.daily_news_brief import validate_news_brief
+    if type(schema) is not int or schema not in {1, 2}:
+        raise ValueError("Unknown voiceover presentation schema")
+    modern = schema == 2
     selected = editor.selected_stories(record)
     review = record["analyst_review"]
     validate_review(review, research, report, selected)
@@ -188,30 +218,40 @@ def build(record, report, research):
     greeting = re.search(r"^(Hello|Good (?:morning|afternoon|evening))\.$", report, re.M)[0]
     hook = next((row["text"] for row in review["insights"] if row["id"] == "opening_takeaway"), "")
     hook = hook.replace("The takeaway:", "The key takeaway.").replace("in the quoted session", "in the market snapshot")
+    hook_bullets = re.split(r"(?<=[.!?])\s+", hook.replace("The key takeaway.", "").strip())[:2] if modern else ("Source-backed market research", "Edition: "+local.date().isoformat())
     add("The Takeaway", greeting+" This is Smart Money for "+local.strftime("%B %d").replace(" 0", " ")+". "+hook,
-        ("Source-backed market research", "Edition: "+local.date().isoformat()))
+        hook_bullets)
     market = market_copy(evidence)
+    market_sources = [story["id"] for story in selected if story_topics(story) & {"trade", "geopolitics", "policy", "energy", "IPO", "AI financing"}] if modern else ()
     add("Market Update", "First, the market. "+market,
-        [f"{key}: {evidence['moves'][key]:+.2f}%" for key in ("S&P","Nasdaq","VIX") if key in evidence["moves"]])
+        [f"{key}: {evidence['moves'][key]:+.2f}%" for key in ("S&P","Nasdaq","VIX") if key in evidence["moves"]], market_sources)
     covered = set()
-    from src.intelligence.market_brief import story_topics
     from src.intelligence.company_focus import issuer, grouped_price_watch
     for story in sorted(selected, key=editor.news_order):
+        copy = story_copy(story, evidence, modern=modern)
+        if not copy:
+            continue
         defense = "defense" in story_topics(story)
         label = "Defense and Innovation" if defense else "Capital Markets" if story.get("ipo") or story.get("sec_filing") else "Policy and Economy" if story["kind"] == "macro" else "Company News"
         transition = "In defense and innovation. " if defense else "In capital markets. " if label == "Capital Markets" else "On policy. " if story["kind"] == "macro" else "In company news. "
-        add(label, transition+story_copy(story,evidence), (story["title"],), (story["id"],))
+        if modern and story.get("event_evidence", {}).get("event") == "solar storage":
+            label, transition = "Energy and Infrastructure", "In energy and infrastructure. "
+        add(label, transition+copy, (story["title"],), (story["id"],))
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)
     if group:
-        add("Companies in Focus", group["text"].replace(group["label"] + " — ", "Across semiconductor companies, "), (group["label"],))
+        copy = group["text"].replace(group["label"] + " — ", "Across semiconductor companies, ")
+        if modern:
+            copy = copy.replace(" Repeat quotes from the same provider support these price readings.", "")
+        bullets = [focus_bullet(row,evidence) for row in evidence["company_focus"]["selected"] if row["symbol"] in group["symbols"]] if modern else (group["label"],)
+        add("Companies in Focus", copy, bullets)
         covered.update(group["symbols"])
     for row in evidence.get("company_focus", {}).get("selected", []):
         if issuer(row["symbol"]) in covered or row.get("basis") == "sector context" and row["group"] != "market event": continue
         text = focus_copy(row, evidence)
         if not text: continue
         ids = ["earnings_GOOG"] if evidence.get("earnings_context") and row["symbol"] in {"GOOG","GOOGL"} else []
-        add("Companies in Focus", text, (row["role"]+": "+row["name"],), ids)
+        add("Companies in Focus", text, (focus_bullet(row,evidence) if modern else row["role"]+": "+row["name"],), ids)
         covered.add(issuer(row["symbol"]))
     if not any("defense" in story_topics(story) for story in selected):
         add("Defense Watch", "On defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.", ("Funded orders", "Production milestones"))
@@ -220,14 +260,15 @@ def build(record, report, research):
     if agenda:
         text = "Looking ahead. " + " ".join(agenda[:2])
         text = text.replace("The publisher schedule lists", "Watch").replace("A previously checked, cached schedule lists", "A previously checked schedule lists")
-        add("What's Ahead", text, agenda[:2], calendar_ids)
+        add("What's Ahead", text, [agenda_bullet(row) for row in agenda[:2]] if modern else agenda[:2], calendar_ids)
     watch = [row["text"] for row in review["insights"] if row["section"] == "watch"]
     signals = []
     for i, text in enumerate(watch):
         label, _, body = text.partition(": ")
         if label.startswith(("Market ", "Staying ", "The ", "Energy ", "IPO ")): label = label[:1].lower()+label[1:]
         signals.append(("First, " if i == 0 else "Second, " if i == 1 else "Finally, ")+label+". "+body)
-    add("What We're Watching", "Here are the next checks. "+" ".join(signals), [text.partition(": ")[0] for text in watch])
+    watch_bullets = [re.split(r"(?<=[.!?])\s+",text.partition(": ")[2])[0] for text in watch] if modern else [text.partition(": ")[0] for text in watch]
+    add("What We're Watching", "Here are the next checks. "+" ".join(signals), watch_bullets)
     editorial = "\n\n".join(row["narration"] for row in scenes)
     add("Closing", "Subscribe to Smart Money for more market research. Research only. Not financial advice.", ("Research only", "Not financial advice"))
     script = "\n\n".join(row["narration"] for row in scenes)
@@ -235,7 +276,10 @@ def build(record, report, research):
     quality = {"words":words(script), "editorial_words":words(editorial), "estimated_seconds":round(words(script)*60/WPM,1),
                "words_per_minute":WPM, "market_words":market_words,"market_estimated_seconds":round(market_words*60/WPM,1),
                "passes":words(editorial)>=MIN_WORDS and MIN_MARKET_WORDS<=market_words<=MAX_MARKET_WORDS and 2<=len(scenes)<=14}
-    return {"schema":1,"input_sha256":digest(json.dumps(packet(record,report,research),sort_keys=True,ensure_ascii=False,allow_nan=False)),
+    if modern:
+        used = {key for scene in scenes for key in scene["source_ids"]}
+        sources = {key: value for key,value in sources.items() if key in used}
+    return {"schema":schema,"input_sha256":digest(json.dumps(packet(record,report,research),sort_keys=True,ensure_ascii=False,allow_nan=False)),
             "script":script,"script_sha256":digest(script),"segments":scenes,"sources":sources,"quality":quality}
 
 
@@ -251,7 +295,7 @@ def checked(record, now=None, max_age_hours=8):
         generated = datetime.fromisoformat(record["generated_at"])
         if not 0 <= (now-generated).total_seconds() <= max_age_hours*3600:
             raise ValueError("The recorded voiceover edition is stale or future-dated; build a current edition")
-    profile = build(record,report,research)
+    profile = build(record,report,research,schema=record.get("voiceover",{}).get("schema",1))
     if profile != record.get("voiceover") or not profile["quality"]["passes"]:
         raise ValueError("Voiceover copy changed or failed its narration checks")
     return profile
@@ -267,4 +311,4 @@ def episode(record, now=None, max_age_hours=8):
             "mode":"draft_review_required","review_required":True,"contains_synthetic_media":True,
             "segments":deepcopy(profile["segments"]),"sources":deepcopy(profile["sources"]),
             "bot_edition_id":record["id"],"bot_report_sha256":record["report_sha256"],"bot_generated_at":record["generated_at"],
-            "voiceover_sha256":profile["script_sha256"],"voiceover_quality":deepcopy(profile["quality"])}
+            "voiceover_sha256":profile["script_sha256"],"voiceover_schema":profile["schema"],"voiceover_quality":deepcopy(profile["quality"])}

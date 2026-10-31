@@ -392,6 +392,9 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                           if re.search(r"\b(conference call|earnings call|investor conference|webcast)\b", story["title"], re.I) else
                           "Original publisher item; headline does not establish a material business or policy development")
             story.update(decision="skip", reason=reason)
+        elif (story["kind"] == "macro" and story["source"] == "U.S. Treasury"
+              and not re.search(r"\b(borrowing|debt|bond auctions?|buybacks?|tariffs?|sanctions|financial stability|securities enforcement|financial regulation|export (?:controls?|bans?|restrictions)|trade (?:restrictions|policy))\b", story["title"], re.I)):
+            story.update(decision="skip", reason="Agency identity alone does not establish investor relevance; no specific market, financing or policy development in the headline")
         elif not primary_source(story):
             story.update(decision="wait", confirmation_check="hold", reason="Original company or agency report required; unconfirmed headlines are excluded from the news brief")
         else:
@@ -406,7 +409,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                     text, scope = "", "headline only"
                 observed = raw.get("evidence_checked_at") or story["source_checked_at"]
                 excerpts[story["id"]] = (text, scope, observed)
-                if is_fomc_statement(story):
+                from src.intelligence.energy_analysis import solar_storage_report
+                if is_fomc_statement(story) or solar_storage_report(story):
                     try:
                         evidence_clock = dated(observed)
                         fresh = -60 <= (now-evidence_clock).total_seconds() <= MAX_CACHE_AGE and (published-evidence_clock).total_seconds() <= 60
@@ -415,7 +419,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                     profile = build_evidence(story, text, scope)
                     if not fresh or scope == "headline only" or not profile["facts"]:
                         story.update(decision="wait", confirmation_check="hold",
-                                     reason="Original Fed decision text and a current source observation are required; the announcement headline alone is insufficient")
+                                     reason=("Original EIA capacity facts and a current source observation are required; the headline alone is insufficient" if solar_storage_report(story) else
+                                             "Original Fed decision text and a current source observation are required; the announcement headline alone is insufficient"))
         if event_context is not None and story["decision"] == "eligible":
             from src.intelligence.market_event_desk import story_priority
             text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
@@ -453,10 +458,10 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
-            "rules_version": 14, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+            "rules_version": 16, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
     if event_context is not None:
         from src.intelligence.company_schedule import notices
-        result.update(rules_version=15, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
+        result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.alphabet_earnings import cached_context
         contexts, backup_health = cached_context(cached, now, event_context["events"])
         result.update(earnings_context_candidates=contexts, earnings_backup_health=backup_health)
