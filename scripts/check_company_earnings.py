@@ -149,6 +149,22 @@ class CompanyEarningsChecks(IsolatedChecks):
         plan = editor.build_editorial_plan({"rows":[{"symbol":"INTC","events":[]}],"issues":[]}, NOW, candidates)
         self.assertFalse(editor.selected_stories(plan)); self.assertEqual(plan["candidates"][0]["decision"], "wait")
 
+    def test_upgrade_recovers_an_old_empty_feed_enrichment_once_without_redating_it(self):
+        raw=source(); calls=[]
+        body='<article><h1>'+TITLE+'</h1>'+''.join('<p>'+line+'</p>' for line in raw["source_excerpt"].splitlines()[1:])+'</article>'
+        old=payload(INTEL["url"],rss(TITLE,URL,raw["published"]),release_excerpt_schema=1,release_evidence=[])
+        value=originals.enrich_feed(INTEL,old,feeds.parse_rss_items,lambda url:(calls.append(url) or payload(url,body)),NOW)
+        self.assertEqual(calls,[URL]); self.assertEqual(value["release_excerpt_schema"],2)
+        self.assertEqual(value["fetched_at_epoch"],old["fetched_at_epoch"])
+        self.assertEqual(value["release_evidence"][0]["published"],raw["published"])
+        self.assertIs(originals.enrich_feed(INTEL,value,feeds.parse_rss_items,
+            lambda _:self.fail("A current enrichment must not consume another read"),NOW),value)
+
+    def test_upgrading_an_expired_feed_does_not_fetch_or_change_its_clock(self):
+        old=payload(INTEL["url"],rss(TITLE,URL,(NOW-timedelta(hours=73)).isoformat()),release_excerpt_schema=1,release_evidence=[])
+        value=originals.enrich_feed(INTEL,old,feeds.parse_rss_items,lambda _:self.fail("Expired results are not fetched"),NOW)
+        self.assertEqual(value["release_evidence"],[]); self.assertEqual(value["fetched_at_epoch"],old["fetched_at_epoch"])
+
     def test_only_supported_results_can_use_the_context_age_window(self):
         for title, hours in ((TITLE,73), ("Intel announces a new product",30), ("Intel to report quarterly financial results",30)):
             calls = []
@@ -170,6 +186,31 @@ class CompanyEarningsChecks(IsolatedChecks):
         group = next(row["text"] for row in review["insights"] if row["id"] == "company_focus_moves")
         self.assertNotIn("Intel", group); self.assertIn("ASML", group); self.assertIn("Advanced Micro Devices", group)
         self.assertEqual(sum("Shares fell 28.6 percent" in row["text"] for row in review["insights"]), 1)
+
+    def test_busy_edition_shortens_watch_section_before_discarding_verified_company_context(self):
+        from scripts.check_video_brief import agency
+        with patch.object(editor,"cache_candidates",return_value=([source(),agency()],[])):
+            text=news.build_daily_news_brief(self.research_moves())
+        record=store.read_editions(report=text)[0]; review=record["analyst_review"]
+        self.assertIn("Intel — recent earnings context",text)
+        self.assertEqual(review["focus_context"]["limit"],3); self.assertEqual(review["reader_limit"],2)
+        self.assertEqual({row["symbol"] for row in review["evidence"]["company_focus"]["selected"]},{"INTC","ASML","AMD"})
+        self.assertEqual(len(editor.selected_stories(record)),1)
+        self.assertLessEqual(len(text),3800); self.assertTrue(news.validate_news_brief(text)["passes"])
+        self.assertIn("earnings follow-through",text)
+        self.assertIn("earnings_INTC",voice.checked(record,NOW)["sources"])
+        self.assertIn("Recent results context: INTC — USED",editor.build_editor_status("INTC",history=True))
+
+    def test_log_separates_available_but_unused_context_from_unavailable_evidence(self):
+        from scripts.check_video_brief import agency
+        with patch.object(editor,"cache_candidates",return_value=([source(),agency()],[])),patch.object(news,"MAX_NEWS_CHARS",3200):
+            text=news.build_daily_news_brief(self.research_moves())
+        record=store.read_editions(report=text)[0]
+        self.assertFalse(record["analyst_review"]["evidence"].get("earnings_context"))
+        log=editor.build_editor_status("INTC",history=True)
+        self.assertIn("Recent results context: INTC — NOT USED",log)
+        self.assertIn("company-focus and length selection",log)
+        self.assertNotIn("Recent results context: INTC — UNAVAILABLE",log)
 
     def test_pending_small_or_other_company_move_cannot_admit_context(self):
         _, record = self.render(pending=True)
@@ -216,6 +257,17 @@ class CompanyEarningsChecks(IsolatedChecks):
         _, record = self.render(raw)
         self.assertFalse(record["analyst_review"]["evidence"].get("earnings_context"))
         self.assertIn("Company earnings context: INTC — limited",editor.build_editor_status())
+        self.assertIn("Recent results context: INTC — UNAVAILABLE",editor.build_editor_status("INTC",history=True))
+
+    def test_saved_editions_show_their_original_rules_and_context_evaluation(self):
+        _,record=self.render()
+        self.assertIn("Editorial rules: 19",editor.build_editor_status())
+        previous=deepcopy(record); previous["rules_version"]=17
+        previous.pop("earnings_context_health"); previous.pop("earnings_context_candidates")
+        with patch.object(store,"read_editions",return_value=[previous]):
+            log=editor.build_editor_status("INTC",history=True)
+        self.assertIn("Editorial rules: 17",log)
+        self.assertIn("Recent results context: INTC — NOT RECORDED",log)
 
     def test_rendering_does_not_fetch_or_change_rankings(self):
         before = self.ranking.read_bytes()
@@ -257,6 +309,7 @@ class CompanyEarningsChecks(IsolatedChecks):
         self.assertIn("third quarter 2026 revenue of $12.5 billion",text)
         self.assertNotIn("Intel — recent earnings context",text)
         self.assertTrue(voice.checked(record,NOW)["quality"]["passes"])
+        self.assertIn("Recent results context: INTC — COVERED",editor.build_editor_status("INTC",history=True))
 
     def test_previous_evidence_schema_keeps_its_original_fields_and_wording(self):
         raw = source(); old = build_evidence(raw,raw["source_excerpt"],"original release excerpt",schema=4)

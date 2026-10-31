@@ -123,7 +123,10 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
 def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -> dict:
     """One release read: fresh news, or supported dated results within 72 hours."""
     fed = source.get("name") == "Federal Reserve" and source.get("category") == "fed"
-    if (not source.get("company_symbol") and not fed) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == 1:
+    # Intel's older marker only checked the 24-hour news window. Reprocess that
+    # cached feed once after upgrading; keep its observation/publication clocks.
+    profile = 2 if source.get("company_symbol") == "INTC" else 1
+    if (not source.get("company_symbol") and not fed) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:
         return payload
     observed = payload.get("fetched_at_epoch")
     if not authorized_response(source, payload) or type(observed) not in (int, float) or not math.isfinite(observed) or not -60 <= now.timestamp() - observed <= 6 * 3600:
@@ -160,7 +163,7 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
                             "text": excerpt, "checked_at_epoch": detail["fetched_at_epoch"]})
         except (ValueError, TypeError, KeyError, UnicodeError) as exc:
             issues.append(str(exc)[:160])
-    return {**payload, "release_excerpt_schema": 1, "release_evidence": details, "release_evidence_issues": issues}
+    return {**payload, "release_excerpt_schema": profile, "release_evidence": details, "release_evidence_issues": issues}
 
 
 class ReleaseLinks(HTMLParser):

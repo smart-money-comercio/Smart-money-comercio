@@ -464,7 +464,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=18, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=19, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     return result
 
@@ -684,6 +684,30 @@ def hold_reasons(candidates: list[dict]) -> list[tuple[str, int]]:
     return sorted(counts.items(), key=lambda row: (-row[1], row[0]))
 
 
+def earnings_context_decisions(record: dict, symbol: str = "") -> list[str]:
+    """Explain source admission separately from what the saved edition used."""
+    from src.intelligence.company_earnings import matching
+    used = record.get("analyst_review", {}).get("evidence", {}).get("earnings_context", [])
+    admitted = record.get("earnings_context_candidates", [])
+    lines = []
+    for health in record.get("earnings_context_health", []):
+        issuer_symbol = health["symbol"]
+        if symbol and symbol != issuer_symbol:
+            continue
+        if matching(used, issuer_symbol):
+            state, reason = "USED", "Dated results are included in this edition; the 24-hour fresh-news decision is separate"
+        elif matching(admitted, issuer_symbol):
+            fresh = any(issuer_symbol in story.get("symbols", []) and story.get("event_evidence", {}).get("event") == "earnings" for story in selected_stories(record))
+            state, reason = ("COVERED", "Fresh earnings already cover this company; dated context is not repeated") if fresh else (
+                "NOT USED", "Verified dated results were available but not retained by this edition's company-focus and length selection")
+        else:
+            state, reason = "UNAVAILABLE", health["reason"]
+        lines.append("Recent results context: " + issuer_symbol + " — " + state + "; " + reason)
+    if symbol == "INTC" and record.get("rules_version", 0) < 18:
+        lines.append("Recent results context: INTC — NOT RECORDED; this saved edition predates Intel results-context evaluation")
+    return lines
+
+
 def build_editor_status(symbol: str = "", history: bool = False) -> str:
     try:
         records = store.read_editions(limit=3 if history else 1)
@@ -694,6 +718,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
     lines = ["Smart Money News Editor" if not history else "News Story Decision Log"]
     for record in records:
         lines += ["", "Edition: " + record["id"], "Built: " + record["generated_at"]]
+        if "rules_version" in record:
+            lines.append("Editorial rules: " + str(record["rules_version"]))
         if not history:
             lines += [step["name"] + ": " + step["status"].upper() + " — " + step["detail"] for step in record["stages"]]
             if record["issues"]:
@@ -733,6 +759,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 lines.append("Alphabet SEC earnings context: " + backup["status"] + " — " + backup["reason"])
             for context_health in record.get("earnings_context_health", []):
                 lines.append("Company earnings context: " + context_health["symbol"] + " — " + context_health["status"] + "; " + context_health["reason"])
+            lines += earnings_context_decisions(record)
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
@@ -751,6 +778,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     for company in focus["selected"]:
                         lines.append("Focus decision: " + company["symbol"] + " — " + company["role"] + ". " + company["why"])
         else:
+            lines += earnings_context_decisions(record, symbol)
             contexts = record.get("analyst_review", {}).get("evidence", {}).get("earnings_context", [])
             if contexts:
                 from src.intelligence.company_earnings import audit, matching
