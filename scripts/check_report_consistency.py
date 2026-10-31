@@ -22,8 +22,12 @@ os.environ.setdefault("DAILY_REPORT_LIVE_QUOTES", "0")
 from src.intelligence.opportunity_ranker import build_opportunity_item, build_top_opportunities_section, risk_adjustment
 from src.reports.daily_tradeplan_bridge import build_daily_tradeplan_snapshot_section
 from src.reports.report_quality import (
+    MAX_DAILY_REPORT_CHARS,
     REQUIRED_HEADERS,
+    describe_quality_failure,
     enforce_daily_report_quality,
+    hard_trim_report,
+    split_report_sections,
     validate_daily_report_quality,
 )
 from src.reports.tradeplan_language import plain_tradeplan_read
@@ -82,6 +86,97 @@ def quality_fixture(stocks=None) -> str:
     ]
     blocks.extend(header + "\n" + bodies.get(header, "Available.") for header in REQUIRED_HEADERS)
     return "\n\n".join(blocks)
+
+
+def budget_fixture(target=MAX_DAILY_REPORT_CHARS + 240) -> str:
+    """Oversized synthetic detail with realistic command and action sections."""
+    text = quality_fixture(enriched_ranked_stocks())
+    text = text.replace("Next Commands\nAvailable.",
+        "Next Commands\n/tradeplans\n/tradeplan SYMBOL\n/scorecard SYMBOL\n/top10\n"
+        "/weeklycalendar\n/global\n/contextstatus\n/summarypreview · /catalysts\n/allocation")
+    text = text.replace("Action Checklist\nAvailable.", "Action Checklist\n" + "\n".join(
+        "• /tradeplan MSFT — Check business, price, volume, guidance and risk conditions before acting."
+        for _ in range(4)))
+    prefix = "Synthetic portfolio detail: "
+    padding = prefix + "x" * max(0, target - len(text) + len("Available.") - len(prefix))
+    return text.replace("Portfolio Read\nAvailable.", "Portfolio Read\n" + padding)
+
+
+class ReportBudgetChecks(unittest.TestCase):
+    def test_small_report_is_unchanged(self):
+        text = quality_fixture(enriched_ranked_stocks())
+        self.assertEqual(hard_trim_report(text), text)
+
+    def test_busy_report_keeps_every_required_section_and_complete_footer(self):
+        for extra in (1, 80, 240, 1500, 5000):
+            with self.subTest(extra=extra):
+                source = budget_fixture(MAX_DAILY_REPORT_CHARS + extra)
+                report = enforce_daily_report_quality(source)
+                result = validate_daily_report_quality(report)
+                self.assertTrue(result["passes"], result)
+                self.assertLessEqual(len(report), MAX_DAILY_REPORT_CHARS)
+                self.assertIn("/summarypreview · /catalysts\n/allocation\n", report)
+                self.assertTrue(report.endswith("Notes\nAvailable."))
+
+    def test_compaction_preserves_market_company_risk_and_plan_evidence(self):
+        source = budget_fixture()
+        result = hard_trim_report(source)
+        original_sections = dict(split_report_sections(source))
+        result_sections = dict(split_report_sections(result))
+        secondary = {"Fastest-Rising Opportunities", "Action Checklist", "Portfolio Read", "Portfolio Allocation Snapshot"}
+        for name, lines in original_sections.items():
+            if name not in secondary:
+                self.assertEqual(result_sections[name], lines, name)
+        self.assertEqual(result.count("Model adjustments:"), source.count("Model adjustments:"))
+        self.assertEqual(result.count("Model inputs:"), source.count("Model inputs:"))
+        for symbol in ("TSM", "MSFT", "NVDA"):
+            self.assertIn("Full review: /tradeplan " + symbol, result)
+
+    def test_length_compaction_is_idempotent(self):
+        report = hard_trim_report(budget_fixture())
+        self.assertEqual(hard_trim_report(report), report)
+
+    def test_missing_section_is_not_fabricated_to_pass_validation(self):
+        source = budget_fixture().replace("Next Commands\n", "Unknown command heading\n")
+        report = hard_trim_report(source)
+        result = validate_daily_report_quality(report)
+        self.assertFalse(result["passes"])
+        self.assertIn("Next Commands", result["missing_headers"])
+
+    def test_missing_notes_are_not_fabricated(self):
+        source = budget_fixture().replace("Notes\nAvailable.", "")
+        result = validate_daily_report_quality(hard_trim_report(source))
+        self.assertFalse(result["passes"])
+        self.assertIn("Notes", result["missing_headers"])
+
+    def test_oversized_protected_evidence_fails_length_without_losing_sections(self):
+        source = budget_fixture().replace("Executive Summary\n", "Executive Summary\n" + "Protected market context. " * 400 + "\n")
+        report = hard_trim_report(source)
+        result = validate_daily_report_quality(report)
+        self.assertFalse(result["passes"])
+        self.assertGreater(len(report), MAX_DAILY_REPORT_CHARS)
+        self.assertEqual(result["missing_headers"], [])
+        self.assertIn("Length:", describe_quality_failure(result))
+        self.assertIn("Protected market context. " * 399, report)
+
+    def test_risk_conflicts_still_fail_in_an_oversized_report(self):
+        source = budget_fixture().replace("Score Risk: Elevated", "Score Risk: Controlled", 1)
+        result = validate_daily_report_quality(enforce_daily_report_quality(source))
+        self.assertFalse(result["passes"])
+        self.assertTrue(any("disagrees for NVDA" in error for error in result["risk_consistency_errors"]))
+
+    def test_wrong_greeting_still_fails_in_an_oversized_report(self):
+        source = budget_fixture().replace("Good evening.", "Good morning.")
+        result = validate_daily_report_quality(enforce_daily_report_quality(source))
+        self.assertFalse(result["passes"])
+        self.assertTrue(result["greeting_errors"])
+
+    def test_compaction_uses_existing_section_links_without_partial_sentences(self):
+        source = budget_fixture(MAX_DAILY_REPORT_CHARS + 1500)
+        result = hard_trim_report(source)
+        self.assertNotIn("Synthetic portfolio detail", result)
+        self.assertIn("Portfolio detail: /portfolio", result)
+        self.assertNotIn("Report trimmed automatically", result)
 
 
 class CoreConsistencyChecks(unittest.TestCase):
@@ -357,6 +452,31 @@ class BuilderConsistencyChecks(unittest.TestCase):
         self.assertEqual(report.count("Model adjustments:"), 2)
         self.assertEqual(report.count("Model inputs:"), 2)
 
+    def test_builder_applies_length_budget_after_the_final_signal_rewrite(self):
+        seen = []
+
+        def enforce_final(text):
+            seen.append(text)
+            self.assertIn("Signal: market tone is", text)
+            return enforce_daily_report_quality(text)
+
+        with patch.object(self.daily, "enforce_daily_report_quality", side_effect=enforce_final):
+            report = self.build_daily_fixture(datetime(2026, 10, 25, 23, tzinfo=timezone.utc), ranked=enriched_ranked_stocks())
+        self.assertEqual(len(seen), 1)
+        self.assertTrue(validate_daily_report_quality(report)["passes"])
+
+    def test_busy_builder_retains_commands_and_all_candidate_risks(self):
+        detail = "• Synthetic portfolio review detail. " * 200
+        with patch.object(self.daily, "build_portfolio_read", return_value=detail):
+            report = self.build_daily_fixture(datetime(2026, 10, 25, 23, tzinfo=timezone.utc), ranked=enriched_ranked_stocks())
+        result = validate_daily_report_quality(report)
+        self.assertTrue(result["passes"], result)
+        self.assertIn("Next Commands\n/tradeplans", report)
+        self.assertIn("Research only. Not financial advice.", report)
+        for symbol in ("TSM", "MSFT", "NVDA"):
+            self.assertIn("Full review: /tradeplan " + symbol, report)
+        self.assertNotIn("trimmed to keep", report)
+
     def test_daily_greeting_changes_at_noon_and_evening(self):
         for hour in (8, 12, 18):
             when = datetime(2026, 10, 6, hour, tzinfo=ZoneInfo("America/New_York"))
@@ -390,6 +510,7 @@ def main(argv=None) -> int:
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
     suite.addTests(loader.loadTestsFromTestCase(CoreConsistencyChecks))
+    suite.addTests(loader.loadTestsFromTestCase(ReportBudgetChecks))
     if not args.core:
         suite.addTests(loader.loadTestsFromTestCase(BuilderConsistencyChecks))
     result = unittest.TextTestRunner(verbosity=1).run(suite)

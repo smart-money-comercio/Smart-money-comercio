@@ -223,20 +223,30 @@ def hard_trim_report(report: str) -> str:
     if len(report) <= MAX_DAILY_REPORT_CHARS:
         return report
 
-    marker = "\nNotes\n"
+    # Never slice through evidence, candidate/risk rows or the commands footer.
+    # Compact whole secondary sections only, leaving the inputs used by the
+    # news/voiceover review intact. Missing sections are not manufactured here.
+    sections = split_report_sections(report)
+    for header, compact_body in (
+        ("Fastest-Rising Opportunities", "Full opportunity ranking: /top10"),
+        ("Action Checklist", "Review the complete setup conditions: /tradeplans"),
+        ("Portfolio Read", "Portfolio detail: /portfolio"),
+        ("Portfolio Allocation Snapshot", "Allocation detail: /allocation"),
+    ):
+        for index, (name, lines) in enumerate(sections):
+            if name != header:
+                continue
+            replacement = [lines[0], compact_body] + ([""] if not lines[-1].strip() else [])
+            if len("\n".join(replacement)) < len("\n".join(lines)):
+                sections[index] = (name, replacement)
+            break
+        report = normalize_blank_lines("\n".join(line for _, lines in sections for line in lines))
+        if len(report) <= MAX_DAILY_REPORT_CHARS:
+            return report
 
-    if marker in report:
-        body, notes = report.split(marker, 1)
-        room = MAX_DAILY_REPORT_CHARS - len(marker) - len(notes) - 120
-        trimmed_body = body[:room].rstrip()
-        return normalize_blank_lines(
-            trimmed_body
-            + "\n\nReport trimmed automatically to keep /report focused.\n"
-            + marker
-            + notes
-        )
-
-    return report[: MAX_DAILY_REPORT_CHARS - 80].rstrip() + "\n\nReport trimmed automatically."
+    # If the protected content itself cannot fit, keep it complete so strict
+    # validation reports the length failure, rather than silently losing data.
+    return report
 
 
 def validate_daily_report_quality(report: str) -> dict:

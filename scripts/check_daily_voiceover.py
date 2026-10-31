@@ -219,6 +219,23 @@ class VoiceChecks(IsolatedChecks):
         for refs in data["sources"].values():
             self.assertTrue(all(set(("url","publisher","published_at","verified_at")) <= set(ref) for ref in refs))
 
+    def test_busy_research_report_can_build_and_export_the_native_voiceover(self):
+        from src.reports.report_quality import MAX_DAILY_REPORT_CHARS, enforce_daily_report_quality, validate_daily_report_quality
+        research = self.research()
+        research = research.replace("Portfolio Read\n", "Portfolio Read\n" + "Synthetic portfolio detail. " * 300 + "\n")
+        self.assertGreater(len(research), MAX_DAILY_REPORT_CHARS)
+        research = enforce_daily_report_quality(research)
+        self.assertTrue(validate_daily_report_quality(research)["passes"])
+        _, record = self.render(research=research)
+        output = self.root / "busy_episode.json"
+        with patch.object(export, "datetime", SimpleNamespace(now=lambda _: NOW)), redirect_stdout(StringIO()):
+            self.assertEqual(export.main(["--edition", record["id"], "--output", str(output)]), 0)
+        data = json.loads(output.read_text())
+        self.assertEqual(data["bot_edition_id"], record["id"])
+        self.assertEqual(output.with_suffix(".txt").read_text(), "\n\n".join(row["narration"] for row in data["segments"]) + "\n")
+        self.assertTrue(data["review_required"])
+        self.assertEqual(data["mode"], "draft_review_required")
+
     def test_episode_date_uses_the_report_timezone_at_utc_midnight(self):
         _, record = self.render()
         # The real build uses a New York edition date; move the fixture's

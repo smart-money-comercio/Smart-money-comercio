@@ -1915,8 +1915,6 @@ Notes
 Research only. Not financial advice.
 """.strip()
 
-    final_report = enforce_daily_report_quality(final_report)
-
     # Build a cleaner professional Signal line.
     signal_parts = []
 
@@ -2129,12 +2127,6 @@ Research only. Not financial advice.
                 + final_report[signal_end:]
             )
 
-    # Hide internal trimming/editorial notices from Telegram output.
-    final_report = final_report.replace(
-        "Briefly trimmed to keep /report focused.",
-        "",
-    )
-
     # Safety fallback: quality enforcement should never leave this
     # dedicated section visibly empty.
     if "Intelligence Used Today\n\nWhat Changed Today" in final_report:
@@ -2150,6 +2142,11 @@ Research only. Not financial advice.
             ),
             1,
         )
+
+    # Apply the budget after every summary/fallback rewrite. Applying it before
+    # the final Signal line allowed later text growth to invalidate the report.
+    final_report = enforce_daily_report_quality(final_report)
+    final_report = final_report.replace("Briefly trimmed to keep /report focused.", "")
 
     # Collapse blank lines left behind by removed trim notices.
     while "\n\n\n" in final_report:

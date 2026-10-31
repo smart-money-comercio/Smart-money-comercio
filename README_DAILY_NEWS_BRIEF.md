@@ -50,6 +50,8 @@ The news edition is rendered from the same validated detailed report. `/fullrepo
 
 Ranking entries retain their complete model evidence, Score Risk and review commands when the detailed report is formatted. They are not cut by the older fixed line limit. Candidate order, risk consistency and the overall character limit are still checked; a failed build names the failing research check. Offline deployment fixtures exercise the production ranking enrichment through the detailed report builder before rendering the spoken brief.
 
+The detailed report's 7,600-character budget is applied after the final summary rewrite. Busy editions compact complete secondary sections into their existing command links rather than cutting through the end of the report. Market and company evidence, rankings, risk rows, trade plans, Next Commands and Notes stay intact. If those protected inputs alone exceed the budget, validation reports the length failure and withholds the new edition. No missing header is inserted to bypass validation. Checks cover oversized reports through the news build and native JSON/TXT voiceover export.
+
 The daily agent refresh now reaches direct chip, software, drone, cybersecurity and defense publishers as well as original release services. `/editorstatus` shows which configured sources were available, how many original reports had verified dates and how many were fresh before editorial selection. `/storylog SYMBOL` includes publisher coverage when no story qualifies. A quiet, healthy feed is separate from an unavailable source or a missing publication timezone. The 24-hour article age, six-hour observation age, materiality checks and both narration-duration checks remain enforced.
 
 ## Company catalyst brief
