@@ -158,7 +158,7 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
     if earnings_context is not None:
         if event_context is None or not reader_version:
             raise ValueError("Dated earnings context requires the news reader and verified market attention")
-        from src.intelligence.alphabet_earnings import retain
+        from src.intelligence.company_earnings import retain
         evidence["earnings_context"] = retain(earnings_context, now, event_context["events"], evidence["stories"], evidence.get("company_focus"))
         if evidence["earnings_context"]:
             evidence["source_sections"].append("Recent earnings context")

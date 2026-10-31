@@ -108,6 +108,10 @@ def story_copy(story, evidence, *, modern=False):
         return story["source"] + " reports: " + story["title"].rstrip(".") + ". Review the original release for its scope and implications."
     symbol = story.get("publisher_symbol") or story.get("confirmed_by") or story["symbols"][0]
     name = NAMES.get(symbol, symbol)
+    if profile["schema"] == 7 and profile["facts"]:
+        from src.intelligence.company_earnings import intel_narration, intel_watch
+        context = {"title": story["title"], "text": profile["source_text"], "release_date":story["published"][:10]}
+        return "Intel. " + intel_narration(context) + " " + intel_watch(context)
     kind, stage = profile["event"], profile["stage"]
     if kind == "contract" and stage not in {"terminated", "cooperation"}:
         purpose = re.search(r"\btask[ -]order to ([^.?!]+)$", story["title"], re.I)
@@ -135,10 +139,13 @@ def story_copy(story, evidence, *, modern=False):
 
 def focus_copy(row, evidence):
     text = price_sentence(row, evidence)
-    contexts = evidence.get("earnings_context", [])
-    if contexts and row["symbol"] in {"GOOG", "GOOGL"}:
+    from src.intelligence.company_earnings import matching, intel_narration, intel_watch
+    context = matching(evidence.get("earnings_context", []), row["symbol"])
+    if context and context["symbol"] == "INTC":
+        text += " For recent earnings context, " + intel_narration(context).replace("Its ", "its ", 1)
+        text += " " + intel_watch(context) + " These dated results do not establish the cause of the price move."
+    elif context:
         from src.intelligence.alphabet_earnings import results_facts
-        context = contexts[0]
         labels = {"reported_revenue":"revenue", "reported_operating_margin":"operating margin", "reported_eps":"earnings per share"}
         facts = results_facts(context["text"], context["title"])[:2]
         day = datetime.strptime(context["release_date"], "%Y-%m-%d").strftime("%B %d").replace(" 0", " ")
@@ -200,7 +207,7 @@ def build(record, report, research, *, schema=2):
         if story.get("source_check") != "pass" or not editor.primary_source(story): raise ValueError("Voiceover story lost its original evidence")
         sources[story["id"]] = [{"url":story["url"], "publisher":story["source"], "published_at":story["published"], "verified_at":story["source_checked_at"]}]
     for context in evidence.get("earnings_context", []):
-        sources["earnings_GOOG"] = [{"url":url, "publisher":context["source"], "published_at":context["published"], "verified_at":context["observed"]}
+        sources["earnings_" + context["symbol"]] = [{"url":url, "publisher":context["source"], "published_at":context["published"], "verified_at":context["observed"]}
             for url in dict.fromkeys((context.get("primary_url", context["url"]), context.get("document_url", context["url"])))]
     calendar_ids = []
     for notice in record.get("narrated_company_schedules", []):
@@ -219,8 +226,14 @@ def build(record, report, research, *, schema=2):
     hook = next((row["text"] for row in review["insights"] if row["id"] == "opening_takeaway"), "")
     hook = hook.replace("The takeaway:", "The key takeaway.").replace("in the quoted session", "in the market snapshot")
     hook_bullets = re.split(r"(?<=[.!?])\s+", hook.replace("The key takeaway.", "").strip())[:2] if modern else ("Source-backed market research", "Edition: "+local.date().isoformat())
+    context_sources = ["earnings_" + context["symbol"] for context in evidence.get("earnings_context", []) if context["symbol"] != "GOOG"]
+    from src.intelligence.company_earnings import matching
+    attention = evidence.get("market_event_context", {}).get("events", [])
+    first_checked = next((event for event in attention if event["status"] == "rechecked"), {})
+    opening_context = matching(evidence.get("earnings_context", []), first_checked.get("symbol"))
+    opening_sources = ["earnings_" + opening_context["symbol"]] if context_sources and opening_context else []
     add("The Takeaway", greeting+" This is Smart Money for "+local.strftime("%B %d").replace(" 0", " ")+". "+hook,
-        hook_bullets)
+        hook_bullets, opening_sources if "Recent earnings provide" in hook else ())
     market = market_copy(evidence)
     market_sources = [story["id"] for story in selected if story_topics(story) & {"trade", "geopolitics", "policy", "energy", "IPO", "AI financing"}] if modern else ()
     add("Market Update", "First, the market. "+market,
@@ -239,19 +252,33 @@ def build(record, report, research, *, schema=2):
         add(label, transition+copy, (story["title"],), (story["id"],))
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)
-    if group:
+    def add_peer_group():
         copy = group["text"].replace(group["label"] + " — ", "Across semiconductor companies, ")
         if modern:
             copy = copy.replace(" Repeat quotes from the same provider support these price readings.", "")
         bullets = [focus_bullet(row,evidence) for row in evidence["company_focus"]["selected"] if row["symbol"] in group["symbols"]] if modern else (group["label"],)
         add("Companies in Focus", copy, bullets)
         covered.update(group["symbols"])
-    for row in evidence.get("company_focus", {}).get("selected", []):
+    defer_group = bool(context_sources)
+    if group and not defer_group:
+        add_peer_group()
+    focus_rows = evidence.get("company_focus", {}).get("selected", [])
+    if context_sources:
+        focus_rows = sorted(focus_rows, key=lambda row: matching(evidence["earnings_context"], row["symbol"]) is None)
+    for row in focus_rows:
+        if group and defer_group and row["symbol"] in group["symbols"] and row["symbol"] not in covered:
+            add_peer_group()
         if issuer(row["symbol"]) in covered or row.get("basis") == "sector context" and row["group"] != "market event": continue
         text = focus_copy(row, evidence)
         if not text: continue
-        ids = ["earnings_GOOG"] if evidence.get("earnings_context") and row["symbol"] in {"GOOG","GOOGL"} else []
-        add("Companies in Focus", text, (focus_bullet(row,evidence) if modern else row["role"]+": "+row["name"],), ids)
+        context = matching(evidence.get("earnings_context", []), row["symbol"])
+        ids = ["earnings_" + context["symbol"]] if context else []
+        bullets = [focus_bullet(row,evidence) if modern else row["role"]+": "+row["name"]]
+        if modern and context and context["symbol"] == "INTC":
+            from src.intelligence.company_earnings import intel_facts
+            bullets += [fact["period"].capitalize() + (" revenue: " if fact["basis"] == "reported" else " revenue forecast: ") + fact["value"]
+                        for fact in intel_facts(context["text"], context["title"])]
+        add("Companies in Focus", text, bullets, ids)
         covered.add(issuer(row["symbol"]))
     if not any("defense" in story_topics(story) for story in selected):
         add("Defense Watch", "On defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.", ("Funded orders", "Production milestones"))
@@ -268,7 +295,10 @@ def build(record, report, research, *, schema=2):
         if label.startswith(("Market ", "Staying ", "The ", "Energy ", "IPO ")): label = label[:1].lower()+label[1:]
         signals.append(("First, " if i == 0 else "Second, " if i == 1 else "Finally, ")+label+". "+body)
     watch_bullets = [re.split(r"(?<=[.!?])\s+",text.partition(": ")[2])[0] for text in watch] if modern else [text.partition(": ")[0] for text in watch]
-    add("What We're Watching", "Here are the next checks. "+" ".join(signals), watch_bullets)
+    watch_context = matching(evidence.get("earnings_context", []), attention[0]["symbol"]) if attention else None
+    watch_sources = ["earnings_" + watch_context["symbol"]] if context_sources and watch_context else []
+    add("What We're Watching", "Here are the next checks. "+" ".join(signals), watch_bullets,
+        watch_sources if any("earnings follow-through" in text for text in watch) else ())
     editorial = "\n\n".join(row["narration"] for row in scenes)
     add("Closing", "Subscribe to Smart Money for more market research. Research only. Not financial advice.", ("Research only", "Not financial advice"))
     script = "\n\n".join(row["narration"] for row in scenes)

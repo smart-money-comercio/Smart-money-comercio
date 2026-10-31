@@ -86,11 +86,12 @@ class SourceChecks(IsolatedChecks):
             lambda url:(calls.append(url) or payload(url,release(date_only=True))),NOW)
         self.assertEqual(calls,[URL]);self.assertEqual(value['release_evidence'][0]['title'],TITLE)
 
-    def test_stale_material_release_is_not_reintroduced_by_body_prioritization(self):
+    def test_dated_results_can_be_read_as_context_without_becoming_fresh_news(self):
         old=(NOW-timedelta(hours=25)).isoformat();calls=[]
-        originals.enrich_feed(INTEL,payload(INTEL['url'],rss(published=old)),feeds.parse_rss_items,
-            lambda url:calls.append(url),NOW)
-        self.assertFalse(calls)
+        value=originals.enrich_feed(INTEL,payload(INTEL['url'],rss(published=old)),feeds.parse_rss_items,
+            lambda url:(calls.append(url) or payload(url,release(clock=old))),NOW)
+        self.assertEqual(calls,[URL])
+        self.assertEqual(feeds.describe_source(INTEL,value,NOW)['fresh'],0)
 
     def test_intel_wrong_title_or_day_withholds_body_evidence(self):
         for body in (release('Unrelated company announcement',date_only=True),release(date_only=True).replace('October 25','October 24')):

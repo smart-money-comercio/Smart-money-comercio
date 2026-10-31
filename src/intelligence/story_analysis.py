@@ -109,6 +109,10 @@ def event_type(title: str, fallback: str = "", *, version: int = 4) -> tuple[str
 
 
 def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4, title: str = "") -> list[dict]:
+    if version >= 7 and kind == "earnings":
+        from src.intelligence.company_earnings import intel_facts
+        return [{"field": row["field"], "value": row["value"] + " (" + row["period"] + ", " + row["basis"] + ")",
+                 "evidence": row["evidence"]} for row in intel_facts(text, title)]
     if version >= 6 and kind == "solar storage":
         from src.intelligence.energy_analysis import storage_facts
         return storage_facts(text)
@@ -180,9 +184,11 @@ def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4, 
 
 def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int | None = None) -> dict:
     from src.intelligence.energy_analysis import solar_storage_report
+    from src.intelligence.company_earnings import intel_period
+    intel_results = story.get("publisher_symbol") == "INTC" and bool(intel_period(story["title"]))
     if schema is None:
-        schema = 6 if solar_storage_report(story) else 5 if story.get("publisher_symbol") in {"GOOG", "GOOGL"} and re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", story["title"], re.I) else 4
-    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6} or scope not in SCOPES or schema == 6 and not solar_storage_report(story):
+        schema = 7 if intel_results else 6 if solar_storage_report(story) else 5 if story.get("publisher_symbol") in {"GOOG", "GOOGL"} and re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", story["title"], re.I) else 4
+    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results:
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=schema)
@@ -274,7 +280,7 @@ def investor_read(story: dict) -> dict:
               "business_focus": "Business focus described in the release", "contract_ceiling": "Announced ceiling",
               "obligated_amount": "Amount described as obligated", "reported_revenue": "Reported revenue",
               "reported_sales": "Reported sales", "reported_net_sales": "Reported net sales",
-              "reported_operating_margin": "Reported operating margin", "reported_eps": "Reported earnings per share",
+              "reported_operating_margin": "Reported operating margin", "reported_eps": "Reported earnings per share", "forecast_revenue": "Management's revenue forecast",
               "program_type": "Program described in the release", "restructuring_charge": "Restructuring cost described in the release",
               "restructuring_cost_estimate": "Estimated restructuring cost", "annual_savings_target": "Annual savings target",
               "tested_capability": "Capability demonstrated in the reported test", "planned_capacity_scale": "Announced expansion plan"}

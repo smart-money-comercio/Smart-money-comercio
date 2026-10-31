@@ -121,7 +121,7 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
 
 
 def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -> dict:
-    """At most one fresh company release or Fed statement during refresh only."""
+    """One release read: fresh news, or supported dated results within 72 hours."""
     fed = source.get("name") == "Federal Reserve" and source.get("category") == "fed"
     if (not source.get("company_symbol") and not fed) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == 1:
         return payload
@@ -134,7 +134,10 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
         from src.intelligence.policy_analysis import is_fomc_statement
         allowed = (is_fomc_statement({"source": source["name"], "title": row["title"]})
                    and authorized_response(source, {"url": row["link"]})) if fed else company_url(source["company_symbol"], row["link"])
-        if (published and 0 <= (now - published).total_seconds() <= 24 * 3600
+        from src.intelligence.company_earnings import intel_period
+        context_release = source.get("company_symbol") == "INTC" and intel_period(row["title"])
+        max_age = 72 * 3600 if context_release else 24 * 3600
+        if (published and 0 <= (now - published).total_seconds() <= max_age
                 and allowed):
             candidates.append((published, row))
     candidates.sort(key=lambda value: value[0], reverse=True)

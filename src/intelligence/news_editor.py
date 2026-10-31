@@ -462,9 +462,10 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     if event_context is not None:
         from src.intelligence.company_schedule import notices
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
-        from src.intelligence.alphabet_earnings import cached_context
-        contexts, backup_health = cached_context(cached, now, event_context["events"])
-        result.update(earnings_context_candidates=contexts, earnings_backup_health=backup_health)
+        from src.intelligence.company_earnings import cached_context
+        contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
+        result.update(rules_version=18, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+                      earnings_context_health=context_health)
     return result
 
 
@@ -730,11 +731,13 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             backup = record.get("earnings_backup_health")
             if backup:
                 lines.append("Alphabet SEC earnings context: " + backup["status"] + " — " + backup["reason"])
+            for context_health in record.get("earnings_context_health", []):
+                lines.append("Company earnings context: " + context_health["symbol"] + " — " + context_health["status"] + "; " + context_health["reason"])
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
                 for context in analysis["evidence"].get("earnings_context", []):
-                    lines.append("Dated earnings context: GOOG — " + context["source"] + "; release " + context["release_date"]
+                    lines.append("Dated earnings context: " + context["symbol"] + " — " + context["source"] + "; release " + context["release_date"]
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")
                 if analysis.get("reader_version") == 1:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
@@ -749,10 +752,11 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Focus decision: " + company["symbol"] + " — " + company["role"] + ". " + company["why"])
         else:
             contexts = record.get("analyst_review", {}).get("evidence", {}).get("earnings_context", [])
-            if contexts and (not symbol or symbol in {"GOOG", "GOOGL"}):
-                from src.intelligence.alphabet_earnings import audit
+            if contexts:
+                from src.intelligence.company_earnings import audit, matching
                 for context in contexts:
-                    lines += [""] + audit(context)
+                    if not symbol or matching([context], symbol):
+                        lines += [""] + audit(context)
             for row in record.get("source_health", []):
                 if symbol and row["symbol"] == symbol:
                     lines.append(f"Publisher coverage: {row['name']} — {row['status']}; {row['reason']}; checked {row['checked_at'] or 'not checked'}")

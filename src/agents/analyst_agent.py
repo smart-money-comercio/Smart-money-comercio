@@ -38,7 +38,10 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
         add("participation", "watch", scope, ["Market Snapshot"])
     if "company_focus" in evidence:
         from src.intelligence.company_focus import focus_paragraph, grouped_price_watch
+        from src.intelligence.company_earnings import matching, narration
         selected = evidence["company_focus"]["selected"]
+        if any(context["symbol"] != "GOOG" for context in evidence.get("earnings_context", [])):
+            selected = sorted(selected, key=lambda row: matching(evidence["earnings_context"], row["symbol"]) is None)
         group = grouped_price_watch(evidence)
         group_added = False
         for index, row in enumerate(selected, 1):
@@ -48,14 +51,13 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
                     group_added = True
                 continue
             text = focus_paragraph(row, evidence.get("stories", []))
-            contexts = evidence.get("earnings_context", [])
-            if contexts and row["symbol"] in {"GOOG", "GOOGL"}:
-                from src.intelligence.alphabet_earnings import narration
-                event = next(value for value in evidence["market_event_context"]["events"] if value["symbol"] in {"GOOG", "GOOGL"} and value["status"] == "rechecked")
-                text = narration(contexts[0], event)
+            context = matching(evidence.get("earnings_context", []), row["symbol"])
+            if context:
+                event = next(value for value in evidence["market_event_context"]["events"] if matching([context], value["symbol"]) and value["status"] == "rechecked")
+                text = narration(context, event)
             if text:
                 add(f"company_focus_{index}", "company", text, row["sources"] + ["Company focus selection"]
-                    + (["Recent earnings context"] if contexts and row["symbol"] in {"GOOG", "GOOGL"} else []))
+                    + (["Recent earnings context"] if context else []))
         if selected:
             confirmation = ("Our next check is whether company disclosures, price and volume support these research ideas. The full report has the rankings, risks and trade-plan conditions." if broadcast else
                             "For these companies, the next test is agreement between original disclosures, price and volume. Company selection reflects today's research relevance; the numerical rankings remain available in the full report.")

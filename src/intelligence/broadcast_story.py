@@ -51,6 +51,10 @@ def render_story(story: dict, zone, names: dict) -> str:
         symbol = story.get("publisher_symbol") or story.get("confirmed_by") or story["symbols"][0]
         company = names.get(symbol, symbol)
         review = company_read(story)
+        if review["evidence"]["schema"] == 7 and review["evidence"]["facts"]:
+            from src.intelligence.company_earnings import intel_narration, intel_watch
+            context = {"title": story["title"], "text": review["evidence"]["source_text"]}
+            return "Intel: " + intel_narration(context, day=day) + " Investor take: compare the sales outlook with profitability and cash generation. " + intel_watch(context)
         fields = {row["field"]: row["value"] for row in review["evidence"]["facts"]}
         special = False
         if (symbol == "LMT" and fields.get("tested_capability") == "in-flight retargeting"

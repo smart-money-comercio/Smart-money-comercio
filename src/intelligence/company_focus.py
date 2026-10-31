@@ -234,8 +234,9 @@ def grouped_price_watch(evidence: dict) -> dict | None:
     if focus.get("grouped_narration") != 1:
         return None
     semiconductors = {"INTC", "AMD", "ASML", "NVDA", "AVGO", "TSM", "MU", "ARM", "MRVL"}
+    contextualized = {row["symbol"] for row in evidence.get("earnings_context", [])}
     events = {row["symbol"]: row for row in evidence.get("market_event_context", {}).get("events", [])}
-    rows = [row for row in focus["selected"] if row["symbol"] in semiconductors and not row["story_id"]
+    rows = [row for row in focus["selected"] if row["symbol"] in semiconductors and row["symbol"] not in contextualized and not row["story_id"]
             and row["group"] in {"market event", "price move"} and (row.get("metric") or {}).get("price") is not None
             and (row["group"] != "market event" or events.get(row["symbol"], {}).get("status") == "rechecked")]
     if len(rows) < 2:
