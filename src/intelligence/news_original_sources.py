@@ -50,6 +50,9 @@ class ArticleBody(VisibleText):
         self.alphabet = publisher in {"GOOG", "GOOGL", "Alphabet Investor Relations"} and parts.hostname in {"abc.xyz", "www.abc.xyz"}
         self.nvidia_blog = parts.hostname == "blogs.nvidia.com"
         self.eia = publisher == "EIA" and parts.hostname == "www.eia.gov"
+        self.amd = publisher in {"AMD", "AMD Investor Relations"} and parts.hostname == "ir.amd.com" and parts.path.startswith("/news-events/press-releases/detail/")
+        from src.intelligence.northrop_newsroom import article_url
+        self.northrop = publisher in {"NOC", "Northrop Grumman Newsroom"} and article_url(url)
         self.depth = 0
         self.heading_tag, self.heading_parts, self.headings = None, [], []
         self.date_depth, self.date_parts = 0, []
@@ -57,7 +60,7 @@ class ArticleBody(VisibleText):
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         classes = set(attrs.get("class", "").split())
-        if classes & {"article-date", "wd_date"} or self.alphabet and "evergreen-news-date-text" in classes or self.eia and tag == "span" and "date" in classes:
+        if classes & {"article-date", "wd_date"} or self.alphabet and "evergreen-news-date-text" in classes or self.eia and tag == "span" and "date" in classes or self.amd and tag == "time" and "date" in classes:
             self.date_depth = 1
         elif self.date_depth and tag not in self.VOID:
             self.date_depth += 1
@@ -73,7 +76,8 @@ class ArticleBody(VisibleText):
         alphabet_body = self.alphabet and tag == "div" and "evergreen-news-body" in classes
         nvidia_body = self.nvidia_blog and tag == "div" and "entry-content" in classes
         eia_body = self.eia and tag == "div" and "tie-article" in classes
-        if not self.depth and (tag == "article" and not treasury and not kratos and not self.nvidia_blog or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body or nvidia_body or eia_body):
+        northrop_body = self.northrop and tag == "div" and any(value.startswith("NewsroomArticleBody_BodyCopy__") for value in classes)
+        if not self.depth and (tag == "article" and not treasury and not kratos and not self.nvidia_blog or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body or nvidia_body or eia_body or northrop_body):
             self.depth = 1
         elif self.depth and tag not in self.VOID:
             self.depth += 1
@@ -122,6 +126,11 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
             raise
         metadata = PublicationPage()
         metadata.feed(body)
+        if parser.northrop:
+            from src.intelligence.northrop_newsroom import PublicationFields
+            original_fields = PublicationFields(); original_fields.feed(body)
+            if original_fields.clocks:
+                raise ValueError("Explicit original Northrop publication metadata could not be verified")
         # Some publisher pages omit time metadata. A zoned original RSS clock
         # may still bind an exact heading and the same explicit release date.
         if metadata.dates or 'datePublished' in body or sum(value.casefold() == title.casefold() for value in parser.headings) != 1:
@@ -134,7 +143,8 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
             original = parsedate_to_datetime(published)
         month = f"(?:{original:%B}|{original:%b})"
         date_text = " ".join(parser.date_parts) if parser.date_parts else text
-        if not re.search(r"\b" + month + rf"\.?\s+{original.day},\s+{original.year}\b", date_text):
+        day = f"(?:{original.day}|{original.day:02d})"
+        if not re.search(r"\b" + month + rf"\.?\s+{day},\s+{original.year}\b", date_text):
             raise ValueError("Original article release date does not match its feed")
     else:
         if actual != expected:
@@ -147,7 +157,7 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *
     fed = source.get("name") == "Federal Reserve" and source.get("category") == "fed"
     # Intel's older marker only checked the 24-hour news window. Reprocess that
     # cached feed once after upgrading; keep its observation/publication clocks.
-    profile = 2 if source.get("company_symbol") == "INTC" else 3
+    profile = 2 if source.get("company_symbol") == "INTC" else 4 if source.get("company_symbol") == "AMD" else 3
     agency = source.get("name") in {"EIA", "DARPA"}
     if (not source.get("company_symbol") and not fed and not agency) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:
         return payload
@@ -323,6 +333,20 @@ def retrieve(source: dict, fetch, now: datetime) -> dict:
         if payload.get("status") != "ok" or not authorized_response(source, payload):
             return {**payload, "status": "error", "error": payload.get("error") or "Publisher redirect mismatch"}
         rows = publication.treasury_items(payload["body"]) if source["format"] == "treasury" else indexed_items(payload["body"], source)
+        if not rows and source.get("newsroom_home_fallback"):
+            from src.intelligence.northrop_newsroom import HOME, home_items
+            if source.get("company_symbol") != "NOC" or source["url"] != "https://news.northropgrumman.com/News-Stream" or source["newsroom_home_fallback"] != HOME:
+                raise ValueError("Unknown publisher homepage fallback")
+            home = fetch(HOME)
+            if home.get("status") != "ok":
+                return {**home, "url": source["url"], "error": "Northrop homepage: " + str(home.get("error") or "unavailable")}
+            if home.get("final_url", home.get("url", HOME)) != HOME:
+                raise ValueError("Northrop homepage redirected outside its configured index")
+            rows = home_items(home["body"])
+            primary_stamp, home_stamp = payload.get("fetched_at_epoch"), home.get("fetched_at_epoch")
+            if any(type(value) not in (int, float) or not math.isfinite(value) or not -60 <= now.timestamp()-value <= 6*3600 for value in [primary_stamp,home_stamp]):
+                raise ValueError("Northrop index observation is stale or invalid")
+            payload = {**payload, "fetched_at_epoch": min(primary_stamp,home_stamp), "index_discovery_url": HOME}
         if not rows:
             raise ValueError("Publisher index has no recognizable release links")
         candidates = ([row for row in rows if recent_hint(row["published"], now)]
@@ -363,12 +387,12 @@ def retrieve(source: dict, fetch, now: datetime) -> dict:
             problems.append(str(exc)[:160])
             if source["format"] == "treasury":
                 row["published"] = ""
-    return {**payload, "url": source["url"], "final_url": source["url"], "original_profile": 2,
+    return {**payload, "url": source["url"], "final_url": source["url"], "original_profile": 3 if source.get("newsroom_home_fallback") else 2,
             "articles": rows, "publication_problems": list(dict.fromkeys(problems))[:3]}
 
 
 def cached_items(payload: dict, source: dict) -> list[dict]:
-    if type(payload.get("original_profile")) is not int or payload.get("original_profile") not in (1, 2) or not isinstance(payload.get("articles"), list):
+    if type(payload.get("original_profile")) is not int or payload.get("original_profile") not in (1, 2, 3) or not isinstance(payload.get("articles"), list):
         raise ValueError("Publisher index has not been parsed by the original-source reader")
     rows = []
     for item in payload["articles"][:MAX_ARTICLES]:

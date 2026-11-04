@@ -63,6 +63,8 @@ def publication_time(body: bytes, title: str, *, url: str = "") -> datetime:
     page.feed(body.decode("utf-8"))
     page.close()
     dates = set(page.dates) if page.title.casefold() == clean(title, 1001).casefold() else set()
+    from src.intelligence.northrop_newsroom import publication_dates
+    dates.update(publication_dates(body.decode("utf-8"), clean(title, 1001), url, page))
     parts = urlsplit(url)
     kratos_url = (parts.scheme == "https" and parts.hostname == "www.kratosdefense.com"
                   and not parts.username and not parts.password and parts.port in (None, 443)

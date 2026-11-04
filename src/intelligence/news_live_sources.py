@@ -74,7 +74,7 @@ NEWS_SOURCES = [
     {"name": "Tesla Investor Relations", "url": "https://ir.tesla.com/rss/news-releases.xml", "category": "company", "company_symbol": "TSLA"},
     {"name": "Apple Newsroom", "url": "https://www.apple.com/newsroom/rss-feed.rss", "category": "company", "company_symbol": "AAPL"},
     {"name": "TSMC Press Center", "url": "https://pr.tsmc.com/english/latest-news", "category": "company", "company_symbol": "TSM", "format": "index", "article_pattern": r"/english/news/\d+"},
-    {"name": "Northrop Grumman Newsroom", "url": "https://news.northropgrumman.com/News-Stream", "category": "company", "company_symbol": "NOC", "format": "index", "article_pattern": r"/news/releases/[^/]+|/releases/[^/]+"},
+    {"name": "Northrop Grumman Newsroom", "url": "https://news.northropgrumman.com/News-Stream", "category": "company", "company_symbol": "NOC", "format": "index", "article_pattern": r"/news/releases/[^/]+|/releases/[^/]+", "newsroom_home_fallback": "https://news.northropgrumman.com/", "requires_original_body": True},
     {"name": "Northrop Grumman Investor Relations", "url": "https://investor.northropgrumman.com/rss/news-releases.xml", "category": "company", "company_symbol": "NOC"},
     {"name": "CACI Investor Relations", "url": "https://investor.caci.com/news?pagetemplate=rss", "category": "company", "company_symbol": "CACI"},
     {"name": "AMD Investor Relations", "url": "https://ir.amd.com/news-events/press-releases/rss", "category": "company", "company_symbol": "AMD"},
@@ -405,7 +405,8 @@ def fetch_source(source: dict, force_refresh: bool = False) -> dict:
     if source.get("format") not in {"palantir", "index", "treasury", "alphabet"}:
         return fetch_url(source["url"], force_refresh)
     cached = get_cached_source(source["url"])
-    if cached and (cached.get("status") == "error" or not force_refresh and cached.get("original_profile") == 2):
+    profile = 3 if source.get("newsroom_home_fallback") else 2
+    if cached and (cached.get("status") == "error" or not force_refresh and cached.get("original_profile") == profile):
         return {**cached, "cache_hit": True}
     try:
         from src.intelligence.alphabet_source import attachment_url
@@ -592,6 +593,8 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
             row["reason"] += f"; {mismatches} publisher-link mismatches"
         if row["undated"] and payload.get("publication_problems"):
             row["reason"] += "; " + str(payload["publication_problems"][0])[:90]
+        if payload.get("index_discovery_url") == "https://news.northropgrumman.com/":
+            row["reason"] += "; release links read from official newsroom homepage"
         if source.get("format") == "alphabet" and payload.get("publication_problems"):
             row.update(status="limited", reason="Original Alphabet release text unavailable: " + str(payload["publication_problems"][0])[:150])
         if source.get("requires_original_body") and any(

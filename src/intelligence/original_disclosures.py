@@ -163,7 +163,7 @@ def gaps(evidence):
     return []
 
 
-def summarize(story, evidence, name):
+def summarize(story, evidence, name, *, for_speech=False):
     fields = {row["field"]: row for row in evidence["facts"]}
     if "deployment_example" in fields:
         row = fields["deployment_example"]
@@ -180,6 +180,11 @@ def summarize(story, evidence, name):
         text = name + " disclosed a " + (term + ", " if term else "") + fields["contract_value"]["value"] + " contract award."
         if "contract_customer" in fields:
             text = text[:-1] + " from the " + fields["contract_customer"]["value"] + "."
+        if for_speech:
+            text = name + " disclosed a " + (term + " " if term else "") + "contract award"
+            if "contract_customer" in fields:
+                text += " from the " + fields["contract_customer"]["value"]
+            text += " worth " + fields["contract_value"]["value"] + "."
         if "contract_scope" in fields:
             text += " The work covers " + fields["contract_scope"]["value"] + "."
         return text

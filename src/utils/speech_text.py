@@ -35,8 +35,14 @@ def ordinal(value):
     return ORDINAL[value] if value in ORDINAL else TENS[value//10] + " " + ORDINAL[value%10]
 
 
-def normalize(text, *, brand_names=False):
+def normalize(text, *, brand_names=False, agency_names=False):
     text = str(text).replace("’", "'").replace("“", '"').replace("”", '"')
+    if agency_names:
+        def agency(match):
+            prefix = match.string[:match.start()].rstrip()
+            article = "The" if not prefix or prefix.endswith((".", "!", "?")) else "the"
+            return article + " U.S. Energy Information Administration"
+        text = re.sub(r"\bEIA\b", agency, text)
     if brand_names:
         text = re.sub(r"\bNVIDIA\b", "Nvidia", text)
     text = re.sub(r"https?://\S+|(?<!\S)/[A-Za-z][A-Za-z0-9_]*", "", text)

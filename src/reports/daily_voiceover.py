@@ -78,7 +78,7 @@ def price_sentence(row, evidence):
     return row['name'] + (" was unchanged" if value == 0 else f" {'rose' if value > 0 else 'fell'} {abs(value):.1f} percent") + " in the quoted session."
 
 
-def story_copy(story, evidence, *, modern=False):
+def story_copy(story, evidence, *, modern=False, refined=False):
     from src.intelligence.daily_brief_analysis import NAMES
     from src.intelligence.story_analysis import investor_read
     from src.intelligence.broadcast_story import copilot_reveal, company_read
@@ -103,7 +103,7 @@ def story_copy(story, evidence, *, modern=False):
     if profile["schema"] == 8:
         from src.intelligence.original_disclosures import summarize
         name = NAMES.get(story.get("publisher_symbol"), story["source"])
-        summary = summarize(story, profile, name)
+        summary = summarize(story, profile, name, for_speech=refined)
         if summary:
             return summary + " " + review["why"]
     if story["kind"] != "company":
@@ -201,6 +201,7 @@ def build(record, report, research, *, schema=2):
     if type(schema) is not int or schema not in {1, 2}:
         raise ValueError("Unknown voiceover presentation schema")
     modern = schema == 2
+    refined = record.get("rules_version", 0) >= 22
     selected = editor.selected_stories(record)
     review = record["analyst_review"]
     validate_review(review, research, report, selected)
@@ -224,7 +225,7 @@ def build(record, report, research, *, schema=2):
         calendar_ids.append(key)
 
     def add(heading, text, bullets=(), source_ids=()):
-        text = normalize(text, brand_names=record.get("rules_version", 0) >= 21)
+        text = normalize(text, brand_names=record.get("rules_version", 0) >= 21, agency_names=refined)
         if not text: return
         scenes.append({"heading":heading, "narration":text, "bullets":list(bullets)[:3], "source_ids":list(source_ids)})
 
@@ -253,7 +254,7 @@ def build(record, report, research, *, schema=2):
     covered = set()
     from src.intelligence.company_focus import issuer, grouped_price_watch
     for story in sorted(selected, key=editor.news_order):
-        copy = story_copy(story, evidence, modern=modern)
+        copy = story_copy(story, evidence, modern=modern, refined=refined)
         if not copy:
             continue
         defense = "defense" in story_topics(story)
@@ -261,6 +262,8 @@ def build(record, report, research, *, schema=2):
         transition = "In defense and innovation. " if defense else "In capital markets. " if label == "Capital Markets" else "On policy. " if story["kind"] == "macro" else "In company news. "
         if modern and story.get("event_evidence", {}).get("event") == "solar storage":
             label, transition = "Energy and Infrastructure", "In energy and infrastructure. "
+        elif modern and refined and story.get("source") == "EIA" and story.get("materiality") == "energy":
+            label, transition = "Energy Watch", "In energy. "
         add(label, transition+copy, (story["title"],), (story["id"],))
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)
