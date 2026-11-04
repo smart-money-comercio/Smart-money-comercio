@@ -532,7 +532,7 @@ def parse_article_items(payload: dict, source: dict, *, full_titles: bool = Fals
             row["evidence_scope"] = row.get("evidence_scope") or ("publisher feed excerpt" if row.get("description") else "headline only")
             row["evidence_checked_at"] = row.get("evidence_checked_at", payload.get("fetched_at_epoch"))
             details = payload.get("release_evidence", [])
-            for detail in (details[:1] if isinstance(details, list) else []):
+            for detail in (details[:originals.MAX_FEED_DETAIL_PAGES] if isinstance(details, list) else []):
                 if (isinstance(detail, dict) and detail.get("title") == row["title"] and detail.get("url") == row["link"]
                         and timestamp(detail.get("published")) == timestamp(row["published"])):
                     row.update(description=originals.release_text(detail.get("text", "")), evidence_scope="original release excerpt",
@@ -602,6 +602,13 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
             root = ET.fromstring(payload.get("body", ""))
             if root.tag.split("}")[-1].lower() == "feed" and any(node.tag.split("}")[-1].lower() == "updated" for node in root.iter()):
                 row["reason"] += "; update timestamps do not establish original publication"
+        reviews = payload.get("release_read_reviews")
+        if isinstance(reviews, list):
+            row["body_reads"] = sum(value.get("status") == "read" for value in reviews if isinstance(value, dict))
+            row["body_limited"] = sum(value.get("status") == "limited" for value in reviews if isinstance(value, dict))
+            row["body_reason"] = next((value["reason"] for value in reviews if isinstance(value, dict) and value.get("status") == "limited"), "")
+            if row["body_limited"]:
+                row["reason"] += f"; {row['body_limited']} original article reads limited: " + row["body_reason"][:100]
         row["reason"] = row["reason"][:240]
     except (ET.ParseError, ValueError, TypeError, KeyError) as exc:
         row["reason"] = "no dated RSS article candidates; invalid publisher response" if isinstance(exc, ET.ParseError) else str(exc)[:150]
@@ -611,7 +618,10 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
 def coverage_summary(rows: list[dict]) -> str:
     available = sum(row["status"] == "available" for row in rows)
     fresh = sum(row["fresh"] for row in rows)
-    return f"Original sources: {available}/{len(rows)} available; {len(rows) - available} limited; {fresh} fresh dated reports before editorial selection."
+    text = f"Original sources: {available}/{len(rows)} available; {len(rows) - available} limited; {fresh} fresh dated reports before editorial selection."
+    if any("body_reads" in row for row in rows):
+        text += f" Original article reads: {sum(row.get('body_reads', 0) for row in rows)} verified; {sum(row.get('body_limited', 0) for row in rows)} limited."
+    return text
 
 
 def cached_original_coverage(now: datetime | None = None) -> list[dict]:
@@ -749,10 +759,11 @@ def fetch_news_live_context(force_refresh: bool = False) -> dict:
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         payloads = list(pool.map(lambda source: fetch_source(source, force_refresh), NEWS_SOURCES))
+        article_budget = originals.DetailReadBudget()
         def read_release(pair):
             source, payload = pair
             result = originals.enrich_feed(source, payload, parse_rss_items,
-                lambda url: fetch_url(url, force_refresh, cache_result=False), datetime.now(timezone.utc))
+                lambda url: fetch_url(url, force_refresh, cache_result=False), datetime.now(timezone.utc), budget=article_budget)
             if result is not payload:
                 set_cached_source(source["url"], result)
             return result

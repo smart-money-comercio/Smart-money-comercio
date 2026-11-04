@@ -67,6 +67,11 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    if story.get("event_evidence", {}).get("schema") == 8 and primary_source(story):
+        from src.intelligence.original_disclosures import body_topic
+        topic = body_topic(story, checked_evidence(story))
+        if topic:
+            return topic
     if story.get("sec_filing"):
         return story["sec_filing"]["disclosure"]["topic"] if primary_source(story) else ""
     if story.get("ipo"):
@@ -378,6 +383,27 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             story.update(source_check="hold", reason=str(exc))
             ledger.append(story)
             continue
+        # Article evidence can establish what a promotional or terse headline omits.
+        # Only a fresh original body can change a materiality decision.
+        if raw.get("excerpt_scope") == "original release excerpt" and primary_source(story) and not story.get("ipo") and not story.get("sec_filing"):
+            try:
+                from src.intelligence.story_analysis import release_text
+                from src.intelligence.energy_analysis import solar_storage_report
+                text = release_text(raw.get("source_excerpt", ""))
+                observed = raw.get("evidence_checked_at") or story["source_checked_at"]
+                evidence_clock = dated(observed)
+                if not -60 <= (now-evidence_clock).total_seconds() <= MAX_CACHE_AGE or (published-evidence_clock).total_seconds() > 60:
+                    raise ValueError("Original article observation is stale, future-dated or predates publication")
+                specialized = (is_fomc_statement(story) or solar_storage_report(story)
+                               or story.get("publisher_symbol") in {"GOOG", "GOOGL", "INTC"})
+                if len(text) >= 80 and not specialized:
+                    story["materiality"] = materiality(story)
+                    story["evidence_checked_at"] = observed
+                    story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=8)
+            except (ValueError, TypeError, OverflowError) as exc:
+                story.update(source_check="hold", reason=str(exc))
+                ledger.append(story)
+                continue
         story["story_type"] = story_type(story)
         if not raw.get("relevant", True) or (story["kind"] == "company" and not story["symbols"]):
             story.update(decision="skip", reason="Outside monitored companies and market themes")
@@ -390,6 +416,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             if story["story_type"] == "context" and primary_source(story):
                 reason = ("Calendar or investor-event notice; no financial results or new business development established"
                           if re.search(r"\b(conference call|earnings call|investor conference|webcast)\b", story["title"], re.I) else
+                          "Original article reviewed; no concrete material business or policy development extracted" if story.get("event_evidence", {}).get("schema") == 8 else
                           "Original publisher item; headline does not establish a material business or policy development")
             story.update(decision="skip", reason=reason)
         elif (story["kind"] == "macro" and story["source"] == "U.S. Treasury"
@@ -455,7 +482,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
-            story["event_evidence"] = build_evidence(story, text, scope)
+            if story.get("event_evidence", {}).get("schema") != 8:
+                story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
             "rules_version": 16, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
@@ -464,7 +492,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=20, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=21, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     return result
 
@@ -633,6 +661,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
+         + f"; {sum(story.get('event_evidence', {}).get('schema') == 8 for story in value['candidates'])} original article materiality reviews"
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
     if broadcast and (analyst_review or {}).get("reader_version") in {1, 2}:
@@ -818,6 +847,11 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     lines.append("Event: " + event["event"] + " | Stage: " + event["stage"] + " | Evidence read: " + event["scope"])
                     if review["facts"]:
                         lines.append("Disclosed excerpt facts: " + review["facts"])
+                    if review.get("undisclosed"):
+                        lines.append("Not specified in reviewed text: " + "; ".join(review["undisclosed"]))
+                    if event.get("schema") == 8:
+                        for fact in event["facts"]:
+                            lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]
                 if story.get("ipo"):
                     from src.intelligence.ipo_monitor import STAGES

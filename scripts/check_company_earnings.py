@@ -261,7 +261,7 @@ class CompanyEarningsChecks(IsolatedChecks):
 
     def test_saved_editions_show_their_original_rules_and_context_evaluation(self):
         _,record=self.render()
-        self.assertIn("Editorial rules: 20",editor.build_editor_status())
+        self.assertIn("Editorial rules: 21",editor.build_editor_status())
         previous=deepcopy(record); previous["rules_version"]=17
         previous.pop("earnings_context_health"); previous.pop("earnings_context_candidates")
         with patch.object(store,"read_editions",return_value=[previous]):

@@ -7,6 +7,8 @@ import hashlib
 import json
 import math
 import re
+import time
+from threading import Lock
 from urllib.parse import urljoin, urlsplit
 
 from src.intelligence.special_alert_company_sources import PublicationPage, publication_time
@@ -17,6 +19,22 @@ from src.intelligence import publisher_publication as publication
 
 MAX_ARTICLES = 30
 MAX_DETAIL_PAGES = 3
+MAX_FEED_DETAIL_PAGES = 2
+
+
+class DetailReadBudget:
+    """One refresh shares twelve attempts and a thirty-second start window."""
+    def __init__(self, reads=12, seconds=30):
+        self.remaining = reads
+        self.deadline = time.monotonic() + seconds
+        self.lock = Lock()
+
+    def take(self):
+        with self.lock:
+            if self.remaining <= 0 or time.monotonic() >= self.deadline:
+                return False
+            self.remaining -= 1
+            return True
 
 
 class ArticleBody(VisibleText):
@@ -30,6 +48,8 @@ class ArticleBody(VisibleText):
         self.kratos = (publisher in {"KTOS", "Kratos Newsroom"} and parts.hostname == "www.kratosdefense.com"
                        and re.fullmatch(r"/newsroom/[^/]+/?", parts.path) is not None)
         self.alphabet = publisher in {"GOOG", "GOOGL", "Alphabet Investor Relations"} and parts.hostname in {"abc.xyz", "www.abc.xyz"}
+        self.nvidia_blog = parts.hostname == "blogs.nvidia.com"
+        self.eia = publisher == "EIA" and parts.hostname == "www.eia.gov"
         self.depth = 0
         self.heading_tag, self.heading_parts, self.headings = None, [], []
         self.date_depth, self.date_parts = 0, []
@@ -37,7 +57,7 @@ class ArticleBody(VisibleText):
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         classes = set(attrs.get("class", "").split())
-        if classes & {"article-date", "wd_date"} or self.alphabet and "evergreen-news-date-text" in classes:
+        if classes & {"article-date", "wd_date"} or self.alphabet and "evergreen-news-date-text" in classes or self.eia and tag == "span" and "date" in classes:
             self.date_depth = 1
         elif self.date_depth and tag not in self.VOID:
             self.date_depth += 1
@@ -51,7 +71,9 @@ class ArticleBody(VisibleText):
         kratos = self.kratos
         kratos_body = kratos and tag == "section" and "wysiwyg-section" in classes
         alphabet_body = self.alphabet and tag == "div" and "evergreen-news-body" in classes
-        if not self.depth and (tag == "article" and not treasury and not kratos or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body):
+        nvidia_body = self.nvidia_blog and tag == "div" and "entry-content" in classes
+        eia_body = self.eia and tag == "div" and "tie-article" in classes
+        if not self.depth and (tag == "article" and not treasury and not kratos and not self.nvidia_blog or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body or nvidia_body or eia_body):
             self.depth = 1
         elif self.depth and tag not in self.VOID:
             self.depth += 1
@@ -120,13 +142,14 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
     return text
 
 
-def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -> dict:
-    """One release read: fresh news, or supported dated results within 72 hours."""
+def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *, budget=None) -> dict:
+    """At most two fresh issuer/agency articles; Intel context keeps its one-page budget."""
     fed = source.get("name") == "Federal Reserve" and source.get("category") == "fed"
     # Intel's older marker only checked the 24-hour news window. Reprocess that
     # cached feed once after upgrading; keep its observation/publication clocks.
-    profile = 2 if source.get("company_symbol") == "INTC" else 1
-    if (not source.get("company_symbol") and not fed) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:
+    profile = 2 if source.get("company_symbol") == "INTC" else 3
+    agency = source.get("name") in {"EIA", "DARPA"}
+    if (not source.get("company_symbol") and not fed and not agency) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:
         return payload
     observed = payload.get("fetched_at_epoch")
     if not authorized_response(source, payload) or type(observed) not in (int, float) or not math.isfinite(observed) or not -60 <= now.timestamp() - observed <= 6 * 3600:
@@ -136,11 +159,12 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
         published = timestamp(row["published"])
         from src.intelligence.policy_analysis import is_fomc_statement
         allowed = (is_fomc_statement({"source": source["name"], "title": row["title"]})
-                   and authorized_response(source, {"url": row["link"]})) if fed else company_url(source["company_symbol"], row["link"])
+                   and authorized_response(source, {"url": row["link"]})) if fed else authorized_response(source, {"url": row["link"]})
         from src.intelligence.company_earnings import intel_period
         context_release = source.get("company_symbol") == "INTC" and intel_period(row["title"])
         max_age = 72 * 3600 if context_release else 24 * 3600
-        if (published and 0 <= (now - published).total_seconds() <= max_age
+        from src.intelligence.original_disclosures import calendar_notice
+        if (published and not calendar_notice(row["title"]) and 0 <= (now - published).total_seconds() <= max_age
                 and allowed):
             candidates.append((published, row))
     candidates.sort(key=lambda value: value[0], reverse=True)
@@ -152,18 +176,34 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime) -
         # Keep the single-page budget for a material release when a newer
         # community or calendar notice would otherwise consume that read.
         candidates.sort(key=lambda value: not material(value))
-    details, issues = [], []
-    for _, row in candidates[:1]:
+    # Distinct URLs consume the fixed request budget, including failures.
+    unique = {}
+    for value in candidates:
+        unique.setdefault(value[1]["link"], value)
+    limit = 1 if fed or source.get("company_symbol") == "INTC" else MAX_FEED_DETAIL_PAGES
+    details, issues, reviews = [], [], []
+    for _, row in list(unique.values())[:limit]:
+        if budget is not None and not budget.take():
+            issue = "Original article read deferred by the shared refresh budget"
+            issues.append(issue)
+            reviews.append({"url": row["link"], "status": "limited", "reason": issue})
+            continue
         try:
             detail = fetch(row["link"])
             if detail.get("status") != "ok" or not authorized_response(source, detail):
                 raise ValueError(detail.get("error") or "Original release redirect mismatch")
             excerpt = article_excerpt(detail["body"], row["title"], row["published"], publisher=source["name"], url=row["link"])
+            checked = detail.get("fetched_at_epoch")
+            if type(checked) not in (int, float) or not math.isfinite(checked) or not -60 <= now.timestamp()-checked <= 6*3600 or checked < timestamp(row["published"]).timestamp()-60:
+                raise ValueError("Original release observation is stale or predates publication")
             details.append({"title": row["title"], "url": row["link"], "published": row["published"],
-                            "text": excerpt, "checked_at_epoch": detail["fetched_at_epoch"]})
+                            "text": excerpt, "checked_at_epoch": checked})
+            reviews.append({"url": row["link"], "status": "read", "reason": "Title, original publication and article body matched"})
         except (ValueError, TypeError, KeyError, UnicodeError) as exc:
             issues.append(str(exc)[:160])
-    return {**payload, "release_excerpt_schema": profile, "release_evidence": details, "release_evidence_issues": issues}
+            reviews.append({"url": row["link"], "status": "limited", "reason": str(exc)[:160]})
+    return {**payload, "release_excerpt_schema": profile, "release_evidence": details, "release_evidence_issues": issues,
+            "release_read_reviews": reviews}
 
 
 class ReleaseLinks(HTMLParser):

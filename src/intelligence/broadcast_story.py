@@ -35,6 +35,13 @@ def render_story(story: dict, zone, names: dict) -> str:
         raise ValueError("Broadcast narration needs an admitted original publisher")
     published = dated(story["published"]).astimezone(zone)
     day = f"{published:%B} {published.day}"
+    if story.get("event_evidence", {}).get("schema") == 8:
+        from src.intelligence.original_disclosures import summarize
+        review = company_read(story) if story["kind"] == "company" else investor_read(story)
+        name = names.get(story.get("publisher_symbol"), story["source"])
+        summary = summarize(story, review["evidence"], name)
+        if summary:
+            return summary + f" The disclosure was published {day}. Investor take: " + review["why"] + " " + next_check(review["watch"])
     if is_fomc_statement(story):
         review = investor_read(story)
         if not review["facts"]:

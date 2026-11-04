@@ -188,14 +188,20 @@ def build_evidence(story: dict, text: str = "", scope: str = "headline only", *,
     intel_results = story.get("publisher_symbol") == "INTC" and bool(intel_period(story["title"]))
     if schema is None:
         schema = 7 if intel_results else 6 if solar_storage_report(story) else 5 if story.get("publisher_symbol") in {"GOOG", "GOOGL"} and re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", story["title"], re.I) else 4
-    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results:
+    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7, 8} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema == 8 and scope != "original release excerpt":
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
-    kind, stage = event_type(story["title"], story.get("materiality", ""), version=schema)
+    kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
+    if schema == 8:
+        from src.intelligence.original_disclosures import event, facts as disclosure_facts
+        kind, stage = event(story, text, kind, stage)
+        facts = disclosure_facts(story, text, kind, stage, disclosed_facts(text, kind, stage, version=4, title=story["title"]))
+    else:
+        facts = disclosed_facts(text, kind, stage, version=schema, title=story["title"])
     return {"schema": schema, "event": kind, "stage": stage, "scope": scope if text else "headline only",
             "source_url": story["url"], "published": story["published"], "source_text": text,
             "observed_at": story.get("evidence_checked_at", story.get("source_checked_at")),
-            "source_sha256": hashlib.sha256(text.encode()).hexdigest(), "facts": disclosed_facts(text, kind, stage, version=schema, title=story["title"])}
+            "source_sha256": hashlib.sha256(text.encode()).hexdigest(), "facts": facts}
 
 
 def checked_evidence(story: dict) -> dict:
@@ -283,7 +289,10 @@ def investor_read(story: dict) -> dict:
               "reported_operating_margin": "Reported operating margin", "reported_eps": "Reported earnings per share", "forecast_revenue": "Management's revenue forecast",
               "program_type": "Program described in the release", "restructuring_charge": "Restructuring cost described in the release",
               "restructuring_cost_estimate": "Estimated restructuring cost", "annual_savings_target": "Annual savings target",
-              "tested_capability": "Capability demonstrated in the reported test", "planned_capacity_scale": "Announced expansion plan"}
+              "tested_capability": "Capability demonstrated in the reported test", "planned_capacity_scale": "Announced expansion plan",
+              "contract_value": "Stated award value, not obligated funding", "contract_term": "Disclosed contract term", "contract_scope": "Disclosed work", "contract_customer": "Customer named in the award",
+              "deployment_example": "Deployment example", "deployment_example_2": "Additional deployment example", "rollout_target": "Rollout target",
+              "commercial_commitment": "Disclosed commercial commitment", "refinery_change": "Dated global refinery observation", "refinery_change_2": "Additional dated refinery observation"}
     if kind == "monetary policy" and stage == "rate decision":
         values = {row["field"]: row["value"] for row in evidence["facts"]}
         facts = ("The Federal Reserve " + values["policy_action"] + " its federal funds target range "
@@ -293,4 +302,9 @@ def investor_read(story: dict) -> dict:
         facts = storage_narration(evidence)
     else:
         facts = "; ".join(labels[row["field"]] + ": " + row["value"] for row in evidence["facts"])
-    return {"evidence": evidence, "facts": facts + "." if facts else "", "why": why, "watch": watch}
+    result = {"evidence": evidence, "facts": facts + "." if facts else "", "why": why, "watch": watch}
+    if evidence["schema"] == 8:
+        from src.intelligence.original_disclosures import interpretation, gaps
+        result["why"], result["watch"] = interpretation(evidence, why, watch)
+        result["undisclosed"] = gaps(evidence)
+    return result

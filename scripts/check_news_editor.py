@@ -1053,7 +1053,7 @@ class OriginalSourceChecks(IsolatedChecks):
         class Clock(datetime):
             @classmethod
             def now(cls, tz=None): return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
-        with patch.object(feeds, "NEWS_SOURCES", [source]), patch.object(feeds, "datetime", Clock), patch.object(feeds, "fetch_source", return_value=self.payload(body)), patch.object(feeds.originals, "enrich_feed", side_effect=lambda source, payload, *args: payload):
+        with patch.object(feeds, "NEWS_SOURCES", [source]), patch.object(feeds, "datetime", Clock), patch.object(feeds, "fetch_source", return_value=self.payload(body)), patch.object(feeds.originals, "enrich_feed", side_effect=lambda source, payload, *args, **kwargs: payload):
             context = feeds.fetch_news_live_context()
         self.assertEqual(len(context["items"]), 1)
         self.assertIn("new AI platform", context["items"][0]["title"])
