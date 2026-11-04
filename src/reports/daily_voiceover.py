@@ -189,7 +189,7 @@ def focus_bullet(row, evidence):
 def build(record, report, research, *, schema=2):
     """Derive a spoken companion only after the original edition passes review."""
     from src.intelligence import news_editor as editor
-    from src.intelligence.daily_brief_analysis import validate_review
+    from src.intelligence.daily_brief_analysis import NAMES, validate_review
     from src.intelligence.market_brief import story_topics
     from src.reports.daily_news_brief import validate_news_brief
     if type(schema) is not int or schema not in {1, 2}:
@@ -231,9 +231,15 @@ def build(record, report, research, *, schema=2):
     attention = evidence.get("market_event_context", {}).get("events", [])
     first_checked = next((event for event in attention if event["status"] == "rechecked"), {})
     opening_context = matching(evidence.get("earnings_context", []), first_checked.get("symbol"))
-    opening_sources = ["earnings_" + opening_context["symbol"]] if context_sources and opening_context else []
+    opening_sources = (["earnings_" + opening_context["symbol"]]
+                       if opening_context and (context_sources or review.get("reader_version") == 2) else [])
+    if modern and review.get("reader_version") == 2 and first_checked:
+        label = NAMES.get(first_checked["symbol"], first_checked["symbol"])
+        company_line = next((line for line in re.split(r"(?<=[.!?])\s+", hook) if label in line), "")
+        if company_line and company_line not in hook_bullets:
+            hook_bullets = [hook_bullets[0], company_line]
     add("The Takeaway", greeting+" This is Smart Money for "+local.strftime("%B %d").replace(" 0", " ")+". "+hook,
-        hook_bullets, opening_sources if "Recent earnings provide" in hook else ())
+        hook_bullets, opening_sources if review.get("reader_version") == 2 or "Recent earnings provide" in hook else ())
     market = market_copy(evidence)
     market_sources = [story["id"] for story in selected if story_topics(story) & {"trade", "geopolitics", "policy", "energy", "IPO", "AI financing"}] if modern else ()
     add("Market Update", "First, the market. "+market,
@@ -296,7 +302,8 @@ def build(record, report, research, *, schema=2):
         signals.append(("First, " if i == 0 else "Second, " if i == 1 else "Finally, ")+label+". "+body)
     watch_bullets = [re.split(r"(?<=[.!?])\s+",text.partition(": ")[2])[0] for text in watch] if modern else [text.partition(": ")[0] for text in watch]
     watch_context = matching(evidence.get("earnings_context", []), attention[0]["symbol"]) if attention else None
-    watch_sources = ["earnings_" + watch_context["symbol"]] if context_sources and watch_context else []
+    watch_sources = (["earnings_" + watch_context["symbol"]]
+                     if watch_context and (context_sources or review.get("reader_version") == 2) else [])
     add("What We're Watching", "Here are the next checks. "+" ".join(signals), watch_bullets,
         watch_sources if any("earnings follow-through" in text for text in watch) else ())
     editorial = "\n\n".join(row["narration"] for row in scenes)

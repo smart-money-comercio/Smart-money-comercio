@@ -464,7 +464,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=19, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=20, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     return result
 
@@ -621,8 +621,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Earnings context lost its admitted source record")
         validate_review(analyst_review, research_report, report, selected)
         value["analyst_review"] = deepcopy(analyst_review)
-        if analyst_review.get("reader_version") == 1:
-            value["reader_version"] = 1
+        if analyst_review.get("reader_version") in {1, 2}:
+            value["reader_version"] = analyst_review["reader_version"]
     snapshot = re.search(r"\nMarket Snapshot\n(.*?)\n\n", research_report, re.S)
     moves = re.search(r"^[-•] Market moves: (.+)$", research_report, re.M)
     value["market_evidence"] = {"snapshot": snapshot[1][:900] if snapshot else "Unavailable", "moves": moves[1][:600] if moves else "Unavailable"}
@@ -635,7 +635,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
-    if broadcast and (analyst_review or {}).get("reader_version") == 1:
+    if broadcast and (analyst_review or {}).get("reader_version") in {1, 2}:
         from src.reports.daily_voiceover import build
         value.update(report_text=report, research_text=research_report)
         value["voiceover"] = build(value, report, research_report)
@@ -766,7 +766,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 for context in analysis["evidence"].get("earnings_context", []):
                     lines.append("Dated earnings context: " + context["symbol"] + " — " + context["source"] + "; release " + context["release_date"]
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")
-                if analysis.get("reader_version") == 1:
+                if analysis.get("reader_version") in {1, 2}:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
                     lines.append(f"Reader brief: opening takeaway and {signals} evidence-grounded watch signals; each explains the next check and why it matters.")
                 voice = record.get("voiceover", {}).get("quality")

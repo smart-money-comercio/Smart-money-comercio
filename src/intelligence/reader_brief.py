@@ -10,7 +10,7 @@ def company_name(story):
     return NAMES.get(symbol, symbol), issuer(symbol)
 
 
-def opening(evidence):
+def _opening_v1(evidence):
     moves, breadth = evidence["moves"], evidence["breadth"]
     events = evidence.get("market_event_context", {}).get("events", [])
     checked = next((row for row in events if row["status"] == "rechecked"), None)
@@ -46,7 +46,7 @@ def opening(evidence):
             "The useful focus is what verified company announcements actually change, and which missing figures we still need before judging the wider picture.")
 
 
-def watching(evidence):
+def _watching_v1(evidence):
     """Two or three concrete checks: observed fact, next signal, meaning."""
     rows = []
     breadth, moves = evidence["breadth"], evidence["moves"]
@@ -136,6 +136,98 @@ def watching(evidence):
         rows.append({"id": "watch_results", "text": "The earnings reality check: In the next company updates, look for sales growth that also produces profits and cash. More spending or higher usage alone would leave the return on that investment uncertain.",
                      "sources": ["Company focus selection"] if evidence.get("company_focus") else ["Top Opportunities"]})
     return [{**row, "section": "watch"} for row in rows[:evidence.get("reader_limit", 3)]]
+
+
+def _participation_scope(evidence):
+    breadth = evidence["breadth"]
+    up, down, total = (breadth[key] for key in ("up", "down", "total"))
+    if up == total or down == total:
+        direction = "higher" if up == total else "lower"
+        verb = "are" if evidence["is_open"] else "finished"
+        return f"All {total} stocks and funds we track {verb} {direction}."
+    return (f"Of the {total} stocks and funds we track, {up} are higher and {down} lower." if evidence["is_open"] else
+            f"Of the {total} stocks and funds we track, {up} finished higher and {down} lower.")
+
+
+def opening(evidence):
+    """Keep saved v1 editions stable; new editions lead with observed conditions."""
+    if evidence.get("reader_version") != 2:
+        return _opening_v1(evidence)
+    moves, breadth = evidence["moves"], evidence["breadth"]
+    checked = next((row for row in evidence.get("market_event_context", {}).get("events", [])
+                    if row["status"] == "rechecked"), None)
+    indexes_down = all(key in moves and moves[key] < 0 for key in ("S&P", "Nasdaq", "Russell"))
+    tracked_down = bool(breadth and breadth["down"] > breadth["up"])
+    all_down = bool(breadth and breadth["down"] == breadth["total"])
+    parts = []
+    if indexes_down:
+        parts.append("All three major indexes are lower in the quoted session." if evidence["is_open"] else
+                     "All three major indexes fell in the quoted session.")
+    if all_down or not indexes_down and checked and checked["reported_move"] < 0 and tracked_down:
+        parts.append(_participation_scope(evidence))
+    if checked:
+        label = NAMES.get(checked["symbol"], checked["symbol"])
+        down = checked["reported_move"] < 0
+        parts.append(f"{label}'s sharp {'decline' if down else 'advance'} stands out" + ("." if parts else " in the quoted session."))
+        context = matching(evidence.get("earnings_context", []), checked["symbol"])
+        if context:
+            detail = "Recent earnings provide dated financial context."
+            if context["symbol"] == "INTC":
+                from src.intelligence.company_earnings import intel_narration
+                facts = intel_narration(context)
+                for direction in ("below", "above"):
+                    if f"The entire forecast range is {direction}" in facts:
+                        detail = f"Its entire next-quarter revenue forecast is {direction} the revenue just reported."
+                        break
+            parts.append(detail)
+        else:
+            parts.append("Company disclosures are the next check on the business outlook.")
+        if down:
+            parts.append("Watch for selling to ease and company results to support a recovery." if indexes_down or tracked_down else
+                         "Watch whether the weakness stays concentrated and whether company disclosures change the outlook.")
+        elif breadth and breadth["up"] > breadth["down"]:
+            parts.append("Watch whether those gains hold and company disclosures support them.")
+        else:
+            parts.append("Watch whether other companies join the advance and company disclosures support it.")
+    elif parts:
+        parts.append("Watch for selling to ease across the names we track and company results to support a recovery.")
+    else:
+        return _opening_v1(evidence)
+    return "The takeaway: " + " ".join(parts)
+
+
+def watching(evidence):
+    rows = _watching_v1(evidence)
+    if evidence.get("reader_version") != 2:
+        return rows
+    breadth, moves = evidence["breadth"], evidence["moves"]
+    for row in rows:
+        if row["id"] == "watch_participation":
+            up, down = breadth["up"], breadth["down"]
+            scope = _participation_scope(evidence)
+            if down > up:
+                if all(key in moves and moves[key] > 0 for key in ("S&P", "Nasdaq", "Russell")):
+                    scope += " Index gains are not shared by most names in this research watchlist."
+                signal = ("Watch for fewer declines and more gains in this group before the close." if evidence["is_open"] else
+                          "In the next session, watch for fewer declines and more gains in this group.")
+                row["text"] = ("Market recovery: " + scope + " " + signal
+                               + " That would suggest selling is easing; renewed declines would weaken the recovery case.")
+            elif up > down:
+                signal = ("Watch whether gains hold across this group through the close." if evidence["is_open"] else
+                          "In the next session, watch whether gains continue across this group.")
+                row["text"] = "Staying power: " + scope + " " + signal + " Gains limited to fewer names would make the advance less convincing."
+            else:
+                signal = "Watch whether more tracked names turn higher or lower together" if evidence["is_open"] else "In the next session, watch whether more tracked names finish higher or lower together"
+                row["text"] = "The next move: " + scope + " " + signal + "; that would help establish a direction within this group."
+        elif row["id"] == "watch_event" and "Recent earnings context" in row["sources"]:
+            event = evidence.get("market_event_context", {}).get("events", [])[0]
+            context = matching(evidence.get("earnings_context", []), event["symbol"])
+            if context and context["symbol"] == "INTC":
+                from src.intelligence.company_earnings import intel_facts
+                if len(intel_facts(context["text"], context["title"])) > 1:
+                    row["text"] = ("Intel's earnings follow-through: Compare the next sales report with management's revenue forecast, then check costs and cash. "
+                                   "Meeting the plan with stronger cash flow would help; a sales shortfall would weaken the business case.")
+    return rows
 
 
 def insights(evidence):
