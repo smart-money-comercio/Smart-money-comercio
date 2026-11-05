@@ -1,0 +1,731 @@
+{
+  "analyst_review": {
+    "event_context": {
+      "events": [],
+      "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+      "schema": 1
+    },
+    "evidence": {
+      "breadth": {
+        "down": 11,
+        "total": 18,
+        "up": 7
+      },
+      "companies": [
+        {
+          "action": "wait",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Nvidia",
+          "opportunity": 92.0,
+          "price": null,
+          "score_risk": "Elevated",
+          "setup_risk": "Medium-High",
+          "structural": 80.1,
+          "symbol": "NVDA"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Microsoft",
+          "opportunity": 89.0,
+          "price": null,
+          "score_risk": "Controlled",
+          "setup_risk": "Medium-High",
+          "structural": 87.3,
+          "symbol": "MSFT"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Taiwan Semiconductor",
+          "opportunity": 86.0,
+          "price": null,
+          "score_risk": "Balanced",
+          "setup_risk": "Medium-High",
+          "structural": 85.4,
+          "symbol": "TSM"
+        }
+      ],
+      "company_focus": {
+        "day": "2026-10-25",
+        "featured_symbols": [
+          "NVDA",
+          "SBUX"
+        ],
+        "grouped_narration": 1,
+        "remaining_candidates": 36,
+        "rule": "Original developments, dated moves and market relevance; recent exposure breaks comparable ties",
+        "schema": 1,
+        "selected": [
+          {
+            "basis": "company report",
+            "group": "company development",
+            "metric": null,
+            "name": "Nvidia",
+            "recent_days": 0,
+            "role": "Development to watch",
+            "sources": [
+              "Verified story decisions"
+            ],
+            "story_id": "ebc673ac5dac5c93",
+            "symbol": "NVDA",
+            "tier": 100,
+            "watch": "Next, watch the disclosed commitments, execution costs and any change to guidance.",
+            "why": "An original company report brings a fresh business development into focus."
+          },
+          {
+            "basis": "sector context",
+            "group": "consumer",
+            "metric": null,
+            "name": "Starbucks",
+            "recent_days": 0,
+            "role": "Consumer watch",
+            "sources": [
+              "Executive Summary",
+              "Market Snapshot",
+              "Research theme universe"
+            ],
+            "story_id": "",
+            "symbol": "SBUX",
+            "tier": 60,
+            "watch": "Next, watch consumer demand, pricing and operating margins in the next company update.",
+            "why": "More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus."
+          }
+        ]
+      },
+      "is_open": false,
+      "leadership": null,
+      "market_event_context": {
+        "events": [],
+        "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+        "schema": 1
+      },
+      "moves": {
+        "Nasdaq": -0.21,
+        "Oil": 4.32,
+        "Russell": -0.29,
+        "S&P": -0.52,
+        "TLT": -0.49,
+        "VIX": 2.21
+      },
+      "narration_version": 2,
+      "reader_limit": 1,
+      "reader_version": 2,
+      "session": "2026-10-23",
+      "source_sections": [
+        "Executive Summary",
+        "Market Snapshot",
+        "What Changed Today",
+        "Top Opportunities",
+        "Trade Plan Snapshot",
+        "Market event checks",
+        "Verified story decisions",
+        "Company focus selection"
+      ],
+      "stories": [
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "contract",
+            "facts": [
+              {
+                "evidence": "CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force.",
+                "field": "contract_value",
+                "status": "stated award value; obligation not established",
+                "value": "$64 million"
+              },
+              {
+                "evidence": "CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force.",
+                "field": "contract_term",
+                "value": "three-year"
+              },
+              {
+                "evidence": "CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force.",
+                "field": "contract_customer",
+                "value": "U.S. Air Force"
+              },
+              {
+                "evidence": "By sustaining and modernizing the Example Enterprise Accounting and Management System (EEAMS), CACI supports agency operations.",
+                "field": "contract_scope",
+                "value": "Example Enterprise Accounting and Management System (EEAMS)"
+              }
+            ],
+            "observed_at": "2026-10-25T16:58:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "9c5670c90303eb041a9ae1a8b2588fa36d08b186424785da9002a50133a2cfa0",
+            "source_text": "CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force.\nBy sustaining and modernizing the Example Enterprise Accounting and Management System (EEAMS), CACI supports agency operations.",
+            "source_url": "https://www.caci.com/news/CACI",
+            "stage": "award"
+          },
+          "evidence_checked_at": "2026-10-25T16:58:00+00:00",
+          "id": "56a70dddb1820222",
+          "kind": "company",
+          "materiality": "contract",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "CACI",
+          "source": "CACI Investor Relations",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [
+            "CACI"
+          ],
+          "title": "CACI advances agency accounting services",
+          "url": "https://www.caci.com/news/CACI"
+        },
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "capacity expansion",
+            "facts": [
+              {
+                "application": "resident services",
+                "evidence": "In Portugal, Civic Systems combines NVIDIA Nemotron with its resident-service agents for municipal procedures.",
+                "field": "deployment_example",
+                "location": "Portugal",
+                "status": "in use",
+                "technology": [
+                  "Nemotron"
+                ],
+                "value": "Portugal: Nemotron; resident services; in use"
+              },
+              {
+                "application": "video analysis",
+                "evidence": "In Bergen, Harbor Systems is building shared AI infrastructure using NVIDIA Cosmos and NVIDIA Metropolis for video search and summarization.",
+                "field": "deployment_example_2",
+                "location": "Bergen",
+                "status": "under development",
+                "technology": [
+                  "Cosmos",
+                  "Metropolis"
+                ],
+                "value": "Bergen: Cosmos, Metropolis; video analysis; under development"
+              },
+              {
+                "evidence": "In Malaysia, Example Vision is scaling NVIDIA RTX PRO 6000 for traffic management to support 21,000+ cameras by 2028.",
+                "field": "rollout_target",
+                "status": "target",
+                "value": "21,000+ cameras by 2028 (target)"
+              }
+            ],
+            "observed_at": "2026-10-25T16:58:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "0020d00a58a9b488ac2e0002db1b02f8b9aab10e9dec3800c0f3329d96af9c7a",
+            "source_text": "In Portugal, Civic Systems combines NVIDIA Nemotron with its resident-service agents for municipal procedures.\nIn Bergen, Harbor Systems is building shared AI infrastructure using NVIDIA Cosmos and NVIDIA Metropolis for video search and summarization.\nIn Malaysia, Example Vision is scaling NVIDIA RTX PRO 6000 for traffic management to support 21,000+ cameras by 2028.",
+            "source_url": "https://blogs.nvidia.com/blog/synthetic-city-services/",
+            "stage": "announced"
+          },
+          "evidence_checked_at": "2026-10-25T16:58:00+00:00",
+          "id": "ebc673ac5dac5c93",
+          "kind": "company",
+          "materiality": "capacity expansion",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "NVDA",
+          "source": "Nvidia Newsroom",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [
+            "NVDA"
+          ],
+          "title": "NVIDIA expands city AI services",
+          "url": "https://blogs.nvidia.com/blog/synthetic-city-services/"
+        },
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "refinery data",
+            "facts": [
+              {
+                "change": "3.2 million barrels per day",
+                "direction": "decrease",
+                "evidence": "Global crude oil refinery inputs fell by 3.2 million barrels per day (b/d) in the second quarter of 2026.",
+                "field": "refinery_change",
+                "period": "second quarter of 2026",
+                "status": "historical observation",
+                "value": "3.2 million barrels per day decrease (second quarter of 2026)"
+              },
+              {
+                "change": "1.1 million barrels per day",
+                "direction": "increase",
+                "evidence": "Global crude oil refinery inputs fell by 3.2 million barrels per day (b/d) in the second quarter of 2026. Throughput then increased by 1.1 million b/d in the third quarter.",
+                "field": "refinery_change_2",
+                "period": "third quarter of 2026",
+                "status": "historical observation",
+                "value": "1.1 million barrels per day increase (third quarter of 2026)"
+              }
+            ],
+            "observed_at": "2026-10-25T16:58:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "ab69dbe51932b9543d663ef63813f2e608384eb4bcab50df3e1f91ab481c5926",
+            "source_text": "Global crude oil refinery inputs fell by 3.2 million barrels per day (b/d) in the second quarter of 2026. Throughput then increased by 1.1 million b/d in the third quarter.\nGlobal crude oil inputs increased by 0.6 million b/d in the second quarter of 2025.",
+            "source_url": "https://www.eia.gov/todayinenergy/detail.php?id=12345",
+            "stage": "dated observation"
+          },
+          "evidence_checked_at": "2026-10-25T16:58:00+00:00",
+          "id": "ef237a362fa61071",
+          "kind": "macro",
+          "materiality": "energy",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "",
+          "source": "EIA",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [],
+          "title": "Global refinery inputs declined before a partial recovery",
+          "url": "https://www.eia.gov/todayinenergy/detail.php?id=12345"
+        }
+      ]
+    },
+    "focus_context": {
+      "limit": 2,
+      "recent": [],
+      "schema": 5
+    },
+    "insights": [
+      {
+        "id": "market_pulse",
+        "section": "market",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Verified story decisions"
+        ],
+        "text": "Our indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 0.52 percent; the Nasdaq Composite fell 0.21 percent; VIX rose 2.21 percent; oil rose 4.32 percent; the TLT bond fund fell 0.49 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs."
+      },
+      {
+        "id": "defense_watch",
+        "section": "global",
+        "sources": [
+          "Verified story decisions"
+        ],
+        "text": "Our view on CACI International: Accounting-system modernization supports a multiyear services workload. Its stated value does not establish funding obligated today or revenue already earned. Next, check obligated funding, task orders, delivery costs, margins and when the company expects to recognize revenue."
+      },
+      {
+        "id": "company_focus_2",
+        "section": "company",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Research theme universe",
+          "Company focus selection"
+        ],
+        "text": "Consumer watch — Starbucks. More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus. No fresh Starbucks announcement is included in this edition. Next, watch consumer demand, pricing and operating margins in the next company update."
+      },
+      {
+        "id": "opening_takeaway",
+        "section": "intro",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot"
+        ],
+        "text": "The takeaway: All three major indexes fell in the quoted session. Watch for selling to ease across the names we track and company results to support a recovery."
+      },
+      {
+        "id": "watch_participation",
+        "section": "watch",
+        "sources": [
+          "Market Snapshot",
+          "Executive Summary"
+        ],
+        "text": "Market recovery: Of the 18 stocks and funds we track, 7 finished higher and 11 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case."
+      }
+    ],
+    "narration_version": 2,
+    "presentation": "news",
+    "reader_limit": 1,
+    "reader_version": 2,
+    "research_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+    "schema": 1,
+    "score_changes": false
+  },
+  "candidates": [
+    {
+      "canonical_url": "https://blogs.nvidia.com/blog/synthetic-city-services/",
+      "confirmation_check": "pass",
+      "confirmed_by": "NVDA",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "capacity expansion",
+        "facts": [
+          {
+            "application": "resident services",
+            "evidence": "In Portugal, Civic Systems combines NVIDIA Nemotron with its resident-service agents for municipal procedures.",
+            "field": "deployment_example",
+            "location": "Portugal",
+            "status": "in use",
+            "technology": [
+              "Nemotron"
+            ],
+            "value": "Portugal: Nemotron; resident services; in use"
+          },
+          {
+            "application": "video analysis",
+            "evidence": "In Bergen, Harbor Systems is building shared AI infrastructure using NVIDIA Cosmos and NVIDIA Metropolis for video search and summarization.",
+            "field": "deployment_example_2",
+            "location": "Bergen",
+            "status": "under development",
+            "technology": [
+              "Cosmos",
+              "Metropolis"
+            ],
+            "value": "Bergen: Cosmos, Metropolis; video analysis; under development"
+          },
+          {
+            "evidence": "In Malaysia, Example Vision is scaling NVIDIA RTX PRO 6000 for traffic management to support 21,000+ cameras by 2028.",
+            "field": "rollout_target",
+            "status": "target",
+            "value": "21,000+ cameras by 2028 (target)"
+          }
+        ],
+        "observed_at": "2026-10-25T16:58:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "0020d00a58a9b488ac2e0002db1b02f8b9aab10e9dec3800c0f3329d96af9c7a",
+        "source_text": "In Portugal, Civic Systems combines NVIDIA Nemotron with its resident-service agents for municipal procedures.\nIn Bergen, Harbor Systems is building shared AI infrastructure using NVIDIA Cosmos and NVIDIA Metropolis for video search and summarization.\nIn Malaysia, Example Vision is scaling NVIDIA RTX PRO 6000 for traffic management to support 21,000+ cameras by 2028.",
+        "source_url": "https://blogs.nvidia.com/blog/synthetic-city-services/",
+        "stage": "announced"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T16:58:00+00:00",
+      "id": "ebc673ac5dac5c93",
+      "kind": "company",
+      "materiality": "capacity expansion",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 119,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "NVDA",
+      "reason": "Original NVDA report; material capacity expansion development within the edition budget",
+      "source": "Nvidia Newsroom",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [
+        "NVDA"
+      ],
+      "title": "NVIDIA expands city AI services",
+      "title_truncated": false,
+      "url": "https://blogs.nvidia.com/blog/synthetic-city-services/"
+    },
+    {
+      "canonical_url": "https://www.caci.com/news/CACI",
+      "confirmation_check": "pass",
+      "confirmed_by": "CACI",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "contract",
+        "facts": [
+          {
+            "evidence": "CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force.",
+            "field": "contract_value",
+            "status": "stated award value; obligation not established",
+            "value": "$64 million"
+          },
+          {
+            "evidence": "CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force.",
+            "field": "contract_term",
+            "value": "three-year"
+          },
+          {
+            "evidence": "CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force.",
+            "field": "contract_customer",
+            "value": "U.S. Air Force"
+          },
+          {
+            "evidence": "By sustaining and modernizing the Example Enterprise Accounting and Management System (EEAMS), CACI supports agency operations.",
+            "field": "contract_scope",
+            "value": "Example Enterprise Accounting and Management System (EEAMS)"
+          }
+        ],
+        "observed_at": "2026-10-25T16:58:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "9c5670c90303eb041a9ae1a8b2588fa36d08b186424785da9002a50133a2cfa0",
+        "source_text": "CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force.\nBy sustaining and modernizing the Example Enterprise Accounting and Management System (EEAMS), CACI supports agency operations.",
+        "source_url": "https://www.caci.com/news/CACI",
+        "stage": "award"
+      },
+      "event_priority": 2,
+      "evidence_checked_at": "2026-10-25T16:58:00+00:00",
+      "id": "56a70dddb1820222",
+      "kind": "company",
+      "materiality": "contract",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 117,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "CACI",
+      "reason": "Original CACI report; material contract development within the edition budget",
+      "source": "CACI Investor Relations",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [
+        "CACI"
+      ],
+      "title": "CACI advances agency accounting services",
+      "title_truncated": false,
+      "url": "https://www.caci.com/news/CACI"
+    },
+    {
+      "canonical_url": "https://www.eia.gov/todayinenergy/detail.php?id=12345",
+      "confirmation_check": "pass",
+      "confirmed_by": "EIA",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "refinery data",
+        "facts": [
+          {
+            "change": "3.2 million barrels per day",
+            "direction": "decrease",
+            "evidence": "Global crude oil refinery inputs fell by 3.2 million barrels per day (b/d) in the second quarter of 2026.",
+            "field": "refinery_change",
+            "period": "second quarter of 2026",
+            "status": "historical observation",
+            "value": "3.2 million barrels per day decrease (second quarter of 2026)"
+          },
+          {
+            "change": "1.1 million barrels per day",
+            "direction": "increase",
+            "evidence": "Global crude oil refinery inputs fell by 3.2 million barrels per day (b/d) in the second quarter of 2026. Throughput then increased by 1.1 million b/d in the third quarter.",
+            "field": "refinery_change_2",
+            "period": "third quarter of 2026",
+            "status": "historical observation",
+            "value": "1.1 million barrels per day increase (third quarter of 2026)"
+          }
+        ],
+        "observed_at": "2026-10-25T16:58:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "ab69dbe51932b9543d663ef63813f2e608384eb4bcab50df3e1f91ab481c5926",
+        "source_text": "Global crude oil refinery inputs fell by 3.2 million barrels per day (b/d) in the second quarter of 2026. Throughput then increased by 1.1 million b/d in the third quarter.\nGlobal crude oil inputs increased by 0.6 million b/d in the second quarter of 2025.",
+        "source_url": "https://www.eia.gov/todayinenergy/detail.php?id=12345",
+        "stage": "dated observation"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T16:58:00+00:00",
+      "id": "ef237a362fa61071",
+      "kind": "macro",
+      "materiality": "energy",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 108,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "",
+      "reason": "Original EIA report; material energy development within the edition budget",
+      "source": "EIA",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [],
+      "title": "Global refinery inputs declined before a partial recovery",
+      "title_truncated": false,
+      "url": "https://www.eia.gov/todayinenergy/detail.php?id=12345"
+    }
+  ],
+  "company_schedules": [],
+  "earnings_backup_health": {
+    "reason": "No cached SEC earnings check",
+    "status": "limited"
+  },
+  "earnings_context_candidates": [],
+  "earnings_context_health": [],
+  "generated_at": "2026-10-25T17:00:00+00:00",
+  "issues": [
+    "2026-10-28: 2 publisher-scheduled releases added to incomplete Nasdaq coverage"
+  ],
+  "lead_story_id": "56a70dddb1820222",
+  "market_event_context": {
+    "events": [],
+    "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+    "schema": 1
+  },
+  "market_evidence": {
+    "moves": "S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.",
+    "snapshot": "Market Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted"
+  },
+  "narrated_company_schedules": [],
+  "narration_version": 2,
+  "ranking_date": "2026-10-23",
+  "reader_version": 2,
+  "report_sha256": "1910597b7b430b29dc5556c6400405a9f8a8ff2547bca05c458c5e9845a8993b",
+  "report_text": "Smart Money Daily News Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\nMarket data: completed regular session 2026-10-23\n\nGood afternoon.\n\nThe takeaway: All three major indexes fell in the quoted session. Watch for selling to ease across the names we track and company results to support a recovery.\n\nGlobal and Defense Watch\nCACI International disclosed a three-year, $64 million contract award from the U.S. Air Force. The work covers Example Enterprise Accounting and Management System (EEAMS). The disclosure was published October 25. Investor take: Accounting-system modernization supports a multiyear services workload. Its stated value does not establish funding obligated today or revenue already earned. Next, check obligated funding, task orders, delivery costs, margins and when the company expects to recognize revenue.\n\nOur view on CACI International: Accounting-system modernization supports a multiyear services workload. Its stated value does not establish funding obligated today or revenue already earned. Next, check obligated funding, task orders, delivery costs, margins and when the company expects to recognize revenue.\n\nMarket Update\nOur indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 0.52 percent; the Nasdaq Composite fell 0.21 percent; VIX rose 2.21 percent; oil rose 4.32 percent; the TLT bond fund fell 0.49 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.\n\nPolicy & Economy\nEIA reported a 3.2 million barrels per day decrease in global refinery inputs for the second quarter of 2026. It also reported a 1.1 million barrels per day increase for the third quarter of 2026. The disclosure was published October 25. Investor take: The dated throughput figures inform the fuel-supply backdrop. They do not establish today's crude demand, refining margins or a current oil-price move. Next, compare current refinery runs, product inventories and fuel-price spreads before changing the energy outlook.\n\nCompanies in Focus\nNvidia described use of Nemotron for resident services in Portugal. A separate rollout aims to support at least 21,000 cameras by 2028. The disclosure was published October 25. Investor take: These uses show where Nvidia's models and computing products are being applied. Adoption examples alone do not quantify Nvidia sales, customer spending or margins. Next, check paying customer commitments, hardware and software purchases, rollout progress and the cost of serving these workloads.\n\nConsumer watch — Starbucks. More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus. No fresh Starbucks announcement is included in this edition. Next, watch consumer demand, pricing and operating margins in the next company update.\n\nWhat's Ahead\nThe publisher schedule lists the Federal Reserve's interest-rate decision for Wednesday, October 28 at 02:00 PM EDT.\n\nCalendar or company-news coverage is incomplete; unverified dates and times remain uncertain.\n\nWhat We're Watching\nMarket recovery: Of the 18 stocks and funds we track, 7 finished higher and 11 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case.\n\nResearch Notes\nThe full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans\n\nSources and full evidence: /storylog · /catalysts · /calendar · /specialalerts\n\nResearch only. Not financial advice.",
+  "research_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+  "research_text": "📊 Smart Money AI Daily Report\n\n\nDaily Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\n\nGood afternoon.\n\n\nExecutive Summary\n- Main theme: Oil / inflation risk.\n- Market moves: S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.\n\nIntelligence Used Today\n- Smart Money Summary, Trade Plan Snapshot, News Intelligence, Alert Monitor, StockAnalysis, Alert Settings, Watchlist Evolution, and Market Memory are feeding today's report. Calendar Evidence: active. Company Catalysts: active. Document Research: active.\n\n\nWhat Changed Today\n• Leadership changed.\n• Confirmation matters.\n• New themes emerging.\n\n\nTheme Read\n• Research Opinion (2026-09-30): AI infrastructure spending supports chip demand, while debt funding adds financing risk. [Empower Q3 2026, p9]\n• Market check: unavailable; current yields, price and volume need confirmation.\n• Theme history is building.\n\n\nMarket Snapshot\nMarket Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted\n\nEarnings & Economic Calendar\nEconomic release times: timezone unverified.\nFull calendar: /weeklycalendar\n\n\nPortfolio Read\n• NVDA is the cleanest ranked setup today, but it still needs price/volume confirmation before action.\n\n\nPortfolio Allocation Snapshot\nPosture: Watchlist.\n\n\nWatchlist Movers\nRelevant research universe: 3 symbols\nMSFT, TSM, NVDA\n\nLive movement data is unavailable.\n\n\nTop Opportunities\n1. NVDA - Opportunity 92.0/100 | Structural 80.1/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-29; company confirmation pending\n   Score Risk: Elevated | Action: Watch Closely\n   Full review: /tradeplan NVDA\n\n2. MSFT - Opportunity 89.0/100 | Structural 87.3/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-28; company confirmation pending\n   Score Risk: Controlled | Action: Watch Closely\n   Full review: /tradeplan MSFT\n\n3. TSM - Opportunity 86.0/100 | Structural 85.4/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; dated catalyst not established in cached coverage\n   Score Risk: Balanced | Action: Watch Closely\n   Full review: /tradeplan TSM\n\n\nFastest-Rising Opportunities\nNo meaningful positive opportunity-score changes versus the prior report.\n\n\nRisk Notes\n• Sizing risk: keep entries smaller on NVDA.\n\n\nSmart Money Summary\nSignal: market tone is quote data unavailable.\nImplication: Review.\nValidation: Confirm.\n\n\nTrade Plan Snapshot\nTop action reads from today's leading opportunities. Score Risk reflects scoring support; Setup Risk reflects score and theme caution.\n\n1. NVDA — Medium conviction, 80.1/100 | Score Risk: Elevated | Setup Risk: Medium-High | Action: Watchlist — wait for better confirmation Entry: Wait for price, volume, and news confirmation. Full plan: /tradeplan NVDA\n2. MSFT — Medium-High conviction, 87.3/100 | Score Risk: Controlled | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan MSFT\n3. TSM — Medium-High conviction, 85.4/100 | Score Risk: Balanced | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan TSM\n\n\nAction Checklist\n• /scorecard NVDA — validate the top-ranked setup.\n• /volume NVDA — confirm whether money flow supports the score.\n\n\nNext Commands\n/tradeplans\n/tradeplan SYMBOL\n/scorecard SYMBOL\n/top10\n/weeklycalendar\n/global\n/contextstatus\n/summarypreview · /catalysts\n/allocation\n\n\nNotes\nResearch only. Not financial advice.",
+  "rules_version": 22,
+  "schema": 1,
+  "source_health": [],
+  "stages": [
+    {
+      "detail": "3 candidates from cached public evidence",
+      "name": "Scan",
+      "status": "pass"
+    },
+    {
+      "detail": "0 held; original publication dates and HTTPS URLs checked",
+      "name": "Source Check",
+      "status": "limited"
+    },
+    {
+      "detail": "Material company developments and macro releases; original-source reports required",
+      "name": "Relevance",
+      "status": "pass"
+    },
+    {
+      "detail": "3 selected / 0 skipped; one story per represented company",
+      "name": "Selection",
+      "status": "pass"
+    },
+    {
+      "detail": "Original publisher, materiality, dates and complete selected wording checked; 2 event-specific company reviews and 9 sourced fact fields; 3 original article materiality reviews; 5 analyst insights matched to this edition's market, ranking and trade-plan evidence",
+      "name": "Editorial Review",
+      "status": "pass"
+    },
+    {
+      "detail": "Built edition and source decisions recorded; this is not a delivery receipt",
+      "name": "Decision Log",
+      "status": "pass"
+    }
+  ],
+  "story_narrations": {
+    "56a70dddb1820222": "CACI International disclosed a three-year, $64 million contract award from the U.S. Air Force. The work covers Example Enterprise Accounting and Management System (EEAMS). The disclosure was published October 25. Investor take: Accounting-system modernization supports a multiyear services workload. Its stated value does not establish funding obligated today or revenue already earned. Next, check obligated funding, task orders, delivery costs, margins and when the company expects to recognize revenue.",
+    "ebc673ac5dac5c93": "Nvidia described use of Nemotron for resident services in Portugal. A separate rollout aims to support at least 21,000 cameras by 2028. The disclosure was published October 25. Investor take: These uses show where Nvidia's models and computing products are being applied. Adoption examples alone do not quantify Nvidia sales, customer spending or margins. Next, check paying customer commitments, hardware and software purchases, rollout progress and the cost of serving these workloads.",
+    "ef237a362fa61071": "EIA reported a 3.2 million barrels per day decrease in global refinery inputs for the second quarter of 2026. It also reported a 1.1 million barrels per day increase for the third quarter of 2026. The disclosure was published October 25. Investor take: The dated throughput figures inform the fuel-supply backdrop. They do not establish today's crude demand, refining margins or a current oil-price move. Next, compare current refinery runs, product inventories and fuel-price spreads before changing the energy outlook."
+  },
+  "truncated_candidates": 0,
+  "voiceover": {
+    "input_sha256": "45bb18f286d16929c34440eabc967a8847e272d5689842c057bf4e5262f44aa9",
+    "quality": {
+      "editorial_words": 357,
+      "estimated_seconds": 138.8,
+      "market_estimated_seconds": 22.5,
+      "market_words": 60,
+      "passes": true,
+      "words": 370,
+      "words_per_minute": 160
+    },
+    "schema": 2,
+    "script": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the market snapshot. Watch for selling to ease across the names we track and company results to support a recovery.\n\nFirst, the market. At the close on Friday, October twenty third, the S and P five hundred fell zero point five two percent, the Nasdaq fell zero point two one percent, and oil rose four point three two percent. Volatility rose. Our read is cautious. Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.\n\nIn defense and innovation. C A C I International disclosed a three-year contract award from the U S Air Force worth sixty four million dollars. The work covers Example Enterprise Accounting and Management System (EEAMS). Accounting-system modernization supports a multiyear services workload. Its stated value does not establish funding obligated today or revenue already earned.\n\nIn company news. Nvidia described use of Nemotron for resident services in Portugal. A separate rollout aims to support at least twenty one thousand cameras by two thousand twenty eight. These uses show where Nvidia's models and computing products are being applied. Adoption examples alone do not quantify Nvidia sales, customer spending or margins.\n\nIn energy. The U S Energy Information Administration reported a three point two million barrels per day decrease in global refinery inputs for the second quarter of two thousand twenty six. It also reported a one point one million barrels per day increase for the third quarter of two thousand twenty six. The dated throughput figures inform the fuel-supply backdrop. They do not establish today's crude demand, refining margins or a current oil-price move.\n\nLooking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.\n\nHere are the next checks. First, market recovery. Of the eighteen stocks and funds we track, seven finished higher and eleven lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case.\n\nSubscribe to Smart Money for more market research. Research only. Not financial advice.",
+    "script_sha256": "e2f214bd1f6f4ba71f74d591e6d6e36919449ddb44e1e302aa7993f91c5014cc",
+    "segments": [
+      {
+        "bullets": [
+          "All three major indexes fell in the market snapshot.",
+          "Watch for selling to ease across the names we track and company results to support a recovery."
+        ],
+        "heading": "The Takeaway",
+        "narration": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the market snapshot. Watch for selling to ease across the names we track and company results to support a recovery.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "S&P: -0.52%",
+          "Nasdaq: -0.21%",
+          "VIX: +2.21%"
+        ],
+        "heading": "Market Update",
+        "narration": "First, the market. At the close on Friday, October twenty third, the S and P five hundred fell zero point five two percent, the Nasdaq fell zero point two one percent, and oil rose four point three two percent. Volatility rose. Our read is cautious. Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "CACI advances agency accounting services"
+        ],
+        "heading": "Defense and Innovation",
+        "narration": "In defense and innovation. C A C I International disclosed a three-year contract award from the U S Air Force worth sixty four million dollars. The work covers Example Enterprise Accounting and Management System (EEAMS). Accounting-system modernization supports a multiyear services workload. Its stated value does not establish funding obligated today or revenue already earned.",
+        "source_ids": [
+          "56a70dddb1820222"
+        ]
+      },
+      {
+        "bullets": [
+          "NVIDIA expands city AI services"
+        ],
+        "heading": "Company News",
+        "narration": "In company news. Nvidia described use of Nemotron for resident services in Portugal. A separate rollout aims to support at least twenty one thousand cameras by two thousand twenty eight. These uses show where Nvidia's models and computing products are being applied. Adoption examples alone do not quantify Nvidia sales, customer spending or margins.",
+        "source_ids": [
+          "ebc673ac5dac5c93"
+        ]
+      },
+      {
+        "bullets": [
+          "Global refinery inputs declined before a partial recovery"
+        ],
+        "heading": "Energy Watch",
+        "narration": "In energy. The U S Energy Information Administration reported a three point two million barrels per day decrease in global refinery inputs for the second quarter of two thousand twenty six. It also reported a one point one million barrels per day increase for the third quarter of two thousand twenty six. The dated throughput figures inform the fuel-supply backdrop. They do not establish today's crude demand, refining margins or a current oil-price move.",
+        "source_ids": [
+          "ef237a362fa61071"
+        ]
+      },
+      {
+        "bullets": [
+          "The Federal Reserve's interest-rate decision for Wed, Oct 28 at 2:00 PM EDT"
+        ],
+        "heading": "What's Ahead",
+        "narration": "Looking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Of the 18 stocks and funds we track, 7 finished higher and 11 lower."
+        ],
+        "heading": "What We're Watching",
+        "narration": "Here are the next checks. First, market recovery. Of the eighteen stocks and funds we track, seven finished higher and eleven lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Research only",
+          "Not financial advice"
+        ],
+        "heading": "Closing",
+        "narration": "Subscribe to Smart Money for more market research. Research only. Not financial advice.",
+        "source_ids": []
+      }
+    ],
+    "sources": {
+      "56a70dddb1820222": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "CACI Investor Relations",
+          "url": "https://www.caci.com/news/CACI",
+          "verified_at": "2026-10-25T16:55:00+00:00"
+        }
+      ],
+      "ebc673ac5dac5c93": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "Nvidia Newsroom",
+          "url": "https://blogs.nvidia.com/blog/synthetic-city-services/",
+          "verified_at": "2026-10-25T16:55:00+00:00"
+        }
+      ],
+      "ef237a362fa61071": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "EIA",
+          "url": "https://www.eia.gov/todayinenergy/detail.php?id=12345",
+          "verified_at": "2026-10-25T16:55:00+00:00"
+        }
+      ]
+    }
+  },
+  "id": "8b390bc3d522e4963791"
+}

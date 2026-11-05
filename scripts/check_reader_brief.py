@@ -263,7 +263,7 @@ class ReaderChecks(IsolatedChecks):
         self.assertIn("entire next-quarter revenue forecast is below", intro)
         self.assertIn("Compare the next sales report with management's revenue forecast", text)
         self.assertNotIn("whether the move spreads", intro)
-        self.assertEqual(record["rules_version"], 22)
+        self.assertEqual(record["rules_version"], 23)
         profile = voice.checked(record, NOW)
         self.assertEqual(profile["schema"], 2)
         for heading in ("The Takeaway", "What We're Watching"):

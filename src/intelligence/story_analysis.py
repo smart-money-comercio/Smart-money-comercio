@@ -188,11 +188,15 @@ def build_evidence(story: dict, text: str = "", scope: str = "headline only", *,
     intel_results = story.get("publisher_symbol") == "INTC" and bool(intel_period(story["title"]))
     if schema is None:
         schema = 7 if intel_results else 6 if solar_storage_report(story) else 5 if story.get("publisher_symbol") in {"GOOG", "GOOGL"} and re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", story["title"], re.I) else 4
-    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7, 8} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema == 8 and scope != "original release excerpt":
+    from src.intelligence.treasury_financing import document_kind, financing_facts
+    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7, 8, 9} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema in {8, 9} and scope != "original release excerpt" or schema == 9 and not document_kind(story):
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
-    if schema == 8:
+    if schema == 9:
+        kind, stage = "Treasury refunding", document_kind(story)
+        facts = financing_facts(story, text)
+    elif schema == 8:
         from src.intelligence.original_disclosures import event, facts as disclosure_facts
         kind, stage = event(story, text, kind, stage)
         facts = disclosure_facts(story, text, kind, stage, disclosed_facts(text, kind, stage, version=4, title=story["title"]))
@@ -215,6 +219,9 @@ def checked_evidence(story: dict) -> dict:
 
 def investor_read(story: dict) -> dict:
     evidence = checked_evidence(story)
+    if evidence["schema"] == 9:
+        from src.intelligence.treasury_financing import review
+        return review(evidence)
     kind, stage = evidence["event"], evidence["stage"]
     if kind == "monetary policy" and stage == "rate decision":
         action = next((row["value"] for row in evidence["facts"] if row["field"] == "policy_action"), "")

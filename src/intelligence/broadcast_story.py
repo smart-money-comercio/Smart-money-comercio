@@ -35,6 +35,11 @@ def render_story(story: dict, zone, names: dict) -> str:
         raise ValueError("Broadcast narration needs an admitted original publisher")
     published = dated(story["published"]).astimezone(zone)
     day = f"{published:%B} {published.day}"
+    if story.get("event_evidence", {}).get("schema") == 9:
+        review = investor_read(story)
+        if not review["facts"]:
+            raise ValueError("Treasury narration needs original financing facts")
+        return review["facts"] + f" The plan was announced {day}. Investor take: " + review["why"] + " " + next_check(review["watch"])
     if story.get("event_evidence", {}).get("schema") == 8:
         from src.intelligence.original_disclosures import summarize
         review = company_read(story) if story["kind"] == "company" else investor_read(story)

@@ -1,6 +1,7 @@
 """Inspect source facts, select diverse stories and preserve editorial decisions."""
 
 from copy import deepcopy
+from collections import Counter
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import hashlib
@@ -67,6 +68,12 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    from src.intelligence.treasury_financing import document_kind, material
+    if document_kind(story) and story.get("event_evidence", {}).get("schema") in {None, 9}:
+        if story.get("event_evidence", {}).get("schema") == 9 and primary_source(story):
+            return "public finance" if material(checked_evidence(story)["facts"]) else ""
+        # A committee's name cannot establish a new financing decision.
+        return ""
     if story.get("event_evidence", {}).get("schema") == 8 and primary_source(story):
         from src.intelligence.original_disclosures import body_topic
         topic = body_topic(story, checked_evidence(story))
@@ -210,7 +217,7 @@ def story_type(story: dict) -> str:
 
 def cache_candidates(now: datetime, symbols: list[str], *, health: list | None = None, cache: dict | None = None) -> tuple[list[dict], list[str]]:
     from src.intelligence.alphabet_source import aliases
-    symbols = aliases(symbols)
+    symbols = aliases(editorial_symbols(symbols))
     path = Path(os.getenv("NEWS_LIVE_SOURCE_CACHE_FILE", str(feeds.CACHE_FILE)))
     try:
         if cache is None:
@@ -281,10 +288,16 @@ def cache_candidates(now: datetime, symbols: list[str], *, health: list | None =
     return candidates, issues
 
 
+def editorial_symbols(symbols: list[str]) -> list[str]:
+    """Publisher coverage is independent of the changing opportunity top ten."""
+    return list(dict.fromkeys(symbols + [source["company_symbol"] for source in feeds.NEWS_SOURCES
+                                       if feeds.is_original_source(source) and source.get("company_symbol")]))
+
+
 def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict] | None = None, *, event_context=None, research_report=None) -> dict:
     if now.tzinfo is None:
         raise ValueError("News editor clock needs a timezone")
-    symbols = [row["symbol"] for row in brief["rows"]]
+    symbols = editorial_symbols([row["symbol"] for row in brief["rows"]])
     from src.intelligence.alphabet_source import aliases
     symbols = aliases(symbols)
     if event_context is not None:
@@ -399,7 +412,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 if len(text) >= 80 and not specialized:
                     story["materiality"] = materiality(story)
                     story["evidence_checked_at"] = observed
-                    story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=8)
+                    from src.intelligence.treasury_financing import document_kind
+                    story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=9 if document_kind(story) else 8)
             except (ValueError, TypeError, OverflowError) as exc:
                 story.update(source_check="hold", reason=str(exc))
                 ledger.append(story)
@@ -416,10 +430,11 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             if story["story_type"] == "context" and primary_source(story):
                 reason = ("Calendar or investor-event notice; no financial results or new business development established"
                           if re.search(r"\b(conference call|earnings call|investor conference|webcast)\b", story["title"], re.I) else
-                          "Original article reviewed; no concrete material business or policy development extracted" if story.get("event_evidence", {}).get("schema") == 8 else
+                          "Original article reviewed; no concrete material business or policy development extracted" if story.get("event_evidence", {}).get("schema") in {8, 9} else
                           "Original publisher item; headline does not establish a material business or policy development")
             story.update(decision="skip", reason=reason)
         elif (story["kind"] == "macro" and story["source"] == "U.S. Treasury"
+              and story.get("event_evidence", {}).get("schema") != 9
               and not re.search(r"\b(borrowing|debt|bond auctions?|buybacks?|tariffs?|sanctions|financial stability|securities enforcement|financial regulation|export (?:controls?|bans?|restrictions)|trade (?:restrictions|policy))\b", story["title"], re.I)):
             story.update(decision="skip", reason="Agency identity alone does not establish investor relevance; no specific market, financing or policy development in the headline")
         elif not primary_source(story):
@@ -457,6 +472,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 story["priority_checked_at"] = observed
             story["event_priority"] = story_priority(story, now, event_context["events"])
         ledger.append(story)
+    from src.intelligence.treasury_financing import link_related_documents
+    link_related_documents(ledger)
     selected, urls, titles, companies = [], set(), set(), set()
     company_eligible = any(story["decision"] == "eligible" and story["kind"] == "company" for story in ledger)
     for story in coverage_order([item for item in ledger if item["decision"] == "eligible"]):
@@ -482,7 +499,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
-            if story.get("event_evidence", {}).get("schema") != 8:
+            if story.get("event_evidence", {}).get("schema") not in {8, 9}:
                 story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
@@ -492,8 +509,9 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=22, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=23, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
+    result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
 
 
@@ -661,7 +679,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
-         + f"; {sum(story.get('event_evidence', {}).get('schema') == 8 for story in value['candidates'])} original article materiality reviews"
+         + f"; {sum(story.get('event_evidence', {}).get('schema') in {8, 9} for story in value['candidates'])} original article materiality reviews"
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
     if broadcast and (analyst_review or {}).get("reader_version") in {1, 2}:
@@ -834,6 +852,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     lines.append("Publication clock source: " + story["publication_url"])
                 if story.get("document_url"):
                     lines.append("Original release document: " + story["document_url"])
+                for related in story.get("related_reports", []):
+                    lines.append("Related original: " + related["title"] + " — " + related["url"])
                 if story.get("confirmed_by"):
                     lines.append("Original publisher verified: " + story["confirmed_by"])
                     lines.append("Investor topic: " + story["materiality"])
@@ -849,7 +869,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Disclosed excerpt facts: " + review["facts"])
                     if review.get("undisclosed"):
                         lines.append("Not specified in reviewed text: " + "; ".join(review["undisclosed"]))
-                    if event.get("schema") == 8:
+                    if event.get("schema") in {8, 9}:
                         for fact in event["facts"]:
                             lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]
@@ -864,6 +884,10 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     lines.append(research_focus(story))
             if not stories:
                 lines.append("No matching story decisions for " + symbol + " in this edition.")
+                omitted = record.get("publisher_scan_omissions", {}).get(symbol, 0)
+                if type(omitted) is int and omitted > 0:
+                    label = "candidate was" if omitted == 1 else "candidates were"
+                    lines.append(f"Scan limit: {omitted} publisher {label} outside this edition's {MAX_CANDIDATES}-candidate review budget.")
             elif len(stories) > 12:
                 lines.append(f"Showing 12 of {len(stories)} decisions; use /storylog SYMBOL to narrow coverage.")
     lines += ["", "Built-edition records; publication, orders and investment returns are not inferred.", "/editorstatus · /storylog [SYMBOL] · /fullreport"]

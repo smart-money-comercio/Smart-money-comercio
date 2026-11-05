@@ -51,6 +51,7 @@ class ArticleBody(VisibleText):
         self.nvidia_blog = parts.hostname == "blogs.nvidia.com"
         self.eia = publisher == "EIA" and parts.hostname == "www.eia.gov"
         self.amd = publisher in {"AMD", "AMD Investor Relations"} and parts.hostname == "ir.amd.com" and parts.path.startswith("/news-events/press-releases/detail/")
+        self.amazon = publisher in {"AMZN", "Amazon Investor Relations"} and parts.hostname == "ir.aboutamazon.com" and parts.path.startswith("/news-release/news-release-details/")
         from src.intelligence.northrop_newsroom import article_url
         self.northrop = publisher in {"NOC", "Northrop Grumman Newsroom"} and article_url(url)
         self.depth = 0
@@ -60,7 +61,7 @@ class ArticleBody(VisibleText):
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         classes = set(attrs.get("class", "").split())
-        if classes & {"article-date", "wd_date"} or self.alphabet and "evergreen-news-date-text" in classes or self.eia and tag == "span" and "date" in classes or self.amd and tag == "time" and "date" in classes:
+        if classes & {"article-date", "wd_date"} or self.alphabet and "evergreen-news-date-text" in classes or self.eia and tag == "span" and "date" in classes or self.amd and tag == "time" and "date" in classes or self.amazon and "module_date-time" in classes:
             self.date_depth = 1
         elif self.date_depth and tag not in self.VOID:
             self.date_depth += 1
@@ -77,7 +78,8 @@ class ArticleBody(VisibleText):
         nvidia_body = self.nvidia_blog and tag == "div" and "entry-content" in classes
         eia_body = self.eia and tag == "div" and "tie-article" in classes
         northrop_body = self.northrop and tag == "div" and any(value.startswith("NewsroomArticleBody_BodyCopy__") for value in classes)
-        if not self.depth and (tag == "article" and not treasury and not kratos and not self.nvidia_blog or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body or nvidia_body or eia_body or northrop_body):
+        amazon_body = self.amazon and tag == "div" and "module_body" in classes
+        if not self.depth and (tag == "article" and not treasury and not kratos and not self.nvidia_blog and not self.amazon or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body or nvidia_body or eia_body or northrop_body or amazon_body):
             self.depth = 1
         elif self.depth and tag not in self.VOID:
             self.depth += 1

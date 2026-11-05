@@ -1,0 +1,524 @@
+{
+  "analyst_review": {
+    "event_context": {
+      "events": [],
+      "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+      "schema": 1
+    },
+    "evidence": {
+      "breadth": {
+        "down": 11,
+        "total": 18,
+        "up": 7
+      },
+      "companies": [
+        {
+          "action": "wait",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Nvidia",
+          "opportunity": 92.0,
+          "price": null,
+          "score_risk": "Elevated",
+          "setup_risk": "Medium-High",
+          "structural": 80.1,
+          "symbol": "NVDA"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Microsoft",
+          "opportunity": 89.0,
+          "price": null,
+          "score_risk": "Controlled",
+          "setup_risk": "Medium-High",
+          "structural": 87.3,
+          "symbol": "MSFT"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Taiwan Semiconductor",
+          "opportunity": 86.0,
+          "price": null,
+          "score_risk": "Balanced",
+          "setup_risk": "Medium-High",
+          "structural": 85.4,
+          "symbol": "TSM"
+        }
+      ],
+      "company_focus": {
+        "day": "2026-10-25",
+        "featured_symbols": [
+          "GD",
+          "OXY",
+          "SBUX"
+        ],
+        "grouped_narration": 1,
+        "remaining_candidates": 35,
+        "rule": "Original developments, dated moves and market relevance; recent exposure breaks comparable ties",
+        "schema": 1,
+        "selected": [
+          {
+            "basis": "sector context",
+            "group": "consumer",
+            "metric": null,
+            "name": "Starbucks",
+            "recent_days": 0,
+            "role": "Consumer watch",
+            "sources": [
+              "Executive Summary",
+              "Market Snapshot",
+              "Research theme universe"
+            ],
+            "story_id": "",
+            "symbol": "SBUX",
+            "tier": 60,
+            "watch": "Next, watch consumer demand, pricing and operating margins in the next company update.",
+            "why": "More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus."
+          },
+          {
+            "basis": "sector context",
+            "group": "energy",
+            "metric": {
+              "Oil": 4.32
+            },
+            "name": "Occidental Petroleum",
+            "recent_days": 0,
+            "role": "Energy spotlight",
+            "sources": [
+              "Executive Summary",
+              "Market Snapshot",
+              "Research theme universe"
+            ],
+            "story_id": "",
+            "symbol": "OXY",
+            "tier": 60,
+            "watch": "Next, watch realized pricing, customer investment decisions and cash flow after costs and capital spending.",
+            "why": "Oil rose 4.32 percent in the quoted session, putting the energy business backdrop in focus."
+          },
+          {
+            "basis": "sector context",
+            "group": "defense",
+            "metric": null,
+            "name": "General Dynamics",
+            "recent_days": 0,
+            "role": "Defense research watch",
+            "sources": [
+              "Executive Summary",
+              "Market Snapshot",
+              "Research theme universe"
+            ],
+            "story_id": "",
+            "symbol": "GD",
+            "tier": 20,
+            "watch": "Next, watch funded procurement and production milestones in original disclosures.",
+            "why": "This is a longer-term research follow-up while fresh company-specific confirmation remains the next check."
+          }
+        ]
+      },
+      "is_open": false,
+      "leadership": null,
+      "market_event_context": {
+        "events": [],
+        "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+        "schema": 1
+      },
+      "moves": {
+        "Nasdaq": -0.21,
+        "Oil": 4.32,
+        "Russell": -0.29,
+        "S&P": -0.52,
+        "TLT": -0.49,
+        "VIX": 2.21
+      },
+      "narration_version": 2,
+      "reader_limit": 3,
+      "reader_version": 2,
+      "session": "2026-10-23",
+      "source_sections": [
+        "Executive Summary",
+        "Market Snapshot",
+        "What Changed Today",
+        "Top Opportunities",
+        "Trade Plan Snapshot",
+        "Market event checks",
+        "Verified story decisions",
+        "Company focus selection"
+      ],
+      "stories": [
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "public finance",
+            "facts": [],
+            "observed_at": "2026-10-25T17:00:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "f35f66fc944fe889f935dcb5bbcd758c930b0d6fe604f48d3bd4569757d2d15a",
+            "source_text": "The Committee discussed financing conditions and market developments. Members considered the outlook for government funding and investor demand.",
+            "source_url": "https://home.treasury.gov/news/press-releases/sb0000",
+            "stage": "reported"
+          },
+          "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+          "id": "6b2462d097bfbe16",
+          "kind": "macro",
+          "materiality": "public finance",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "",
+          "source": "U.S. Treasury",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [],
+          "title": "Report to the Secretary of the Treasury from the Treasury Borrowing Advisory Committee",
+          "url": "https://home.treasury.gov/news/press-releases/sb0000"
+        },
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "public finance",
+            "facts": [],
+            "observed_at": "2026-10-25T17:00:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "f35f66fc944fe889f935dcb5bbcd758c930b0d6fe604f48d3bd4569757d2d15a",
+            "source_text": "The Committee discussed financing conditions and market developments. Members considered the outlook for government funding and investor demand.",
+            "source_url": "https://home.treasury.gov/news/press-releases/sb0001",
+            "stage": "reported"
+          },
+          "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+          "id": "f98a1ad79f68fb01",
+          "kind": "macro",
+          "materiality": "public finance",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "",
+          "source": "U.S. Treasury",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [],
+          "title": "Minutes of the Meeting of the Treasury Borrowing Advisory Committee October 24, 2026",
+          "url": "https://home.treasury.gov/news/press-releases/sb0001"
+        }
+      ]
+    },
+    "focus_context": {
+      "limit": 3,
+      "recent": [],
+      "schema": 5
+    },
+    "insights": [
+      {
+        "id": "market_pulse",
+        "section": "market",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Verified story decisions"
+        ],
+        "text": "Our indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 0.52 percent; the Nasdaq Composite fell 0.21 percent; VIX rose 2.21 percent; oil rose 4.32 percent; the TLT bond fund fell 0.49 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs."
+      },
+      {
+        "id": "defense_watch",
+        "section": "global",
+        "sources": [
+          "Verified story decisions"
+        ],
+        "text": "Defense and innovation remain on our research watch, including drones, counter-drone systems, cybersecurity and autonomy. No current verified defense development qualified in this edition; check funded orders and production milestones before changing the industry outlook."
+      },
+      {
+        "id": "company_focus_1",
+        "section": "company",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Research theme universe",
+          "Company focus selection"
+        ],
+        "text": "Consumer watch — Starbucks. More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus. No fresh Starbucks announcement is included in this edition. Next, watch consumer demand, pricing and operating margins in the next company update."
+      },
+      {
+        "id": "company_focus_2",
+        "section": "company",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Research theme universe",
+          "Company focus selection"
+        ],
+        "text": "Energy spotlight — Occidental Petroleum. Oil rose 4.32 percent in the quoted session, putting the energy business backdrop in focus. No fresh Occidental Petroleum announcement is included in this edition. Next, watch realized pricing, customer investment decisions and cash flow after costs and capital spending."
+      },
+      {
+        "id": "company_focus_3",
+        "section": "company",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Research theme universe",
+          "Company focus selection"
+        ],
+        "text": "Defense research watch — General Dynamics. This is a longer-term research follow-up while fresh company-specific confirmation remains the next check. No fresh General Dynamics announcement is included in this edition. Next, watch funded procurement and production milestones in original disclosures."
+      },
+      {
+        "id": "opening_takeaway",
+        "section": "intro",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot"
+        ],
+        "text": "The takeaway: All three major indexes fell in the quoted session. Watch for selling to ease across the names we track and company results to support a recovery."
+      },
+      {
+        "id": "watch_participation",
+        "section": "watch",
+        "sources": [
+          "Market Snapshot",
+          "Executive Summary"
+        ],
+        "text": "Market recovery: Of the 18 stocks and funds we track, 7 finished higher and 11 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case."
+      },
+      {
+        "id": "watch_energy",
+        "section": "watch",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot"
+        ],
+        "text": "Energy costs: Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins."
+      }
+    ],
+    "narration_version": 2,
+    "presentation": "news",
+    "reader_limit": 3,
+    "reader_version": 2,
+    "research_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+    "schema": 1,
+    "score_changes": false
+  },
+  "candidates": [
+    {
+      "canonical_url": "https://home.treasury.gov/news/press-releases/sb0000",
+      "confirmation_check": "pass",
+      "confirmed_by": "U.S. Treasury",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "public finance",
+        "facts": [],
+        "observed_at": "2026-10-25T17:00:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "f35f66fc944fe889f935dcb5bbcd758c930b0d6fe604f48d3bd4569757d2d15a",
+        "source_text": "The Committee discussed financing conditions and market developments. Members considered the outlook for government funding and investor demand.",
+        "source_url": "https://home.treasury.gov/news/press-releases/sb0000",
+        "stage": "reported"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+      "id": "6b2462d097bfbe16",
+      "kind": "macro",
+      "materiality": "public finance",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 109,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "",
+      "reason": "Original U.S. Treasury report; material public finance development within the edition budget",
+      "source": "U.S. Treasury",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [],
+      "title": "Report to the Secretary of the Treasury from the Treasury Borrowing Advisory Committee",
+      "title_truncated": false,
+      "url": "https://home.treasury.gov/news/press-releases/sb0000"
+    },
+    {
+      "canonical_url": "https://home.treasury.gov/news/press-releases/sb0001",
+      "confirmation_check": "pass",
+      "confirmed_by": "U.S. Treasury",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "public finance",
+        "facts": [],
+        "observed_at": "2026-10-25T17:00:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "f35f66fc944fe889f935dcb5bbcd758c930b0d6fe604f48d3bd4569757d2d15a",
+        "source_text": "The Committee discussed financing conditions and market developments. Members considered the outlook for government funding and investor demand.",
+        "source_url": "https://home.treasury.gov/news/press-releases/sb0001",
+        "stage": "reported"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+      "id": "f98a1ad79f68fb01",
+      "kind": "macro",
+      "materiality": "public finance",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 109,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "",
+      "reason": "Original U.S. Treasury report; material public finance development within the edition budget",
+      "source": "U.S. Treasury",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [],
+      "title": "Minutes of the Meeting of the Treasury Borrowing Advisory Committee October 24, 2026",
+      "title_truncated": false,
+      "url": "https://home.treasury.gov/news/press-releases/sb0001"
+    }
+  ],
+  "company_schedules": [],
+  "earnings_backup_health": {
+    "reason": "No cached SEC earnings check",
+    "status": "limited"
+  },
+  "earnings_context_candidates": [],
+  "earnings_context_health": [],
+  "generated_at": "2026-10-25T17:00:00+00:00",
+  "issues": [
+    "2026-10-28: 2 publisher-scheduled releases added to incomplete Nasdaq coverage"
+  ],
+  "lead_story_id": "6b2462d097bfbe16",
+  "market_event_context": {
+    "events": [],
+    "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+    "schema": 1
+  },
+  "market_evidence": {
+    "moves": "S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.",
+    "snapshot": "Market Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted"
+  },
+  "narrated_company_schedules": [],
+  "narration_version": 2,
+  "ranking_date": "2026-10-23",
+  "reader_version": 2,
+  "report_sha256": "8f553cd8d0f626984b3db04b76a59e035fae000ec77bb5a12434894d5b012278",
+  "report_text": "Smart Money Daily News Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\nMarket data: completed regular session 2026-10-23\n\nGood afternoon.\n\nThe takeaway: All three major indexes fell in the quoted session. Watch for selling to ease across the names we track and company results to support a recovery.\n\nPolicy & Economy\nU.S. Treasury's October 25 announcement: “Report to the Secretary of the Treasury from the Treasury Borrowing Advisory Committee”. Review the original report for scope and context.\n\nU.S. Treasury's October 25 announcement: “Minutes of the Meeting of the Treasury Borrowing Advisory Committee October 24, 2026”. Review the original report for scope and context.\n\nMarket Update\nOur indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 0.52 percent; the Nasdaq Composite fell 0.21 percent; VIX rose 2.21 percent; oil rose 4.32 percent; the TLT bond fund fell 0.49 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.\n\nCompanies in Focus\nConsumer watch — Starbucks. More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus. No fresh Starbucks announcement is included in this edition. Next, watch consumer demand, pricing and operating margins in the next company update.\n\nEnergy spotlight — Occidental Petroleum. Oil rose 4.32 percent in the quoted session, putting the energy business backdrop in focus. No fresh Occidental Petroleum announcement is included in this edition. Next, watch realized pricing, customer investment decisions and cash flow after costs and capital spending.\n\nDefense research watch — General Dynamics. This is a longer-term research follow-up while fresh company-specific confirmation remains the next check. No fresh General Dynamics announcement is included in this edition. Next, watch funded procurement and production milestones in original disclosures.\n\nGlobal and Defense Watch\nDefense and innovation remain on our research watch, including drones, counter-drone systems, cybersecurity and autonomy. No current verified defense development qualified in this edition; check funded orders and production milestones before changing the industry outlook.\n\nWhat's Ahead\nThe publisher schedule lists the Federal Reserve's interest-rate decision for Wednesday, October 28 at 02:00 PM EDT.\n\nWhy it matters: Watch the Fed's guidance on the rate outlook and what it could mean for growth-company financing and valuations.\n\nCalendar or company-news coverage is incomplete; unverified dates and times remain uncertain.\n\nWhat We're Watching\nMarket recovery: Of the 18 stocks and funds we track, 7 finished higher and 11 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case.\n\nEnergy costs: Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins.\n\nResearch Notes\nThe full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans\n\nSources and full evidence: /storylog · /catalysts · /calendar · /specialalerts\n\nNo new source-confirmed company report met the editorial checks for this edition.\n\nResearch only. Not financial advice.",
+  "research_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+  "research_text": "📊 Smart Money AI Daily Report\n\n\nDaily Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\n\nGood afternoon.\n\n\nExecutive Summary\n- Main theme: Oil / inflation risk.\n- Market moves: S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.\n\nIntelligence Used Today\n- Smart Money Summary, Trade Plan Snapshot, News Intelligence, Alert Monitor, StockAnalysis, Alert Settings, Watchlist Evolution, and Market Memory are feeding today's report. Calendar Evidence: active. Company Catalysts: active. Document Research: active.\n\n\nWhat Changed Today\n• Leadership changed.\n• Confirmation matters.\n• New themes emerging.\n\n\nTheme Read\n• Research Opinion (2026-09-30): AI infrastructure spending supports chip demand, while debt funding adds financing risk. [Empower Q3 2026, p9]\n• Market check: unavailable; current yields, price and volume need confirmation.\n• Theme history is building.\n\n\nMarket Snapshot\nMarket Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted\n\nEarnings & Economic Calendar\nEconomic release times: timezone unverified.\nFull calendar: /weeklycalendar\n\n\nPortfolio Read\n• NVDA is the cleanest ranked setup today, but it still needs price/volume confirmation before action.\n\n\nPortfolio Allocation Snapshot\nPosture: Watchlist.\n\n\nWatchlist Movers\nRelevant research universe: 3 symbols\nMSFT, TSM, NVDA\n\nLive movement data is unavailable.\n\n\nTop Opportunities\n1. NVDA - Opportunity 92.0/100 | Structural 80.1/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-29; company confirmation pending\n   Score Risk: Elevated | Action: Watch Closely\n   Full review: /tradeplan NVDA\n\n2. MSFT - Opportunity 89.0/100 | Structural 87.3/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-28; company confirmation pending\n   Score Risk: Controlled | Action: Watch Closely\n   Full review: /tradeplan MSFT\n\n3. TSM - Opportunity 86.0/100 | Structural 85.4/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; dated catalyst not established in cached coverage\n   Score Risk: Balanced | Action: Watch Closely\n   Full review: /tradeplan TSM\n\n\nFastest-Rising Opportunities\nNo meaningful positive opportunity-score changes versus the prior report.\n\n\nRisk Notes\n• Sizing risk: keep entries smaller on NVDA.\n\n\nSmart Money Summary\nSignal: market tone is quote data unavailable.\nImplication: Review.\nValidation: Confirm.\n\n\nTrade Plan Snapshot\nTop action reads from today's leading opportunities. Score Risk reflects scoring support; Setup Risk reflects score and theme caution.\n\n1. NVDA — Medium conviction, 80.1/100 | Score Risk: Elevated | Setup Risk: Medium-High | Action: Watchlist — wait for better confirmation Entry: Wait for price, volume, and news confirmation. Full plan: /tradeplan NVDA\n2. MSFT — Medium-High conviction, 87.3/100 | Score Risk: Controlled | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan MSFT\n3. TSM — Medium-High conviction, 85.4/100 | Score Risk: Balanced | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan TSM\n\n\nAction Checklist\n• /scorecard NVDA — validate the top-ranked setup.\n• /volume NVDA — confirm whether money flow supports the score.\n\n\nNext Commands\n/tradeplans\n/tradeplan SYMBOL\n/scorecard SYMBOL\n/top10\n/weeklycalendar\n/global\n/contextstatus\n/summarypreview · /catalysts\n/allocation\n\n\nNotes\nResearch only. Not financial advice.",
+  "rules_version": 22,
+  "schema": 1,
+  "source_health": [],
+  "stages": [
+    {
+      "detail": "2 candidates from cached public evidence",
+      "name": "Scan",
+      "status": "pass"
+    },
+    {
+      "detail": "0 held; original publication dates and HTTPS URLs checked",
+      "name": "Source Check",
+      "status": "limited"
+    },
+    {
+      "detail": "Material company developments and macro releases; original-source reports required",
+      "name": "Relevance",
+      "status": "pass"
+    },
+    {
+      "detail": "2 selected / 0 skipped; one story per represented company",
+      "name": "Selection",
+      "status": "pass"
+    },
+    {
+      "detail": "Original publisher, materiality, dates and complete selected wording checked; 0 event-specific company reviews and 0 sourced fact fields; 2 original article materiality reviews; 8 analyst insights matched to this edition's market, ranking and trade-plan evidence",
+      "name": "Editorial Review",
+      "status": "pass"
+    },
+    {
+      "detail": "Built edition and source decisions recorded; this is not a delivery receipt",
+      "name": "Decision Log",
+      "status": "pass"
+    }
+  ],
+  "story_narrations": {
+    "6b2462d097bfbe16": "U.S. Treasury's October 25 announcement: “Report to the Secretary of the Treasury from the Treasury Borrowing Advisory Committee”. Review the original report for scope and context.",
+    "f98a1ad79f68fb01": "U.S. Treasury's October 25 announcement: “Minutes of the Meeting of the Treasury Borrowing Advisory Committee October 24, 2026”. Review the original report for scope and context."
+  },
+  "truncated_candidates": 0,
+  "voiceover": {
+    "input_sha256": "4399f79e20d64837f793410e2ae93ed67f69c6b18f85b26ba1453b698ca1dc79",
+    "quality": {
+      "editorial_words": 220,
+      "estimated_seconds": 87.4,
+      "market_estimated_seconds": 22.5,
+      "market_words": 60,
+      "passes": true,
+      "words": 233,
+      "words_per_minute": 160
+    },
+    "schema": 2,
+    "script": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the market snapshot. Watch for selling to ease across the names we track and company results to support a recovery.\n\nFirst, the market. At the close on Friday, October twenty third, the S and P five hundred fell zero point five two percent, the Nasdaq fell zero point two one percent, and oil rose four point three two percent. Volatility rose. Our read is cautious. Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.\n\nOn defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.\n\nLooking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.\n\nHere are the next checks. First, market recovery. Of the eighteen stocks and funds we track, seven finished higher and eleven lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case. Second, energy costs. Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins.\n\nSubscribe to Smart Money for more market research. Research only. Not financial advice.",
+    "script_sha256": "d6b6a0a5b9651fc84e48a6b247e74d6c602b51fc699182b9a712c070fadec371",
+    "segments": [
+      {
+        "bullets": [
+          "All three major indexes fell in the market snapshot.",
+          "Watch for selling to ease across the names we track and company results to support a recovery."
+        ],
+        "heading": "The Takeaway",
+        "narration": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the market snapshot. Watch for selling to ease across the names we track and company results to support a recovery.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "S&P: -0.52%",
+          "Nasdaq: -0.21%",
+          "VIX: +2.21%"
+        ],
+        "heading": "Market Update",
+        "narration": "First, the market. At the close on Friday, October twenty third, the S and P five hundred fell zero point five two percent, the Nasdaq fell zero point two one percent, and oil rose four point three two percent. Volatility rose. Our read is cautious. Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Funded orders",
+          "Production milestones"
+        ],
+        "heading": "Defense Watch",
+        "narration": "On defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "The Federal Reserve's interest-rate decision for Wed, Oct 28 at 2:00 PM EDT"
+        ],
+        "heading": "What's Ahead",
+        "narration": "Looking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Of the 18 stocks and funds we track, 7 finished higher and 11 lower.",
+          "Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills."
+        ],
+        "heading": "What We're Watching",
+        "narration": "Here are the next checks. First, market recovery. Of the eighteen stocks and funds we track, seven finished higher and eleven lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case. Second, energy costs. Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Research only",
+          "Not financial advice"
+        ],
+        "heading": "Closing",
+        "narration": "Subscribe to Smart Money for more market research. Research only. Not financial advice.",
+        "source_ids": []
+      }
+    ],
+    "sources": {}
+  },
+  "id": "36b8e45cde3137510f19"
+}
