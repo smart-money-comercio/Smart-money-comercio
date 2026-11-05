@@ -133,7 +133,7 @@ class ReaderChecks(IsolatedChecks):
     def test_opening_and_every_watch_signal_are_bound_to_the_research_edition(self):
         report = self.research(); text = self.render(report=report)
         record = self.record(text); reviewed = record["analyst_review"]
-        self.assertEqual(reviewed["reader_version"], 3)
+        self.assertEqual(reviewed["reader_version"], 4)
         self.assertTrue(2 <= sum(row["section"] == "watch" for row in reviewed["insights"]) <= 3)
         analysis.validate_review(reviewed, report, text, editor.selected_stories(record))
         altered = deepcopy(reviewed)
@@ -177,7 +177,7 @@ class ReaderChecks(IsolatedChecks):
         self.assertNotIn("available to trade", text)
 
     def test_invalid_reader_context_cannot_bypass_review(self):
-        for options in ({"reader_version": 4}, {"reader_version": True}, {"reader_version": 1, "reader_limit": 0}, {"reader_version": 1, "reader_limit": True}):
+        for options in ({"reader_version": 5}, {"reader_version": True}, {"reader_version": 1, "reader_limit": 0}, {"reader_version": 1, "reader_limit": True}):
             with self.assertRaises(ValueError):
                 analysis.analyze_report(self.research(), presentation="news", narration_version=2, **options)
 
@@ -264,7 +264,7 @@ class ReaderChecks(IsolatedChecks):
         self.assertIn("entire next-quarter revenue forecast is below", intro)
         self.assertIn("Compare the next sales report with management's revenue forecast", text)
         self.assertNotIn("whether the move spreads", intro)
-        self.assertEqual(record["rules_version"], 24)
+        self.assertEqual(record["rules_version"], 25)
         profile = voice.checked(record, NOW)
         self.assertEqual(profile["schema"], 2)
         for heading in ("The Takeaway", "What We're Watching"):

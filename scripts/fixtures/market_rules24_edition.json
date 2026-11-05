@@ -1,0 +1,1702 @@
+{
+  "analyst_review": {
+    "event_context": {
+      "events": [
+        {
+          "proof": {
+            "checked_at": "2026-10-25T17:00:00+00:00",
+            "first": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": -14.689999999999998,
+              "change_percent": -14.690000000000003,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 85.31,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        85.31
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 85.31,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "AMD"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "AMD",
+              "volume": 1200.0
+            },
+            "issuer": "AMD",
+            "recheck_at": "2026-10-25T17:00:00+00:00",
+            "second": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": -14.689999999999998,
+              "change_percent": -14.690000000000003,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 85.31,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        85.31
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 85.31,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "AMD"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "AMD",
+              "volume": 1200.0
+            },
+            "status": "rechecked",
+            "symbol": "AMD"
+          },
+          "reported_move": -14.69,
+          "source_symbol": "AMD",
+          "status": "rechecked",
+          "symbol": "AMD"
+        },
+        {
+          "proof": {
+            "checked_at": "2026-10-25T17:00:00+00:00",
+            "first": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": -9.5,
+              "change_percent": -9.499999999999996,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 90.5,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        90.5
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 90.5,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "TSLA"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "TSLA",
+              "volume": 1200.0
+            },
+            "issuer": "TSLA",
+            "recheck_at": "2026-10-25T17:00:00+00:00",
+            "second": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": -9.5,
+              "change_percent": -9.499999999999996,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 90.5,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        90.5
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 90.5,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "TSLA"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "TSLA",
+              "volume": 1200.0
+            },
+            "status": "rechecked",
+            "symbol": "TSLA"
+          },
+          "reported_move": -9.5,
+          "source_symbol": "TSLA",
+          "status": "rechecked",
+          "symbol": "TSLA"
+        },
+        {
+          "proof": {
+            "checked_at": "2026-10-25T17:00:00+00:00",
+            "first": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": -9.0,
+              "change_percent": -8.999999999999996,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 91.0,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        91.0
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 91.0,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "PLTR"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "PLTR",
+              "volume": 1200.0
+            },
+            "issuer": "PLTR",
+            "recheck_at": "2026-10-25T17:00:00+00:00",
+            "second": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": -9.0,
+              "change_percent": -8.999999999999996,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 91.0,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        91.0
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 91.0,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "PLTR"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "PLTR",
+              "volume": 1200.0
+            },
+            "status": "rechecked",
+            "symbol": "PLTR"
+          },
+          "reported_move": -9.0,
+          "source_symbol": "PLTR",
+          "status": "rechecked",
+          "symbol": "PLTR"
+        }
+      ],
+      "report_sha256": "d2e1028f46a05c19f68be2257b8846fb6fded87e6a286fbe3acf877ece3696cb",
+      "schema": 1
+    },
+    "evidence": {
+      "breadth": {
+        "down": 17,
+        "total": 18,
+        "up": 1
+      },
+      "companies": [
+        {
+          "action": "wait",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Nvidia",
+          "opportunity": 92.0,
+          "price": null,
+          "score_risk": "Elevated",
+          "setup_risk": "Medium-High",
+          "structural": 80.1,
+          "symbol": "NVDA"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Microsoft",
+          "opportunity": 89.0,
+          "price": null,
+          "score_risk": "Controlled",
+          "setup_risk": "Medium-High",
+          "structural": 87.3,
+          "symbol": "MSFT"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Taiwan Semiconductor",
+          "opportunity": 86.0,
+          "price": null,
+          "score_risk": "Balanced",
+          "setup_risk": "Medium-High",
+          "structural": 85.4,
+          "symbol": "TSM"
+        }
+      ],
+      "company_focus": {
+        "day": "2026-10-25",
+        "featured_symbols": [
+          "NVDA",
+          "PLTR",
+          "TSLA"
+        ],
+        "grouped_narration": 1,
+        "remaining_candidates": 35,
+        "rule": "Original developments, dated moves and market relevance; recent exposure breaks comparable ties",
+        "schema": 1,
+        "selected": [
+          {
+            "basis": "price move",
+            "group": "market event",
+            "metric": {
+              "price": -9.0
+            },
+            "name": "Palantir",
+            "recent_days": 0,
+            "role": "Event watch",
+            "sources": [
+              "Market event checks",
+              "Watchlist Movers"
+            ],
+            "story_id": "",
+            "symbol": "PLTR",
+            "tier": 120,
+            "watch": "Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",
+            "why": "It fell 9.0 percent in the quoted regular session. A repeat quote from the same provider supports the price reading."
+          },
+          {
+            "basis": "price move",
+            "group": "market event",
+            "metric": {
+              "price": -9.5
+            },
+            "name": "Tesla",
+            "recent_days": 0,
+            "role": "Event watch",
+            "sources": [
+              "Market event checks",
+              "Watchlist Movers"
+            ],
+            "story_id": "",
+            "symbol": "TSLA",
+            "tier": 120,
+            "watch": "Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",
+            "why": "It fell 9.5 percent in the quoted regular session. A repeat quote from the same provider supports the price reading."
+          },
+          {
+            "basis": "price move",
+            "group": "market event",
+            "metric": null,
+            "name": "Nvidia",
+            "recent_days": 0,
+            "role": "Event watch",
+            "sources": [
+              "Market event checks",
+              "Watchlist Movers"
+            ],
+            "story_id": "",
+            "symbol": "NVDA",
+            "tier": 120,
+            "watch": "Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",
+            "why": "An unusually large reported move is under review; quote confirmation and corporate-action checks remain open."
+          }
+        ]
+      },
+      "is_open": false,
+      "leadership": null,
+      "market_event_context": {
+        "events": [
+          {
+            "proof": {
+              "checked_at": "2026-10-25T17:00:00+00:00",
+              "first": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": -14.689999999999998,
+                "change_percent": -14.690000000000003,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 85.31,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          85.31
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 85.31,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "AMD"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "AMD",
+                "volume": 1200.0
+              },
+              "issuer": "AMD",
+              "recheck_at": "2026-10-25T17:00:00+00:00",
+              "second": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": -14.689999999999998,
+                "change_percent": -14.690000000000003,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 85.31,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          85.31
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 85.31,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "AMD"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "AMD",
+                "volume": 1200.0
+              },
+              "status": "rechecked",
+              "symbol": "AMD"
+            },
+            "reported_move": -14.69,
+            "source_symbol": "AMD",
+            "status": "rechecked",
+            "symbol": "AMD"
+          },
+          {
+            "proof": {
+              "checked_at": "2026-10-25T17:00:00+00:00",
+              "first": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": -9.5,
+                "change_percent": -9.499999999999996,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 90.5,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          90.5
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 90.5,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "TSLA"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "TSLA",
+                "volume": 1200.0
+              },
+              "issuer": "TSLA",
+              "recheck_at": "2026-10-25T17:00:00+00:00",
+              "second": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": -9.5,
+                "change_percent": -9.499999999999996,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 90.5,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          90.5
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 90.5,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "TSLA"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "TSLA",
+                "volume": 1200.0
+              },
+              "status": "rechecked",
+              "symbol": "TSLA"
+            },
+            "reported_move": -9.5,
+            "source_symbol": "TSLA",
+            "status": "rechecked",
+            "symbol": "TSLA"
+          },
+          {
+            "proof": {
+              "checked_at": "2026-10-25T17:00:00+00:00",
+              "first": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": -9.0,
+                "change_percent": -8.999999999999996,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 91.0,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          91.0
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 91.0,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "PLTR"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "PLTR",
+                "volume": 1200.0
+              },
+              "issuer": "PLTR",
+              "recheck_at": "2026-10-25T17:00:00+00:00",
+              "second": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": -9.0,
+                "change_percent": -8.999999999999996,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 91.0,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          91.0
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 91.0,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "PLTR"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "PLTR",
+                "volume": 1200.0
+              },
+              "status": "rechecked",
+              "symbol": "PLTR"
+            },
+            "reported_move": -9.0,
+            "source_symbol": "PLTR",
+            "status": "rechecked",
+            "symbol": "PLTR"
+          }
+        ],
+        "report_sha256": "d2e1028f46a05c19f68be2257b8846fb6fded87e6a286fbe3acf877ece3696cb",
+        "schema": 1
+      },
+      "moves": {
+        "Nasdaq": -4.3,
+        "Oil": 1.51,
+        "Russell": -2.27,
+        "S&P": -2.79,
+        "TLT": -0.02,
+        "VIX": 49.43
+      },
+      "narration_version": 2,
+      "reader_limit": 3,
+      "reader_version": 3,
+      "session": "2026-10-23",
+      "source_sections": [
+        "Executive Summary",
+        "Market Snapshot",
+        "What Changed Today",
+        "Top Opportunities",
+        "Trade Plan Snapshot",
+        "Market event checks",
+        "Verified story decisions",
+        "Company focus selection"
+      ],
+      "stories": [
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "energy",
+            "facts": [],
+            "observed_at": "2026-10-25T17:00:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "7646b2371e8fc4dbb83ee95030b375f457da2cdbd5d28caf8b83eed9cf55b5ea",
+            "source_text": "Data from our latest Petroleum Supply Monthly includes data through June 2026. The U.S. refining fleet produces several fuels.\nFrom January through June 2026, refinery yields of gasoline have averaged less than 47%.\nThe U.S. refinery fleet exceeded an average jet fuel yield of 11% for the first time in April 2026. Since then, the fleetwide average jet fuel yield has remained at or above 11% through the latest Petroleum Supply Monthly data for June 2026.\nParticularly high refinery margins for distillate fuel oil and jet fuel have contributed to shifts in the refinery yields of major products in 2026.",
+            "source_url": "https://www.eia.gov/todayinenergy/detail.php?id=99999",
+            "stage": "reported"
+          },
+          "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+          "id": "401050d5a8738a6c",
+          "kind": "macro",
+          "materiality": "energy",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "",
+          "source": "EIA",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [],
+          "title": "Refineries have shifted production away from gasoline to middle distillates",
+          "url": "https://www.eia.gov/todayinenergy/detail.php?id=99999"
+        },
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "product",
+            "facts": [
+              {
+                "evidence": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.",
+                "field": "program_name",
+                "kind": "uncrewed system",
+                "program": "XR-42",
+                "value": "XR-42 uncrewed system"
+              },
+              {
+                "evidence": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.",
+                "field": "program_stage",
+                "status": "development stage; production readiness not established",
+                "value": "developmental"
+              },
+              {
+                "evidence": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.",
+                "field": "development_test",
+                "status": "reported milestone; independent test verification not established",
+                "value": "company-reported completed flight test"
+              },
+              {
+                "evidence": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.",
+                "field": "program_customer",
+                "value": "U.S. Air Force"
+              },
+              {
+                "evidence": "Executed under a prime military contract valued at over $2.4B, the flight supplied development data.",
+                "field": "existing_program_contract",
+                "status": "existing program contract context; new award, obligation and revenue not established",
+                "value": "over $2.4 billion"
+              },
+              {
+                "evidence": "The program is working toward system-level Critical Design Review (CDR).",
+                "field": "next_program_gate",
+                "status": "future program milestone; completion and date not established",
+                "value": "Critical Design Review"
+              }
+            ],
+            "observed_at": "2026-10-25T17:00:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 10,
+            "scope": "original release excerpt",
+            "source_sha256": "5ec25161dd219fbf5eeaa6cfd9e58107516f95ff56eec7e7e2d3ec5873e11005",
+            "source_text": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.\nExecuted under a prime military contract valued at over $2.4B, the flight supplied development data.\nThe program is working toward system-level Critical Design Review (CDR).",
+            "source_url": "https://news.lockheedmartin.com/synthetic-development-test",
+            "stage": "test milestone"
+          },
+          "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+          "id": "f7032da4f759d424",
+          "kind": "company",
+          "materiality": "defense innovation",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "LMT",
+          "source": "Lockheed Martin Newsroom",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [
+            "LMT"
+          ],
+          "title": "Lockheed Martin Completes Flight Test of Military Development Vehicle",
+          "url": "https://news.lockheedmartin.com/synthetic-development-test"
+        }
+      ]
+    },
+    "focus_context": {
+      "limit": 3,
+      "recent": [
+        {
+          "day": "2026-10-24",
+          "symbols": [
+            "AMD"
+          ]
+        }
+      ],
+      "schema": 5
+    },
+    "insights": [
+      {
+        "id": "market_pulse",
+        "section": "market",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Verified story decisions"
+        ],
+        "text": "Our indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 2.79 percent; the Nasdaq Composite fell 4.30 percent; VIX rose 49.43 percent; oil rose 1.51 percent; the TLT bond fund fell 0.02 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs."
+      },
+      {
+        "id": "defense_watch",
+        "section": "global",
+        "sources": [
+          "Verified story decisions"
+        ],
+        "text": "Our view on Lockheed Martin: The test advances an existing development program. Funded delivery plans and development costs will help assess its path to production revenue. The stated contract value is program context, not a new award. Next, watch for the Critical Design Review outcome, disclosed funding and a delivery timetable."
+      },
+      {
+        "id": "company_focus_moves",
+        "section": "company",
+        "sources": [
+          "Market event checks",
+          "Watchlist Movers",
+          "Company focus selection"
+        ],
+        "text": "Company price watch — Palantir fell 9.0 percent; Tesla fell 9.5 percent in the quoted regular session. Repeat quotes from the same provider support these price readings. These moves do not establish a shared cause. Check original company results and guidance for business context."
+      },
+      {
+        "id": "company_focus_3",
+        "section": "company",
+        "sources": [
+          "Market event checks",
+          "Watchlist Movers",
+          "Company focus selection"
+        ],
+        "text": "Event watch — Nvidia. An unusually large reported move is under review; quote confirmation and corporate-action checks remain open. Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause."
+      },
+      {
+        "id": "opening_takeaway",
+        "section": "intro",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Verified story decisions",
+          "Market event checks"
+        ],
+        "text": "The takeaway: All three major indexes fell in the completed session. Lockheed Martin reported a flight-test milestone for its developmental XR-42 uncrewed system. The next disclosed program gate is Critical Design Review."
+      },
+      {
+        "id": "watch_participation",
+        "section": "watch",
+        "sources": [
+          "Market Snapshot",
+          "Executive Summary"
+        ],
+        "text": "Market recovery: Of the 18 stocks and funds we track, 1 finished higher and 17 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case."
+      },
+      {
+        "id": "watch_business",
+        "section": "watch",
+        "sources": [
+          "Verified story decisions"
+        ],
+        "text": "Lockheed Martin's next milestone: Watch for the Critical Design Review outcome and updated delivery plans. Those disclosures will help assess development progress and the route to production revenue."
+      }
+    ],
+    "narration_version": 2,
+    "presentation": "news",
+    "reader_limit": 3,
+    "reader_version": 3,
+    "research_sha256": "d2e1028f46a05c19f68be2257b8846fb6fded87e6a286fbe3acf877ece3696cb",
+    "schema": 1,
+    "score_changes": false
+  },
+  "candidates": [
+    {
+      "canonical_url": "https://news.lockheedmartin.com/synthetic-development-test",
+      "confirmation_check": "pass",
+      "confirmed_by": "LMT",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "product",
+        "facts": [
+          {
+            "evidence": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.",
+            "field": "program_name",
+            "kind": "uncrewed system",
+            "program": "XR-42",
+            "value": "XR-42 uncrewed system"
+          },
+          {
+            "evidence": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.",
+            "field": "program_stage",
+            "status": "development stage; production readiness not established",
+            "value": "developmental"
+          },
+          {
+            "evidence": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.",
+            "field": "development_test",
+            "status": "reported milestone; independent test verification not established",
+            "value": "company-reported completed flight test"
+          },
+          {
+            "evidence": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.",
+            "field": "program_customer",
+            "value": "U.S. Air Force"
+          },
+          {
+            "evidence": "Executed under a prime military contract valued at over $2.4B, the flight supplied development data.",
+            "field": "existing_program_contract",
+            "status": "existing program contract context; new award, obligation and revenue not established",
+            "value": "over $2.4 billion"
+          },
+          {
+            "evidence": "The program is working toward system-level Critical Design Review (CDR).",
+            "field": "next_program_gate",
+            "status": "future program milestone; completion and date not established",
+            "value": "Critical Design Review"
+          }
+        ],
+        "observed_at": "2026-10-25T17:00:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 10,
+        "scope": "original release excerpt",
+        "source_sha256": "5ec25161dd219fbf5eeaa6cfd9e58107516f95ff56eec7e7e2d3ec5873e11005",
+        "source_text": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.\nExecuted under a prime military contract valued at over $2.4B, the flight supplied development data.\nThe program is working toward system-level Critical Design Review (CDR).",
+        "source_url": "https://news.lockheedmartin.com/synthetic-development-test",
+        "stage": "test milestone"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+      "id": "f7032da4f759d424",
+      "kind": "company",
+      "materiality": "defense innovation",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 114,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "LMT",
+      "reason": "Original LMT report; material defense innovation development within the edition budget",
+      "source": "Lockheed Martin Newsroom",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [
+        "LMT"
+      ],
+      "title": "Lockheed Martin Completes Flight Test of Military Development Vehicle",
+      "title_truncated": false,
+      "url": "https://news.lockheedmartin.com/synthetic-development-test"
+    },
+    {
+      "canonical_url": "https://www.eia.gov/todayinenergy/detail.php?id=99999",
+      "confirmation_check": "pass",
+      "confirmed_by": "EIA",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "energy",
+        "facts": [],
+        "observed_at": "2026-10-25T17:00:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "7646b2371e8fc4dbb83ee95030b375f457da2cdbd5d28caf8b83eed9cf55b5ea",
+        "source_text": "Data from our latest Petroleum Supply Monthly includes data through June 2026. The U.S. refining fleet produces several fuels.\nFrom January through June 2026, refinery yields of gasoline have averaged less than 47%.\nThe U.S. refinery fleet exceeded an average jet fuel yield of 11% for the first time in April 2026. Since then, the fleetwide average jet fuel yield has remained at or above 11% through the latest Petroleum Supply Monthly data for June 2026.\nParticularly high refinery margins for distillate fuel oil and jet fuel have contributed to shifts in the refinery yields of major products in 2026.",
+        "source_url": "https://www.eia.gov/todayinenergy/detail.php?id=99999",
+        "stage": "reported"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+      "id": "401050d5a8738a6c",
+      "kind": "macro",
+      "materiality": "energy",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 105,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "",
+      "reason": "Original EIA report; material energy development within the edition budget",
+      "source": "EIA",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [],
+      "title": "Refineries have shifted production away from gasoline to middle distillates",
+      "title_truncated": false,
+      "url": "https://www.eia.gov/todayinenergy/detail.php?id=99999"
+    }
+  ],
+  "company_schedules": [],
+  "earnings_backup_health": {
+    "reason": "No cached SEC earnings check",
+    "status": "limited"
+  },
+  "earnings_context_candidates": [],
+  "earnings_context_health": [],
+  "generated_at": "2026-10-25T17:00:00+00:00",
+  "issues": [
+    "2026-10-28: 2 publisher-scheduled releases added to incomplete Nasdaq coverage"
+  ],
+  "lead_story_id": "f7032da4f759d424",
+  "market_event_context": {
+    "events": [
+      {
+        "proof": {
+          "checked_at": "2026-10-25T17:00:00+00:00",
+          "first": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": -14.689999999999998,
+            "change_percent": -14.690000000000003,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 85.31,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      85.31
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 85.31,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "AMD"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "AMD",
+            "volume": 1200.0
+          },
+          "issuer": "AMD",
+          "recheck_at": "2026-10-25T17:00:00+00:00",
+          "second": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": -14.689999999999998,
+            "change_percent": -14.690000000000003,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 85.31,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      85.31
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 85.31,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "AMD"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "AMD",
+            "volume": 1200.0
+          },
+          "status": "rechecked",
+          "symbol": "AMD"
+        },
+        "reported_move": -14.69,
+        "source_symbol": "AMD",
+        "status": "rechecked",
+        "symbol": "AMD"
+      },
+      {
+        "proof": {
+          "checked_at": "2026-10-25T17:00:00+00:00",
+          "first": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": -9.5,
+            "change_percent": -9.499999999999996,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 90.5,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      90.5
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 90.5,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "TSLA"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "TSLA",
+            "volume": 1200.0
+          },
+          "issuer": "TSLA",
+          "recheck_at": "2026-10-25T17:00:00+00:00",
+          "second": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": -9.5,
+            "change_percent": -9.499999999999996,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 90.5,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      90.5
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 90.5,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "TSLA"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "TSLA",
+            "volume": 1200.0
+          },
+          "status": "rechecked",
+          "symbol": "TSLA"
+        },
+        "reported_move": -9.5,
+        "source_symbol": "TSLA",
+        "status": "rechecked",
+        "symbol": "TSLA"
+      },
+      {
+        "proof": {
+          "checked_at": "2026-10-25T17:00:00+00:00",
+          "first": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": -9.0,
+            "change_percent": -8.999999999999996,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 91.0,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      91.0
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 91.0,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "PLTR"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "PLTR",
+            "volume": 1200.0
+          },
+          "issuer": "PLTR",
+          "recheck_at": "2026-10-25T17:00:00+00:00",
+          "second": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": -9.0,
+            "change_percent": -8.999999999999996,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 91.0,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      91.0
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 91.0,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "PLTR"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "PLTR",
+            "volume": 1200.0
+          },
+          "status": "rechecked",
+          "symbol": "PLTR"
+        },
+        "reported_move": -9.0,
+        "source_symbol": "PLTR",
+        "status": "rechecked",
+        "symbol": "PLTR"
+      }
+    ],
+    "report_sha256": "d2e1028f46a05c19f68be2257b8846fb6fded87e6a286fbe3acf877ece3696cb",
+    "schema": 1
+  },
+  "market_evidence": {
+    "moves": "S&P -2.79%, Nasdaq -4.30%, Russell -2.27%, VIX +49.43%, Oil +1.51%, TLT -0.02%.",
+    "snapshot": "Market Session: Closed — weekend.\nQuote session: 2026-10-23\nBreadth: 1 up / 17 down / 18 quoted"
+  },
+  "narrated_company_schedules": [],
+  "narration_version": 2,
+  "publisher_scan_omissions": {},
+  "ranking_date": "2026-10-23",
+  "reader_version": 3,
+  "report_sha256": "64e36fe323ecec24907decaea7f333a7e374eee1920df28c3ff9b5a997b19818",
+  "report_text": "Smart Money Daily News Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\nMarket data: completed regular session 2026-10-23\n\nGood afternoon.\n\nThe takeaway: All three major indexes fell in the completed session. Lockheed Martin reported a flight-test milestone for its developmental XR-42 uncrewed system. The next disclosed program gate is Critical Design Review.\n\nGlobal and Defense Watch\nLockheed Martin reported a completed flight test of its developmental XR-42 uncrewed system with the U.S. Air Force. The release cites an existing prime contract valued at over $2.4 billion. The program is working toward Critical Design Review. The disclosure was published October 25.\n\nOur view on Lockheed Martin: The test advances an existing development program. Funded delivery plans and development costs will help assess its path to production revenue. The stated contract value is program context, not a new award. Next, watch for the Critical Design Review outcome, disclosed funding and a delivery timetable.\n\nMarket Update\nOur indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 2.79 percent; the Nasdaq Composite fell 4.30 percent; VIX rose 49.43 percent; oil rose 1.51 percent; the TLT bond fund fell 0.02 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.\n\nPolicy & Economy\nEIA's October 25 announcement: “Refineries have shifted production away from gasoline to middle distillates”. Review the original report for scope and context.\n\nCompanies in Focus\nCompany price watch — Palantir fell 9.0 percent; Tesla fell 9.5 percent in the quoted regular session. Repeat quotes from the same provider support these price readings. These moves do not establish a shared cause. Check original company results and guidance for business context.\n\nEvent watch — Nvidia. An unusually large reported move is under review; quote confirmation and corporate-action checks remain open. Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.\n\nWhat's Ahead\nThe publisher schedule lists the Federal Reserve's interest-rate decision for Wednesday, October 28 at 02:00 PM EDT.\n\nWhy it matters: Watch the Fed's guidance on the rate outlook and what it could mean for growth-company financing and valuations.\n\nCalendar or company-news coverage is incomplete; unverified dates and times remain uncertain.\n\nWhat We're Watching\nMarket recovery: Of the 18 stocks and funds we track, 1 finished higher and 17 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case.\n\nLockheed Martin's next milestone: Watch for the Critical Design Review outcome and updated delivery plans. Those disclosures will help assess development progress and the route to production revenue.\n\nResearch Notes\nThe full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans\n\nSources and full evidence: /storylog · /catalysts · /calendar · /specialalerts\n\nResearch only. Not financial advice.",
+  "research_sha256": "d2e1028f46a05c19f68be2257b8846fb6fded87e6a286fbe3acf877ece3696cb",
+  "research_text": "📊 Smart Money AI Daily Report\n\n\nDaily Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\n\nGood afternoon.\n\n\nExecutive Summary\n- Main theme: Pressure.\n- Market moves: S&P -2.79%, Nasdaq -4.30%, Russell -2.27%, VIX +49.43%, Oil +1.51%, TLT -0.02%.\n\nIntelligence Used Today\n- Smart Money Summary, Trade Plan Snapshot, News Intelligence, Alert Monitor, StockAnalysis, Alert Settings, Watchlist Evolution, and Market Memory are feeding today's report. Calendar Evidence: active. Company Catalysts: active. Document Research: active.\n\n\nWhat Changed Today\n• Leadership changed.\n• Confirmation matters.\n• New themes emerging.\n\n\nTheme Read\n• Research Opinion (2026-09-30): AI infrastructure spending supports chip demand, while debt funding adds financing risk. [Empower Q3 2026, p9]\n• Market check: unavailable; current yields, price and volume need confirmation.\n• Theme history is building.\n\n\nMarket Snapshot\nMarket Session: Closed — weekend.\nQuote session: 2026-10-23\nBreadth: 1 up / 17 down / 18 quoted\n\nEarnings & Economic Calendar\nEconomic release times: timezone unverified.\nFull calendar: /weeklycalendar\n\n\nPortfolio Read\n• NVDA is the cleanest ranked setup today, but it still needs price/volume confirmation before action.\n\n\nPortfolio Allocation Snapshot\nPosture: Watchlist.\n\n\nWatchlist Movers\nLargest regular-session movers:\n• AMD: $100.00 (-14.69%)\n• TSLA: $100.00 (-9.50%)\n• PLTR: $100.00 (-9.00%)\n• NVDA: $100.00 (-8.00%)\n\nTop Opportunities\n1. NVDA - Opportunity 92.0/100 | Structural 80.1/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-29; company confirmation pending\n   Score Risk: Elevated | Action: Watch Closely\n   Full review: /tradeplan NVDA\n\n2. MSFT - Opportunity 89.0/100 | Structural 87.3/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-28; company confirmation pending\n   Score Risk: Controlled | Action: Watch Closely\n   Full review: /tradeplan MSFT\n\n3. TSM - Opportunity 86.0/100 | Structural 85.4/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; dated catalyst not established in cached coverage\n   Score Risk: Balanced | Action: Watch Closely\n   Full review: /tradeplan TSM\n\n\nFastest-Rising Opportunities\nNo meaningful positive opportunity-score changes versus the prior report.\n\n\nRisk Notes\n• Sizing risk: keep entries smaller on NVDA.\n\n\nSmart Money Summary\nSignal: market tone is quote data unavailable.\nImplication: Review.\nValidation: Confirm.\n\n\nTrade Plan Snapshot\nTop action reads from today's leading opportunities. Score Risk reflects scoring support; Setup Risk reflects score and theme caution.\n\n1. NVDA — Medium conviction, 80.1/100 | Score Risk: Elevated | Setup Risk: Medium-High | Action: Watchlist — wait for better confirmation Entry: Wait for price, volume, and news confirmation. Full plan: /tradeplan NVDA\n2. MSFT — Medium-High conviction, 87.3/100 | Score Risk: Controlled | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan MSFT\n3. TSM — Medium-High conviction, 85.4/100 | Score Risk: Balanced | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan TSM\n\n\nAction Checklist\n• /scorecard NVDA — validate the top-ranked setup.\n• /volume NVDA — confirm whether money flow supports the score.\n\n\nNext Commands\n/tradeplans\n/tradeplan SYMBOL\n/scorecard SYMBOL\n/top10\n/weeklycalendar\n/global\n/contextstatus\n/summarypreview · /catalysts\n/allocation\n\n\nNotes\nResearch only. Not financial advice.",
+  "rules_version": 24,
+  "schema": 1,
+  "source_health": [],
+  "stages": [
+    {
+      "detail": "2 candidates from cached public evidence",
+      "name": "Scan",
+      "status": "pass"
+    },
+    {
+      "detail": "0 held; original publication dates and HTTPS URLs checked",
+      "name": "Source Check",
+      "status": "limited"
+    },
+    {
+      "detail": "Material company developments and macro releases; original-source reports required",
+      "name": "Relevance",
+      "status": "pass"
+    },
+    {
+      "detail": "2 selected / 0 skipped; one story per represented company",
+      "name": "Selection",
+      "status": "pass"
+    },
+    {
+      "detail": "Original publisher, materiality, dates and complete selected wording checked; 1 event-specific company reviews and 6 sourced fact fields; 2 original article materiality reviews; 7 analyst insights matched to this edition's market, ranking and trade-plan evidence",
+      "name": "Editorial Review",
+      "status": "pass"
+    },
+    {
+      "detail": "Built edition and source decisions recorded; this is not a delivery receipt",
+      "name": "Decision Log",
+      "status": "pass"
+    }
+  ],
+  "story_narrations": {
+    "401050d5a8738a6c": "EIA's October 25 announcement: “Refineries have shifted production away from gasoline to middle distillates”. Review the original report for scope and context.",
+    "f7032da4f759d424": "Lockheed Martin reported a completed flight test of its developmental XR-42 uncrewed system with the U.S. Air Force. The release cites an existing prime contract valued at over $2.4 billion. The program is working toward Critical Design Review. The disclosure was published October 25."
+  },
+  "truncated_candidates": 0,
+  "voiceover": {
+    "input_sha256": "01f9cc8c7a2b2074e8f99ca0d901520c8758193ca3950af61795d5b2b0729b7f",
+    "quality": {
+      "editorial_words": 322,
+      "estimated_seconds": 125.6,
+      "market_estimated_seconds": 22.1,
+      "market_words": 59,
+      "passes": true,
+      "words": 335,
+      "words_per_minute": 160
+    },
+    "schema": 2,
+    "script": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the completed session. Lockheed Martin reported a flight-test milestone for its developmental XR-forty two uncrewed system. The next disclosed program gate is Critical Design Review.\n\nFirst, the market. At the close on Friday, October twenty third, the S and P five hundred fell two point seven nine percent, the Nasdaq fell four point three percent, and oil rose one point five one percent. Volatility rose. Our read is cautious. Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.\n\nIn defense and innovation. Lockheed Martin reported a completed flight test of its developmental XR-forty two uncrewed system with the U S Air Force. The release cites an existing prime contract valued at over two point four billion dollars. The program is working toward Critical Design Review. The test advances an existing development program. Funded delivery plans and development costs will help assess its path to production revenue. The stated contract value is program context, not a new award.\n\nAmong the companies we track, Palantir fell nine percent; Tesla fell nine point five percent in the quoted regular session. These moves do not establish a shared cause. Check original company results and guidance for business context.\n\nLooking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.\n\nHere are the next checks. First, market recovery. Of the eighteen stocks and funds we track, one finished higher and seventeen lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case. Second, Lockheed Martin's next milestone. Watch for the Critical Design Review outcome and updated delivery plans. Those disclosures will help assess development progress and the route to production revenue.\n\nSubscribe to Smart Money for more market research. Research only. Not financial advice.",
+    "script_sha256": "4b6245c7af12651b9bbf0f2b4138b90b20c67efd3147113ac7e30788313f6d63",
+    "segments": [
+      {
+        "bullets": [
+          "All three major indexes fell in the completed session.",
+          "Lockheed Martin reported a flight-test milestone for its developmental XR-42 uncrewed system."
+        ],
+        "heading": "The Takeaway",
+        "narration": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the completed session. Lockheed Martin reported a flight-test milestone for its developmental XR-forty two uncrewed system. The next disclosed program gate is Critical Design Review.",
+        "source_ids": [
+          "f7032da4f759d424"
+        ]
+      },
+      {
+        "bullets": [
+          "S&P: -2.79%",
+          "Nasdaq: -4.30%",
+          "VIX: +49.43%"
+        ],
+        "heading": "Market Update",
+        "narration": "First, the market. At the close on Friday, October twenty third, the S and P five hundred fell two point seven nine percent, the Nasdaq fell four point three percent, and oil rose one point five one percent. Volatility rose. Our read is cautious. Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.",
+        "source_ids": [
+          "401050d5a8738a6c"
+        ]
+      },
+      {
+        "bullets": [
+          "Lockheed Martin Completes Flight Test of Military Development Vehicle"
+        ],
+        "heading": "Defense and Innovation",
+        "narration": "In defense and innovation. Lockheed Martin reported a completed flight test of its developmental XR-forty two uncrewed system with the U S Air Force. The release cites an existing prime contract valued at over two point four billion dollars. The program is working toward Critical Design Review. The test advances an existing development program. Funded delivery plans and development costs will help assess its path to production revenue. The stated contract value is program context, not a new award.",
+        "source_ids": [
+          "f7032da4f759d424"
+        ]
+      },
+      {
+        "bullets": [
+          "Palantir (PLTR): -9.0%",
+          "Tesla (TSLA): -9.5%"
+        ],
+        "heading": "Companies in Focus",
+        "narration": "Among the companies we track, Palantir fell nine percent; Tesla fell nine point five percent in the quoted regular session. These moves do not establish a shared cause. Check original company results and guidance for business context.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "The Federal Reserve's interest-rate decision for Wed, Oct 28 at 2:00 PM EDT"
+        ],
+        "heading": "What's Ahead",
+        "narration": "Looking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Of the 18 stocks and funds we track, 1 finished higher and 17 lower.",
+          "Watch for the Critical Design Review outcome and updated delivery plans."
+        ],
+        "heading": "What We're Watching",
+        "narration": "Here are the next checks. First, market recovery. Of the eighteen stocks and funds we track, one finished higher and seventeen lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case. Second, Lockheed Martin's next milestone. Watch for the Critical Design Review outcome and updated delivery plans. Those disclosures will help assess development progress and the route to production revenue.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Research only",
+          "Not financial advice"
+        ],
+        "heading": "Closing",
+        "narration": "Subscribe to Smart Money for more market research. Research only. Not financial advice.",
+        "source_ids": []
+      }
+    ],
+    "sources": {
+      "401050d5a8738a6c": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "EIA",
+          "url": "https://www.eia.gov/todayinenergy/detail.php?id=99999",
+          "verified_at": "2026-10-25T16:55:00+00:00"
+        }
+      ],
+      "f7032da4f759d424": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "Lockheed Martin Newsroom",
+          "url": "https://news.lockheedmartin.com/synthetic-development-test",
+          "verified_at": "2026-10-25T16:55:00+00:00"
+        }
+      ]
+    }
+  },
+  "id": "64551437ff9987b41b61"
+}

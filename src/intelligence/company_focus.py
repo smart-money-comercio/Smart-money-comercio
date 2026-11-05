@@ -121,6 +121,7 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
     except (TypeError, ValueError):
         dated_session = False
     moves, stories = evidence["moves"] if dated_session else {}, evidence.get("stories", [])
+    verified_first = evidence.get("reader_version") == 4
     attention = {row["symbol"]: row for row in evidence.get("market_event_context", {}).get("events", [])} if context["schema"] >= 4 else {}
     for story in stories:
         if story.get("kind") != "company":
@@ -164,7 +165,8 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
                     why = f"It {direction} {abs(value):.1f} percent in the quoted regular session. A repeat quote from the same provider supports the price reading."
                 else:
                     why = "An unusually large reported move is under review; quote confirmation and corporate-action checks remain open."
-                add(symbol, "market event", "Event watch", 120, why,
+                tier = 120 if not verified_first or event.get("status") == "rechecked" else 80
+                add(symbol, "market event", "Event watch", tier, why,
                     "Check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",
                     ["Market event checks", "Watchlist Movers"], metric={"price": value} if event.get("status") == "rechecked" else None)
                 continue
@@ -214,7 +216,11 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
     selected, used_groups = [], set()
     while pool and len(selected) < context["limit"]:
         def priority(row):
-            tier = row["tier"] - (50 if row["tier"] < 100 and row["group"] in used_groups else 0)
+            tier = row["tier"] - (50 if row["tier"] < 100 and row["group"] in used_groups and not (verified_first and row["group"] == "market event") else 0)
+            if verified_first:
+                size = abs((row.get("metric") or {}).get("price",0)) if row["group"] == "market event" else 0
+                return (-tier,row["group"] in used_groups,-size,row["recent_days"],
+                        hashlib.sha256((day.isoformat()+row["symbol"]).encode()).hexdigest())
             return (-tier, row["group"] in used_groups, row["recent_days"],
                 hashlib.sha256((day.isoformat()+row["symbol"]).encode()).hexdigest())
         row = min(pool.values(), key=priority)
@@ -224,7 +230,8 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
         if story.get("kind") == "company" and "defense" not in story_topics(story):
             featured.update(issuer(symbol) for symbol in [story.get("publisher_symbol")] if company(symbol))
     return {"schema": 1, "day": day.isoformat(), "selected": selected, "featured_symbols": sorted(featured), "remaining_candidates": len(pool),
-        "rule": "Original developments, dated moves and market relevance; recent exposure breaks comparable ties",
+        "rule": ("Source quality, material developments and checked move size; recent exposure breaks remaining ties" if verified_first else
+                 "Original developments, dated moves and market relevance; recent exposure breaks comparable ties"),
         **({"grouped_narration": 1} if context["schema"] >= 5 else {})}
 
 
@@ -234,7 +241,7 @@ def grouped_price_watch(evidence: dict) -> dict | None:
     if focus.get("grouped_narration") != 1:
         return None
     semiconductors = {"INTC", "AMD", "ASML", "NVDA", "AVGO", "TSM", "MU", "ARM", "MRVL"}
-    combined = evidence.get("reader_version") == 3
+    combined = evidence.get("reader_version") in {3,4}
     contextualized = {row["symbol"] for row in evidence.get("earnings_context", [])}
     events = {row["symbol"]: row for row in evidence.get("market_event_context", {}).get("events", [])}
     rows = [row for row in focus["selected"] if (combined or row["symbol"] in semiconductors) and row["symbol"] not in contextualized and not row["story_id"]

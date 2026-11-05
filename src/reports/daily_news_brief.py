@@ -262,7 +262,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         # verified results context this attempt is meant to include.
         for indexes, context_values, focus_limit, reader_limit in product(combinations(range(len(initial_stories)), count), context_choices, (3, 2, 1), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
-            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=3, reader_limit=reader_limit, earnings_context=context_values)
+            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit, earnings_context=context_values)
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")
@@ -309,6 +309,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                                "Global and Defense Watch" if "defense" in story_topics(lead) else
                                POLICY_HEADER if lead["kind"] == "macro" else "Companies in Focus")
                 groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, ALL_HEADERS.index(group[0])))
+            from src.intelligence.market_priority import selloff
+            if selloff(analysis["evidence"]):
+                groups.sort(key=lambda group: (0 if group[0] == "Market Update" else 1 if group[0] == "Companies in Focus" else 2, ALL_HEADERS.index(group[0])))
 
             def render():
                 introduction = "\n\n".join(row["text"] for row in insights if row["section"] == "intro")

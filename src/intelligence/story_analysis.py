@@ -190,11 +190,15 @@ def build_evidence(story: dict, text: str = "", scope: str = "headline only", *,
         schema = 7 if intel_results else 6 if solar_storage_report(story) else 5 if story.get("publisher_symbol") in {"GOOG", "GOOGL"} and re.fullmatch(r"Alphabet (?:Announces|Reports) (?:First|Second|Third|Fourth) Quarter 20\d{2} Results", story["title"], re.I) else 4
     from src.intelligence.treasury_financing import document_kind, financing_facts
     from src.intelligence.defense_program import applicable, program_facts, material
-    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema in {8, 9, 10} and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story):
+    from src.intelligence import refinery_mix
+    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema in {8, 9, 10, 11} and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story):
         raise ValueError("Unknown original story evidence scope")
     text = release_text(text)
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
-    if schema == 10:
+    if schema == 11:
+        kind, stage = "refinery product mix", "dated observation"
+        facts = refinery_mix.product_facts(story, text)
+    elif schema == 10:
         kind, stage = "product", "test milestone"
         facts = program_facts(story, text)
         if not material(facts):
@@ -225,6 +229,9 @@ def checked_evidence(story: dict) -> dict:
 
 def investor_read(story: dict) -> dict:
     evidence = checked_evidence(story)
+    if evidence["schema"] == 11:
+        from src.intelligence.refinery_mix import review
+        return review(evidence)
     if evidence["schema"] == 10:
         from src.intelligence.defense_program import review
         return review(evidence)

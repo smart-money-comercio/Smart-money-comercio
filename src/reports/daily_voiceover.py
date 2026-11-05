@@ -49,19 +49,23 @@ def market_copy(evidence):
             figures.append(label + (" was unchanged" if value == 0 else f" {'rose' if value > 0 else 'fell'} {abs(value):g} percent"))
     if not figures:
         figures = ["the Russell 2000 " + ("was unchanged" if moves.get("Russell", 0) == 0 else f"{'rose' if moves['Russell'] > 0 else 'fell'} {abs(moves['Russell']):g} percent")]
-    mood = sentiment(moves)
+    pressure_first = evidence.get("reader_version") == 4
+    from src.intelligence.market_priority import selloff
+    pressure = pressure_first and selloff(evidence)
+    mood = sentiment(moves, pressure_first=pressure_first)
     topics = set().union(*(story_topics(story) for story in evidence.get("stories", [])))
-    lens = portfolio_lens(moves, topics, mood)
+    lens = portfolio_lens(moves, topics, mood, pressure_first=pressure_first)
     lens = lens.replace("research case", "case").replace("entry conditions for individual companies", "outlook for individual companies")
     lens = lens.replace("upcoming catalysts", "upcoming company and policy events")
     volatility = (" Volatility " + ("rose." if moves["VIX"] > 0 else "fell." if moves["VIX"] < 0 else "was unchanged.")) if "VIX" in moves else ""
-    if moves.get("Oil", 0) >= 1.5:
+    if moves.get("Oil", 0) >= 1.5 and not pressure:
         figures.append(f"oil rose {moves['Oil']:g} percent")
     figures_text = (", ".join(figures[:-1])+", and "+figures[-1]) if len(figures)>2 else ", while ".join(figures)
     text = clock + ", " + figures_text + "." + volatility
-    text += " Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + ". " + lens
+    basis = "; index coverage is incomplete" if pressure and not all(key in moves for key in ("S&P","Nasdaq","Russell")) else ""
+    text += " Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + basis + ". " + lens
     if words(normalize(text)) + 4 > MAX_MARKET_WORDS:
-        text = clock + ", " + figures_text + ". Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + ". " + lens
+        text = clock + ", " + figures_text + ". Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + basis + ". " + lens
     if words(normalize(text)) + 4 < MIN_MARKET_WORDS:
         text += " Watch whether gains or losses spread across more companies in the next session."
     return text
@@ -100,6 +104,8 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
         return filing["issuer"] + " disclosed financing terms in a current SEC report. " + narration(story)
     review = company_read(story) if story["kind"] == "company" else investor_read(story)
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
+    if profile["schema"] == 11:
+        return review["facts"] + " " + review["why"]
     if profile["schema"] == 10:
         from src.intelligence.defense_program import summary
         return summary(profile, NAMES.get(story["publisher_symbol"], story["publisher_symbol"])) + " " + review["why"]
@@ -248,21 +254,30 @@ def build(record, report, research, *, schema=2):
     first_checked = next((event for event in attention if event["status"] == "rechecked"), {})
     opening_context = matching(evidence.get("earnings_context", []), first_checked.get("symbol"))
     opening_sources = (["earnings_" + opening_context["symbol"]]
-                       if opening_context and (context_sources or review.get("reader_version") in {2, 3}) else [])
-    if review.get("reader_version") == 3:
-        from src.intelligence.evidence_opening import opening_source
+                       if opening_context and (context_sources or review.get("reader_version") in {2, 3, 4}) else [])
+    if review.get("reader_version") in {3,4}:
+        if review["reader_version"] == 4:
+            from src.intelligence.market_priority import opening_source, selloff
+            if selloff(evidence):
+                opening_sources = []
+        else:
+            from src.intelligence.evidence_opening import opening_source
         point = opening_source(evidence)
         if point:
             opening_sources = point["story_ids"]
-    if modern and review.get("reader_version") in {2, 3} and first_checked:
+    if modern and review.get("reader_version") in {2, 3, 4} and first_checked:
         label = NAMES.get(first_checked["symbol"], first_checked["symbol"])
         company_line = next((line for line in re.split(r"(?<=[.!?])\s+", hook) if label in line), "")
         if company_line and company_line not in hook_bullets:
             hook_bullets = [hook_bullets[0], company_line]
     add("The Takeaway", greeting+" This is Smart Money for "+local.strftime("%B %d").replace(" 0", " ")+". "+hook,
-        hook_bullets, opening_sources if review.get("reader_version") in {2, 3} or "Recent earnings provide" in hook else ())
+        hook_bullets, opening_sources if review.get("reader_version") in {2, 3, 4} or "Recent earnings provide" in hook else ())
     market = market_copy(evidence)
     market_sources = [story["id"] for story in selected if story_topics(story) & {"trade", "geopolitics", "policy", "energy", "IPO", "AI financing"}] if modern else ()
+    if review.get("reader_version") == 4:
+        from src.intelligence.market_priority import selloff
+        if selloff(evidence):
+            market_sources = []
     add("Market Update", "First, the market. "+market,
         [f"{key}: {evidence['moves'][key]:+.2f}%" for key in ("S&P","Nasdaq","VIX") if key in evidence["moves"]], market_sources)
     covered = set()
@@ -282,7 +297,7 @@ def build(record, report, research, *, schema=2):
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)
     def add_peer_group():
-        prefix = "Among the companies we track, " if review.get("reader_version") == 3 else "Across semiconductor companies, "
+        prefix = "Among the companies we track, " if review.get("reader_version") in {3,4} else "Across semiconductor companies, "
         copy = group["text"].replace(group["label"] + " — ", prefix)
         if modern:
             copy = copy.replace(" Repeat quotes from the same provider support these price readings.", "")
@@ -327,9 +342,13 @@ def build(record, report, research, *, schema=2):
     watch_bullets = [re.split(r"(?<=[.!?])\s+",text.partition(": ")[2])[0] for text in watch] if modern else [text.partition(": ")[0] for text in watch]
     watch_context = matching(evidence.get("earnings_context", []), attention[0]["symbol"]) if attention else None
     watch_sources = (["earnings_" + watch_context["symbol"]]
-                     if watch_context and (context_sources or review.get("reader_version") in {2, 3}) else [])
+                     if watch_context and (context_sources or review.get("reader_version") in {2, 3, 4}) else [])
     add("What We're Watching", "Here are the next checks. "+" ".join(signals), watch_bullets,
         watch_sources if any("earnings follow-through" in text for text in watch) else ())
+    if review.get("reader_version") == 4:
+        from src.intelligence.market_priority import selloff
+        if selloff(evidence):
+            scenes[2:] = sorted(scenes[2:],key=lambda row: row["heading"] != "Companies in Focus")
     editorial = "\n\n".join(row["narration"] for row in scenes)
     add("Closing", "Subscribe to Smart Money for more market research. Research only. Not financial advice.", ("Research only", "Not financial advice"))
     script = "\n\n".join(row["narration"] for row in scenes)

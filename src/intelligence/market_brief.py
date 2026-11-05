@@ -41,7 +41,11 @@ def story_topics(story: dict) -> set[str]:
     return topics
 
 
-def sentiment(moves: dict) -> str:
+def sentiment(moves: dict, *, pressure_first=False) -> str:
+    if pressure_first:
+        from src.intelligence.market_priority import sharp_loss
+        if sharp_loss(moves):
+            return "cautious"
     if not all(key in moves for key in ("S&P", "Nasdaq", "Russell")):
         return "limited by incomplete coverage"
     values = [moves[key] for key in ("S&P", "Nasdaq", "Russell")]
@@ -52,7 +56,11 @@ def sentiment(moves: dict) -> str:
     return "mixed"
 
 
-def portfolio_lens(moves: dict, topics: set[str], mood: str) -> str:
+def portfolio_lens(moves: dict, topics: set[str], mood: str, *, pressure_first=False) -> str:
+    if pressure_first:
+        from src.intelligence.market_priority import sharp_loss
+        if sharp_loss(moves):
+            return "Review concentrated growth exposure and upcoming company results; watch whether selling eases and participation improves before increasing conviction."
     if "trade" in topics:
         return ("Verified trade-policy news puts chip-market access and supply chains on watch; check company guidance before changing exposure." if "chips" in topics else
                 "Verified trade-policy news warrants checking cross-border costs and supply chains against company guidance before changing exposure.")
@@ -79,7 +87,10 @@ def market_segment(evidence: dict) -> str:
         return ("A dated broad-market snapshot is unavailable, so an overall sentiment call would be premature. "
                 "Portfolio lens: keep the research ranking separate from entry timing. Confirm the major indexes, volatility and current company prices before increasing conviction, and review upcoming policy and earnings releases for a clearer risk picture.")
     topics = set().union(*(story_topics(story) for story in evidence.get("stories", [])))
-    mood = sentiment(moves)
+    pressure_first = evidence.get("reader_version") == 4
+    mood = sentiment(moves, pressure_first=pressure_first)
+    from src.intelligence.market_priority import selloff
+    pressure = pressure_first and selloff(evidence)
     day = datetime.strptime(evidence["session"], "%Y-%m-%d").strftime("%A, %B %d")
     clock = f"During the {day} regular session" if evidence["is_open"] else f"At the {day} regular-session close"
 
@@ -93,10 +104,11 @@ def market_segment(evidence: dict) -> str:
     def render():
         figures = "; ".join(move(key, label) for key, label in indices + others)
         qualification = " TLT tracks bond prices; yields are unverified." if any(key == "TLT" for key, _ in others) else ""
-        return f"Our indicator-based sentiment read is {mood}. {clock}, {figures}.{qualification} Portfolio lens: " + portfolio_lens(moves, topics, mood)
+        basis = " based on available indexes; coverage is incomplete" if pressure and not all(key in moves for key in ("S&P","Nasdaq","Russell")) else ""
+        return f"Our indicator-based sentiment read is {mood}{basis}. {clock}, {figures}.{qualification} Portfolio lens: " + portfolio_lens(moves, topics, mood, pressure_first=pressure_first)
 
     text = render()
-    for key in ("Russell", "TLT", "Oil", "VIX"):
+    for key in (("TLT", "Oil", "Russell", "VIX") if pressure else ("Russell", "TLT", "Oil", "VIX")):
         if word_count(text) <= PREFERRED_MARKET_WORDS:
             break
         indices = [(k, v) for k, v in indices if k != key]

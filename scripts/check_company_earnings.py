@@ -203,7 +203,7 @@ class CompanyEarningsChecks(IsolatedChecks):
 
     def test_log_separates_available_but_unused_context_from_unavailable_evidence(self):
         from scripts.check_video_brief import agency
-        with patch.object(editor,"cache_candidates",return_value=([source(),agency()],[])),patch.object(news,"MAX_NEWS_CHARS",3200):
+        with patch.object(editor,"cache_candidates",return_value=([source(),agency()],[])),patch.object(news,"MAX_NEWS_CHARS",3000):
             text=news.build_daily_news_brief(self.research_moves())
         record=store.read_editions(report=text)[0]
         self.assertFalse(record["analyst_review"]["evidence"].get("earnings_context"))
@@ -261,7 +261,7 @@ class CompanyEarningsChecks(IsolatedChecks):
 
     def test_saved_editions_show_their_original_rules_and_context_evaluation(self):
         _,record=self.render()
-        self.assertIn("Editorial rules: 24",editor.build_editor_status())
+        self.assertIn("Editorial rules: 25",editor.build_editor_status())
         previous=deepcopy(record); previous["rules_version"]=17
         previous.pop("earnings_context_health"); previous.pop("earnings_context_candidates")
         with patch.object(store,"read_editions",return_value=[previous]):

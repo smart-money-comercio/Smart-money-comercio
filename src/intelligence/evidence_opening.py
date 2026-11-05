@@ -25,6 +25,10 @@ def opening_source(evidence):
             text = ("Treasury's refunding plan would raise " + fields["refunding_new_cash"] + " in new cash." if "refunding_new_cash" in fields else
                     "Treasury plans to offer " + fields["refunding_offering"] + " to refinance " + fields["refunding_maturities"] + " in maturing debt.")
             watch, priority = "Watch auction demand and yields for a check on financing conditions.", 1
+        elif profile["schema"] == 11 and "gasoline_yield_average" in fields:
+            row = next(row for row in profile["facts"] if row["field"] == "gasoline_yield_average")
+            text = "EIA reported U.S. refinery gasoline yields averaging " + row["comparison"].replace("%"," percent") + " from " + row["period"] + "."
+            watch, priority = "Check current product inventories and refinery margins for a more recent business read.", 2
         elif profile["schema"] == 10 and {"program_name", "program_stage", "development_test"} <= fields.keys():
             text = name + " reported a flight-test milestone for its " + fields["program_stage"] + " " + fields["program_name"] + "."
             watch = ("The next disclosed program gate is " + fields["next_program_gate"] + "." if "next_program_gate" in fields else

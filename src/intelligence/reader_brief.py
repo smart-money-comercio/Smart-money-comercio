@@ -151,6 +151,9 @@ def _participation_scope(evidence):
 
 def opening(evidence):
     """Keep saved v1 editions stable; new editions lead with observed conditions."""
+    if evidence.get("reader_version") == 4:
+        from src.intelligence.market_priority import opening as market_opening
+        return market_opening(evidence)
     if evidence.get("reader_version") == 3:
         from src.intelligence.evidence_opening import opening as source_opening
         return source_opening(evidence)
@@ -200,6 +203,9 @@ def opening(evidence):
 
 
 def watching(evidence):
+    if evidence.get("reader_version") == 4:
+        from src.intelligence.market_priority import watching as market_watching
+        return market_watching(evidence)
     if evidence.get("reader_version") == 3:
         from src.intelligence.evidence_opening import watching as source_watching
         return source_watching(evidence)
@@ -238,13 +244,17 @@ def watching(evidence):
 
 def insights(evidence):
     sources = ["Executive Summary", "Market Snapshot"]
-    if evidence.get("reader_version") == 3:
-        from src.intelligence.evidence_opening import opening_source
+    if evidence.get("reader_version") in {3,4}:
+        if evidence["reader_version"] == 4:
+            from src.intelligence.market_priority import opening_source
+        else:
+            from src.intelligence.evidence_opening import opening_source
         if opening_source(evidence):
             sources.append("Verified story decisions")
     if evidence.get("market_event_context", {}).get("events"):
         sources.append("Market event checks")
     first = next((row for row in evidence.get("market_event_context", {}).get("events", []) if row["status"] == "rechecked"), None)
-    if first and matching(evidence.get("earnings_context", []), first["symbol"]):
+    from src.intelligence.market_priority import selloff
+    if first and matching(evidence.get("earnings_context", []), first["symbol"]) and not (evidence.get("reader_version") == 4 and selloff(evidence)):
         sources.append("Recent earnings context")
     return [{"id": "opening_takeaway", "section": "intro", "text": opening(evidence), "sources": sources}, *watching(evidence)]
