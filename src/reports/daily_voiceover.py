@@ -78,7 +78,7 @@ def price_sentence(row, evidence):
     return row['name'] + (" was unchanged" if value == 0 else f" {'rose' if value > 0 else 'fell'} {abs(value):.1f} percent") + " in the quoted session."
 
 
-def story_copy(story, evidence, *, modern=False, refined=False):
+def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
     from src.intelligence.daily_brief_analysis import NAMES
     from src.intelligence.story_analysis import investor_read
     from src.intelligence.broadcast_story import copilot_reveal, company_read
@@ -100,7 +100,13 @@ def story_copy(story, evidence, *, modern=False, refined=False):
         return filing["issuer"] + " disclosed financing terms in a current SEC report. " + narration(story)
     review = company_read(story) if story["kind"] == "company" else investor_read(story)
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
+    if profile["schema"] == 10:
+        from src.intelligence.defense_program import summary
+        return summary(profile, NAMES.get(story["publisher_symbol"], story["publisher_symbol"])) + " " + review["why"]
     if profile["schema"] == 9:
+        if concise:
+            from src.intelligence.treasury_financing import summary
+            return summary(profile,speech=True) + " " + review["why"]
         return review["facts"] + " " + review["why"]
     if profile["schema"] == 8:
         from src.intelligence.original_disclosures import summarize
@@ -204,6 +210,7 @@ def build(record, report, research, *, schema=2):
         raise ValueError("Unknown voiceover presentation schema")
     modern = schema == 2
     refined = record.get("rules_version", 0) >= 22
+    concise = record.get("rules_version", 0) >= 24
     selected = editor.selected_stories(record)
     review = record["analyst_review"]
     validate_review(review, research, report, selected)
@@ -241,14 +248,19 @@ def build(record, report, research, *, schema=2):
     first_checked = next((event for event in attention if event["status"] == "rechecked"), {})
     opening_context = matching(evidence.get("earnings_context", []), first_checked.get("symbol"))
     opening_sources = (["earnings_" + opening_context["symbol"]]
-                       if opening_context and (context_sources or review.get("reader_version") == 2) else [])
-    if modern and review.get("reader_version") == 2 and first_checked:
+                       if opening_context and (context_sources or review.get("reader_version") in {2, 3}) else [])
+    if review.get("reader_version") == 3:
+        from src.intelligence.evidence_opening import opening_source
+        point = opening_source(evidence)
+        if point:
+            opening_sources = point["story_ids"]
+    if modern and review.get("reader_version") in {2, 3} and first_checked:
         label = NAMES.get(first_checked["symbol"], first_checked["symbol"])
         company_line = next((line for line in re.split(r"(?<=[.!?])\s+", hook) if label in line), "")
         if company_line and company_line not in hook_bullets:
             hook_bullets = [hook_bullets[0], company_line]
     add("The Takeaway", greeting+" This is Smart Money for "+local.strftime("%B %d").replace(" 0", " ")+". "+hook,
-        hook_bullets, opening_sources if review.get("reader_version") == 2 or "Recent earnings provide" in hook else ())
+        hook_bullets, opening_sources if review.get("reader_version") in {2, 3} or "Recent earnings provide" in hook else ())
     market = market_copy(evidence)
     market_sources = [story["id"] for story in selected if story_topics(story) & {"trade", "geopolitics", "policy", "energy", "IPO", "AI financing"}] if modern else ()
     add("Market Update", "First, the market. "+market,
@@ -256,7 +268,7 @@ def build(record, report, research, *, schema=2):
     covered = set()
     from src.intelligence.company_focus import issuer, grouped_price_watch
     for story in sorted(selected, key=editor.news_order):
-        copy = story_copy(story, evidence, modern=modern, refined=refined)
+        copy = story_copy(story, evidence, modern=modern, refined=refined, concise=concise)
         if not copy:
             continue
         defense = "defense" in story_topics(story)
@@ -270,7 +282,8 @@ def build(record, report, research, *, schema=2):
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)
     def add_peer_group():
-        copy = group["text"].replace(group["label"] + " — ", "Across semiconductor companies, ")
+        prefix = "Among the companies we track, " if review.get("reader_version") == 3 else "Across semiconductor companies, "
+        copy = group["text"].replace(group["label"] + " — ", prefix)
         if modern:
             copy = copy.replace(" Repeat quotes from the same provider support these price readings.", "")
         bullets = [focus_bullet(row,evidence) for row in evidence["company_focus"]["selected"] if row["symbol"] in group["symbols"]] if modern else (group["label"],)
@@ -314,7 +327,7 @@ def build(record, report, research, *, schema=2):
     watch_bullets = [re.split(r"(?<=[.!?])\s+",text.partition(": ")[2])[0] for text in watch] if modern else [text.partition(": ")[0] for text in watch]
     watch_context = matching(evidence.get("earnings_context", []), attention[0]["symbol"]) if attention else None
     watch_sources = (["earnings_" + watch_context["symbol"]]
-                     if watch_context and (context_sources or review.get("reader_version") == 2) else [])
+                     if watch_context and (context_sources or review.get("reader_version") in {2, 3}) else [])
     add("What We're Watching", "Here are the next checks. "+" ".join(signals), watch_bullets,
         watch_sources if any("earnings follow-through" in text for text in watch) else ())
     editorial = "\n\n".join(row["narration"] for row in scenes)

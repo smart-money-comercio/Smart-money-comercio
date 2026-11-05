@@ -19,6 +19,8 @@ def copilot_reveal(story: dict, review: dict) -> bool:
 
 def company_read(story: dict) -> dict:
     review = investor_read(story)
+    if review["evidence"]["schema"] == 10:
+        return review
     if copilot_reveal(story, review):
         return {**review, "why": "The commercial test is paid adoption and the cost of running multiple models.",
                 "watch": "Watch customer uptake, pricing and AI-related revenue or margin disclosures."}
@@ -35,6 +37,11 @@ def render_story(story: dict, zone, names: dict) -> str:
         raise ValueError("Broadcast narration needs an admitted original publisher")
     published = dated(story["published"]).astimezone(zone)
     day = f"{published:%B} {published.day}"
+    if story.get("event_evidence", {}).get("schema") == 10:
+        from src.intelligence.defense_program import summary
+        review = investor_read(story)
+        text = summary(review["evidence"], names.get(story["publisher_symbol"], story["publisher_symbol"]))
+        return text + f" The disclosure was published {day}."
     if story.get("event_evidence", {}).get("schema") == 9:
         review = investor_read(story)
         if not review["facts"]:

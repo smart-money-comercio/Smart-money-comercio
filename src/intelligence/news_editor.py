@@ -68,6 +68,9 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    if story.get("event_evidence", {}).get("schema") == 10 and primary_source(story):
+        from src.intelligence.defense_program import material
+        return "defense innovation" if material(checked_evidence(story)["facts"]) else ""
     from src.intelligence.treasury_financing import document_kind, material
     if document_kind(story) and story.get("event_evidence", {}).get("schema") in {None, 9}:
         if story.get("event_evidence", {}).get("schema") == 9 and primary_source(story):
@@ -413,7 +416,9 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                     story["materiality"] = materiality(story)
                     story["evidence_checked_at"] = observed
                     from src.intelligence.treasury_financing import document_kind
-                    story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=9 if document_kind(story) else 8)
+                    from src.intelligence.defense_program import program_facts, material
+                    profile = 9 if document_kind(story) else 10 if material(program_facts(story, text)) else 8
+                    story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=profile)
             except (ValueError, TypeError, OverflowError) as exc:
                 story.update(source_check="hold", reason=str(exc))
                 ledger.append(story)
@@ -430,7 +435,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             if story["story_type"] == "context" and primary_source(story):
                 reason = ("Calendar or investor-event notice; no financial results or new business development established"
                           if re.search(r"\b(conference call|earnings call|investor conference|webcast)\b", story["title"], re.I) else
-                          "Original article reviewed; no concrete material business or policy development extracted" if story.get("event_evidence", {}).get("schema") in {8, 9} else
+                          "Original article reviewed; no concrete material business or policy development extracted" if story.get("event_evidence", {}).get("schema") in {8, 9, 10} else
                           "Original publisher item; headline does not establish a material business or policy development")
             story.update(decision="skip", reason=reason)
         elif (story["kind"] == "macro" and story["source"] == "U.S. Treasury"
@@ -499,7 +504,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
-            if story.get("event_evidence", {}).get("schema") not in {8, 9}:
+            if story.get("event_evidence", {}).get("schema") not in {8, 9, 10}:
                 story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
@@ -509,7 +514,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=23, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=24, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -667,7 +672,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Earnings context lost its admitted source record")
         validate_review(analyst_review, research_report, report, selected)
         value["analyst_review"] = deepcopy(analyst_review)
-        if analyst_review.get("reader_version") in {1, 2}:
+        if analyst_review.get("reader_version") in {1, 2, 3}:
             value["reader_version"] = analyst_review["reader_version"]
     snapshot = re.search(r"\nMarket Snapshot\n(.*?)\n\n", research_report, re.S)
     moves = re.search(r"^[-•] Market moves: (.+)$", research_report, re.M)
@@ -679,10 +684,10 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
-         + f"; {sum(story.get('event_evidence', {}).get('schema') in {8, 9} for story in value['candidates'])} original article materiality reviews"
+         + f"; {sum(story.get('event_evidence', {}).get('schema') in {8, 9, 10} for story in value['candidates'])} original article materiality reviews"
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
-    if broadcast and (analyst_review or {}).get("reader_version") in {1, 2}:
+    if broadcast and (analyst_review or {}).get("reader_version") in {1, 2, 3}:
         from src.reports.daily_voiceover import build
         value.update(report_text=report, research_text=research_report)
         value["voiceover"] = build(value, report, research_report)
@@ -813,7 +818,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 for context in analysis["evidence"].get("earnings_context", []):
                     lines.append("Dated earnings context: " + context["symbol"] + " — " + context["source"] + "; release " + context["release_date"]
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")
-                if analysis.get("reader_version") in {1, 2}:
+                if analysis.get("reader_version") in {1, 2, 3}:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
                     lines.append(f"Reader brief: opening takeaway and {signals} evidence-grounded watch signals; each explains the next check and why it matters.")
                 voice = record.get("voiceover", {}).get("quality")
@@ -869,7 +874,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Disclosed excerpt facts: " + review["facts"])
                     if review.get("undisclosed"):
                         lines.append("Not specified in reviewed text: " + "; ".join(review["undisclosed"]))
-                    if event.get("schema") in {8, 9}:
+                    if event.get("schema") in {8, 9, 10}:
                         for fact in event["facts"]:
                             lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]

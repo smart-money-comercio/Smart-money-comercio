@@ -234,19 +234,27 @@ def grouped_price_watch(evidence: dict) -> dict | None:
     if focus.get("grouped_narration") != 1:
         return None
     semiconductors = {"INTC", "AMD", "ASML", "NVDA", "AVGO", "TSM", "MU", "ARM", "MRVL"}
+    combined = evidence.get("reader_version") == 3
     contextualized = {row["symbol"] for row in evidence.get("earnings_context", [])}
     events = {row["symbol"]: row for row in evidence.get("market_event_context", {}).get("events", [])}
-    rows = [row for row in focus["selected"] if row["symbol"] in semiconductors and row["symbol"] not in contextualized and not row["story_id"]
+    rows = [row for row in focus["selected"] if (combined or row["symbol"] in semiconductors) and row["symbol"] not in contextualized and not row["story_id"]
             and row["group"] in {"market event", "price move"} and (row.get("metric") or {}).get("price") is not None
             and (row["group"] != "market event" or events.get(row["symbol"], {}).get("status") == "rechecked")]
     if len(rows) < 2:
         return None
     label = "Semiconductor sell-off" if all(row["metric"]["price"] < 0 for row in rows) else "Semiconductor watch"
+    if combined and not all(row["symbol"] in semiconductors for row in rows):
+        label = "Company price watch"
     clauses = [row["name"] + (" was unchanged" if row["metric"]["price"] == 0 else
         f" {'rose' if row['metric']['price'] > 0 else 'fell'} {abs(row['metric']['price']):.1f} percent") for row in rows]
     prices = "; ".join(clauses) + " in the quoted regular session."
     proof = (" Repeat quotes from the same provider support these price readings." if all(
         events.get(row["symbol"], {}).get("status") == "rechecked" for row in rows) else "")
+    if combined:
+        return {"symbols":[row["symbol"] for row in rows], "label":label,
+                "text":label + " — " + prices + proof
+                       + " These moves do not establish a shared cause. Check original company results and guidance for business context.",
+                "sources":list(dict.fromkeys(source for row in rows for source in row["sources"]))}
     return {"symbols": [row["symbol"] for row in rows], "label": label,
             "text": label + " — " + prices + proof + " These moves do not establish a shared cause. "
                     "No fresh company disclosure for these moves is included here. Next, compare original results, guidance and spending plans before judging the business impact.",

@@ -138,7 +138,12 @@ def summary(evidence, *, speech=False):
     if all(day for _, day in dates):
         year = dates[0][1][-4:]
         if all(day.endswith(year) for _, day in dates):
-            text += " Its three-, ten- and thirty-year auctions are scheduled for " + ", ".join(day[:-6] for _, day in dates[:2]) + " and " + dates[2][1] + ", respectively."
+            if speech:
+                text += (" The three-year note auction is scheduled for " + dates[0][1][:-6]
+                         + ", the ten-year note auction for " + dates[1][1][:-6]
+                         + " and the thirty-year bond auction for " + dates[2][1] + ".")
+            else:
+                text += " Its three-, ten- and thirty-year auctions are scheduled for " + ", ".join(day[:-6] for _, day in dates[:2]) + " and " + dates[2][1] + ", respectively."
     return text
 
 

@@ -151,6 +151,9 @@ def _participation_scope(evidence):
 
 def opening(evidence):
     """Keep saved v1 editions stable; new editions lead with observed conditions."""
+    if evidence.get("reader_version") == 3:
+        from src.intelligence.evidence_opening import opening as source_opening
+        return source_opening(evidence)
     if evidence.get("reader_version") != 2:
         return _opening_v1(evidence)
     moves, breadth = evidence["moves"], evidence["breadth"]
@@ -197,6 +200,9 @@ def opening(evidence):
 
 
 def watching(evidence):
+    if evidence.get("reader_version") == 3:
+        from src.intelligence.evidence_opening import watching as source_watching
+        return source_watching(evidence)
     rows = _watching_v1(evidence)
     if evidence.get("reader_version") != 2:
         return rows
@@ -232,6 +238,10 @@ def watching(evidence):
 
 def insights(evidence):
     sources = ["Executive Summary", "Market Snapshot"]
+    if evidence.get("reader_version") == 3:
+        from src.intelligence.evidence_opening import opening_source
+        if opening_source(evidence):
+            sources.append("Verified story decisions")
     if evidence.get("market_event_context", {}).get("events"):
         sources.append("Market event checks")
     first = next((row for row in evidence.get("market_event_context", {}).get("events", []) if row["status"] == "rechecked"), None)

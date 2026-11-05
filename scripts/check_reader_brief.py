@@ -64,8 +64,8 @@ class ReaderChecks(IsolatedChecks):
         text = self.render(report=self.outlier())
         opening = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
         watch = section(text, "What We're Watching")
-        self.assertIn("Alphabet's sharp decline", opening)
-        self.assertIn("Company disclosures are the next check on the business outlook", opening)
+        self.assertIn("Alphabet fell 12.0 percent", opening)
+        self.assertIn("Compare the move with original results and guidance", opening)
         self.assertNotIn("whether selling spreads", opening)
         self.assertIn("Alphabet's business outlook", watch)
         self.assertIn("price move alone cannot explain it", watch)
@@ -82,14 +82,15 @@ class ReaderChecks(IsolatedChecks):
     def test_opposing_index_directions_are_explained_without_a_market_wide_claim(self):
         report = self.research(replacements={"Executive Summary": "- Main theme: Mixed.\n- Market moves: S&P -0.17%, Nasdaq -1.04%, Russell +1.22%, VIX -2.9%, Oil -1.56%, TLT +0.53%."})
         text = self.render(report=report)
-        self.assertIn("Nasdaq is lower while smaller-company stocks are higher", text)
-        self.assertIn("whether selling stays concentrated or spreads", text)
+        self.assertIn("Nasdaq fell while the Russell index rose", text)
+        self.assertIn("Watch participation across the names we track", text)
         self.assertNotIn("all stocks are falling", text.lower())
 
     def test_higher_indexes_and_weak_watchlist_have_a_scoped_takeaway(self):
         report = self.research(replacements={"Executive Summary": "- Main theme: Growth.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.1%."})
         text = self.render(report=report)
-        self.assertIn("major indexes are higher, but more of the stocks and funds we follow are lower", text)
+        self.assertIn("All three major indexes rose in the completed session", text)
+        self.assertIn("Most names in our tracked group still finished lower", text)
         self.assertIn("Index gains are not shared by most names in this research watchlist", text)
 
     def test_closed_session_watch_preserves_completed_session_tense(self):
@@ -132,7 +133,7 @@ class ReaderChecks(IsolatedChecks):
     def test_opening_and_every_watch_signal_are_bound_to_the_research_edition(self):
         report = self.research(); text = self.render(report=report)
         record = self.record(text); reviewed = record["analyst_review"]
-        self.assertEqual(reviewed["reader_version"], 2)
+        self.assertEqual(reviewed["reader_version"], 3)
         self.assertTrue(2 <= sum(row["section"] == "watch" for row in reviewed["insights"]) <= 3)
         analysis.validate_review(reviewed, report, text, editor.selected_stories(record))
         altered = deepcopy(reviewed)
@@ -176,7 +177,7 @@ class ReaderChecks(IsolatedChecks):
         self.assertNotIn("available to trade", text)
 
     def test_invalid_reader_context_cannot_bypass_review(self):
-        for options in ({"reader_version": 3}, {"reader_version": True}, {"reader_version": 1, "reader_limit": 0}, {"reader_version": 1, "reader_limit": True}):
+        for options in ({"reader_version": 4}, {"reader_version": True}, {"reader_version": 1, "reader_limit": 0}, {"reader_version": 1, "reader_limit": True}):
             with self.assertRaises(ValueError):
                 analysis.analyze_report(self.research(), presentation="news", narration_version=2, **options)
 
@@ -190,7 +191,7 @@ class ReaderChecks(IsolatedChecks):
         report = report.replace("Breadth: 7 up / 11 down / 18 quoted", "Breadth: 0 up / 18 down / 18 quoted")
         text = self.render(report=report)
         intro = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
-        self.assertLess(intro.index("All three major indexes fell"), intro.index("Alphabet's sharp decline"))
+        self.assertLess(intro.index("All three major indexes fell"), intro.index("Alphabet fell 12.0 percent"))
         self.assertIn("All 18 stocks and funds we track finished lower", intro)
         self.assertIn("selling to ease", intro)
         self.assertNotIn("whether selling spreads", intro)
@@ -263,7 +264,7 @@ class ReaderChecks(IsolatedChecks):
         self.assertIn("entire next-quarter revenue forecast is below", intro)
         self.assertIn("Compare the next sales report with management's revenue forecast", text)
         self.assertNotIn("whether the move spreads", intro)
-        self.assertEqual(record["rules_version"], 23)
+        self.assertEqual(record["rules_version"], 24)
         profile = voice.checked(record, NOW)
         self.assertEqual(profile["schema"], 2)
         for heading in ("The Takeaway", "What We're Watching"):
@@ -298,7 +299,7 @@ class ReaderChecks(IsolatedChecks):
             "Executive Summary": "- Main theme: Strong.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.2%."})
         text = self.render(report=report)
         intro = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
-        self.assertIn("Alphabet's sharp advance", intro)
+        self.assertIn("Alphabet rose 12.0 percent", intro)
         self.assertIn("whether those gains hold", intro)
         self.assertNotIn("other companies join", intro)
 

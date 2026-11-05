@@ -187,13 +187,13 @@ class CompanyEarningsChecks(IsolatedChecks):
         self.assertNotIn("Intel", group); self.assertIn("ASML", group); self.assertIn("Advanced Micro Devices", group)
         self.assertEqual(sum("Shares fell 28.6 percent" in row["text"] for row in review["insights"]), 1)
 
-    def test_busy_edition_shortens_watch_section_before_discarding_verified_company_context(self):
+    def test_busy_edition_keeps_verified_context_and_all_company_focus(self):
         from scripts.check_video_brief import agency
         with patch.object(editor,"cache_candidates",return_value=([source(),agency()],[])):
             text=news.build_daily_news_brief(self.research_moves())
         record=store.read_editions(report=text)[0]; review=record["analyst_review"]
         self.assertIn("Intel — recent earnings context",text)
-        self.assertEqual(review["focus_context"]["limit"],3); self.assertEqual(review["reader_limit"],2)
+        self.assertEqual(review["focus_context"]["limit"],3); self.assertGreaterEqual(review["reader_limit"],2)
         self.assertEqual({row["symbol"] for row in review["evidence"]["company_focus"]["selected"]},{"INTC","ASML","AMD"})
         self.assertEqual(len(editor.selected_stories(record)),1)
         self.assertLessEqual(len(text),3800); self.assertTrue(news.validate_news_brief(text)["passes"])
@@ -261,7 +261,7 @@ class CompanyEarningsChecks(IsolatedChecks):
 
     def test_saved_editions_show_their_original_rules_and_context_evaluation(self):
         _,record=self.render()
-        self.assertIn("Editorial rules: 23",editor.build_editor_status())
+        self.assertIn("Editorial rules: 24",editor.build_editor_status())
         previous=deepcopy(record); previous["rules_version"]=17
         previous.pop("earnings_context_health"); previous.pop("earnings_context_candidates")
         with patch.object(store,"read_editions",return_value=[previous]):

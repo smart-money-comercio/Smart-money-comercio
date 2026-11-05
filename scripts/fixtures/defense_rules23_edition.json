@@ -1,0 +1,1776 @@
+{
+  "analyst_review": {
+    "event_context": {
+      "events": [
+        {
+          "proof": {
+            "checked_at": "2026-10-25T17:00:00+00:00",
+            "first": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": 6.699999999999989,
+              "change_percent": 6.699999999999995,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 106.69999999999999,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        106.69999999999999
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 106.69999999999999,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "MSFT"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "MSFT",
+              "volume": 1200.0
+            },
+            "issuer": "MSFT",
+            "recheck_at": "2026-10-25T17:00:00+00:00",
+            "second": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": 6.699999999999989,
+              "change_percent": 6.699999999999995,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 106.69999999999999,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        106.69999999999999
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 106.69999999999999,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "MSFT"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "MSFT",
+              "volume": 1200.0
+            },
+            "status": "rechecked",
+            "symbol": "MSFT"
+          },
+          "reported_move": 6.7,
+          "source_symbol": "MSFT",
+          "status": "rechecked",
+          "symbol": "MSFT"
+        },
+        {
+          "proof": {
+            "checked_at": "2026-10-25T17:00:00+00:00",
+            "first": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": 6.099999999999994,
+              "change_percent": 6.099999999999994,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 106.1,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        106.1
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 106.1,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "AMZN"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "AMZN",
+              "volume": 1200.0
+            },
+            "issuer": "AMZN",
+            "recheck_at": "2026-10-25T17:00:00+00:00",
+            "second": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": 6.099999999999994,
+              "change_percent": 6.099999999999994,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 106.1,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        106.1
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 106.1,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "AMZN"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "AMZN",
+              "volume": 1200.0
+            },
+            "status": "rechecked",
+            "symbol": "AMZN"
+          },
+          "reported_move": 6.1,
+          "source_symbol": "AMZN",
+          "status": "rechecked",
+          "symbol": "AMZN"
+        },
+        {
+          "proof": {
+            "checked_at": "2026-10-25T17:00:00+00:00",
+            "first": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": 5.299999999999997,
+              "change_percent": 5.299999999999994,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 105.3,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        105.3
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 105.3,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "AAPL"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "AAPL",
+              "volume": 1200.0
+            },
+            "issuer": "AAPL",
+            "recheck_at": "2026-10-25T17:00:00+00:00",
+            "second": {
+              "asof": "2026-10-23T20:00:00+00:00",
+              "change": 5.299999999999997,
+              "change_percent": 5.299999999999994,
+              "closing_quote_update": false,
+              "currency": "USD",
+              "exchange": "N/A",
+              "instrument_type": "EQUITY",
+              "market_state": "CLOSED",
+              "ok": true,
+              "previous_close": 100.0,
+              "previous_session_date": "2026-10-22",
+              "price": 105.3,
+              "quote_evidence": {
+                "indicators": {
+                  "quote": [
+                    {
+                      "close": [
+                        100,
+                        105.3
+                      ],
+                      "volume": [
+                        1000,
+                        1200
+                      ]
+                    }
+                  ]
+                },
+                "meta": {
+                  "currency": "USD",
+                  "currentTradingPeriod": {
+                    "regular": {
+                      "end": 1792785600.0,
+                      "start": 1792762200.0
+                    }
+                  },
+                  "exchangeTimezoneName": "America/New_York",
+                  "instrumentType": "EQUITY",
+                  "regularMarketPrice": 105.3,
+                  "regularMarketTime": 1792785600.0,
+                  "symbol": "AAPL"
+                },
+                "timestamp": [
+                  1792675800.0,
+                  1792762200.0
+                ]
+              },
+              "quote_timing": "completed_session",
+              "return_basis": "regular-session price vs dated previous-session close",
+              "session_date": "2026-10-23",
+              "symbol": "AAPL",
+              "volume": 1200.0
+            },
+            "status": "rechecked",
+            "symbol": "AAPL"
+          },
+          "reported_move": 5.3,
+          "source_symbol": "AAPL",
+          "status": "rechecked",
+          "symbol": "AAPL"
+        }
+      ],
+      "report_sha256": "e8f4119ffa8ed2f2c47bccb77f1ff01319db746e8a6c8fc0374c76309293d31b",
+      "schema": 1
+    },
+    "evidence": {
+      "breadth": {
+        "down": 11,
+        "total": 18,
+        "up": 7
+      },
+      "companies": [
+        {
+          "action": "wait",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Nvidia",
+          "opportunity": 92.0,
+          "price": null,
+          "score_risk": "Elevated",
+          "setup_risk": "Medium-High",
+          "structural": 80.1,
+          "symbol": "NVDA"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Microsoft",
+          "opportunity": 89.0,
+          "price": null,
+          "score_risk": "Controlled",
+          "setup_risk": "Medium-High",
+          "structural": 87.3,
+          "symbol": "MSFT"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Taiwan Semiconductor",
+          "opportunity": 86.0,
+          "price": null,
+          "score_risk": "Balanced",
+          "setup_risk": "Medium-High",
+          "structural": 85.4,
+          "symbol": "TSM"
+        }
+      ],
+      "company_focus": {
+        "day": "2026-10-25",
+        "featured_symbols": [
+          "AAPL",
+          "AMZN",
+          "MSFT"
+        ],
+        "grouped_narration": 1,
+        "remaining_candidates": 37,
+        "rule": "Original developments, dated moves and market relevance; recent exposure breaks comparable ties",
+        "schema": 1,
+        "selected": [
+          {
+            "basis": "price move",
+            "group": "market event",
+            "metric": {
+              "price": 5.3
+            },
+            "name": "Apple",
+            "recent_days": 0,
+            "role": "Event watch",
+            "sources": [
+              "Market event checks",
+              "Watchlist Movers"
+            ],
+            "story_id": "",
+            "symbol": "AAPL",
+            "tier": 120,
+            "watch": "Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",
+            "why": "It rose 5.3 percent in the quoted regular session. A repeat quote from the same provider supports the price reading."
+          },
+          {
+            "basis": "price move",
+            "group": "market event",
+            "metric": {
+              "price": 6.7
+            },
+            "name": "Microsoft",
+            "recent_days": 0,
+            "role": "Event watch",
+            "sources": [
+              "Market event checks",
+              "Watchlist Movers"
+            ],
+            "story_id": "",
+            "symbol": "MSFT",
+            "tier": 120,
+            "watch": "Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",
+            "why": "It rose 6.7 percent in the quoted regular session. A repeat quote from the same provider supports the price reading."
+          },
+          {
+            "basis": "price move",
+            "group": "market event",
+            "metric": {
+              "price": 6.1
+            },
+            "name": "Amazon",
+            "recent_days": 0,
+            "role": "Event watch",
+            "sources": [
+              "Market event checks",
+              "Watchlist Movers"
+            ],
+            "story_id": "",
+            "symbol": "AMZN",
+            "tier": 120,
+            "watch": "Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",
+            "why": "It rose 6.1 percent in the quoted regular session. A repeat quote from the same provider supports the price reading."
+          }
+        ]
+      },
+      "is_open": false,
+      "leadership": null,
+      "market_event_context": {
+        "events": [
+          {
+            "proof": {
+              "checked_at": "2026-10-25T17:00:00+00:00",
+              "first": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": 6.699999999999989,
+                "change_percent": 6.699999999999995,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 106.69999999999999,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          106.69999999999999
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 106.69999999999999,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "MSFT"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "MSFT",
+                "volume": 1200.0
+              },
+              "issuer": "MSFT",
+              "recheck_at": "2026-10-25T17:00:00+00:00",
+              "second": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": 6.699999999999989,
+                "change_percent": 6.699999999999995,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 106.69999999999999,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          106.69999999999999
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 106.69999999999999,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "MSFT"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "MSFT",
+                "volume": 1200.0
+              },
+              "status": "rechecked",
+              "symbol": "MSFT"
+            },
+            "reported_move": 6.7,
+            "source_symbol": "MSFT",
+            "status": "rechecked",
+            "symbol": "MSFT"
+          },
+          {
+            "proof": {
+              "checked_at": "2026-10-25T17:00:00+00:00",
+              "first": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": 6.099999999999994,
+                "change_percent": 6.099999999999994,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 106.1,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          106.1
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 106.1,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "AMZN"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "AMZN",
+                "volume": 1200.0
+              },
+              "issuer": "AMZN",
+              "recheck_at": "2026-10-25T17:00:00+00:00",
+              "second": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": 6.099999999999994,
+                "change_percent": 6.099999999999994,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 106.1,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          106.1
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 106.1,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "AMZN"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "AMZN",
+                "volume": 1200.0
+              },
+              "status": "rechecked",
+              "symbol": "AMZN"
+            },
+            "reported_move": 6.1,
+            "source_symbol": "AMZN",
+            "status": "rechecked",
+            "symbol": "AMZN"
+          },
+          {
+            "proof": {
+              "checked_at": "2026-10-25T17:00:00+00:00",
+              "first": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": 5.299999999999997,
+                "change_percent": 5.299999999999994,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 105.3,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          105.3
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 105.3,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "AAPL"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "AAPL",
+                "volume": 1200.0
+              },
+              "issuer": "AAPL",
+              "recheck_at": "2026-10-25T17:00:00+00:00",
+              "second": {
+                "asof": "2026-10-23T20:00:00+00:00",
+                "change": 5.299999999999997,
+                "change_percent": 5.299999999999994,
+                "closing_quote_update": false,
+                "currency": "USD",
+                "exchange": "N/A",
+                "instrument_type": "EQUITY",
+                "market_state": "CLOSED",
+                "ok": true,
+                "previous_close": 100.0,
+                "previous_session_date": "2026-10-22",
+                "price": 105.3,
+                "quote_evidence": {
+                  "indicators": {
+                    "quote": [
+                      {
+                        "close": [
+                          100,
+                          105.3
+                        ],
+                        "volume": [
+                          1000,
+                          1200
+                        ]
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "currency": "USD",
+                    "currentTradingPeriod": {
+                      "regular": {
+                        "end": 1792785600.0,
+                        "start": 1792762200.0
+                      }
+                    },
+                    "exchangeTimezoneName": "America/New_York",
+                    "instrumentType": "EQUITY",
+                    "regularMarketPrice": 105.3,
+                    "regularMarketTime": 1792785600.0,
+                    "symbol": "AAPL"
+                  },
+                  "timestamp": [
+                    1792675800.0,
+                    1792762200.0
+                  ]
+                },
+                "quote_timing": "completed_session",
+                "return_basis": "regular-session price vs dated previous-session close",
+                "session_date": "2026-10-23",
+                "symbol": "AAPL",
+                "volume": 1200.0
+              },
+              "status": "rechecked",
+              "symbol": "AAPL"
+            },
+            "reported_move": 5.3,
+            "source_symbol": "AAPL",
+            "status": "rechecked",
+            "symbol": "AAPL"
+          }
+        ],
+        "report_sha256": "e8f4119ffa8ed2f2c47bccb77f1ff01319db746e8a6c8fc0374c76309293d31b",
+        "schema": 1
+      },
+      "moves": {
+        "Nasdaq": -0.21,
+        "Oil": 4.32,
+        "Russell": -0.29,
+        "S&P": -0.52,
+        "TLT": -0.49,
+        "VIX": 2.21
+      },
+      "narration_version": 2,
+      "reader_limit": 2,
+      "reader_version": 2,
+      "session": "2026-10-23",
+      "source_sections": [
+        "Executive Summary",
+        "Market Snapshot",
+        "What Changed Today",
+        "Top Opportunities",
+        "Trade Plan Snapshot",
+        "Market event checks",
+        "Verified story decisions",
+        "Company focus selection"
+      ],
+      "stories": [
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "Treasury refunding",
+            "facts": [
+              {
+                "evidence": "WASHINGTON — The U.S. Department of the Treasury is offering $90 billion of Treasury securities to refund approximately $70 billion of privately-held Treasury notes and bonds maturing on November 15, 2026.",
+                "field": "refunding_offering",
+                "status": "announced plan; execution not established",
+                "value": "$90 billion"
+              },
+              {
+                "evidence": "WASHINGTON — The U.S. Department of the Treasury is offering $90 billion of Treasury securities to refund approximately $70 billion of privately-held Treasury notes and bonds maturing on November 15, 2026.",
+                "field": "refunding_maturities",
+                "status": "announced plan; execution not established",
+                "value": "approximately $70 billion"
+              },
+              {
+                "evidence": "This issuance will raise new cash from private investors of approximately $20 billion.",
+                "field": "refunding_new_cash",
+                "status": "announced plan; execution not established",
+                "value": "approximately $20 billion"
+              },
+              {
+                "evidence": "A 3-year note in the amount of $40 billion, maturing November 15, 2029;",
+                "field": "refunding_tranche_3",
+                "status": "announced plan; execution not established",
+                "tenor": 3,
+                "value": "$40 billion"
+              },
+              {
+                "evidence": "The 3-year note will be auctioned at 1:00 p.m. ET on Monday, October 26, 2026.",
+                "field": "refunding_auction_3",
+                "status": "announced plan; execution not established",
+                "tenor": 3,
+                "value": "October 26, 2026 at 01:00 PM ET"
+              },
+              {
+                "evidence": "A 10-year note in the amount of $30 billion, maturing November 15, 2036;",
+                "field": "refunding_tranche_10",
+                "status": "announced plan; execution not established",
+                "tenor": 10,
+                "value": "$30 billion"
+              },
+              {
+                "evidence": "The 10-year note will be auctioned at 1:00 p.m. ET on Tuesday, October 27, 2026.",
+                "field": "refunding_auction_10",
+                "status": "announced plan; execution not established",
+                "tenor": 10,
+                "value": "October 27, 2026 at 01:00 PM ET"
+              },
+              {
+                "evidence": "A 30-year bond in the amount of $20 billion, maturing November 15, 2056.",
+                "field": "refunding_tranche_30",
+                "status": "announced plan; execution not established",
+                "tenor": 30,
+                "value": "$20 billion"
+              },
+              {
+                "evidence": "The 30-year bond will be auctioned at 1:00 p.m. ET on Thursday, October 29, 2026.",
+                "field": "refunding_auction_30",
+                "status": "announced plan; execution not established",
+                "tenor": 30,
+                "value": "October 29, 2026 at 01:00 PM ET"
+              }
+            ],
+            "observed_at": "2026-10-25T17:00:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 9,
+            "scope": "original release excerpt",
+            "source_sha256": "9f6071a86175e7688d242f68ab9661fb6e1b50e95b3309ffde4b2720fe015c79",
+            "source_text": "WASHINGTON — The U.S. Department of the Treasury is offering $90 billion of Treasury securities to refund approximately $70 billion of privately-held Treasury notes and bonds maturing on November 15, 2026. This issuance will raise new cash from private investors of approximately $20 billion. The securities are:\nA 3-year note in the amount of $40 billion, maturing November 15, 2029;\nA 10-year note in the amount of $30 billion, maturing November 15, 2036;\nA 30-year bond in the amount of $20 billion, maturing November 15, 2056.\nThe 3-year note will be auctioned at 1:00 p.m. ET on Monday, October 26, 2026. The 10-year note will be auctioned at 1:00 p.m. ET on Tuesday, October 27, 2026. The 30-year bond will be auctioned at 1:00 p.m. ET on Thursday, October 29, 2026.",
+            "source_url": "https://home.treasury.gov/news/press-releases/sb0001",
+            "stage": "policy statement"
+          },
+          "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+          "id": "f0d632f74c64fe99",
+          "kind": "macro",
+          "materiality": "public finance",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "",
+          "source": "U.S. Treasury",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [],
+          "title": "Quarterly Refunding Statement of Assistant Secretary for Financial Markets Example Official",
+          "url": "https://home.treasury.gov/news/press-releases/sb0001"
+        },
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "product",
+            "facts": [],
+            "observed_at": "2026-10-25T17:00:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "5ec25161dd219fbf5eeaa6cfd9e58107516f95ff56eec7e7e2d3ec5873e11005",
+            "source_text": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.\nExecuted under a prime military contract valued at over $2.4B, the flight supplied development data.\nThe program is working toward system-level Critical Design Review (CDR).",
+            "source_url": "https://news.lockheedmartin.com/synthetic-development-test",
+            "stage": "test milestone"
+          },
+          "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+          "id": "f7032da4f759d424",
+          "kind": "company",
+          "materiality": "defense innovation",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "LMT",
+          "source": "Lockheed Martin Newsroom",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [
+            "LMT"
+          ],
+          "title": "Lockheed Martin Completes Flight Test of Military Development Vehicle",
+          "url": "https://news.lockheedmartin.com/synthetic-development-test"
+        }
+      ]
+    },
+    "focus_context": {
+      "limit": 3,
+      "recent": [],
+      "schema": 5
+    },
+    "insights": [
+      {
+        "id": "market_pulse",
+        "section": "market",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Verified story decisions"
+        ],
+        "text": "Our indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 0.52 percent; the Nasdaq Composite fell 0.21 percent; VIX rose 2.21 percent; oil rose 4.32 percent; the TLT bond fund fell 0.49 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs."
+      },
+      {
+        "id": "defense_watch",
+        "section": "global",
+        "sources": [
+          "Verified story decisions"
+        ],
+        "text": "Our view on Lockheed Martin: The capability could support future procurement; funded orders and production costs will determine the business impact. Next, watch repeat validation, procurement decisions, funded orders and delivery costs."
+      },
+      {
+        "id": "company_focus_1",
+        "section": "company",
+        "sources": [
+          "Market event checks",
+          "Watchlist Movers",
+          "Company focus selection"
+        ],
+        "text": "Event watch — Apple. It rose 5.3 percent in the quoted regular session. A repeat quote from the same provider supports the price reading. Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause."
+      },
+      {
+        "id": "company_focus_2",
+        "section": "company",
+        "sources": [
+          "Market event checks",
+          "Watchlist Movers",
+          "Company focus selection"
+        ],
+        "text": "Event watch — Microsoft. It rose 6.7 percent in the quoted regular session. A repeat quote from the same provider supports the price reading. Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause."
+      },
+      {
+        "id": "company_focus_3",
+        "section": "company",
+        "sources": [
+          "Market event checks",
+          "Watchlist Movers",
+          "Company focus selection"
+        ],
+        "text": "Event watch — Amazon. It rose 6.1 percent in the quoted regular session. A repeat quote from the same provider supports the price reading. Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause."
+      },
+      {
+        "id": "opening_takeaway",
+        "section": "intro",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Market event checks"
+        ],
+        "text": "The takeaway: All three major indexes fell in the quoted session. Microsoft's sharp advance stands out. Company disclosures are the next check on the business outlook. Watch whether other companies join the advance and company disclosures support it."
+      },
+      {
+        "id": "watch_participation",
+        "section": "watch",
+        "sources": [
+          "Market Snapshot",
+          "Executive Summary"
+        ],
+        "text": "Market recovery: Of the 18 stocks and funds we track, 7 finished higher and 11 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case."
+      },
+      {
+        "id": "watch_event",
+        "section": "watch",
+        "sources": [
+          "Market event checks"
+        ],
+        "text": "Microsoft's business outlook: Watch original results and guidance for changes in sales, costs and spending. Those details will help judge whether the business outlook changed; the price move alone cannot explain it."
+      }
+    ],
+    "narration_version": 2,
+    "presentation": "news",
+    "reader_limit": 2,
+    "reader_version": 2,
+    "research_sha256": "e8f4119ffa8ed2f2c47bccb77f1ff01319db746e8a6c8fc0374c76309293d31b",
+    "schema": 1,
+    "score_changes": false
+  },
+  "candidates": [
+    {
+      "canonical_url": "https://news.lockheedmartin.com/synthetic-development-test",
+      "confirmation_check": "pass",
+      "confirmed_by": "LMT",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "product",
+        "facts": [],
+        "observed_at": "2026-10-25T17:00:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "5ec25161dd219fbf5eeaa6cfd9e58107516f95ff56eec7e7e2d3ec5873e11005",
+        "source_text": "Lockheed Martin and the U.S. Air Force completed a test flight of its unarmed, developmental XR-42 uncrewed system.\nExecuted under a prime military contract valued at over $2.4B, the flight supplied development data.\nThe program is working toward system-level Critical Design Review (CDR).",
+        "source_url": "https://news.lockheedmartin.com/synthetic-development-test",
+        "stage": "test milestone"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+      "id": "f7032da4f759d424",
+      "kind": "company",
+      "materiality": "defense innovation",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 114,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "LMT",
+      "reason": "Original LMT report; material defense innovation development within the edition budget",
+      "source": "Lockheed Martin Newsroom",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [
+        "LMT"
+      ],
+      "title": "Lockheed Martin Completes Flight Test of Military Development Vehicle",
+      "title_truncated": false,
+      "url": "https://news.lockheedmartin.com/synthetic-development-test"
+    },
+    {
+      "canonical_url": "https://home.treasury.gov/news/press-releases/sb0001",
+      "confirmation_check": "pass",
+      "confirmed_by": "U.S. Treasury",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "Treasury refunding",
+        "facts": [
+          {
+            "evidence": "WASHINGTON — The U.S. Department of the Treasury is offering $90 billion of Treasury securities to refund approximately $70 billion of privately-held Treasury notes and bonds maturing on November 15, 2026.",
+            "field": "refunding_offering",
+            "status": "announced plan; execution not established",
+            "value": "$90 billion"
+          },
+          {
+            "evidence": "WASHINGTON — The U.S. Department of the Treasury is offering $90 billion of Treasury securities to refund approximately $70 billion of privately-held Treasury notes and bonds maturing on November 15, 2026.",
+            "field": "refunding_maturities",
+            "status": "announced plan; execution not established",
+            "value": "approximately $70 billion"
+          },
+          {
+            "evidence": "This issuance will raise new cash from private investors of approximately $20 billion.",
+            "field": "refunding_new_cash",
+            "status": "announced plan; execution not established",
+            "value": "approximately $20 billion"
+          },
+          {
+            "evidence": "A 3-year note in the amount of $40 billion, maturing November 15, 2029;",
+            "field": "refunding_tranche_3",
+            "status": "announced plan; execution not established",
+            "tenor": 3,
+            "value": "$40 billion"
+          },
+          {
+            "evidence": "The 3-year note will be auctioned at 1:00 p.m. ET on Monday, October 26, 2026.",
+            "field": "refunding_auction_3",
+            "status": "announced plan; execution not established",
+            "tenor": 3,
+            "value": "October 26, 2026 at 01:00 PM ET"
+          },
+          {
+            "evidence": "A 10-year note in the amount of $30 billion, maturing November 15, 2036;",
+            "field": "refunding_tranche_10",
+            "status": "announced plan; execution not established",
+            "tenor": 10,
+            "value": "$30 billion"
+          },
+          {
+            "evidence": "The 10-year note will be auctioned at 1:00 p.m. ET on Tuesday, October 27, 2026.",
+            "field": "refunding_auction_10",
+            "status": "announced plan; execution not established",
+            "tenor": 10,
+            "value": "October 27, 2026 at 01:00 PM ET"
+          },
+          {
+            "evidence": "A 30-year bond in the amount of $20 billion, maturing November 15, 2056.",
+            "field": "refunding_tranche_30",
+            "status": "announced plan; execution not established",
+            "tenor": 30,
+            "value": "$20 billion"
+          },
+          {
+            "evidence": "The 30-year bond will be auctioned at 1:00 p.m. ET on Thursday, October 29, 2026.",
+            "field": "refunding_auction_30",
+            "status": "announced plan; execution not established",
+            "tenor": 30,
+            "value": "October 29, 2026 at 01:00 PM ET"
+          }
+        ],
+        "observed_at": "2026-10-25T17:00:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 9,
+        "scope": "original release excerpt",
+        "source_sha256": "9f6071a86175e7688d242f68ab9661fb6e1b50e95b3309ffde4b2720fe015c79",
+        "source_text": "WASHINGTON — The U.S. Department of the Treasury is offering $90 billion of Treasury securities to refund approximately $70 billion of privately-held Treasury notes and bonds maturing on November 15, 2026. This issuance will raise new cash from private investors of approximately $20 billion. The securities are:\nA 3-year note in the amount of $40 billion, maturing November 15, 2029;\nA 10-year note in the amount of $30 billion, maturing November 15, 2036;\nA 30-year bond in the amount of $20 billion, maturing November 15, 2056.\nThe 3-year note will be auctioned at 1:00 p.m. ET on Monday, October 26, 2026. The 10-year note will be auctioned at 1:00 p.m. ET on Tuesday, October 27, 2026. The 30-year bond will be auctioned at 1:00 p.m. ET on Thursday, October 29, 2026.",
+        "source_url": "https://home.treasury.gov/news/press-releases/sb0001",
+        "stage": "policy statement"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+      "id": "f0d632f74c64fe99",
+      "kind": "macro",
+      "materiality": "public finance",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 105,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "",
+      "reason": "Original U.S. Treasury report; material public finance development within the edition budget",
+      "related_reports": [],
+      "source": "U.S. Treasury",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [],
+      "title": "Quarterly Refunding Statement of Assistant Secretary for Financial Markets Example Official",
+      "title_truncated": false,
+      "url": "https://home.treasury.gov/news/press-releases/sb0001"
+    }
+  ],
+  "company_schedules": [],
+  "earnings_backup_health": {
+    "reason": "No cached SEC earnings check",
+    "status": "limited"
+  },
+  "earnings_context_candidates": [],
+  "earnings_context_health": [],
+  "generated_at": "2026-10-25T17:00:00+00:00",
+  "issues": [
+    "2026-10-28: 2 publisher-scheduled releases added to incomplete Nasdaq coverage"
+  ],
+  "lead_story_id": "f7032da4f759d424",
+  "market_event_context": {
+    "events": [
+      {
+        "proof": {
+          "checked_at": "2026-10-25T17:00:00+00:00",
+          "first": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": 6.699999999999989,
+            "change_percent": 6.699999999999995,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 106.69999999999999,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      106.69999999999999
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 106.69999999999999,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "MSFT"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "MSFT",
+            "volume": 1200.0
+          },
+          "issuer": "MSFT",
+          "recheck_at": "2026-10-25T17:00:00+00:00",
+          "second": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": 6.699999999999989,
+            "change_percent": 6.699999999999995,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 106.69999999999999,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      106.69999999999999
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 106.69999999999999,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "MSFT"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "MSFT",
+            "volume": 1200.0
+          },
+          "status": "rechecked",
+          "symbol": "MSFT"
+        },
+        "reported_move": 6.7,
+        "source_symbol": "MSFT",
+        "status": "rechecked",
+        "symbol": "MSFT"
+      },
+      {
+        "proof": {
+          "checked_at": "2026-10-25T17:00:00+00:00",
+          "first": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": 6.099999999999994,
+            "change_percent": 6.099999999999994,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 106.1,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      106.1
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 106.1,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "AMZN"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "AMZN",
+            "volume": 1200.0
+          },
+          "issuer": "AMZN",
+          "recheck_at": "2026-10-25T17:00:00+00:00",
+          "second": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": 6.099999999999994,
+            "change_percent": 6.099999999999994,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 106.1,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      106.1
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 106.1,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "AMZN"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "AMZN",
+            "volume": 1200.0
+          },
+          "status": "rechecked",
+          "symbol": "AMZN"
+        },
+        "reported_move": 6.1,
+        "source_symbol": "AMZN",
+        "status": "rechecked",
+        "symbol": "AMZN"
+      },
+      {
+        "proof": {
+          "checked_at": "2026-10-25T17:00:00+00:00",
+          "first": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": 5.299999999999997,
+            "change_percent": 5.299999999999994,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 105.3,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      105.3
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 105.3,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "AAPL"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "AAPL",
+            "volume": 1200.0
+          },
+          "issuer": "AAPL",
+          "recheck_at": "2026-10-25T17:00:00+00:00",
+          "second": {
+            "asof": "2026-10-23T20:00:00+00:00",
+            "change": 5.299999999999997,
+            "change_percent": 5.299999999999994,
+            "closing_quote_update": false,
+            "currency": "USD",
+            "exchange": "N/A",
+            "instrument_type": "EQUITY",
+            "market_state": "CLOSED",
+            "ok": true,
+            "previous_close": 100.0,
+            "previous_session_date": "2026-10-22",
+            "price": 105.3,
+            "quote_evidence": {
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      100,
+                      105.3
+                    ],
+                    "volume": [
+                      1000,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1792785600.0,
+                    "start": 1792762200.0
+                  }
+                },
+                "exchangeTimezoneName": "America/New_York",
+                "instrumentType": "EQUITY",
+                "regularMarketPrice": 105.3,
+                "regularMarketTime": 1792785600.0,
+                "symbol": "AAPL"
+              },
+              "timestamp": [
+                1792675800.0,
+                1792762200.0
+              ]
+            },
+            "quote_timing": "completed_session",
+            "return_basis": "regular-session price vs dated previous-session close",
+            "session_date": "2026-10-23",
+            "symbol": "AAPL",
+            "volume": 1200.0
+          },
+          "status": "rechecked",
+          "symbol": "AAPL"
+        },
+        "reported_move": 5.3,
+        "source_symbol": "AAPL",
+        "status": "rechecked",
+        "symbol": "AAPL"
+      }
+    ],
+    "report_sha256": "e8f4119ffa8ed2f2c47bccb77f1ff01319db746e8a6c8fc0374c76309293d31b",
+    "schema": 1
+  },
+  "market_evidence": {
+    "moves": "S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.",
+    "snapshot": "Market Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted"
+  },
+  "narrated_company_schedules": [],
+  "narration_version": 2,
+  "publisher_scan_omissions": {},
+  "ranking_date": "2026-10-23",
+  "reader_version": 2,
+  "report_sha256": "250a013f8d5eb3638a8eb6937ac904d9ee2fe2603627a3b6bc54b3fa5d56174f",
+  "report_text": "Smart Money Daily News Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\nMarket data: completed regular session 2026-10-23\n\nGood afternoon.\n\nThe takeaway: All three major indexes fell in the quoted session. Microsoft's sharp advance stands out. Company disclosures are the next check on the business outlook. Watch whether other companies join the advance and company disclosures support it.\n\nGlobal and Defense Watch\nLockheed Martin's October 25 announcement: “Lockheed Martin Completes Flight Test of Military Development Vehicle”.\n\nOur view on Lockheed Martin: The capability could support future procurement; funded orders and production costs will determine the business impact. Next, watch repeat validation, procurement decisions, funded orders and delivery costs.\n\nMarket Update\nOur indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 0.52 percent; the Nasdaq Composite fell 0.21 percent; VIX rose 2.21 percent; oil rose 4.32 percent; the TLT bond fund fell 0.49 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.\n\nPolicy & Economy\nTreasury plans to offer $90 billion in securities to refinance approximately $70 billion in maturing debt. The offering would raise approximately $20 billion in new cash. Its three-, ten- and thirty-year auctions are scheduled for October 26, October 27 and October 29, 2026, respectively. The plan was announced October 25. Investor take: The financing plan sets the supply of government debt investors must absorb. Auction demand and yields will help assess financing conditions. Next, watch the announced auctions, their yields and investor demand, alongside company borrowing costs.\n\nCompanies in Focus\nEvent watch — Apple. It rose 5.3 percent in the quoted regular session. A repeat quote from the same provider supports the price reading. Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.\n\nEvent watch — Microsoft. It rose 6.7 percent in the quoted regular session. A repeat quote from the same provider supports the price reading. Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.\n\nEvent watch — Amazon. It rose 6.1 percent in the quoted regular session. A repeat quote from the same provider supports the price reading. Next, check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.\n\nWhat's Ahead\nThe publisher schedule lists the Federal Reserve's interest-rate decision for Wednesday, October 28 at 02:00 PM EDT.\n\nWhy it matters: Watch the Fed's guidance on the rate outlook and what it could mean for growth-company financing and valuations.\n\nCalendar or company-news coverage is incomplete; unverified dates and times remain uncertain.\n\nWhat We're Watching\nMarket recovery: Of the 18 stocks and funds we track, 7 finished higher and 11 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case.\n\nMicrosoft's business outlook: Watch original results and guidance for changes in sales, costs and spending. Those details will help judge whether the business outlook changed; the price move alone cannot explain it.\n\nResearch Notes\nThe full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans\n\nSources and full evidence: /storylog · /catalysts · /calendar · /specialalerts\n\nResearch only. Not financial advice.",
+  "research_sha256": "e8f4119ffa8ed2f2c47bccb77f1ff01319db746e8a6c8fc0374c76309293d31b",
+  "research_text": "📊 Smart Money AI Daily Report\n\n\nDaily Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\n\nGood afternoon.\n\n\nExecutive Summary\n- Main theme: Oil / inflation risk.\n- Market moves: S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.\n\nIntelligence Used Today\n- Smart Money Summary, Trade Plan Snapshot, News Intelligence, Alert Monitor, StockAnalysis, Alert Settings, Watchlist Evolution, and Market Memory are feeding today's report. Calendar Evidence: active. Company Catalysts: active. Document Research: active.\n\n\nWhat Changed Today\n• Leadership changed.\n• Confirmation matters.\n• New themes emerging.\n\n\nTheme Read\n• Research Opinion (2026-09-30): AI infrastructure spending supports chip demand, while debt funding adds financing risk. [Empower Q3 2026, p9]\n• Market check: unavailable; current yields, price and volume need confirmation.\n• Theme history is building.\n\n\nMarket Snapshot\nMarket Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted\n\nEarnings & Economic Calendar\nEconomic release times: timezone unverified.\nFull calendar: /weeklycalendar\n\n\nPortfolio Read\n• NVDA is the cleanest ranked setup today, but it still needs price/volume confirmation before action.\n\n\nPortfolio Allocation Snapshot\nPosture: Watchlist.\n\n\nWatchlist Movers\nLargest regular-session movers:\n• AAPL: $100.00 (+5.30%)\n• AMZN: $100.00 (+6.10%)\n• MSFT: $100.00 (+6.70%)\n\nTop Opportunities\n1. NVDA - Opportunity 92.0/100 | Structural 80.1/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-29; company confirmation pending\n   Score Risk: Elevated | Action: Watch Closely\n   Full review: /tradeplan NVDA\n\n2. MSFT - Opportunity 89.0/100 | Structural 87.3/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-28; company confirmation pending\n   Score Risk: Controlled | Action: Watch Closely\n   Full review: /tradeplan MSFT\n\n3. TSM - Opportunity 86.0/100 | Structural 85.4/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; dated catalyst not established in cached coverage\n   Score Risk: Balanced | Action: Watch Closely\n   Full review: /tradeplan TSM\n\n\nFastest-Rising Opportunities\nNo meaningful positive opportunity-score changes versus the prior report.\n\n\nRisk Notes\n• Sizing risk: keep entries smaller on NVDA.\n\n\nSmart Money Summary\nSignal: market tone is quote data unavailable.\nImplication: Review.\nValidation: Confirm.\n\n\nTrade Plan Snapshot\nTop action reads from today's leading opportunities. Score Risk reflects scoring support; Setup Risk reflects score and theme caution.\n\n1. NVDA — Medium conviction, 80.1/100 | Score Risk: Elevated | Setup Risk: Medium-High | Action: Watchlist — wait for better confirmation Entry: Wait for price, volume, and news confirmation. Full plan: /tradeplan NVDA\n2. MSFT — Medium-High conviction, 87.3/100 | Score Risk: Controlled | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan MSFT\n3. TSM — Medium-High conviction, 85.4/100 | Score Risk: Balanced | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan TSM\n\n\nAction Checklist\n• /scorecard NVDA — validate the top-ranked setup.\n• /volume NVDA — confirm whether money flow supports the score.\n\n\nNext Commands\n/tradeplans\n/tradeplan SYMBOL\n/scorecard SYMBOL\n/top10\n/weeklycalendar\n/global\n/contextstatus\n/summarypreview · /catalysts\n/allocation\n\n\nNotes\nResearch only. Not financial advice.",
+  "rules_version": 23,
+  "schema": 1,
+  "source_health": [],
+  "stages": [
+    {
+      "detail": "2 candidates from cached public evidence",
+      "name": "Scan",
+      "status": "pass"
+    },
+    {
+      "detail": "0 held; original publication dates and HTTPS URLs checked",
+      "name": "Source Check",
+      "status": "limited"
+    },
+    {
+      "detail": "Material company developments and macro releases; original-source reports required",
+      "name": "Relevance",
+      "status": "pass"
+    },
+    {
+      "detail": "2 selected / 0 skipped; one story per represented company",
+      "name": "Selection",
+      "status": "pass"
+    },
+    {
+      "detail": "Original publisher, materiality, dates and complete selected wording checked; 1 event-specific company reviews and 9 sourced fact fields; 2 original article materiality reviews; 8 analyst insights matched to this edition's market, ranking and trade-plan evidence",
+      "name": "Editorial Review",
+      "status": "pass"
+    },
+    {
+      "detail": "Built edition and source decisions recorded; this is not a delivery receipt",
+      "name": "Decision Log",
+      "status": "pass"
+    }
+  ],
+  "story_narrations": {
+    "f0d632f74c64fe99": "Treasury plans to offer $90 billion in securities to refinance approximately $70 billion in maturing debt. The offering would raise approximately $20 billion in new cash. Its three-, ten- and thirty-year auctions are scheduled for October 26, October 27 and October 29, 2026, respectively. The plan was announced October 25. Investor take: The financing plan sets the supply of government debt investors must absorb. Auction demand and yields will help assess financing conditions. Next, watch the announced auctions, their yields and investor demand, alongside company borrowing costs.",
+    "f7032da4f759d424": "Lockheed Martin's October 25 announcement: “Lockheed Martin Completes Flight Test of Military Development Vehicle”."
+  },
+  "truncated_candidates": 0,
+  "voiceover": {
+    "input_sha256": "dd1237e00d5f2a276ed4b58b7e50584c33043e64f97918cc7db8e5de3a2cb381",
+    "quality": {
+      "editorial_words": 388,
+      "estimated_seconds": 150.4,
+      "market_estimated_seconds": 22.5,
+      "market_words": 60,
+      "passes": true,
+      "words": 401,
+      "words_per_minute": 160
+    },
+    "schema": 2,
+    "script": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the market snapshot. Microsoft's sharp advance stands out. Company disclosures are the next check on the business outlook. Watch whether other companies join the advance and company disclosures support it.\n\nFirst, the market. At the close on Friday, October twenty third, the S and P five hundred fell zero point five two percent, the Nasdaq fell zero point two one percent, and oil rose four point three two percent. Volatility rose. Our read is cautious. Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.\n\nIn defense and innovation. Lockheed Martin completes Flight Test of Military Development Vehicle. The capability could support future procurement; funded orders and production costs will determine the business impact.\n\nOn policy. Treasury plans to offer ninety billion dollars in securities to refinance approximately seventy billion dollars in maturing debt. The offering would raise approximately twenty billion dollars in new cash. Its three-, ten- and thirty-year auctions are scheduled for October twenty sixth, October twenty seventh and October twenty ninth, two thousand twenty six respectively. The financing plan sets the supply of government debt investors must absorb. Auction demand and yields will help assess financing conditions.\n\nApple rose five point three percent in the quoted session. Check original results and guidance before assigning a business explanation to the move.\n\nMicrosoft rose six point seven percent in the quoted session. Check original results and guidance before assigning a business explanation to the move.\n\nAmazon rose six point one percent in the quoted session. Check original results and guidance before assigning a business explanation to the move.\n\nLooking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.\n\nHere are the next checks. First, market recovery. Of the eighteen stocks and funds we track, seven finished higher and eleven lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case. Second, Microsoft's business outlook. Watch original results and guidance for changes in sales, costs and spending. Those details will help judge whether the business outlook changed; the price move alone cannot explain it.\n\nSubscribe to Smart Money for more market research. Research only. Not financial advice.",
+    "script_sha256": "4d9706c19b9b0bffaf881f435844ff62292eedd66e64cdd4bf650dc25a542b03",
+    "segments": [
+      {
+        "bullets": [
+          "All three major indexes fell in the market snapshot.",
+          "Microsoft's sharp advance stands out."
+        ],
+        "heading": "The Takeaway",
+        "narration": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the market snapshot. Microsoft's sharp advance stands out. Company disclosures are the next check on the business outlook. Watch whether other companies join the advance and company disclosures support it.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "S&P: -0.52%",
+          "Nasdaq: -0.21%",
+          "VIX: +2.21%"
+        ],
+        "heading": "Market Update",
+        "narration": "First, the market. At the close on Friday, October twenty third, the S and P five hundred fell zero point five two percent, the Nasdaq fell zero point two one percent, and oil rose four point three two percent. Volatility rose. Our read is cautious. Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Lockheed Martin Completes Flight Test of Military Development Vehicle"
+        ],
+        "heading": "Defense and Innovation",
+        "narration": "In defense and innovation. Lockheed Martin completes Flight Test of Military Development Vehicle. The capability could support future procurement; funded orders and production costs will determine the business impact.",
+        "source_ids": [
+          "f7032da4f759d424"
+        ]
+      },
+      {
+        "bullets": [
+          "Quarterly Refunding Statement of Assistant Secretary for Financial Markets Example Official"
+        ],
+        "heading": "Policy and Economy",
+        "narration": "On policy. Treasury plans to offer ninety billion dollars in securities to refinance approximately seventy billion dollars in maturing debt. The offering would raise approximately twenty billion dollars in new cash. Its three-, ten- and thirty-year auctions are scheduled for October twenty sixth, October twenty seventh and October twenty ninth, two thousand twenty six respectively. The financing plan sets the supply of government debt investors must absorb. Auction demand and yields will help assess financing conditions.",
+        "source_ids": [
+          "f0d632f74c64fe99"
+        ]
+      },
+      {
+        "bullets": [
+          "Apple (AAPL): +5.3%"
+        ],
+        "heading": "Companies in Focus",
+        "narration": "Apple rose five point three percent in the quoted session. Check original results and guidance before assigning a business explanation to the move.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Microsoft (MSFT): +6.7%"
+        ],
+        "heading": "Companies in Focus",
+        "narration": "Microsoft rose six point seven percent in the quoted session. Check original results and guidance before assigning a business explanation to the move.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Amazon (AMZN): +6.1%"
+        ],
+        "heading": "Companies in Focus",
+        "narration": "Amazon rose six point one percent in the quoted session. Check original results and guidance before assigning a business explanation to the move.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "The Federal Reserve's interest-rate decision for Wed, Oct 28 at 2:00 PM EDT"
+        ],
+        "heading": "What's Ahead",
+        "narration": "Looking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Of the 18 stocks and funds we track, 7 finished higher and 11 lower.",
+          "Watch original results and guidance for changes in sales, costs and spending."
+        ],
+        "heading": "What We're Watching",
+        "narration": "Here are the next checks. First, market recovery. Of the eighteen stocks and funds we track, seven finished higher and eleven lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case. Second, Microsoft's business outlook. Watch original results and guidance for changes in sales, costs and spending. Those details will help judge whether the business outlook changed; the price move alone cannot explain it.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Research only",
+          "Not financial advice"
+        ],
+        "heading": "Closing",
+        "narration": "Subscribe to Smart Money for more market research. Research only. Not financial advice.",
+        "source_ids": []
+      }
+    ],
+    "sources": {
+      "f0d632f74c64fe99": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "U.S. Treasury",
+          "url": "https://home.treasury.gov/news/press-releases/sb0001",
+          "verified_at": "2026-10-25T16:55:00+00:00"
+        }
+      ],
+      "f7032da4f759d424": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "Lockheed Martin Newsroom",
+          "url": "https://news.lockheedmartin.com/synthetic-development-test",
+          "verified_at": "2026-10-25T16:55:00+00:00"
+        }
+      ]
+    }
+  },
+  "id": "a4030570447a1627dbbd"
+}
