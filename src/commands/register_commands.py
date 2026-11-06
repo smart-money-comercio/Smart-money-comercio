@@ -1,6 +1,7 @@
 from src.commands.daily_agent_commands import agentstatus_command, rundailyagent_command
 from telegram.ext import CommandHandler
 from src.commands.special_alert_commands import specialalerts_command
+from src.commands.premarket_commands import premarket_command
 from src.commands.company_catalyst_commands import catalysts_command, fullreport_command
 from src.commands.news_editor_commands import editorstatus_command, storylog_command
 from src.commands.voiceover_commands import voiceover_command
@@ -193,6 +194,7 @@ def register_commands(app):
     app.add_handler(CommandHandler("smartmoney", smartmoney))
     app.add_handler(CommandHandler("alerts", alerts_command))
     app.add_handler(CommandHandler("specialalerts", specialalerts_command))
+    app.add_handler(CommandHandler("premarket", premarket_command))
     app.add_handler(CommandHandler("dailyalerts", dailyalerts_command))
     app.add_handler(CommandHandler("alertstatus", alertstatus_command))
     app.add_handler(CommandHandler("alertrules", alertrules_command))

@@ -10,6 +10,7 @@ START_COMMANDS = [
 
 
 CORE_COMMANDS = [
+    ("/premarket [status|history|review|preview|on|off]", "Pre-open risk checks, evidence and outcome review"),
     ("/researchdesk [status|history|run|on|off]", "Hourly discovery agent and independent relevance review"),
     ("/editorstatus", "News edition stages, source coverage and review status"),
     ("/storylog [SYMBOL]", "Selected, skipped and held news stories with reasons"),
@@ -42,6 +43,7 @@ CORE_COMMANDS = [
 
 
 DAILY_REPORT_COMMANDS = [
+    ("/premarket", "08:45 and 09:15 Eastern risk checks and recorded evidence"),
     ("/editorstatus", "News editor review and decision logging"),
     ("/storylog [SYMBOL]", "Source evidence and editorial decisions"),
     ("/brief", "Smart Money Daily News Brief"),

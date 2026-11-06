@@ -525,7 +525,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=25, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=26, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result

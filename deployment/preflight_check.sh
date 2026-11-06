@@ -19,6 +19,7 @@ export NEWS_EDITOR_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/news_editor.sqlite3"
 export AI_IPO_CACHE_FILE="$ALERT_PREFLIGHT_STATE_DIR/ai_ipo_cache.json"
 export HOURLY_RESEARCH_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/hourly_research.sqlite3"
 export MARKET_EVENT_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/market_event_checks.json"
+export PREMARKET_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/premarket.sqlite3"
 
 echo "Running Smart Money AI preflight checks..."
 
@@ -40,6 +41,8 @@ echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 "$PYTHON_BIN" scripts/check_defense_narration.py
 "$PYTHON_BIN" scripts/check_market_priority.py
 "$PYTHON_BIN" scripts/check_evidence_revalidation.py
+"$PYTHON_BIN" scripts/check_premarket_risk.py
+"$PYTHON_BIN" scripts/check_premarket_operations.py
 "$PYTHON_BIN" scripts/check_daily_voiceover.py
 "$PYTHON_BIN" scripts/check_video_brief.py
 "$PYTHON_BIN" scripts/check_semiconductor_news.py
