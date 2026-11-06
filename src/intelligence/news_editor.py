@@ -424,7 +424,11 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                     from src.intelligence.refinery_mix import applicable as product_mix
                     profile = 11 if product_mix(story) else 9 if document_kind(story) else 10 if material(program_facts(story, text)) else 8
                     story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=profile)
+                    checked_evidence(story)
             except (ValueError, TypeError, OverflowError) as exc:
+                # A rejected candidate cannot poison the rest of this edition
+                # or leave an invalid profile for /storylog to interpret.
+                story.pop("event_evidence", None)
                 story.update(source_check="hold", reason=str(exc))
                 ledger.append(story)
                 continue
@@ -633,8 +637,13 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         checked_context(plan["market_event_context"], research_report, when)
         for story in plan["candidates"]:
             profile = story.get("priority_evidence")
-            if profile is not None and profile != build_evidence(story, profile.get("source_text", ""), profile.get("scope", "headline only")):
-                raise ValueError("Editorial priority evidence changed")
+            if profile is not None:
+                try:
+                    if not isinstance(profile, dict) or profile.get("schema") != build_evidence(story)["schema"]:
+                        raise ValueError("Unexpected priority evidence schema")
+                    checked_evidence({**story, "event_evidence": profile})
+                except (ValueError, TypeError, OverflowError) as exc:
+                    raise ValueError("Editorial priority evidence changed: " + str(exc)) from exc
             if "event_priority" in story and story["event_priority"] != story_priority(story, when, plan["market_event_context"]["events"]):
                 raise ValueError("Editorial event priority lost its supporting evidence")
         if plan.get("lead_story_id") != (min(selected, key=news_order)["id"] if selected else ""):

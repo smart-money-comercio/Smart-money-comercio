@@ -183,6 +183,11 @@ def disclosed_facts(text: str, kind: str, stage: str = "", *, version: int = 4, 
 
 
 def build_evidence(story: dict, text: str = "", scope: str = "headline only", *, schema: int | None = None) -> dict:
+    return _from_admitted_text(story, release_text(text), scope, schema=schema)
+
+
+def _from_admitted_text(story: dict, text: str, scope: str, *, schema: int | None = None) -> dict:
+    """Derive facts from the admitted plain text, without decoding it again."""
     from src.intelligence.energy_analysis import solar_storage_report
     from src.intelligence.company_earnings import intel_period
     intel_results = story.get("publisher_symbol") == "INTC" and bool(intel_period(story["title"]))
@@ -193,7 +198,6 @@ def build_evidence(story: dict, text: str = "", scope: str = "headline only", *,
     from src.intelligence import refinery_mix
     if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema in {8, 9, 10, 11} and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story):
         raise ValueError("Unknown original story evidence scope")
-    text = release_text(text)
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
     if schema == 11:
         kind, stage = "refinery product mix", "dated observation"
@@ -222,8 +226,13 @@ def checked_evidence(story: dict) -> dict:
     value = story.get("event_evidence")
     if value is None:
         return build_evidence(story)
-    if not isinstance(value, dict) or value != build_evidence(story, value.get("source_text", ""), value.get("scope", "headline only"), schema=value.get("schema")):
+    if not isinstance(value, dict) or not isinstance(value.get("source_text"), str) or len(value["source_text"]) > MAX_EXCERPT:
         raise ValueError("Story facts or event stage do not match the admitted original evidence")
+    expected = _from_admitted_text(story, value["source_text"], value.get("scope", "headline only"), schema=value.get("schema"))
+    if value != expected:
+        fields = sorted(key for key in set(value) | set(expected) if key not in value or key not in expected or value[key] != expected[key])
+        identity = str(story.get("id") or story.get("publisher_symbol") or story.get("source") or "unknown")[:80]
+        raise ValueError("Story facts or event stage do not match the admitted original evidence (source: " + identity + "; fields: " + ", ".join(fields) + ")")
     return value
 
 
