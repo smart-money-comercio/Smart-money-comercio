@@ -343,6 +343,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         fresh = published is not None and -60 <= (now - published).total_seconds() <= MAX_NEWS_AGE
         return (item.get("official") is not True, not fresh, -published.timestamp() if published else 0)
     candidates.sort(key=scan_priority)
+    # Excerpts belong to candidate instances: duplicate article IDs can have
+    # different source bodies and observation clocks. Keep each pair together.
     ledger, excerpts = [], {}
     for raw in candidates[:MAX_CANDIDATES]:
         raw_title = raw.get("title")
@@ -464,7 +466,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 if scope not in {"headline only", "publisher feed excerpt", "original release excerpt"}:
                     text, scope = "", "headline only"
                 observed = raw.get("evidence_checked_at") or story["source_checked_at"]
-                excerpts[story["id"]] = (text, scope, observed)
+                excerpts[id(story)] = (text, scope, observed)
                 from src.intelligence.energy_analysis import solar_storage_report
                 if is_fomc_statement(story) or solar_storage_report(story):
                     try:
@@ -479,7 +481,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                                              "Original Fed decision text and a current source observation are required; the announcement headline alone is insufficient"))
         if event_context is not None and story["decision"] == "eligible":
             from src.intelligence.market_event_desk import story_priority
-            text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
+            text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
             if story.get("materiality") in {"earnings", "guidance", "regulation"} and scope != "headline only" and len(text) >= 80:
                 story["evidence_checked_at"] = observed
                 story["priority_evidence"] = build_evidence(story, text[:1200], scope)
@@ -511,7 +513,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
     for story in selected:
         if not story.get("ipo") and not story.get("sec_filing"):
-            text, scope, observed = excerpts.get(story["id"], ("", "headline only", story["source_checked_at"]))
+            text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
             if story.get("event_evidence", {}).get("schema") not in {8, 9, 10, 11}:
                 story["event_evidence"] = build_evidence(story, text, scope)

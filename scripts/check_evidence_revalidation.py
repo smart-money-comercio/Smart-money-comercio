@@ -4,6 +4,7 @@ import argparse
 import asyncio
 from contextlib import ExitStack
 from copy import deepcopy
+from datetime import timedelta
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -143,6 +144,86 @@ class RebuildChecks(IsolatedChecks):
         rows=[kratos()];_,record=self.render(rows)
         rows[0]["source_excerpt"]="A later unrelated cache observation."
         self.assertEqual(voice.checked(record,NOW)["script_sha256"],record["voiceover"]["script_sha256"])
+
+    def duplicates(self, *, different_text=False):
+        first=kratos();first["origin"]="synthetic first observation"
+        second=deepcopy(first);second["origin"]="synthetic second observation"
+        second["evidence_checked_at"]=(NOW-timedelta(minutes=3)).isoformat()
+        if different_text:
+            second["source_excerpt"]="The quarterly results discussed a different synthetic operational update. "*3
+        return [first,second]
+
+    def test_duplicate_article_ids_keep_the_selected_candidates_own_clock(self):
+        rows=self.duplicates();_,record=self.render(rows)
+        selected=editor.selected_stories(record)
+        self.assertEqual(len(selected),1)
+        self.assertEqual(selected[0]["evidence_checked_at"],rows[0]["evidence_checked_at"])
+        self.assertEqual(selected[0]["event_evidence"]["observed_at"],rows[0]["evidence_checked_at"])
+        duplicates=[row for row in record["candidates"] if row["publisher_symbol"]=="KTOS"]
+        self.assertEqual(len(duplicates),2);self.assertEqual(duplicates[0]["id"],duplicates[1]["id"])
+        self.assertEqual(duplicates[1]["decision"],"skip")
+
+    def test_different_duplicate_bodies_cannot_replace_selected_admitted_text(self):
+        rows=self.duplicates(different_text=True);_,record=self.render(rows)
+        row=editor.selected_stories(record)[0]
+        expected=analysis.build_evidence(rows[0],analysis.release_text(rows[0]["source_excerpt"]),"original release excerpt",schema=8)
+        self.assertEqual(row["event_evidence"]["source_sha256"],expected["source_sha256"])
+        self.assertEqual(row["event_evidence"]["source_text"],expected["source_text"])
+        self.assertNotIn("different synthetic operational update",row["event_evidence"]["source_text"])
+
+    def test_duplicate_priority_and_event_profiles_remain_bound_to_each_candidate(self):
+        rows=self.duplicates(different_text=True);_,record=self.render(rows)
+        expected={row["origin"]:row["evidence_checked_at"] for row in rows}
+        for row in record["candidates"]:
+            if row["publisher_symbol"]!="KTOS":continue
+            for field in ("event_evidence","priority_evidence"):
+                self.assertEqual(row[field]["observed_at"],expected[row["origin"]])
+                analysis.checked_evidence({**row,"event_evidence":row[field]})
+
+    def test_a_later_feed_excerpt_cannot_replace_an_original_body(self):
+        rows=self.duplicates();rows[1].update(excerpt_scope="publisher feed excerpt",source_excerpt="Quarterly results summary.")
+        _,record=self.render(rows);row=editor.selected_stories(record)[0]
+        self.assertEqual(row["event_evidence"]["scope"],"original release excerpt")
+        self.assertEqual(row["event_evidence"]["observed_at"],rows[0]["evidence_checked_at"])
+        self.assertIn("business outlook",row["event_evidence"]["source_text"])
+
+    def test_reversing_duplicate_observations_keeps_each_body_and_clock_together(self):
+        rows=self.duplicates(different_text=True)[::-1];_,record=self.render(rows)
+        row=editor.selected_stories(record)[0]
+        self.assertEqual(row["origin"],rows[0]["origin"])
+        self.assertEqual(row["event_evidence"]["observed_at"],rows[0]["evidence_checked_at"])
+        self.assertIn("different synthetic operational update",row["event_evidence"]["source_text"])
+
+    def test_duplicate_observation_rebuild_leaves_cached_inputs_unchanged(self):
+        rows=self.duplicates(different_text=True);before=deepcopy(rows)
+        self.render(rows);self.assertEqual(rows,before)
+
+    def test_a_stale_duplicate_is_held_without_touching_the_current_candidate(self):
+        rows=self.duplicates();rows[1]["evidence_checked_at"]=(NOW-timedelta(hours=7)).isoformat()
+        _,record=self.render(rows);selected=editor.selected_stories(record)
+        self.assertEqual(len(selected),1)
+        self.assertEqual(selected[0]["event_evidence"]["observed_at"],rows[0]["evidence_checked_at"])
+        rejected=next(row for row in record["candidates"] if row["origin"]==rows[1]["origin"])
+        self.assertEqual(rejected["source_check"],"hold")
+
+    def test_quality_card_and_command_rebuild_duplicate_observations(self):
+        from types import SimpleNamespace
+        loading=SimpleNamespace(edit_text=AsyncMock())
+        update=SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=loading)))
+        with patch.object(editor,"cache_candidates",return_value=(self.duplicates(),[])),patch.object(daily_report,"build_research_report",return_value=self.research()):
+            self.assertIn("Status: PASS",reportcheck_commands.build_daily_report_quality_card())
+            asyncio.run(reportcheck_commands.reportcheck_command(update,SimpleNamespace()))
+        self.assertIn("Status: PASS",loading.edit_text.call_args.args[0])
+
+    def test_changing_the_candidate_clock_still_rejects_its_admitted_profile(self):
+        _,record=self.render(self.duplicates());row=deepcopy(editor.selected_stories(record)[0])
+        row["evidence_checked_at"]=(NOW-timedelta(minutes=1)).isoformat()
+        with self.assertRaisesRegex(ValueError,"fields: observed_at"):analysis.checked_evidence(row)
+
+    def test_another_duplicates_profile_cannot_be_swapped_between_observations(self):
+        _,record=self.render(self.duplicates());rows=[row for row in record["candidates"] if row["publisher_symbol"]=="KTOS"]
+        changed=deepcopy(rows[0]);changed["event_evidence"]=deepcopy(rows[1]["event_evidence"])
+        with self.assertRaisesRegex(ValueError,"fields: observed_at"):analysis.checked_evidence(changed)
 
     def test_priority_proof_mutations_still_stop_editorial_review(self):
         report,record=self.render()
