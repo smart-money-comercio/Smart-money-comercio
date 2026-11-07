@@ -75,6 +75,8 @@ def price_sentence(row, evidence):
     symbol = row["symbol"]
     event = next((event for event in evidence.get("market_event_context", {}).get("events", []) if event["symbol"] == symbol), None)
     if event and event["status"] != "rechecked":
+        if evidence.get("market_event_context", {}).get("schema") == 2:
+            return row["name"] + "'s reported move remains unconfirmed. " + event["verification_note"]
         return row["name"] + "'s unusual price reading still needs confirmation. Check pricing and any stock split before interpreting its business impact."
     value = (row.get("metric") or {}).get("price")
     if value is None and event: value = event["reported_move"]

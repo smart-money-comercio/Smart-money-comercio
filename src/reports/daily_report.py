@@ -654,6 +654,8 @@ def get_quote_price(quote: dict | None):
 
 
 def get_quote_change_percent(quote: dict | None):
+    if isinstance(quote, dict) and quote.get("return_usable") is False:
+        return None
     return get_quote_value(
         quote,
         [
@@ -730,7 +732,7 @@ def collect_watchlist_movers(symbols: list[str], quotes: dict) -> list[dict]:
     for symbol in symbols or []:
         quote = quotes.get(symbol) or quotes.get(symbol.upper())
 
-        if not isinstance(quote, dict) or quote.get("ok") is False:
+        if not isinstance(quote, dict) or quote.get("ok") is False or quote.get("return_usable") is False:
             continue
 
         change_percent = safe_float(get_quote_change_percent(quote))
@@ -841,15 +843,18 @@ def build_market_tone(movers: list[dict]) -> str:
     return "Mixed / neutral"
 
 
-def build_market_snapshot(symbols: list[str], movers: list[dict]) -> str:
-    if not symbols:
+def build_market_snapshot(symbols: list[str], movers: list[dict], *, market_context: dict | None = None) -> str:
+    benchmark_session = (market_context or {}).get("_benchmark_session", "")
+    if not symbols and not benchmark_session:
         return "Watchlist unavailable."
 
     if not movers:
         quote_status = "Off" if not DAILY_REPORT_LIVE_QUOTES else "Unavailable"
+        baseline = ("\nQuote session: " + benchmark_session + "\nScope: benchmark regular-session returns; watchlist breadth unavailable."
+                    if benchmark_session else "")
 
         return f"""
-Market Session: {get_market_status_label()}
+Market Session: {get_market_status_label()}{baseline}
 Tone: Quote data unavailable
 Watchlist: {len(symbols)} symbols
 Live Quotes: {quote_status}
@@ -1769,6 +1774,8 @@ def build_research_report() -> str:
     record_watchlist_evolution_day(watchlist_symbols, global_context)
 
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
+    from src.intelligence.research_context import align_report_sessions
+    global_context, movers = align_report_sessions(global_context, movers, now)
     market_tone = build_market_tone(movers)
 
     # Daily opportunity ranking combines structural conviction with
@@ -1869,7 +1876,7 @@ Theme Read
 {theme_read}
 
 Market Snapshot
-{build_market_snapshot(watchlist_symbols, movers)}
+{build_market_snapshot(watchlist_symbols, movers, market_context=global_context)}
 
 {calendar_report}
 

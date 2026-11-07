@@ -180,53 +180,21 @@ def parse_alert_threshold(raw_args: list[str]) -> tuple[float | None, str | None
 
 
 def fetch_chart_quote(symbol: str) -> dict:
-    encoded_symbol = urllib.parse.quote(symbol, safe="")
-    url = f"{YAHOO_CHART_URL}/{encoded_symbol}?range=5d&interval=1d"
-
-    request = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/125.0 Safari/537.36"
-            ),
-            "Accept": "application/json,text/plain,*/*",
-            "Connection": "close",
-        },
-    )
-
-    try:
+    from src.utils.market_quote_source import read_chart, source_evidence
+    def read(url):
+        request = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 SmartMoneyAI/1.9", "Accept": "application/json", "Connection": "close"})
         with urllib.request.urlopen(request, timeout=QUOTE_TIMEOUT_SECONDS) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-
-        chart = payload.get("chart", {})
-        error = chart.get("error")
-
-        if error:
-            return {
-                "symbol": symbol,
-                "ok": False,
-                "error": error.get("description", "Yahoo chart error"),
-            }
-
-        results = chart.get("result", [])
-
-        if not results:
-            return {
-                "symbol": symbol,
-                "ok": False,
-                "error": "No chart data returned",
-            }
-
-        result = results[0]
-        quote = parse_regular_quote(symbol, result)
-        fields = ("symbol", "regularMarketPrice", "regularMarketTime", "exchangeTimezoneName", "currentTradingPeriod",
-                  "currency", "exchangeName", "instrumentType", "hasPrePostMarketData", "dataGranularity", "priceHint")
-        quote["quote_evidence"] = {"meta": {key: result["meta"][key] for key in fields if key in result["meta"]},
-            "timestamp": result["timestamp"], "indicators": {"quote": result["indicators"]["quote"]},
-            "events": result.get("events", {})}
-        return quote
+            raw = response.read(2_000_001)
+        if len(raw) > 2_000_000:
+            raise QuoteDataError("Chart response exceeds its bounded size")
+        return raw.decode("utf-8")
+    try:
+        value, result = read_chart(symbol, read)
+        value["quote_evidence"] = source_evidence(result)
+        if value.get("return_usable") is False:
+            value.update(ok=False, error=value["return_note"])
+        return value
 
     except QuoteDataError as error:
         return {"symbol": symbol, "ok": False, "error": str(error)}

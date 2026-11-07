@@ -57,11 +57,38 @@ def market_quotes(payload: dict, now: datetime | None = None) -> dict[str, dict]
         except (ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError):
             continue
         quotes[quote["symbol"].upper()] = quote
+    if any(quote.get("quote_schema") == 2 for quote in quotes.values()):
+        core = [quote["session_date"] for symbol, quote in quotes.items() if symbol in {"^GSPC", "^IXIC", "^RUT"}]
+        if core:
+            day = max(core)
+            quotes = {symbol: quote for symbol, quote in quotes.items() if quote["session_date"] == day}
     return quotes
 
 
 def market_observations(payload: dict, now: datetime | None = None) -> dict[str, float]:
     return {symbol: round(quote["change_percent"], 2) for symbol, quote in market_quotes(payload, now).items()}
+
+
+def align_report_sessions(context: dict, movers: list[dict], now: datetime) -> tuple[dict, list[dict]]:
+    """Keep the macro prices and watchlist breadth on the same dated session."""
+    from copy import deepcopy
+    payload = context.get("_market_payload", {})
+    quotes = market_quotes(payload, now)
+    if not any(quote.get("quote_schema") == 2 for quote in quotes.values()):
+        return context, movers
+    dates = [quote["session_date"] for quote in quotes.values()]
+    dates += [row["session_date"] for row in movers if row.get("session_date")]
+    day = max(dates)
+    aligned = deepcopy(context)
+    aligned["_market_payload"]["market_moves"] = [row for row in payload.get("market_moves", [])
+        if row.get("symbol") in quotes and quotes[row["symbol"]]["session_date"] == day]
+    for key, symbol in (("sp500","^GSPC"),("nasdaq","^IXIC"),("russell","^RUT"),("dow","^DJI"),
+                        ("vix","^VIX"),("tlt","TLT"),("oil","USO"),("gold","GLD"),("dollar","UUP")):
+        quote = quotes.get(symbol)
+        aligned[key] = quote["change_percent"] if quote and quote["session_date"] == day else 0.0
+    if any(symbol in {"^GSPC", "^IXIC", "^RUT"} and quote["session_date"] == day for symbol, quote in quotes.items()):
+        aligned["_benchmark_session"] = day
+    return aligned, [row for row in movers if row.get("session_date") == day]
 
 
 def market_check(payload: dict, now: datetime | None = None, symbol: str = "") -> str:

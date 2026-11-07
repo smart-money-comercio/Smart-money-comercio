@@ -10,7 +10,7 @@ import re
 import tempfile
 from threading import RLock
 
-from src.utils.yahoo_quote import finite_number, parse_regular_quote
+from src.utils.yahoo_quote import finite_number, parse_regular_quote, evidence_quote
 from src.intelligence.special_alert_sources import timestamp
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,20 +25,44 @@ def state_path():
 
 
 def packet(row, symbol, now):
-    if not isinstance(row, dict) or row.get("ok") is not True or not isinstance(row.get("quote_evidence"), dict):
+    if not isinstance(row, dict) or not isinstance(row.get("quote_evidence"), dict):
         raise ValueError("Original chart evidence unavailable")
-    quote = parse_regular_quote(symbol, row["quote_evidence"], now)
+    quote = evidence_quote(symbol, row["quote_evidence"], now)
+    held = quote.get("quote_schema") == 2 and quote.get("return_usable") is False
+    if (not held and row.get("ok") is not True) or (held and (row.get("ok") is not False or row.get("error") != quote["return_note"])):
+        raise ValueError("Quote admission status does not match the source qualifications")
     if (quote["instrument_type"] != "EQUITY" or any(row.get(key) != quote[key] for key in
         ("symbol", "asof", "session_date", "previous_session_date")) or any(
         finite_number(row.get(key)) is None or abs(row[key]-quote[key]) > .011
         for key in ("price", "previous_close", "change_percent")
     )):
         raise ValueError("Displayed equity quote does not match its source")
+    if quote.get("quote_schema") == 2 and any(row.get(key) != quote.get(key) for key in ("return_usable", "return_note", "action_check")):
+        raise ValueError("Displayed return qualifications do not match its source")
     return quote
 
 
 def verdict(row, now):
     first = packet(row["first"], row["symbol"], now)
+    if row.get("verification_version") == 2:
+        if first.get("quote_schema") != 2:
+            return "quote check pending"
+        try:
+            second = packet(row["second"], row["symbol"], now)
+        except (ValueError, KeyError, TypeError):
+            second = None
+        if first.get("action_check") != "clear" or second and second.get("action_check") not in {None, "clear"}:
+            return "corporate action check"
+        if first.get("return_usable") is False or second and second.get("return_usable") is False:
+            return "price basis review"
+        if second is None or second.get("quote_schema") != 2:
+            return "quote check pending"
+        same = (first["session_date"] == second["session_date"] and first["previous_session_date"] == second["previous_session_date"]
+                and abs(first["previous_close"]-second["previous_close"]) <= max(.000001, first["previous_close"]*.000001)
+                and abs(first["change_percent"]-second["change_percent"]) <= .5
+                and first["change_percent"]*second["change_percent"] > 0
+                and abs(second["change_percent"]) >= THRESHOLD)
+        return "rechecked" if same else "quote changed; check pending"
     action = row["first"]["quote_evidence"].get("events", {}).get("splits", {})
     if action:
         return "corporate action check"
@@ -58,6 +82,9 @@ def checked_row(row, now):
     from src.intelligence.company_focus import COMPANY_NAMES, issuer
     if not isinstance(row, dict) or row.get("symbol") not in COMPANY_NAMES:
         raise ValueError("Event issuer unavailable")
+    version = row.get("verification_version", 1)
+    if type(version) is not int or version not in {1, 2}:
+        raise ValueError("Unknown quote verification version")
     observed = timestamp(row.get("checked_at"))
     if observed is None or not -60 <= (now-observed).total_seconds() <= 3600:
         raise ValueError("Event observation unavailable or stale")
@@ -73,7 +100,7 @@ def read_snapshot(now):
         if path.stat().st_size > 150_000:
             return []
         value = json.loads(path.read_text(encoding="utf-8-sig"))
-        if not isinstance(value, dict) or type(value.get("schema")) is not int or value["schema"] != 1 or not isinstance(value.get("events"), list) or len(value["events"]) > LIMIT:
+        if not isinstance(value, dict) or type(value.get("schema")) is not int or value["schema"] not in {1, 2} or not isinstance(value.get("events"), list) or len(value["events"]) > LIMIT:
             return []
         result = []
         for row in value["events"]:
@@ -86,7 +113,7 @@ def read_snapshot(now):
 
 def save_snapshot(rows):
     path = state_path(); path.parent.mkdir(parents=True, exist_ok=True)
-    body = json.dumps({"schema": 1, "events": rows}, allow_nan=False).encode()
+    body = json.dumps({"schema": 2 if any(row.get("verification_version") == 2 for row in rows) else 1, "events": rows}, allow_nan=False).encode()
     if len(body) > 150_000:
         raise ValueError("Market event evidence exceeds its limit")
     fd, name = tempfile.mkstemp(prefix=".market-events-", dir=path.parent)
@@ -117,9 +144,12 @@ def review_quotes(quotes, fetch, now=None):
             if identity in seen: continue
             seen.add(identity)
             prior = next((row for row in previous if row["symbol"] == symbol and
+                          row.get("verification_version", 1) == (2 if first.get("quote_evidence", {}).get("schema") == 2 else 1) and
                           -60 <= (now-timestamp(row.get("recheck_at", row["checked_at"]))).total_seconds() <= RECHECK_SECONDS), None)
             value = {"symbol": symbol, "issuer": identity, "first": deepcopy(first),
                      "checked_at": now.isoformat(), "recheck_at": prior.get("recheck_at", prior["checked_at"]) if prior else now.isoformat()}
+            if first.get("quote_evidence", {}).get("schema") == 2:
+                value["verification_version"] = 2
             try: value["second"] = deepcopy(prior.get("second", {})) if prior else fetch(symbol)
             except Exception: value["second"] = {}
             value["status"] = verdict(value, now)
@@ -156,14 +186,24 @@ def context_for_report(report, now):
                       and row["first"]["session_date"] == session[1]
                       and abs(row["first"]["change_percent"]-value) <= .11), None)
         events.append({"symbol": issuer(symbol), "source_symbol": symbol, "reported_move": value,
-                       "status": proof["status"] if proof else "quote check pending", "proof": proof})
+                       "status": proof["status"] if proof else "quote check pending", "proof": proof,
+                       "verification_note": verification_note(proof)})
         if len(events) == LIMIT: break
-    return {"schema": 1, "report_sha256": hashlib.sha256(report.encode()).hexdigest(), "events": events}
+    return {"schema": 2, "report_sha256": hashlib.sha256(report.encode()).hexdigest(), "events": events}
+
+
+def verification_note(proof):
+    status = proof.get("status") if proof else "quote check pending"
+    return {"rechecked": "Repeat dated quotes agree; both are from the same provider.",
+            "corporate action check": "Split or action evidence needs review for the two closing dates.",
+            "price basis review": "The closing-price basis needs review before this percentage is admitted.",
+            "quote changed; check pending": "The repeat quote did not agree with the first dated reading."}.get(status,
+            "No usable repeat check was recorded; the percentage remains unconfirmed.")
 
 
 def checked_context(context, report, now):
     prices, session = report_prices(report)
-    if (not isinstance(context, dict) or context.get("schema") != 1 or context.get("report_sha256") != hashlib.sha256(report.encode()).hexdigest()
+    if (not isinstance(context, dict) or type(context.get("schema")) is not int or context.get("schema") not in {1, 2} or context.get("report_sha256") != hashlib.sha256(report.encode()).hexdigest()
             or not isinstance(context.get("events"), list) or len(context["events"]) > LIMIT):
         raise ValueError("Market event context does not match the research edition")
     from src.intelligence.company_focus import issuer
@@ -190,6 +230,8 @@ def checked_context(context, report, now):
                 raise ValueError("Market event quote does not match the edition")
         if event["status"] != (proof["status"] if proof else "quote check pending"):
             raise ValueError("Market event status lost its evidence")
+        if context["schema"] == 2 and event.get("verification_note") != verification_note(proof):
+            raise ValueError("Market event qualification lost its evidence")
     return context
 
 

@@ -663,7 +663,7 @@ def record_issue_bullets(bullets: list[str]) -> None:
 
     save_issue_memory(memory)
 
-def request_text(url: str) -> str:
+def request_text(url: str, *, max_bytes=None) -> str:
     request = urllib.request.Request(
         url,
         headers={
@@ -673,18 +673,20 @@ def request_text(url: str) -> str:
     )
 
     with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
-        return response.read().decode("utf-8", errors="ignore")
+        raw = response.read(max_bytes+1) if max_bytes is not None else response.read()
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Source response exceeds its bounded size")
+        return raw.decode("utf-8", errors="ignore")
 
 
-def get_asset_move(symbol: str) -> dict:
-    encoded = urllib.parse.quote(symbol, safe="")
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded}?range=5d&interval=1d"
-
+def get_asset_move(symbol: str, *, recovery_budget=None) -> dict:
+    from src.utils.market_quote_source import read_chart, source_evidence
     try:
-        payload = json.loads(request_text(url))
-        result = payload["chart"]["result"][0]
         now = datetime.now(timezone.utc)
-        quote = parse_regular_quote(symbol, result, now)
+        quote, result = read_chart(symbol, lambda url: request_text(url, max_bytes=2_000_000), now, budget=recovery_budget)
+        if quote.get("return_usable") is False:
+            raise ValueError(quote["return_note"])
+
         closes = result["indicators"]["quote"][0]["close"]
         dated_closes = []
         for epoch, raw_close in zip(result.get("timestamp") or [], closes):
@@ -694,11 +696,7 @@ def get_asset_move(symbol: str) -> dict:
         week_start = min(dated_closes)[1] if dated_closes else None
         week_move = 100 * (quote["price"] / week_start - 1) if week_start else None
         # Preserve the minimal original chart evidence for cache readers to revalidate.
-        meta_fields = ("symbol", "regularMarketPrice", "regularMarketTime", "exchangeTimezoneName",
-                       "currentTradingPeriod", "currency", "exchangeName", "instrumentType",
-                       "hasPrePostMarketData", "dataGranularity", "priceHint")
-        evidence = {"meta": {key: result["meta"][key] for key in meta_fields if key in result["meta"]},
-                    "timestamp": result["timestamp"], "indicators": {"quote": [{"close": closes}]}}
+        evidence = source_evidence(result, volume=False)
         return {
             "symbol": symbol,
             "latest": quote["price"],
@@ -713,7 +711,7 @@ def get_asset_move(symbol: str) -> dict:
         }
     except Exception as exc:
         return {"symbol": symbol, "move": None, "week_move": None,
-                "error": "Dated quote unavailable (" + type(exc).__name__ + ")"}
+                "error": "Dated quote unavailable (" + type(exc).__name__ + "): " + str(exc)[:160]}
 
 
 def fetch_market_moves() -> list[dict]:
@@ -721,6 +719,8 @@ def fetch_market_moves() -> list[dict]:
     seen_symbols = set()
 
     assets = list(MARKET_ASSETS)
+    from src.utils.market_quote_source import RecoveryBudget
+    recovery_budget = RecoveryBudget(2)
 
     for symbol in RECAP_SYMBOLS:
         clean_symbol = str(symbol or "").strip().upper()
@@ -741,7 +741,7 @@ def fetch_market_moves() -> list[dict]:
 
         seen_symbols.add(symbol)
 
-        data = get_asset_move(symbol)
+        data = get_asset_move(symbol, recovery_budget=recovery_budget)
         data["label"] = asset["label"]
         moves.append(data)
 

@@ -543,7 +543,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=28, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        from src.utils.market_quote_source import cached_health
+        result.update(rules_version=29, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -837,6 +838,15 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     level = " | evidence: " + row["evidence_level"] if row.get("evidence_level") else ""
                     lines.append(f"{label}: {row['status']} | {row['fresh']} fresh / {row['dated']} dated{latest}{level} | {row['reason']}")
             lines += ["", "Market evidence: " + clean(record["market_evidence"]["moves"], 400)]
+            market_health = record.get("market_data_health", [])
+            if market_health:
+                from src.utils.market_quote_source import BENCHMARKS
+                selected_health = [row for row in market_health if row["symbol"] in BENCHMARKS]
+                selected_health += [row for row in market_health if row["symbol"] not in BENCHMARKS and row["status"] == "limited"][:3]
+                for row in selected_health:
+                    session = " | session " + row["session_date"] if row.get("session_date") else ""
+                    recovery = " | secondary endpoint, same provider" if len(row["attempts"]) > 1 and row["status"] == "available" else ""
+                    lines.append("Quote check: " + BENCHMARKS.get(row["symbol"], row["symbol"]) + " — " + row["status"] + session + recovery + " | " + row["reason"])
             for event in record.get("market_event_context", {}).get("events", []):
                 lines.append("Market event check: " + event["symbol"] + " — " + event["status"] + "; issuer-disclosure search cue, market cause not inferred")
             for row in record.get("narrated_company_schedules", []):

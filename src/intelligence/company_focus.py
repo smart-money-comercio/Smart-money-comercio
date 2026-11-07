@@ -165,6 +165,8 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
                     why = f"It {direction} {abs(value):.1f} percent in the quoted regular session. A repeat quote from the same provider supports the price reading."
                 else:
                     why = "An unusually large reported move is under review; quote confirmation and corporate-action checks remain open."
+                    if evidence.get("market_event_context", {}).get("schema") == 2:
+                        why = "An unusually large reported move is under review. " + event.get("verification_note", "Quote confirmation remains open.")
                 tier = 120 if not verified_first or event.get("status") == "rechecked" else 80
                 add(symbol, "market event", "Event watch", tier, why,
                     "Check original earnings, guidance and regulatory disclosures; price alone does not establish the cause.",

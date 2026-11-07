@@ -7,6 +7,8 @@ from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+import os
+import tempfile
 from pathlib import Path
 import socket
 import sys
@@ -272,13 +274,15 @@ class BackdropQuoteChecks(unittest.TestCase):
         self.assertEqual(row["asof"], "2026-10-19T20:00:01+00:00")
         self.assertIn("MSFT -0.30%", research_context.market_check(self.payload(row), self.clock, "MSFT"))
 
-    def test_watchlist_and_backdrop_use_the_same_return_when_the_daily_bar_disagrees(self):
+    def test_new_adapters_withhold_a_conflicting_completed_daily_bar(self):
         value = result("MSFT", 99.7)
         value["indicators"]["quote"][0]["close"][-1] = 105
         row = self.fetch(value)
-        quote = parse_regular_quote("MSFT", value, self.clock)
-        self.assertEqual(row["move"], round(quote["change_percent"], 2))
-        self.assertEqual(research_context.market_observations(self.payload(row)), {"MSFT": -0.3})
+        self.assertIsNone(row["move"])
+        self.assertIn("conflicts", row["error"])
+        self.assertEqual(research_context.market_observations(self.payload(row)), {})
+        # Previously saved version-one evidence retains its original calculation.
+        self.assertAlmostEqual(parse_regular_quote("MSFT", value, self.clock)["change_percent"], -.3)
 
     def test_missing_prior_close_does_not_collapse_to_an_older_bar(self):
         value = result(); value["indicators"]["quote"][0]["close"][-2] = None
@@ -503,6 +507,8 @@ def main(argv=None):
     with ExitStack() as stack:
         if args.windows_socketpair:
             stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))
+        temporary = stack.enter_context(tempfile.TemporaryDirectory())
+        stack.enter_context(patch.dict(os.environ, {"MARKET_QUOTE_STATUS_FILE": str(Path(temporary)/"health.json")}))
         traffic = stack.enter_context(offline_network_guard())
         result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__]))
     success = result.wasSuccessful() and not traffic["blocked"]

@@ -286,7 +286,7 @@ class EditionChecks(IsolatedChecks):
         selected = editor.selected_stories(record)
         self.assertEqual(len(selected),3)
         profile = voice.checked(record,NOW)
-        self.assertTrue(profile["quality"]["passes"]);self.assertEqual(record["rules_version"],28)
+        self.assertTrue(profile["quality"]["passes"]);self.assertEqual(record["rules_version"],29)
         self.assertTrue({row["id"] for row in selected} <= set(profile["sources"]))
         self.assertIn("Nvidia",profile["script"]);self.assertNotIn("NVIDIA",profile["script"])
         self.assertIn("sixty four million dollars",profile["script"])
