@@ -31,7 +31,7 @@ OFFICIAL_HOSTS = {"Federal Reserve": "federalreserve.gov", "U.S. Treasury": "tre
 ALIASES = {**feeds.TICKER_TERMS, "TSM": ["TSM", "TSMC", "Taiwan Semiconductor"],
            "NOC": ["NOC", "Northrop Grumman"], "LMT": ["LMT", "Lockheed Martin"],
            "AVAV": ["AVAV", "AeroVironment"], "KTOS": ["KTOS", "Kratos"], "CRWD": ["CRWD", "CrowdStrike"],
-           "CACI": ["CACI"], "GOOG": ["GOOG", "Google", "Alphabet"]}
+           "CACI": ["CACI"], "GOOG": ["GOOG", "Google", "Alphabet"], "ETN": ["ETN", "Eaton"]}
 STAGE_NAMES = ("Scan", "Source Check", "Relevance", "Selection", "Editorial Review", "Decision Log")
 
 
@@ -543,7 +543,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=27, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=28, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -834,7 +834,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     duplicates = sum(value["symbol"] == row["symbol"] for value in record["source_health"]) > 1
                     label = row["symbol"] + " — " + row["name"] if row["symbol"] and duplicates else row["symbol"] or row["name"]
                     latest = " | newest " + row["latest_publication"][:10] if row["latest_publication"] else ""
-                    lines.append(f"{label}: {row['status']} | {row['fresh']} fresh / {row['dated']} dated{latest} | {row['reason']}")
+                    level = " | evidence: " + row["evidence_level"] if row.get("evidence_level") else ""
+                    lines.append(f"{label}: {row['status']} | {row['fresh']} fresh / {row['dated']} dated{latest}{level} | {row['reason']}")
             lines += ["", "Market evidence: " + clean(record["market_evidence"]["moves"], 400)]
             for event in record.get("market_event_context", {}).get("events", []):
                 lines.append("Market event check: " + event["symbol"] + " — " + event["status"] + "; issuer-disclosure search cue, market cause not inferred")

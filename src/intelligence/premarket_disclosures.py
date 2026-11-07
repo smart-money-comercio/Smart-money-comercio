@@ -99,11 +99,13 @@ def collect(now,previous_close,fetcher=None):
             if risk_sentences(text):found.append({"symbol":row["publisher_symbol"],"title":row["title"],"text":text,
                 "published":published.isoformat(),"observed":observed.isoformat(),"url":row["url"],"source":row["source"],"sha256":sha256(text.encode()).hexdigest()})
     except (OSError,ValueError,KeyError,TypeError):issues.append("Cached original-disclosure coverage unavailable")
-    if not os.getenv("SEC_USER_AGENT","").strip():
-        issues.append("QCOM original earnings: SEC_USER_AGENT not configured; no SEC requests")
+    from src.intelligence.sec_contact import user_agent
+    agent = user_agent()
+    if not agent:
+        issues.append("QCOM original earnings: SEC_USER_AGENT missing or invalid; no SEC requests")
     else:
         try:
-            fetcher=fetcher or (lambda url:feeds.fetch_url(url,force_refresh=True,cache_result=False,user_agent=os.environ["SEC_USER_AGENT"]))
+            fetcher=fetcher or (lambda url:feeds.fetch_url(url,force_refresh=True,cache_result=False,user_agent=agent))
             row=qualcomm(now,fetcher)
             if row and previous_close<=timestamp(row["published"])<=now and risk_sentences(row["text"]):found.append(row)
         except Exception as error:issues.append("QCOM original earnings limited: "+type(error).__name__)

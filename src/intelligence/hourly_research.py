@@ -79,7 +79,8 @@ def fetch_original(url: str) -> bytes:
             if (alphabet_pdf and newurl != url) or (sec and (not sec_research.authority(newurl) or urlsplit(newurl).hostname != urlsplit(url).hostname)) or (not sec and not alphabet_pdf and identity(newurl) != expected):
                 raise ValueError("Research source redirected outside its original publisher")
             return super().redirect_request(request, fp, code, msg, headers, newurl)
-    agent = os.getenv("SEC_USER_AGENT", "SmartMoneyAI/1.7 public filing research") if sec else "SmartMoneyAI/1.7 original-source research"
+    from src.intelligence.sec_contact import require_user_agent
+    agent = require_user_agent() if sec else "SmartMoneyAI/1.7 original-source research"
     request = Request(url, headers={"User-Agent": agent, "Accept": "text/html,application/xhtml+xml,application/json"})
     with build_opener(Redirects()).open(request, timeout=10) as response:
         body = response.read(2_000_001)

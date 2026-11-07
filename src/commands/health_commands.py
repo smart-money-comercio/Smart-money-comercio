@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ContextTypes
 from src.config.version_info import build_version_text
+from src.intelligence.sec_contact import user_agent as sec_contact
 
 from src.utils.cache import get_cache, set_cache
 
@@ -23,11 +24,11 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     openai_key = os.getenv("OPENAI_API_KEY")
-    sec_user_agent = os.getenv("SEC_USER_AGENT")
+    sec_user_agent = sec_contact()
 
     checks.append(("Telegram token", bool(bot_token)))
     checks.append(("OpenAI key", bool(openai_key)))
-    checks.append(("SEC user agent", bool(sec_user_agent)))
+    checks.append(("SEC contact format", bool(sec_user_agent)))
 
     try:
         set_cache("health:test", "ok", ttl_seconds=60)
@@ -95,7 +96,7 @@ async def system_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Environment:",
         f"Telegram token: {'✅ Loaded' if os.getenv('TELEGRAM_BOT_TOKEN') else '❌ Missing'}",
         f"OpenAI key: {'✅ Loaded' if os.getenv('OPENAI_API_KEY') else '❌ Missing'}",
-        f"SEC user agent: {'✅ Loaded' if os.getenv('SEC_USER_AGENT') else '❌ Missing'}",
+        f"SEC contact format: {'✅ Configured' if sec_contact() else '❌ Missing or invalid'}",
         "",
         "Active modules:",
         "✅ Market data",

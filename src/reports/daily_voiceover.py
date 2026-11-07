@@ -84,6 +84,8 @@ def price_sentence(row, evidence):
 
 def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
     from src.intelligence.daily_brief_analysis import NAMES
+    if evidence.get("disclosure_version", 0) >= 2:
+        NAMES = {**NAMES, "ETN": "Eaton"}
     from src.intelligence.story_analysis import investor_read
     from src.intelligence.broadcast_story import copilot_reveal, company_read
     if story.get("ipo"):

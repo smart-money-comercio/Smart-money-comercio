@@ -6,6 +6,7 @@ from datetime import datetime
 
 from telegram import Update
 from telegram.ext import ContextTypes
+from src.intelligence.sec_contact import user_agent as sec_contact
 
 
 BOT_START_TIME = datetime.now()
@@ -237,7 +238,7 @@ async def diagnostics_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     telegram_token_ok = env_loaded_bool("TELEGRAM_BOT_TOKEN")
     openai_key_ok = env_loaded_bool("OPENAI_API_KEY")
-    sec_user_agent_ok = env_loaded_any_bool(["SEC_USER_AGENT", "SEC_API_USER_AGENT"])
+    sec_user_agent_ok = bool(sec_contact())
     admin_ids_ok = bool(admin_chat_ids)
     admin_authorized_ok = current_chat_id in admin_chat_ids
     chat_id_ok = current_chat_id != "UNKNOWN"
@@ -253,7 +254,7 @@ async def diagnostics_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"{pass_fail(admin_authorized_ok)} Current chat authorized\n"
         f"{pass_fail(telegram_token_ok)} Telegram token loaded\n"
         f"{pass_fail(openai_key_ok)} OpenAI key loaded\n"
-        f"{pass_fail(sec_user_agent_ok)} SEC user agent loaded\n\n"
+        f"{pass_fail(sec_user_agent_ok)} SEC contact format configured\n\n"
         "Command Menu Checks\n"
         f"{info_status()} Command catalog count: {command_catalog_count}\n"
         f"{info_status()} TELEGRAM_COMMAND_CHAT_ID loaded: {'Yes' if command_chat_ids else 'No'}\n"
@@ -340,7 +341,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "Environment\n"
         f"Telegram token: {env_loaded('TELEGRAM_BOT_TOKEN')}\n"
         f"OpenAI key: {env_loaded('OPENAI_API_KEY')}\n"
-        f"SEC user agent: {env_loaded_any(['SEC_USER_AGENT', 'SEC_API_USER_AGENT'])}\n"
+        f"SEC contact format: {'Configured' if sec_contact() else 'Missing or invalid'}\n"
         f"Telegram admin IDs: {env_loaded('TELEGRAM_ADMIN_CHAT_ID')}\n"
         f"Telegram exact command chat IDs: {'Loaded' if command_chat_ids else 'Missing'}\n\n"
         "Command Menu\n"

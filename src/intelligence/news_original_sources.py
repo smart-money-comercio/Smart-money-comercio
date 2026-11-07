@@ -52,6 +52,11 @@ class ArticleBody(VisibleText):
         self.eia = publisher == "EIA" and parts.hostname == "www.eia.gov"
         self.amd = publisher in {"AMD", "AMD Investor Relations"} and parts.hostname == "ir.amd.com" and parts.path.startswith("/news-events/press-releases/detail/")
         self.amazon = publisher in {"AMZN", "Amazon Investor Relations"} and parts.hostname == "ir.aboutamazon.com" and parts.path.startswith("/news-release/news-release-details/")
+        from src.intelligence.publisher_recovery import article_url as corporate_url
+        self.corporate = ("ETN" if publisher in {"ETN", "Eaton Newsroom"} and corporate_url("ETN", url) else
+                          "CRWD" if publisher in {"CRWD", "CrowdStrike Newsroom"} and corporate_url("CRWD", url) else "")
+        self.corporate_roots = 0
+        self.corporate_title_seen = False
         from src.intelligence.northrop_newsroom import article_url
         self.northrop = publisher in {"NOC", "Northrop Grumman Newsroom"} and article_url(url)
         self.depth = 0
@@ -79,14 +84,21 @@ class ArticleBody(VisibleText):
         eia_body = self.eia and tag == "div" and "tie-article" in classes
         northrop_body = self.northrop and tag == "div" and any(value.startswith("NewsroomArticleBody_BodyCopy__") for value in classes)
         amazon_body = self.amazon and tag == "div" and "module_body" in classes
-        if not self.depth and (tag == "article" and not treasury and not kratos and not self.nvidia_blog and not self.amazon or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body or nvidia_body or eia_body or northrop_body or amazon_body):
+        corporate_body = tag == "div" and self.corporate_title_seen and ((self.corporate == "ETN" and "eaton-text-default__content" in classes
+                                            and "overlapping__anchor" in classes and self.corporate_roots == 0)
+                                           or (self.corporate == "CRWD" and "text--press-release-content" in classes))
+        if not self.depth and (corporate_body or not self.corporate and (tag == "article" and not treasury and not kratos and not self.nvidia_blog and not self.amazon or classes & {"wd_news_body", "article-body", "release-body"} or fed_body or treasury_body or kratos_body or alphabet_body or nvidia_body or eia_body or northrop_body or amazon_body)):
             self.depth = 1
+            if corporate_body:
+                self.corporate_roots += 1
         elif self.depth and tag not in self.VOID:
             self.depth += 1
         if self.depth:
             super().handle_starttag(tag, attrs)
 
     def handle_endtag(self, tag):
+        if tag == "h1":
+            self.corporate_title_seen = True
         if self.date_depth and tag not in self.VOID:
             self.date_depth -= 1
         if tag == self.heading_tag:
@@ -315,6 +327,9 @@ def recent_hint(value: str, now: datetime) -> bool:
 
 def retrieve(source: dict, fetch, now: datetime) -> dict:
     """Read a public index and at most three exact release pages."""
+    if source["format"] == "corporate":
+        from src.intelligence.publisher_recovery import retrieve as corporate_retrieve
+        return corporate_retrieve(source, fetch, now)
     if source["format"] == "alphabet":
         from src.intelligence.alphabet_source import retrieve as alphabet_retrieve
         return alphabet_retrieve(source, fetch, now)
@@ -394,12 +409,17 @@ def retrieve(source: dict, fetch, now: datetime) -> dict:
 
 
 def cached_items(payload: dict, source: dict) -> list[dict]:
-    if type(payload.get("original_profile")) is not int or payload.get("original_profile") not in (1, 2, 3, 4) or not isinstance(payload.get("articles"), list):
+    if type(payload.get("original_profile")) is not int or payload.get("original_profile") not in (1, 2, 3, 4, 5) or not isinstance(payload.get("articles"), list):
         raise ValueError("Publisher index has not been parsed by the original-source reader")
+    if source.get("format") == "corporate" and payload["original_profile"] != 5:
+        raise ValueError("Corporate newsroom cache needs its source-specific article proof")
     rows = []
     for item in payload["articles"][:MAX_ARTICLES]:
         if not isinstance(item, dict) or not isinstance(item.get("title"), str) or not isinstance(item.get("link"), str):
             continue
+        if source.get("format") == "corporate" and item.get("published"):
+            from src.intelligence.publisher_recovery import checked_article
+            checked_article(source["company_symbol"], item)
         if not authorized_response(source, {"url": item["link"]}):
             continue
         required = source.get("requires_original_body") is True

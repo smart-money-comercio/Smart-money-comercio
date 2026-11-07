@@ -211,7 +211,7 @@ class RebuildDetailChecks(IsolatedChecks):
     def test_two_original_stories_produce_eight_fact_fields_and_specific_analysis(self):
         report,record=self.render([maintenance(),sanctions()])
         selected=editor.selected_stories(record)
-        self.assertEqual(record["rules_version"],27);self.assertEqual(len(selected),2)
+        self.assertEqual(record["rules_version"],28);self.assertEqual(len(selected),2)
         self.assertEqual(sum(len(s["event_evidence"]["facts"]) for s in selected),8)
         self.assertIn("payment and counterparty exposure",report)
         self.assertNotIn("cross-border costs and supply chains",report)

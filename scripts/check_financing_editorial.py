@@ -217,7 +217,7 @@ class FinancingEditionChecks(IsolatedChecks):
         self.assertIn("$90 billion",report);self.assertIn("approximately $20 billion in new cash",report)
         self.assertIn("supply of government debt",report);self.assertNotIn("Review the original report for scope",report)
         self.assertTrue(validate_news_brief(report)["passes"])
-        self.assertEqual(record["rules_version"],27)
+        self.assertEqual(record["rules_version"],28)
 
     def test_voiceover_uses_a_factual_summary_and_preserves_schema2_review(self):
         _,record=self.render();profile=voice.checked(record,NOW);episode=voice.episode(record,NOW)

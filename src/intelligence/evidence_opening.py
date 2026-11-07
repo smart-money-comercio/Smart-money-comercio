@@ -16,6 +16,8 @@ def opening_source(evidence):
         profile = checked_evidence(story)
         fields = {row["field"]:row["value"] for row in profile["facts"]}
         name = NAMES.get(story.get("publisher_symbol"), story.get("publisher_symbol", story["source"]))
+        if evidence.get("disclosure_version", 0) >= 2 and story.get("source") == "Eaton Newsroom":
+            name = "Eaton"
         text, watch, priority = "", "", 9
         if profile["event"] == "monetary policy" and profile["stage"] == "rate decision" and "policy_target_range" in fields:
             from src.intelligence.story_analysis import investor_read
@@ -39,6 +41,9 @@ def opening_source(evidence):
             from src.intelligence.original_disclosures import sentences
             text = sentences(summary(profile, name))[0]
             watch = review(profile)["watch"]
+            if evidence.get("disclosure_version", 0) >= 2:
+                text = name + " has a new aircraft-maintenance designation."
+                watch = "The commercial follow-through matters next."
             priority = 3
         elif profile["event"] == "earnings":
             field = next((key for key in ("reported_revenue", "reported_sales", "reported_net_sales") if key in fields), None)
@@ -118,7 +123,7 @@ def opening(evidence):
         if move < 0 and breadth and breadth["down"] > breadth["up"]:
             text += " Watch for selling to ease across the names we track."
         elif move > 0 and breadth and breadth["up"] > breadth["down"]:
-            text += (" Watch whether those gains hold in the next session." if evidence.get("disclosure_version") == 1 and not evidence["is_open"] else
+            text += (" Watch whether those gains hold in the next session." if evidence.get("disclosure_version", 0) >= 1 and not evidence["is_open"] else
                      " Watch whether those gains hold in this group.")
     else:
         text += " Watch participation across the names we track and the next company results."
@@ -142,6 +147,8 @@ def watching(evidence):
                 name = NAMES.get(story.get("publisher_symbol"), story["source"])
                 label = name + "'s maintenance opportunity"
                 text = label + ": " + review(profile)["watch"]
+                if evidence.get("disclosure_version", 0) >= 2:
+                    text = label + ": Watch for a disclosed service-order value and delivery timetable. Those details would help establish the scale and timing of the opportunity."
                 rows = [row for row in rows if row["id"] not in {"watch_business", "watch_event"}]
                 rows.insert(1 if rows else 0, {"id":"watch_business", "section":"watch", "text":text, "sources":["Verified story decisions"]})
                 break
@@ -156,7 +163,7 @@ def watching(evidence):
             rows = [row for row in rows if row["id"] not in {"watch_business", "watch_event"}]
             rows.insert(1 if rows else 0,{"id":"watch_business","section":"watch","text":text,"sources":["Verified story decisions"]})
             break
-    if evidence.get("disclosure_version") == 1:
+    if evidence.get("disclosure_version", 0) >= 1:
         for row in rows:
             row["text"] = row["text"].replace("Advanced Micro Devices's", "AMD's")
     return rows[:evidence.get("reader_limit",3)]

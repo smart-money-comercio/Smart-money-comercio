@@ -232,12 +232,9 @@ def refresh(force_refresh=False):
     if cached and (cached.get("status") == "error" or not force_refresh and cached.get("earnings_backup_profile") == 1):
         return {**cached, "cache_hit": True}
     previous = cached or feeds.load_cache().get(SUBMISSIONS) or {}
-    agents = (os.getenv("SEC_USER_AGENT", ""), os.getenv("SEC_API_USER_AGENT", ""))
-    agent = next((value for value in agents if "@" in value and "example.com" not in value.casefold()
-                  and "your name" not in value.casefold() and "\r" not in value and "\n" not in value), "")
     try:
-        if not agent:
-            raise ValueError("Configure the existing SEC_USER_AGENT with an administrative contact")
+        from src.intelligence.sec_contact import require_user_agent
+        agent = require_user_agent()
         payload = retrieve(datetime.now(timezone.utc), lambda url: feeds.fetch_url(
             url, force_refresh, cache_result=False, user_agent=agent))
     except Exception as error:
@@ -245,6 +242,9 @@ def refresh(force_refresh=False):
         payload = failure if failure and failure.get("status") == "error" else {
             "url": SUBMISSIONS, "status": "error", "body": "", "error": str(error)[:160],
             "fetched_at_epoch": feeds.time.time(), "retry_after_epoch": feeds.time.time()+300}
+        from src.intelligence.sec_contact import user_agent
+        if not user_agent():
+            payload = {**payload, "configuration_required": True}
         if isinstance(error, AmendedResults) or previous.get("withhold_context"):
             payload = {**payload, "withhold_context": True}
         prior_record = None if payload.get("withhold_context") else previous.get("record") or previous.get("retained_record")

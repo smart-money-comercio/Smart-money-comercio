@@ -85,6 +85,8 @@ NEWS_SOURCES = [
     {"name": "Alphabet Investor Relations", "url": "https://abc.xyz/rss/pressrelease.aspx?LanguageId=1", "category": "company", "company_symbol": "GOOG", "format": "alphabet", "requires_original_body": True},
     {"name": "Intel Investor Relations", "url": "https://www.intc.com/news-events/press-releases/rss", "category": "company", "company_symbol": "INTC", "requires_original_body": True},
     {"name": "ASML Investor Relations", "url": "https://investor.asml.com/news/press-releases-and-announcements", "category": "company", "company_symbol": "ASML", "format": "index", "article_pattern": r"/news-releases/news-release-details/[^/]+", "requires_original_body": True},
+    {"name": "Eaton Newsroom", "url": "https://www.eaton.com/us/en-us/company/news-insights.html", "category": "company", "company_symbol": "ETN", "format": "corporate", "requires_original_body": True},
+    {"name": "CrowdStrike Newsroom", "url": "https://www.crowdstrike.com/en-us/press-releases/", "category": "company", "company_symbol": "CRWD", "format": "corporate", "requires_original_body": True},
 ]
 
 
@@ -302,6 +304,9 @@ def get_cached_source(url: str) -> dict | None:
 
     if not isinstance(item, dict):
         return None
+    from src.intelligence.sec_contact import configuration_failure
+    if url.startswith("https://data.sec.gov/submissions/") and configuration_failure(item):
+        return None
 
     fetched_at_epoch = item.get("fetched_at_epoch")
 
@@ -403,10 +408,10 @@ def fetch_url(url: str, force_refresh: bool = False, *, cache_result: bool = Tru
 
 
 def fetch_source(source: dict, force_refresh: bool = False) -> dict:
-    if source.get("format") not in {"palantir", "index", "treasury", "alphabet"}:
+    if source.get("format") not in {"palantir", "index", "treasury", "alphabet", "corporate"}:
         return fetch_url(source["url"], force_refresh)
     cached = get_cached_source(source["url"])
-    profile = 4 if source.get("newsroom_home_fallback") else 2
+    profile = 5 if source.get("format") == "corporate" else 4 if source.get("newsroom_home_fallback") else 2
     if cached and (cached.get("status") == "error" or not force_refresh and cached.get("original_profile") == profile):
         return {**cached, "cache_hit": True}
     try:
@@ -523,7 +528,7 @@ def parse_source_payload(payload: dict, source: dict) -> list[dict]:
 
 
 def parse_article_items(payload: dict, source: dict, *, full_titles: bool = False, full_text: bool = False) -> list[dict]:
-    if source.get("format") in {"palantir", "index", "treasury", "alphabet"}:
+    if source.get("format") in {"palantir", "index", "treasury", "alphabet", "corporate"}:
         rows = originals.cached_items(payload, source)
     else:
         rows = parse_rss_items(payload.get("body", ""), source, full_titles=full_titles, full_text=full_text)
@@ -558,7 +563,8 @@ def original_source_for_url(url: str) -> dict | None:
 def describe_source(source: dict, payload, now: datetime) -> dict:
     """Distinguish an unavailable publisher from a healthy, quiet publication feed."""
     row = {"name": source["name"], "symbol": source.get("company_symbol", ""), "status": "limited",
-           "checked_at": "", "entries": 0, "dated": 0, "fresh": 0, "undated": 0, "latest_publication": "", "reason": "Missing cached fetch"}
+           "checked_at": "", "entries": 0, "dated": 0, "fresh": 0, "undated": 0, "latest_publication": "", "reason": "Missing cached fetch",
+           "evidence_level": "unavailable", "original_bodies": 0, "fresh_bodies": 0}
     if not isinstance(payload, dict):
         return row
     fetched = payload.get("fetched_at_epoch")
@@ -579,7 +585,7 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
             kind = container.tag.split("}")[-1].lower()
             if kind not in {"rss", "rdf", "feed"} or kind == "rss" and container.find("channel") is None:
                 raise ValueError("no dated RSS article candidates; expected a publisher feed")
-        items = parse_article_items(payload, source, full_titles=True, full_text=bool(source.get("requires_original_body")))[:30]
+        items = parse_article_items(payload, source, full_titles=True, full_text=True)[:30]
         row["entries"] = len(items)
         dates = [timestamp(item.get("published")) for item in items]
         valid = [value for value in dates if value and (now - value).total_seconds() >= -60]
@@ -588,6 +594,16 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
                    fresh=sum(value is not None and 0 <= (now - value).total_seconds() <= 24 * 3600
                              and originals.authorized_response(source, {"url": item.get("link", "")}) for item, value in zip(items, dates)),
                    latest_publication=max(valid).isoformat() if valid else "")
+        verified = []
+        for item, published in zip(items, dates):
+            checked = item.get("evidence_checked_at")
+            if (published and published <= now and item.get("evidence_scope") == "original release excerpt"
+                    and len(item.get("description", "")) >= 80 and type(checked) in (int, float) and math.isfinite(checked)
+                    and -60 <= now.timestamp()-checked <= 21600 and checked >= published.timestamp()-60):
+                verified.append(published)
+        row.update(original_bodies=len(verified), fresh_bodies=sum(0 <= (now-value).total_seconds() <= 86400 for value in verified))
+        row["evidence_level"] = ("fresh original body" if row["fresh_bodies"] else "dated original body" if verified else
+                                 "dated listing" if valid else "publication unverified")
         row.update(status="limited" if row["undated"] or mismatches else "available",
                    reason=f"{row['undated']} original publication clocks unverified" if row["undated"] else "No fresh dated reports" if not row["fresh"] else "Fresh dated reports available; editorial review still required")
         if mismatches:
@@ -598,9 +614,7 @@ def describe_source(source: dict, payload, now: datetime) -> dict:
             row["reason"] += "; release links read from official newsroom homepage"
         if source.get("format") == "alphabet" and payload.get("publication_problems"):
             row.update(status="limited", reason="Original Alphabet release text unavailable: " + str(payload["publication_problems"][0])[:150])
-        if source.get("requires_original_body") and any(
-                date and 0 <= (now-date).total_seconds() <= 86400 and item.get("evidence_scope") != "original release excerpt"
-                for item, date in zip(items, dates)):
+        if source.get("requires_original_body") and row["fresh_bodies"] < row["fresh"]:
             row.update(status="limited", reason="Fresh publisher release text unavailable; original body verification required")
         if row["undated"] and not source.get("format") and not any(dates):
             root = ET.fromstring(payload.get("body", ""))
@@ -625,6 +639,11 @@ def coverage_summary(rows: list[dict]) -> str:
     text = f"Original sources: {available}/{len(rows)} available; {len(rows) - available} limited; {fresh} fresh dated reports before editorial selection."
     if any("body_reads" in row for row in rows):
         text += f" Original article reads: {sum(row.get('body_reads', 0) for row in rows)} verified; {sum(row.get('body_limited', 0) for row in rows)} limited."
+    if any("evidence_level" in row for row in rows):
+        issuers = {row.get("symbol") for row in rows if row.get("symbol")}
+        dated = {row["symbol"] for row in rows if row.get("symbol") and row.get("dated", 0)}
+        bodies = {row["symbol"] for row in rows if row.get("symbol") and row.get("fresh_bodies", 0)}
+        text += f" Issuer coverage: {len(dated)}/{len(issuers)} companies have a dated route; {len(bodies)} have a fresh original body."
     return text
 
 

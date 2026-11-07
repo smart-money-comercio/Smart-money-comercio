@@ -45,6 +45,7 @@ OFFICIAL_DOMAINS = {
     "NOC": ("northropgrumman.com",), "LMT": ("lockheedmartin.com",),
     "RTX": ("rtx.com",), "AMZN": ("amazon.com", "aboutamazon.com"),
     "CACI": ("caci.com",),
+    "ETN": ("eaton.com",),
     "AAPL": ("apple.com",), "META": ("meta.com",),
     "GOOG": ("google.com", "abc.xyz"), "GOOGL": ("google.com", "abc.xyz"),
 }
