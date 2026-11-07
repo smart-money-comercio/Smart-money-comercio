@@ -196,10 +196,17 @@ def _from_admitted_text(story: dict, text: str, scope: str, *, schema: int | Non
     from src.intelligence.treasury_financing import document_kind, financing_facts
     from src.intelligence.defense_program import applicable, program_facts, material
     from src.intelligence import refinery_mix
-    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema in {8, 9, 10, 11} and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story):
+    from src.intelligence import disclosure_details
+    if type(schema) is not int or schema not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13} or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema in {8, 9, 10, 11, 12, 13} and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
         raise ValueError("Unknown original story evidence scope")
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
-    if schema == 11:
+    if schema in {12, 13}:
+        family = "maintenance" if schema == 12 else "financial sanctions"
+        kind, stage = ("maintenance certification", "company-reported designation") if schema == 12 else ("financial sanctions", "designations announced")
+        facts = (disclosure_details.maintenance_facts if schema == 12 else disclosure_details.sanctions_facts)(story, text)
+        if not disclosure_details.material(facts, family):
+            raise ValueError("Original " + family + " facts are incomplete or ambiguous")
+    elif schema == 11:
         kind, stage = "refinery product mix", "dated observation"
         facts = refinery_mix.product_facts(story, text)
     elif schema == 10:
@@ -238,6 +245,9 @@ def checked_evidence(story: dict) -> dict:
 
 def investor_read(story: dict) -> dict:
     evidence = checked_evidence(story)
+    if evidence["schema"] in {12, 13}:
+        from src.intelligence.disclosure_details import review
+        return review(evidence)
     if evidence["schema"] == 11:
         from src.intelligence.refinery_mix import review
         return review(evidence)

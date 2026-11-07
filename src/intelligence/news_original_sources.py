@@ -387,14 +387,14 @@ def retrieve(source: dict, fetch, now: datetime) -> dict:
                     problems.append(str(exc)[:160])
         except (ValueError, KeyError, TypeError, UnicodeError) as exc:
             problems.append(str(exc)[:160])
-            if source["format"] == "treasury":
+            if source["format"] == "treasury" or source.get("company_symbol") == "NOC":
                 row["published"] = ""
-    return {**payload, "url": source["url"], "final_url": source["url"], "original_profile": 3 if source.get("newsroom_home_fallback") else 2,
+    return {**payload, "url": source["url"], "final_url": source["url"], "original_profile": 4 if source.get("newsroom_home_fallback") else 2,
             "articles": rows, "publication_problems": list(dict.fromkeys(problems))[:3]}
 
 
 def cached_items(payload: dict, source: dict) -> list[dict]:
-    if type(payload.get("original_profile")) is not int or payload.get("original_profile") not in (1, 2, 3) or not isinstance(payload.get("articles"), list):
+    if type(payload.get("original_profile")) is not int or payload.get("original_profile") not in (1, 2, 3, 4) or not isinstance(payload.get("articles"), list):
         raise ValueError("Publisher index has not been parsed by the original-source reader")
     rows = []
     for item in payload["articles"][:MAX_ARTICLES]:

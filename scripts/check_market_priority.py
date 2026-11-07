@@ -281,7 +281,7 @@ class EditionChecks(IsolatedChecks):
 
     def test_new_report_and_private_schema2_export_pass_all_budgets(self):
         report,record=self.render();episode=voice.episode(record,NOW)
-        self.assertEqual(record["rules_version"],26);self.assertEqual(record["analyst_review"]["reader_version"],4)
+        self.assertEqual(record["rules_version"],27);self.assertEqual(record["analyst_review"]["reader_version"],4)
         self.assertTrue(validate_news_brief(report)["passes"]);self.assertTrue(record["voiceover"]["quality"]["passes"])
         self.assertEqual(episode["voiceover_schema"],2);self.assertEqual(episode["mode"],"draft_review_required")
 

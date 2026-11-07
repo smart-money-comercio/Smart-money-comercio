@@ -68,6 +68,13 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    if story.get("disclosure_version") == 1 or story.get("event_evidence", {}).get("schema") in {12, 13}:
+        from src.intelligence.disclosure_details import family, material
+        category = family(story)
+        profile = story.get("event_evidence", {})
+        if category:
+            expected = 12 if category == "maintenance" else 13
+            return ("defense sustainment" if category == "maintenance" else "financial sanctions") if profile.get("schema") == expected and material(checked_evidence(story)["facts"], category) else ""
     from src.intelligence import refinery_mix
     if refinery_mix.applicable(story) and story.get("event_evidence", {}).get("schema") in {None,11}:
         return "energy" if story.get("event_evidence", {}).get("schema") == 11 and primary_source(story) and refinery_mix.material(checked_evidence(story)["facts"]) else ""
@@ -358,6 +365,9 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                  "publisher_symbol": raw.get("publisher_symbol", ""),
                  "source_checked_at": raw.get("source_checked_at"), "decision": "wait", "reason": "Source checks pending"}
         story["id"] = hashlib.sha256(json.dumps([story["title"], story["url"], story["published"]]).encode()).hexdigest()[:16]
+        from src.intelligence.disclosure_details import family as disclosure_family
+        if disclosure_family(story):
+            story["disclosure_version"] = 1
         if raw.get("ipo") is not None:
             story["ipo"] = deepcopy(raw["ipo"])
         if raw.get("sec_filing") is not None:
@@ -399,6 +409,10 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             from src.intelligence.refinery_mix import applicable as product_mix
             if (raw.get("requires_original_body") or product_mix(story)) and (raw.get("excerpt_scope") != "original release excerpt" or len(raw.get("source_excerpt", "")) < 80):
                 raise ValueError("Original publisher release body must match its listed title and publication time")
+            if story.get("disclosure_version") == 1 and (raw.get("excerpt_scope") != "original release excerpt" or len(raw.get("source_excerpt", "")) < 80):
+                raise ValueError("Original disclosure body is required for maintenance or financial-sanctions facts")
+            if story.get("publisher_symbol") == "NOC" and raw.get("discovery_evidence") and raw["discovery_evidence"].get("scope") != "original release excerpt":
+                raise ValueError("Original Northrop discovery text needs a scoped article-body review")
             story["published"] = published.isoformat()
             story["source_check"] = "pass"
         except (ValueError, TypeError, OverflowError) as exc:
@@ -412,6 +426,9 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 from src.intelligence.story_analysis import release_text
                 from src.intelligence.energy_analysis import solar_storage_report
                 text = release_text(raw.get("source_excerpt", ""))
+                if story.get("publisher_symbol") == "NOC":
+                    from src.intelligence.northrop_newsroom import check_dateline
+                    check_dateline(text, story["published"])
                 observed = raw.get("evidence_checked_at") or story["source_checked_at"]
                 evidence_clock = dated(observed)
                 if not -60 <= (now-evidence_clock).total_seconds() <= MAX_CACHE_AGE or (published-evidence_clock).total_seconds() > 60:
@@ -424,7 +441,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                     from src.intelligence.treasury_financing import document_kind
                     from src.intelligence.defense_program import program_facts, material
                     from src.intelligence.refinery_mix import applicable as product_mix
-                    profile = 11 if product_mix(story) else 9 if document_kind(story) else 10 if material(program_facts(story, text)) else 8
+                    category = disclosure_family(story)
+                    profile = 12 if category == "maintenance" else 13 if category == "financial sanctions" else 11 if product_mix(story) else 9 if document_kind(story) else 10 if material(program_facts(story, text)) else 8
                     story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=profile)
                     checked_evidence(story)
             except (ValueError, TypeError, OverflowError) as exc:
@@ -515,7 +533,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
-            if story.get("event_evidence", {}).get("schema") not in {8, 9, 10, 11}:
+            if story.get("event_evidence", {}).get("schema") not in {8, 9, 10, 11, 12, 13}:
                 story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
@@ -525,7 +543,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
-        result.update(rules_version=26, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=27, earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -700,7 +718,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
-         + f"; {sum(story.get('event_evidence', {}).get('schema') in {8, 9, 10, 11} for story in value['candidates'])} original article materiality reviews"
+         + f"; {sum(story.get('event_evidence', {}).get('schema') in {8, 9, 10, 11, 12, 13} for story in value['candidates'])} original article materiality reviews"
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
     if broadcast and (analyst_review or {}).get("reader_version") in {1, 2, 3, 4}:
@@ -890,7 +908,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Disclosed excerpt facts: " + review["facts"])
                     if review.get("undisclosed"):
                         lines.append("Not specified in reviewed text: " + "; ".join(review["undisclosed"]))
-                    if event.get("schema") in {8, 9, 10, 11}:
+                    if review.get("not_established"):
+                        lines.append("Not established by these extracted facts: " + "; ".join(review["not_established"]))
+                    if event.get("schema") in {8, 9, 10, 11, 12, 13}:
                         for fact in event["facts"]:
                             lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]

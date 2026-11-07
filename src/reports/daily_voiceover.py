@@ -104,6 +104,9 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
         return filing["issuer"] + " disclosed financing terms in a current SEC report. " + narration(story)
     review = company_read(story) if story["kind"] == "company" else investor_read(story)
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
+    if profile["schema"] in {12, 13}:
+        from src.intelligence.disclosure_details import summary
+        return summary(profile, NAMES.get(story.get("publisher_symbol"), story["source"])) + " " + review["why"]
     if profile["schema"] == 11:
         return review["facts"] + " " + review["why"]
     if profile["schema"] == 10:
@@ -240,7 +243,7 @@ def build(record, report, research, *, schema=2):
         calendar_ids.append(key)
 
     def add(heading, text, bullets=(), source_ids=()):
-        text = normalize(text, brand_names=record.get("rules_version", 0) >= 21, agency_names=refined)
+        text = normalize(text, brand_names=record.get("rules_version", 0) >= 21, agency_names=refined, disclosure_names=record.get("rules_version", 0) >= 27)
         if not text: return
         scenes.append({"heading":heading, "narration":text, "bullets":list(bullets)[:3], "source_ids":list(source_ids)})
 

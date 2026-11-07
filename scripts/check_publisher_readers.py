@@ -124,7 +124,7 @@ class NorthropChecks(unittest.TestCase):
         value,calls = self.retrieve()
         self.assertEqual(calls,[NORTHROP["url"],noc.HOME,NOC_URL])
         self.assertEqual(value["index_discovery_url"],noc.HOME)
-        self.assertEqual(value["original_profile"],3)
+        self.assertEqual(value["original_profile"],4)
         rows = originals.cached_items(value,NORTHROP)
         self.assertEqual(rows[0]["evidence_scope"],"original release excerpt")
         self.assertIn("synthetic test",rows[0]["description"])
@@ -214,10 +214,10 @@ class NorthropChecks(unittest.TestCase):
         self.assertEqual(health["status"],"limited");self.assertEqual(health["fresh"],0)
 
     def test_upgraded_reader_reprocesses_old_positive_cache_without_touching_http_cooldowns(self):
-        old = payload(NORTHROP["url"],original_profile=2,articles=[])
-        updated = {**old,"original_profile":3}
+        old = payload(NORTHROP["url"],original_profile=3,articles=[])
+        updated = {**old,"original_profile":4}
         with patch.object(feeds,"get_cached_source",return_value=old),patch.object(originals,"retrieve",return_value=updated) as read,patch.object(feeds,"set_cached_source"):
-            self.assertEqual(feeds.fetch_source(NORTHROP)["original_profile"],3);self.assertEqual(read.call_count,1)
+            self.assertEqual(feeds.fetch_source(NORTHROP)["original_profile"],4);self.assertEqual(read.call_count,1)
         failed = payload(NORTHROP["url"],status="error",error="HTTPError 403",retry_after_epoch=READ_NOW.timestamp()+3600)
         with patch.object(feeds,"get_cached_source",return_value=failed),patch.object(originals,"retrieve",side_effect=AssertionError("Cooldown must be respected")):
             self.assertEqual(feeds.fetch_source(NORTHROP,True)["retry_after_epoch"],failed["retry_after_epoch"])
@@ -249,7 +249,7 @@ class NarrationChecks(IsolatedChecks):
 
     def test_source_references_review_requirement_and_schema2_remain_intact(self):
         _,record = self.render();episode = voice.episode(record,NOW)
-        self.assertEqual(record["rules_version"],26);self.assertEqual(episode["voiceover_schema"],2)
+        self.assertEqual(record["rules_version"],27);self.assertEqual(episode["voiceover_schema"],2)
         self.assertTrue(episode["review_required"]);self.assertEqual(episode["mode"],"draft_review_required")
         used = {key for scene in episode["segments"] for key in scene["source_ids"]}
         self.assertEqual(used,set(episode["sources"]))

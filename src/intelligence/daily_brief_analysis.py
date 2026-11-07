@@ -96,7 +96,7 @@ def report_evidence(report: str) -> dict:
             "source_sections": [key for key in ("Executive Summary", "Market Snapshot", "What Changed Today", "Top Opportunities", "Trade Plan Snapshot") if sections.get(key)]}
 
 
-def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None, narration_version: int = 1, event_context: dict | None = None, reader_version: int = 0, reader_limit: int = 3, earnings_context: list | None = None) -> dict:
+def analyze_report(report: str, stories: list[dict] | None = None, *, presentation: str = "full", focus_context: dict | None = None, narration_version: int = 1, event_context: dict | None = None, reader_version: int = 0, reader_limit: int = 3, earnings_context: list | None = None, disclosure_version: int = 0) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
     if type(narration_version) is not int or narration_version not in {1, 2} or narration_version == 2 and presentation != "news":
@@ -105,7 +105,11 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         raise ValueError("Unknown reader brief version")
     if type(reader_limit) is not int or not 1 <= reader_limit <= 3:
         raise ValueError("Invalid reader watch-signal limit")
+    if type(disclosure_version) is not int or disclosure_version not in {0, 1} or disclosure_version and (presentation != "news" or narration_version != 2):
+        raise ValueError("Unknown disclosure presentation version")
     evidence = report_evidence(report)
+    if disclosure_version:
+        evidence["disclosure_version"] = disclosure_version
     if event_context is not None:
         from src.intelligence.market_event_desk import checked_context
         generated = re.search(r"^Generated: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\S+)$", report, re.M)
@@ -144,7 +148,7 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
             from src.intelligence.story_analysis import checked_evidence
             checked_evidence(story)
             evidence["stories"][-1].update({key: deepcopy(story[key]) for key in (
-                "event_evidence", "materiality", "evidence_checked_at", "source_checked_at") if key in story})
+                "event_evidence", "materiality", "evidence_checked_at", "source_checked_at", "disclosure_version") if key in story})
     if presentation == "news":
         evidence["stories"].sort(key=lambda story: story["id"])
     if evidence["stories"]:
@@ -177,6 +181,8 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         value["reader_limit"] = reader_limit
     if earnings_context is not None:
         value["earnings_context"] = deepcopy(earnings_context)
+    if disclosure_version:
+        value["disclosure_version"] = disclosure_version
     return value
 
 
@@ -188,8 +194,8 @@ def retained_review(analysis: dict, report: str) -> dict:
 
 
 def validate_review(analysis: dict, research_report: str, report: str, stories: list[dict] | None = None) -> None:
-    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"), narration_version=analysis.get("narration_version", 1), event_context=analysis.get("event_context"), reader_version=analysis.get("reader_version", 0), reader_limit=analysis.get("reader_limit", 3), earnings_context=analysis.get("earnings_context"))
-    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version", "event_context", "reader_version", "reader_limit", "earnings_context")):
+    expected = analyze_report(research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"), narration_version=analysis.get("narration_version", 1), event_context=analysis.get("event_context"), reader_version=analysis.get("reader_version", 0), reader_limit=analysis.get("reader_limit", 3), earnings_context=analysis.get("earnings_context"), disclosure_version=analysis.get("disclosure_version", 0))
+    if any(analysis.get(key) != expected.get(key) for key in ("schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version", "event_context", "reader_version", "reader_limit", "earnings_context", "disclosure_version")):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
     seen = set()

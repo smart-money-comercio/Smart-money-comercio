@@ -132,13 +132,15 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
         raise ValueError("Original report has a date-only clock")
     parser = VisibleText(); parser.feed(text)
     visible = " ".join("".join(parser.parts).split())[:6000]
-    if fed_statement or publisher["name"] == "U.S. Treasury" or kratos:
+    if fed_statement or publisher["name"] == "U.S. Treasury" or kratos or publisher["symbol"] == "NOC":
         from src.intelligence.news_original_sources import article_excerpt
         visible = " ".join(article_excerpt(text, page.title, published.isoformat(), publisher=publisher["name"], url=url).split())
     if not visible:
         raise ValueError("Original report text unavailable")
     proof = {"schema": 1, "url": url, "title": page.title, "published": published.isoformat(), "observed": now.isoformat(),
              "publisher": publisher, "text": visible, "sha256": hashlib.sha256(visible.encode()).hexdigest()}
+    if publisher["symbol"] == "NOC":
+        proof["scope"] = "original release excerpt"
     return {"title": page.title, "original_title": page.title, "url": url, "published": published.isoformat(),
             "source_checked_at": now.isoformat(), "source": publisher["name"], "official": True,
             "publisher_symbol": publisher["symbol"], "symbol": publisher["symbol"],

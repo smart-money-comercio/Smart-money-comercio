@@ -1,6 +1,7 @@
 """Northrop's public newsroom cards and explicit original-publication field."""
 
 from html.parser import HTMLParser
+from datetime import datetime
 import re
 from urllib.parse import urljoin, urlsplit
 
@@ -96,3 +97,29 @@ def publication_dates(body, title, url, page):
             or not fields.urls or not all(same_page(value, url) for value in fields.urls)):
         raise ValueError("Original Northrop release title or canonical URL does not match")
     return fields.clocks
+
+
+def check_dateline(text, published):
+    """A newer CMS clock cannot silently replace an explicit release dateline."""
+    match = re.search(r"\b[A-Z][A-Za-z .,'\u2019-]{1,100}\s*[-\u2013\u2014]\s*"
+                      r"((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+20\d{2})"
+                      r"\s*[-\u2013\u2014]\s*(?:\(PHOTO RELEASE\)\s*)?Northrop Grumman\b", text[:2500])
+    if not match:
+        return
+    value = re.sub(r"\s+", " ", match[1].replace(".", ""))
+    value = re.sub(r"^Sept\b", "Sep", value)
+    try:
+        day = datetime.strptime(value, "%B %d, %Y").date()
+    except ValueError:
+        day = datetime.strptime(value, "%b %d, %Y").date()
+    at = timestamp(published)
+    from src.intelligence.special_alert_sources import NY
+    if at is None or day not in {at.date(), at.astimezone(NY).date()}:
+        raise ValueError("Original Northrop dateline date conflicts with publication metadata")
+
+
+def check_page_dateline(body, published, url):
+    from src.intelligence.news_original_sources import ArticleBody
+    parser = ArticleBody("NOC", url)
+    parser.feed(body)
+    check_dateline(" ".join("".join(parser.parts).split()), published)

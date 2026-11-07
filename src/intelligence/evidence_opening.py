@@ -34,6 +34,12 @@ def opening_source(evidence):
             watch = ("The next disclosed program gate is " + fields["next_program_gate"] + "." if "next_program_gate" in fields else
                      "Watch further test results and funded delivery plans.")
             priority = 3
+        elif profile["schema"] == 12:
+            from src.intelligence.disclosure_details import summary, review
+            from src.intelligence.original_disclosures import sentences
+            text = sentences(summary(profile, name))[0]
+            watch = review(profile)["watch"]
+            priority = 3
         elif profile["event"] == "earnings":
             field = next((key for key in ("reported_revenue", "reported_sales", "reported_net_sales") if key in fields), None)
             match = re.fullmatch(r"(\$[\d,.]+\s*(?:billion|million)?) \(([^()]+)\)", fields[field]) if field else None
@@ -112,7 +118,8 @@ def opening(evidence):
         if move < 0 and breadth and breadth["down"] > breadth["up"]:
             text += " Watch for selling to ease across the names we track."
         elif move > 0 and breadth and breadth["up"] > breadth["down"]:
-            text += " Watch whether those gains hold in this group."
+            text += (" Watch whether those gains hold in the next session." if evidence.get("disclosure_version") == 1 and not evidence["is_open"] else
+                     " Watch whether those gains hold in this group.")
     else:
         text += " Watch participation across the names we track and the next company results."
     return text
@@ -130,6 +137,14 @@ def watching(evidence):
         for story in evidence.get("stories", []):
             profile = story.get("event_evidence", {})
             fields = {row["field"]:row["value"] for row in profile.get("facts", [])}
+            if profile.get("schema") == 12:
+                from src.intelligence.disclosure_details import review
+                name = NAMES.get(story.get("publisher_symbol"), story["source"])
+                label = name + "'s maintenance opportunity"
+                text = label + ": " + review(profile)["watch"]
+                rows = [row for row in rows if row["id"] not in {"watch_business", "watch_event"}]
+                rows.insert(1 if rows else 0, {"id":"watch_business", "section":"watch", "text":text, "sources":["Verified story decisions"]})
+                break
             if profile.get("schema") != 10 or "next_program_gate" not in fields:
                 continue
             name = NAMES.get(story["publisher_symbol"],story["publisher_symbol"])
@@ -141,4 +156,7 @@ def watching(evidence):
             rows = [row for row in rows if row["id"] not in {"watch_business", "watch_event"}]
             rows.insert(1 if rows else 0,{"id":"watch_business","section":"watch","text":text,"sources":["Verified story decisions"]})
             break
+    if evidence.get("disclosure_version") == 1:
+        for row in rows:
+            row["text"] = row["text"].replace("Advanced Micro Devices's", "AMD's")
     return rows[:evidence.get("reader_limit",3)]

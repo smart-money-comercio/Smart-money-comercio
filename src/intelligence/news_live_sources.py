@@ -406,7 +406,7 @@ def fetch_source(source: dict, force_refresh: bool = False) -> dict:
     if source.get("format") not in {"palantir", "index", "treasury", "alphabet"}:
         return fetch_url(source["url"], force_refresh)
     cached = get_cached_source(source["url"])
-    profile = 3 if source.get("newsroom_home_fallback") else 2
+    profile = 4 if source.get("newsroom_home_fallback") else 2
     if cached and (cached.get("status") == "error" or not force_refresh and cached.get("original_profile") == profile):
         return {**cached, "cache_hit": True}
     try:

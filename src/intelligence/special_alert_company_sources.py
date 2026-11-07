@@ -97,7 +97,11 @@ def publication_time(body: bytes, title: str, *, url: str = "") -> datetime:
             continue
     if len(dates) != 1 or None in dates:
         raise ValueError("Original release publication timezone unavailable or ambiguous")
-    return dates.pop()
+    published = dates.pop()
+    from src.intelligence.northrop_newsroom import article_url, check_page_dateline
+    if article_url(url):
+        check_page_dateline(body.decode("utf-8"), published.isoformat(), url)
+    return published
 
 
 def palantir_news(now: datetime, config: dict) -> tuple[list[dict], str, list[str]]:

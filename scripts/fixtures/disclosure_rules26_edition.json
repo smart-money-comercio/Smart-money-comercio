@@ -1,0 +1,585 @@
+{
+  "analyst_review": {
+    "event_context": {
+      "events": [],
+      "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+      "schema": 1
+    },
+    "evidence": {
+      "breadth": {
+        "down": 11,
+        "total": 18,
+        "up": 7
+      },
+      "companies": [
+        {
+          "action": "wait",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Nvidia",
+          "opportunity": 92.0,
+          "price": null,
+          "score_risk": "Elevated",
+          "setup_risk": "Medium-High",
+          "structural": 80.1,
+          "symbol": "NVDA"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Microsoft",
+          "opportunity": 89.0,
+          "price": null,
+          "score_risk": "Controlled",
+          "setup_risk": "Medium-High",
+          "structural": 87.3,
+          "symbol": "MSFT"
+        },
+        {
+          "action": "constructive",
+          "basis": null,
+          "delta": 0.0,
+          "inputs": null,
+          "name": "Taiwan Semiconductor",
+          "opportunity": 86.0,
+          "price": null,
+          "score_risk": "Balanced",
+          "setup_risk": "Medium-High",
+          "structural": 85.4,
+          "symbol": "TSM"
+        }
+      ],
+      "company_focus": {
+        "day": "2026-10-25",
+        "featured_symbols": [
+          "GD",
+          "OXY",
+          "SBUX"
+        ],
+        "grouped_narration": 1,
+        "remaining_candidates": 34,
+        "rule": "Source quality, material developments and checked move size; recent exposure breaks remaining ties",
+        "schema": 1,
+        "selected": [
+          {
+            "basis": "sector context",
+            "group": "consumer",
+            "metric": null,
+            "name": "Starbucks",
+            "recent_days": 0,
+            "role": "Consumer watch",
+            "sources": [
+              "Executive Summary",
+              "Market Snapshot",
+              "Research theme universe"
+            ],
+            "story_id": "",
+            "symbol": "SBUX",
+            "tier": 60,
+            "watch": "Next, watch consumer demand, pricing and operating margins in the next company update.",
+            "why": "More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus."
+          },
+          {
+            "basis": "sector context",
+            "group": "defense",
+            "metric": null,
+            "name": "General Dynamics",
+            "recent_days": 0,
+            "role": "Defense industry watch",
+            "sources": [
+              "Executive Summary",
+              "Market Snapshot",
+              "Research theme universe"
+            ],
+            "story_id": "",
+            "symbol": "GD",
+            "tier": 60,
+            "watch": "Next, watch procurement approvals, funded backlog and the path from testing to production.",
+            "why": "Verified defense or global-risk reports put the sector's execution pipeline in focus."
+          },
+          {
+            "basis": "sector context",
+            "group": "energy",
+            "metric": {
+              "Oil": 4.32
+            },
+            "name": "Occidental Petroleum",
+            "recent_days": 0,
+            "role": "Energy spotlight",
+            "sources": [
+              "Executive Summary",
+              "Market Snapshot",
+              "Research theme universe"
+            ],
+            "story_id": "",
+            "symbol": "OXY",
+            "tier": 60,
+            "watch": "Next, watch realized pricing, customer investment decisions and cash flow after costs and capital spending.",
+            "why": "Oil rose 4.32 percent in the quoted session, putting the energy business backdrop in focus."
+          }
+        ]
+      },
+      "is_open": false,
+      "leadership": null,
+      "market_event_context": {
+        "events": [],
+        "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+        "schema": 1
+      },
+      "moves": {
+        "Nasdaq": -0.21,
+        "Oil": 4.32,
+        "Russell": -0.29,
+        "S&P": -0.52,
+        "TLT": -0.49,
+        "VIX": 2.21
+      },
+      "narration_version": 2,
+      "reader_limit": 3,
+      "reader_version": 4,
+      "session": "2026-10-23",
+      "source_sections": [
+        "Executive Summary",
+        "Market Snapshot",
+        "What Changed Today",
+        "Top Opportunities",
+        "Trade Plan Snapshot",
+        "Market event checks",
+        "Verified story decisions",
+        "Company focus selection"
+      ],
+      "stories": [
+        {
+          "decision": "selected",
+          "discovery_evidence": {
+            "observed": "2026-10-25T17:00:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "publisher": {
+              "domain": "northropgrumman.com",
+              "kind": "company",
+              "name": "NOC",
+              "symbol": "NOC"
+            },
+            "schema": 1,
+            "sha256": "22263a688e24d3461adc3d167c31d2a2bde2d4214db033bdabe29e582ef09513",
+            "text": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet Northrop Grumman is expanding C-130 Hercules depot-level maintenance at its Example Bay, Louisiana, facility. Northrop Grumman has been selected as a Certified Continental U.S. depot for the C-130 Hercules fleet. As a certified depot, Northrop Grumman will provide aircraft maintenance, including repair, overhaul and inspection.",
+            "title": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet",
+            "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation"
+          },
+          "event_evidence": {
+            "event": "reviewed company development",
+            "facts": [],
+            "observed_at": "2026-10-25T17:00:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "22263a688e24d3461adc3d167c31d2a2bde2d4214db033bdabe29e582ef09513",
+            "source_text": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet Northrop Grumman is expanding C-130 Hercules depot-level maintenance at its Example Bay, Louisiana, facility. Northrop Grumman has been selected as a Certified Continental U.S. depot for the C-130 Hercules fleet. As a certified depot, Northrop Grumman will provide aircraft maintenance, including repair, overhaul and inspection.",
+            "source_url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation",
+            "stage": "reported"
+          },
+          "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+          "id": "4818dbe717b02183",
+          "kind": "company",
+          "materiality": "reviewed company development",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "NOC",
+          "source": "NOC",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T17:00:00+00:00",
+          "symbols": [
+            "NOC"
+          ],
+          "title": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet",
+          "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation"
+        },
+        {
+          "decision": "selected",
+          "event_evidence": {
+            "event": "public finance",
+            "facts": [],
+            "observed_at": "2026-10-25T16:45:00+00:00",
+            "published": "2026-10-25T16:45:00+00:00",
+            "schema": 8,
+            "scope": "original release excerpt",
+            "source_sha256": "ff223659e15397e71e5da7e5ba73014e1da60b9f705660e5feab0c632c69f807",
+            "source_text": "The Department of the Treasury's Office of Foreign Assets Control (OFAC) designated three money services businesses based in Canada that handled transfers for a synthetic restricted network. These companies exchange currencies for digital assets to support international transactions. This text is synthetic fixture evidence for software validation.",
+            "source_url": "https://home.treasury.gov/news/press-releases/sb9999",
+            "stage": "reported"
+          },
+          "evidence_checked_at": "2026-10-25T16:45:00+00:00",
+          "id": "f8522bb9e2bfe797",
+          "kind": "macro",
+          "materiality": "public finance",
+          "official": true,
+          "published": "2026-10-25T16:45:00+00:00",
+          "publisher_symbol": "",
+          "source": "U.S. Treasury",
+          "source_check": "pass",
+          "source_checked_at": "2026-10-25T16:55:00+00:00",
+          "symbols": [],
+          "title": "Treasury Sanctions Three Canadian Money Services Businesses",
+          "url": "https://home.treasury.gov/news/press-releases/sb9999"
+        }
+      ]
+    },
+    "focus_context": {
+      "limit": 3,
+      "recent": [],
+      "schema": 5
+    },
+    "insights": [
+      {
+        "id": "market_pulse",
+        "section": "market",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Verified story decisions"
+        ],
+        "text": "Our indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 0.52 percent; the Nasdaq Composite fell 0.21 percent; VIX rose 2.21 percent; oil rose 4.32 percent; the TLT bond fund fell 0.49 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Verified trade-policy news warrants checking cross-border costs and supply chains against company guidance before changing exposure."
+      },
+      {
+        "id": "defense_watch",
+        "section": "global",
+        "sources": [
+          "Verified story decisions"
+        ],
+        "text": "Our view on Northrop Grumman: The reported development warrants reviewing its effect on the business and capital commitments. Next, check company disclosures, timing, execution costs and any guidance change."
+      },
+      {
+        "id": "company_focus_1",
+        "section": "company",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Research theme universe",
+          "Company focus selection"
+        ],
+        "text": "Consumer watch — Starbucks. More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus. No fresh Starbucks announcement is included in this edition. Next, watch consumer demand, pricing and operating margins in the next company update."
+      },
+      {
+        "id": "company_focus_2",
+        "section": "company",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Research theme universe",
+          "Company focus selection"
+        ],
+        "text": "Defense industry watch — General Dynamics. Verified defense or global-risk reports put the sector's execution pipeline in focus. No fresh General Dynamics announcement is included in this edition. Next, watch procurement approvals, funded backlog and the path from testing to production."
+      },
+      {
+        "id": "company_focus_3",
+        "section": "company",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot",
+          "Research theme universe",
+          "Company focus selection"
+        ],
+        "text": "Energy spotlight — Occidental Petroleum. Oil rose 4.32 percent in the quoted session, putting the energy business backdrop in focus. No fresh Occidental Petroleum announcement is included in this edition. Next, watch realized pricing, customer investment decisions and cash flow after costs and capital spending."
+      },
+      {
+        "id": "opening_takeaway",
+        "section": "intro",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot"
+        ],
+        "text": "The takeaway: All three major indexes fell in the completed session. Watch participation across the names we track and the next company results."
+      },
+      {
+        "id": "watch_participation",
+        "section": "watch",
+        "sources": [
+          "Market Snapshot",
+          "Executive Summary"
+        ],
+        "text": "Market recovery: Of the 18 stocks and funds we track, 7 finished higher and 11 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case."
+      },
+      {
+        "id": "watch_energy",
+        "section": "watch",
+        "sources": [
+          "Executive Summary",
+          "Market Snapshot"
+        ],
+        "text": "Energy costs: Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins."
+      }
+    ],
+    "narration_version": 2,
+    "presentation": "news",
+    "reader_limit": 3,
+    "reader_version": 4,
+    "research_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+    "schema": 1,
+    "score_changes": false
+  },
+  "candidates": [
+    {
+      "canonical_url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation",
+      "confirmation_check": "pass",
+      "confirmed_by": "NOC",
+      "decision": "selected",
+      "discovery_evidence": {
+        "observed": "2026-10-25T17:00:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "publisher": {
+          "domain": "northropgrumman.com",
+          "kind": "company",
+          "name": "NOC",
+          "symbol": "NOC"
+        },
+        "schema": 1,
+        "sha256": "22263a688e24d3461adc3d167c31d2a2bde2d4214db033bdabe29e582ef09513",
+        "text": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet Northrop Grumman is expanding C-130 Hercules depot-level maintenance at its Example Bay, Louisiana, facility. Northrop Grumman has been selected as a Certified Continental U.S. depot for the C-130 Hercules fleet. As a certified depot, Northrop Grumman will provide aircraft maintenance, including repair, overhaul and inspection.",
+        "title": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet",
+        "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation"
+      },
+      "event_evidence": {
+        "event": "reviewed company development",
+        "facts": [],
+        "observed_at": "2026-10-25T17:00:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "22263a688e24d3461adc3d167c31d2a2bde2d4214db033bdabe29e582ef09513",
+        "source_text": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet Northrop Grumman is expanding C-130 Hercules depot-level maintenance at its Example Bay, Louisiana, facility. Northrop Grumman has been selected as a Certified Continental U.S. depot for the C-130 Hercules fleet. As a certified depot, Northrop Grumman will provide aircraft maintenance, including repair, overhaul and inspection.",
+        "source_url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation",
+        "stage": "reported"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T17:00:00+00:00",
+      "id": "4818dbe717b02183",
+      "kind": "company",
+      "materiality": "reviewed company development",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 117,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "NOC",
+      "reason": "Original NOC report; material reviewed company development development within the edition budget",
+      "research_review": {
+        "quote": "Northrop Grumman has been selected as a Certified Continental U.S. depot",
+        "reason": "Synthetic fixture; not a live issuer report",
+        "response_id": "synthetic-test-review",
+        "score": 80
+      },
+      "source": "NOC",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T17:00:00+00:00",
+      "story_type": "announcement",
+      "symbols": [
+        "NOC"
+      ],
+      "title": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet",
+      "title_truncated": false,
+      "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation"
+    },
+    {
+      "canonical_url": "https://home.treasury.gov/news/press-releases/sb9999",
+      "confirmation_check": "pass",
+      "confirmed_by": "U.S. Treasury",
+      "decision": "selected",
+      "event_evidence": {
+        "event": "public finance",
+        "facts": [],
+        "observed_at": "2026-10-25T16:45:00+00:00",
+        "published": "2026-10-25T16:45:00+00:00",
+        "schema": 8,
+        "scope": "original release excerpt",
+        "source_sha256": "ff223659e15397e71e5da7e5ba73014e1da60b9f705660e5feab0c632c69f807",
+        "source_text": "The Department of the Treasury's Office of Foreign Assets Control (OFAC) designated three money services businesses based in Canada that handled transfers for a synthetic restricted network. These companies exchange currencies for digital assets to support international transactions. This text is synthetic fixture evidence for software validation.",
+        "source_url": "https://home.treasury.gov/news/press-releases/sb9999",
+        "stage": "reported"
+      },
+      "event_priority": 1,
+      "evidence_checked_at": "2026-10-25T16:45:00+00:00",
+      "id": "f8522bb9e2bfe797",
+      "kind": "macro",
+      "materiality": "public finance",
+      "official": true,
+      "origin": "cached RSS",
+      "priority": 105,
+      "published": "2026-10-25T16:45:00+00:00",
+      "publisher_symbol": "",
+      "reason": "Original U.S. Treasury report; material public finance development within the edition budget",
+      "source": "U.S. Treasury",
+      "source_check": "pass",
+      "source_checked_at": "2026-10-25T16:55:00+00:00",
+      "story_type": "announcement",
+      "symbols": [],
+      "title": "Treasury Sanctions Three Canadian Money Services Businesses",
+      "title_truncated": false,
+      "url": "https://home.treasury.gov/news/press-releases/sb9999"
+    }
+  ],
+  "company_schedules": [],
+  "earnings_backup_health": {
+    "reason": "No cached SEC earnings check",
+    "status": "limited"
+  },
+  "earnings_context_candidates": [],
+  "earnings_context_health": [],
+  "generated_at": "2026-10-25T17:00:00+00:00",
+  "issues": [
+    "2026-10-28: 2 publisher-scheduled releases added to incomplete Nasdaq coverage"
+  ],
+  "lead_story_id": "4818dbe717b02183",
+  "market_event_context": {
+    "events": [],
+    "report_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+    "schema": 1
+  },
+  "market_evidence": {
+    "moves": "S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.",
+    "snapshot": "Market Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted"
+  },
+  "narrated_company_schedules": [],
+  "narration_version": 2,
+  "publisher_scan_omissions": {},
+  "ranking_date": "2026-10-23",
+  "reader_version": 4,
+  "report_sha256": "9b4212a95154b2e87fa21af40cfff8b4a10114f081e4f331a4e9ad2141e094bf",
+  "report_text": "Smart Money Daily News Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\nMarket data: completed regular session 2026-10-23\n\nGood afternoon.\n\nThe takeaway: All three major indexes fell in the completed session. Watch participation across the names we track and the next company results.\n\nGlobal and Defense Watch\nNorthrop Grumman's October 25 announcement: “Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet”.\n\nOur view on Northrop Grumman: The reported development warrants reviewing its effect on the business and capital commitments. Next, check company disclosures, timing, execution costs and any guidance change.\n\nMarket Update\nOur indicator-based sentiment read is cautious. At the Friday, October 23 regular-session close, the S&P 500 fell 0.52 percent; the Nasdaq Composite fell 0.21 percent; VIX rose 2.21 percent; oil rose 4.32 percent; the TLT bond fund fell 0.49 percent. TLT tracks bond prices; yields are unverified. Portfolio lens: Verified trade-policy news warrants checking cross-border costs and supply chains against company guidance before changing exposure.\n\nPolicy & Economy\nU.S. Treasury's October 25 announcement: “Treasury Sanctions Three Canadian Money Services Businesses”. Review the original report for scope and context.\n\nCompanies in Focus\nConsumer watch — Starbucks. More names fell than rose in the 18-symbol quoted watchlist, putting resilience in focus. No fresh Starbucks announcement is included in this edition. Next, watch consumer demand, pricing and operating margins in the next company update.\n\nDefense industry watch — General Dynamics. Verified defense or global-risk reports put the sector's execution pipeline in focus. No fresh General Dynamics announcement is included in this edition. Next, watch procurement approvals, funded backlog and the path from testing to production.\n\nEnergy spotlight — Occidental Petroleum. Oil rose 4.32 percent in the quoted session, putting the energy business backdrop in focus. No fresh Occidental Petroleum announcement is included in this edition. Next, watch realized pricing, customer investment decisions and cash flow after costs and capital spending.\n\nWhat's Ahead\nThe publisher schedule lists the Federal Reserve's interest-rate decision for Wednesday, October 28 at 02:00 PM EDT.\n\nWhy it matters: Watch the Fed's guidance on the rate outlook and what it could mean for growth-company financing and valuations.\n\nCalendar or company-news coverage is incomplete; unverified dates and times remain uncertain.\n\nWhat We're Watching\nMarket recovery: Of the 18 stocks and funds we track, 7 finished higher and 11 lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case.\n\nEnergy costs: Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins.\n\nResearch Notes\nThe full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans\n\nSources and full evidence: /storylog · /catalysts · /calendar · /specialalerts\n\nResearch only. Not financial advice.",
+  "research_sha256": "f21a2497bc0de59384097574524da353e12f3173343226ad19836300b9cb8536",
+  "research_text": "📊 Smart Money AI Daily Report\n\n\nDaily Brief\nDate: October 25, 2026\nGenerated: 2026-10-25 13:00:00 America/New_York\n\nGood afternoon.\n\n\nExecutive Summary\n- Main theme: Oil / inflation risk.\n- Market moves: S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.\n\nIntelligence Used Today\n- Smart Money Summary, Trade Plan Snapshot, News Intelligence, Alert Monitor, StockAnalysis, Alert Settings, Watchlist Evolution, and Market Memory are feeding today's report. Calendar Evidence: active. Company Catalysts: active. Document Research: active.\n\n\nWhat Changed Today\n• Leadership changed.\n• Confirmation matters.\n• New themes emerging.\n\n\nTheme Read\n• Research Opinion (2026-09-30): AI infrastructure spending supports chip demand, while debt funding adds financing risk. [Empower Q3 2026, p9]\n• Market check: unavailable; current yields, price and volume need confirmation.\n• Theme history is building.\n\n\nMarket Snapshot\nMarket Session: Closed — weekend. Price moves reflect the last completed regular session.\nQuote session: 2026-10-23\nTone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted\n\nEarnings & Economic Calendar\nEconomic release times: timezone unverified.\nFull calendar: /weeklycalendar\n\n\nPortfolio Read\n• NVDA is the cleanest ranked setup today, but it still needs price/volume confirmation before action.\n\n\nPortfolio Allocation Snapshot\nPosture: Watchlist.\n\n\nWatchlist Movers\nRelevant research universe: 3 symbols\nMSFT, TSM, NVDA\n\nLive movement data is unavailable.\n\n\nTop Opportunities\n1. NVDA - Opportunity 92.0/100 | Structural 80.1/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-29; company confirmation pending\n   Score Risk: Elevated | Action: Watch Closely\n   Full review: /tradeplan NVDA\n\n2. MSFT - Opportunity 89.0/100 | Structural 87.3/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; earnings estimate 2026-10-28; company confirmation pending\n   Score Risk: Controlled | Action: Watch Closely\n   Full review: /tradeplan MSFT\n\n3. TSM - Opportunity 86.0/100 | Structural 85.4/100 | unchanged\n   Price: unavailable | News signals: 0\n   Why now: structural conviction remains the main driver; dated catalyst not established in cached coverage\n   Score Risk: Balanced | Action: Watch Closely\n   Full review: /tradeplan TSM\n\n\nFastest-Rising Opportunities\nNo meaningful positive opportunity-score changes versus the prior report.\n\n\nRisk Notes\n• Sizing risk: keep entries smaller on NVDA.\n\n\nSmart Money Summary\nSignal: market tone is quote data unavailable.\nImplication: Review.\nValidation: Confirm.\n\n\nTrade Plan Snapshot\nTop action reads from today's leading opportunities. Score Risk reflects scoring support; Setup Risk reflects score and theme caution.\n\n1. NVDA — Medium conviction, 80.1/100 | Score Risk: Elevated | Setup Risk: Medium-High | Action: Watchlist — wait for better confirmation Entry: Wait for price, volume, and news confirmation. Full plan: /tradeplan NVDA\n2. MSFT — Medium-High conviction, 87.3/100 | Score Risk: Controlled | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan MSFT\n3. TSM — Medium-High conviction, 85.4/100 | Score Risk: Balanced | Setup Risk: Medium-High | Action: Constructive — favored on confirmed strength Entry: Use pullbacks or confirmed breakouts. Full plan: /tradeplan TSM\n\n\nAction Checklist\n• /scorecard NVDA — validate the top-ranked setup.\n• /volume NVDA — confirm whether money flow supports the score.\n\n\nNext Commands\n/tradeplans\n/tradeplan SYMBOL\n/scorecard SYMBOL\n/top10\n/weeklycalendar\n/global\n/contextstatus\n/summarypreview · /catalysts\n/allocation\n\n\nNotes\nResearch only. Not financial advice.",
+  "rules_version": 26,
+  "schema": 1,
+  "source_health": [],
+  "stages": [
+    {
+      "detail": "2 candidates from cached public evidence",
+      "name": "Scan",
+      "status": "pass"
+    },
+    {
+      "detail": "0 held; original publication dates and HTTPS URLs checked",
+      "name": "Source Check",
+      "status": "limited"
+    },
+    {
+      "detail": "Material company developments and macro releases; original-source reports required",
+      "name": "Relevance",
+      "status": "pass"
+    },
+    {
+      "detail": "2 selected / 0 skipped; one story per represented company",
+      "name": "Selection",
+      "status": "pass"
+    },
+    {
+      "detail": "Original publisher, materiality, dates and complete selected wording checked; 1 event-specific company reviews and 0 sourced fact fields; 2 original article materiality reviews; 8 analyst insights matched to this edition's market, ranking and trade-plan evidence",
+      "name": "Editorial Review",
+      "status": "pass"
+    },
+    {
+      "detail": "Built edition and source decisions recorded; this is not a delivery receipt",
+      "name": "Decision Log",
+      "status": "pass"
+    }
+  ],
+  "story_narrations": {
+    "4818dbe717b02183": "Northrop Grumman's October 25 announcement: “Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet”.",
+    "f8522bb9e2bfe797": "U.S. Treasury's October 25 announcement: “Treasury Sanctions Three Canadian Money Services Businesses”. Review the original report for scope and context."
+  },
+  "truncated_candidates": 0,
+  "voiceover": {
+    "input_sha256": "c70de8ec8b748cd55117f052b904073e705aaeab3f4f5b945a5d7c8e1d7762ec",
+    "quality": {
+      "editorial_words": 232,
+      "estimated_seconds": 91.9,
+      "market_estimated_seconds": 23.6,
+      "market_words": 63,
+      "passes": true,
+      "words": 245,
+      "words_per_minute": 160
+    },
+    "schema": 2,
+    "script": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the completed session. Watch participation across the names we track and the next company results.\n\nFirst, the market. At the close on Friday, October twenty third, the S and P five hundred fell zero point five two percent, the Nasdaq fell zero point two one percent, and oil rose four point three two percent. Volatility rose. Our read is cautious. Verified trade-policy news warrants checking cross-border costs and supply chains against company guidance before changing exposure.\n\nIn defense and innovation. Northrop Grumman facility Selected as Certified US Maintenance Depot for C-one hundred thirty Hercules Fleet. The reported development warrants reviewing its effect on the business and capital commitments.\n\nLooking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.\n\nHere are the next checks. First, market recovery. Of the eighteen stocks and funds we track, seven finished higher and eleven lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case. Second, energy costs. Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins.\n\nSubscribe to Smart Money for more market research. Research only. Not financial advice.",
+    "script_sha256": "8223210da0a131c04dfb203be91500bbe9a9e2b6154b63a36b691c6b85a289b1",
+    "segments": [
+      {
+        "bullets": [
+          "All three major indexes fell in the completed session.",
+          "Watch participation across the names we track and the next company results."
+        ],
+        "heading": "The Takeaway",
+        "narration": "Good afternoon. This is Smart Money for October twenty fifth. The key takeaway. All three major indexes fell in the completed session. Watch participation across the names we track and the next company results.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "S&P: -0.52%",
+          "Nasdaq: -0.21%",
+          "VIX: +2.21%"
+        ],
+        "heading": "Market Update",
+        "narration": "First, the market. At the close on Friday, October twenty third, the S and P five hundred fell zero point five two percent, the Nasdaq fell zero point two one percent, and oil rose four point three two percent. Volatility rose. Our read is cautious. Verified trade-policy news warrants checking cross-border costs and supply chains against company guidance before changing exposure.",
+        "source_ids": [
+          "f8522bb9e2bfe797"
+        ]
+      },
+      {
+        "bullets": [
+          "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet"
+        ],
+        "heading": "Defense and Innovation",
+        "narration": "In defense and innovation. Northrop Grumman facility Selected as Certified US Maintenance Depot for C-one hundred thirty Hercules Fleet. The reported development warrants reviewing its effect on the business and capital commitments.",
+        "source_ids": [
+          "4818dbe717b02183"
+        ]
+      },
+      {
+        "bullets": [
+          "The Federal Reserve's interest-rate decision for Wed, Oct 28 at 2:00 PM EDT"
+        ],
+        "heading": "What's Ahead",
+        "narration": "Looking ahead. Watch the Federal Reserve's interest-rate decision for Wednesday, October twenty eighth at two in the afternoon, Eastern Daylight Time.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Of the 18 stocks and funds we track, 7 finished higher and 11 lower.",
+          "Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills."
+        ],
+        "heading": "What We're Watching",
+        "narration": "Here are the next checks. First, market recovery. Of the eighteen stocks and funds we track, seven finished higher and eleven lower. In the next session, watch for fewer declines and more gains in this group. That would suggest selling is easing; renewed declines would weaken the recovery case. Second, energy costs. Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins.",
+        "source_ids": []
+      },
+      {
+        "bullets": [
+          "Research only",
+          "Not financial advice"
+        ],
+        "heading": "Closing",
+        "narration": "Subscribe to Smart Money for more market research. Research only. Not financial advice.",
+        "source_ids": []
+      }
+    ],
+    "sources": {
+      "4818dbe717b02183": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "NOC",
+          "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation",
+          "verified_at": "2026-10-25T17:00:00+00:00"
+        }
+      ],
+      "f8522bb9e2bfe797": [
+        {
+          "published_at": "2026-10-25T16:45:00+00:00",
+          "publisher": "U.S. Treasury",
+          "url": "https://home.treasury.gov/news/press-releases/sb9999",
+          "verified_at": "2026-10-25T16:55:00+00:00"
+        }
+      ]
+    }
+  },
+  "id": "d43958836cc5f12558a0"
+}

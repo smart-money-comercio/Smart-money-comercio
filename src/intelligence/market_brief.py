@@ -27,7 +27,10 @@ def story_topics(story: dict) -> set[str]:
         topics.add("defense")
     if re.search(r"\b(innovations?|introduces?|launch(?:es)?|unveils?|prototype|demonstrat\w*|flight test|autonomous|quantum|new .{0,25}(?:chip|platform|system))\b", title, re.I):
         topics.add("innovation")
-    if re.search(r"\b(export (?:ban|restrictions?|controls?)|sanctions?|tariffs?|trade restrictions?)\b", title, re.I):
+    financial = story.get("event_evidence", {}).get("schema") == 13
+    if financial:
+        topics.add("financial sanctions")
+    if re.search(r"\b(export (?:ban|restrictions?|controls?)|" + ("" if financial else "sanctions?|") + r"tariffs?|trade restrictions?)\b", title, re.I):
         topics.add("trade")
     if re.search(r"\b(chips?|semiconductors?|AI accelerators?)\b", title, re.I):
         topics.add("chips")
@@ -70,6 +73,8 @@ def portfolio_lens(moves: dict, topics: set[str], mood: str, *, pressure_first=F
         return "Verified policy news warrants checking financing costs and growth-company valuations alongside current price and volume."
     if "energy" in topics or moves.get("Oil", 0) >= 1.5:
         return "Higher energy costs could squeeze margins; review growth exposure and businesses sensitive to fuel costs."
+    if "financial sanctions" in topics:
+        return "Targeted financial sanctions call for checking payment and counterparty exposure. Company disclosures are needed to assess any effect on sales or costs."
     if "IPO" in topics:
         return "AI IPO news adds a valuation comparison; review capital needs and AI exposure. A filing alone does not establish tradable shares."
     if "AI financing" in topics:
