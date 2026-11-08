@@ -249,7 +249,7 @@ class NarrationChecks(IsolatedChecks):
 
     def test_source_references_review_requirement_and_schema2_remain_intact(self):
         _,record = self.render();episode = voice.episode(record,NOW)
-        self.assertEqual(record["rules_version"],29);self.assertEqual(episode["voiceover_schema"],2)
+        self.assertEqual(record["rules_version"],30);self.assertEqual(episode["voiceover_schema"],2)
         self.assertTrue(episode["review_required"]);self.assertEqual(episode["mode"],"draft_review_required")
         used = {key for scene in episode["segments"] for key in scene["source_ids"]}
         self.assertEqual(used,set(episode["sources"]))

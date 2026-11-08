@@ -5,6 +5,7 @@ from src.commands.premarket_commands import premarket_command
 from src.commands.company_catalyst_commands import catalysts_command, fullreport_command
 from src.commands.news_editor_commands import editorstatus_command, storylog_command
 from src.commands.voiceover_commands import voiceover_command
+from src.commands.weekend_commands import weekend_command, weekendstatus_command, weekendvoiceover_command, weekendexport_command
 from src.commands.hourly_research_commands import researchdesk_command
 
 from src.commands.admin_commands import (
@@ -132,6 +133,10 @@ def register_commands(app):
     app.add_handler(CommandHandler("editorstatus", editorstatus_command))
     app.add_handler(CommandHandler("storylog", storylog_command))
     app.add_handler(CommandHandler("voiceover", voiceover_command))
+    app.add_handler(CommandHandler("weekend", weekend_command))
+    app.add_handler(CommandHandler("weekendstatus", weekendstatus_command))
+    app.add_handler(CommandHandler("weekendvoiceover", weekendvoiceover_command))
+    app.add_handler(CommandHandler("weekendexport", weekendexport_command))
     app.add_handler(CommandHandler("fullreport", fullreport_command))
     app.add_handler(CommandHandler("catalysts", catalysts_command))
     app.add_handler(CommandHandler("snapshot", snapshot_command))

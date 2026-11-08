@@ -21,6 +21,7 @@ export HOURLY_RESEARCH_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/hourly_research.sq
 export MARKET_EVENT_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/market_event_checks.json"
 export MARKET_QUOTE_STATUS_FILE="$ALERT_PREFLIGHT_STATE_DIR/market_quote_status.json"
 export PREMARKET_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/premarket.sqlite3"
+export WEEKEND_STATE_FILE="$ALERT_PREFLIGHT_STATE_DIR/weekend_outlook.sqlite3"
 
 echo "Running Smart Money AI preflight checks..."
 
@@ -32,6 +33,7 @@ fi
 echo "Using Python: $($PYTHON_BIN -c 'import sys; print(sys.executable)')"
 
 "$PYTHON_BIN" scripts/check_special_alerts.py
+"$PYTHON_BIN" scripts/check_weekend_outlook.py
 "$PYTHON_BIN" scripts/check_ipo_alerts.py
 "$PYTHON_BIN" scripts/check_hourly_research.py
 "$PYTHON_BIN" scripts/check_event_news.py

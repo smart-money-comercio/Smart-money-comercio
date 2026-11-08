@@ -10,6 +10,10 @@ START_COMMANDS = [
 
 
 CORE_COMMANDS = [
+    ("/weekend [refresh]", "Weekly evidence, one business theme and coming-week catalysts"),
+    ("/weekendstatus", "Recorded Weekend Outlook evidence and quality review"),
+    ("/weekendvoiceover", "Current PASS weekend narration for review"),
+    ("/weekendexport", "Current PASS weekend JSON draft for adapter review"),
     ("/premarket [status|history|review|preview|on|off]", "Pre-open risk checks, evidence and outcome review"),
     ("/researchdesk [status|history|run|on|off]", "Hourly discovery agent and independent relevance review"),
     ("/editorstatus", "News edition stages, source coverage and review status"),

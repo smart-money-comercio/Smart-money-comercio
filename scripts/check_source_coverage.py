@@ -339,7 +339,7 @@ class EditionChecks(IsolatedChecks):
 
     def test_new_edition_retains_facts_and_tells_full_maintenance_details_once(self):
         report,record=self.render([maintenance(),sanctions()])
-        self.assertEqual(record["rules_version"],29)
+        self.assertEqual(record["rules_version"],30)
         self.assertEqual(record["analyst_review"]["disclosure_version"],2)
         self.assertTrue(validate_news_brief(report)["passes"])
         self.assertEqual(sum(len(s["event_evidence"]["facts"]) for s in editor.selected_stories(record)),8)
