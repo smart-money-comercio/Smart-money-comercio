@@ -525,6 +525,111 @@ class StorageCommandChecks(unittest.TestCase):
         self.assertEqual(target.read_text(),"keep");self.assertFalse(target.with_suffix('.txt').exists())
 
 
+class WeeklyDiscoveryChecks(unittest.TestCase):
+    def archived(self):
+        at=inputs.clock(PUBLISHED)+timedelta(hours=1)
+        row=inputs.admit_story(story(),MAINTENANCE,at.isoformat(),inputs.window(NOW),at)
+        return {**row,"decision":"selected"}
+
+    def leads(self,archived,live=None):
+        from src.intelligence import news_editor_store
+        with patch.object(editor,"cache_candidates",return_value=(live or [],[])),patch.object(news_editor_store,"read_editions",return_value=[{"candidates":archived}]) as read:
+            rows,issues=inputs.raw_candidates(NOW)
+        self.assertEqual(read.call_args.kwargs["limit"],50)
+        return rows,issues
+
+    def cold(self,count=6):
+        sources=(("MSFT","https://blogs.microsoft.com/blog/synthetic-platform/"),
+            ("NVDA","https://nvidianews.nvidia.com/news/synthetic-platform"),
+            ("AMD","https://ir.amd.com/news-events/press-releases/detail/999/synthetic-platform"),
+            ("CRWD","https://www.crowdstrike.com/en-us/press-releases/synthetic-platform/"),
+            ("AMZN","https://www.aboutamazon.com/news/aws/synthetic-platform"),
+            ("INTC","https://newsroom.intel.com/artificial-intelligence/synthetic-platform"))
+        return [candidate(symbol,title=symbol+" introduces a synthetic cloud platform",url=url,
+            published=(NOW-timedelta(minutes=15)).isoformat(),source_checked_at=NOW.isoformat(),excerpt_scope="headline only") for symbol,url in sources[:count]]
+
+    def test_weekly_archive_supplies_dated_original_leads(self):
+        rows,issues=self.leads([self.archived()])
+        self.assertEqual(len(rows),1);self.assertTrue(rows[0]["weekend_archive_lead"])
+        self.assertEqual(rows[0]["published"],PUBLISHED);self.assertIn("1 reviewed original",issues[0])
+
+    def test_selected_headline_without_concrete_original_proof_is_not_a_lead(self):
+        row=story(decision="selected");row.pop("event_evidence",None)
+        rows,_=self.leads([row]);self.assertFalse(rows)
+
+    def test_unselected_or_old_week_disclosures_are_not_weekly_leads(self):
+        a=self.archived();b={**a,"published":"2026-10-30T16:00:00+00:00"};a["decision"]="skip"
+        rows,_=self.leads([a,b]);self.assertFalse(rows)
+
+    def test_duplicate_archived_urls_are_added_once(self):
+        rows,_=self.leads([self.archived(),self.archived()]);self.assertEqual(len(rows),1)
+
+    def test_invalid_archived_fact_proof_is_not_used_for_discovery(self):
+        row=self.archived();row["event_evidence"]["facts"][0]["value"]="unsupported new order"
+        rows,_=self.leads([row]);self.assertFalse(rows)
+
+    def test_old_archive_observation_requires_a_new_original_read(self):
+        rows,_=self.leads([self.archived()]);fetch=Mock(return_value={"status":"ok","url":URL,"body":original_page(),"fetched_at_epoch":NOW.timestamp()})
+        found,_=inputs.collect_stories(rows,inputs.window(NOW),NOW,fetch)
+        self.assertEqual(fetch.call_count,1);self.assertEqual(found[0]["evidence_checked_at"],NOW.isoformat())
+        self.assertEqual(found[0]["published"],PUBLISHED)
+
+    def test_blocked_archive_read_does_not_renew_old_facts(self):
+        rows,_=self.leads([self.archived()]);fetch=Mock(return_value={"status":"error","error":"HTTPError 403; cooldown active"})
+        found,ledger=inputs.collect_stories(rows,inputs.window(NOW),NOW,fetch)
+        self.assertFalse(found);self.assertIn("cooldown",ledger[0]["reason"])
+
+    def test_archive_date_conflict_is_still_held(self):
+        rows,_=self.leads([self.archived()]);fetch=Mock(return_value={"status":"ok","url":URL,
+            "body":original_page(published="2026-11-05T16:00:00+00:00"),"fetched_at_epoch":NOW.timestamp()})
+        found,_=inputs.collect_stories(rows,inputs.window(NOW),NOW,fetch);self.assertFalse(found)
+
+    def test_archived_disclosure_is_reviewed_before_six_newer_headline_leads(self):
+        rows,_=self.leads([self.archived()],self.cold())
+        def fetch(url):
+            return {"status":"ok","url":url,"body":original_page(),"fetched_at_epoch":NOW.timestamp()} if url==URL else {"status":"error","error":"Synthetic unavailable body"}
+        read=Mock(side_effect=fetch);found,ledger=inputs.collect_stories(rows,inputs.window(NOW),NOW,read)
+        self.assertEqual(len(found),1);self.assertEqual(found[0]["publisher_symbol"],"NOC")
+        self.assertEqual(ledger[0]["status"],"admitted");self.assertEqual(read.call_count,6)
+        self.assertEqual(len(ledger),6)
+
+    def test_verified_cached_facts_outrank_newer_factless_bodies(self):
+        bad=[{**row,"excerpt_scope":"original release excerpt","source_excerpt":"This company describes general ambitions and research. "*3,
+              "evidence_checked_at":NOW.isoformat()} for row in self.cold()]
+        read=Mock(side_effect=AssertionError("Fresh body should be reused"))
+        found,ledger=inputs.collect_stories(bad+[story()],inputs.window(NOW),NOW,read)
+        self.assertEqual(found[0]["publisher_symbol"],"NOC");self.assertEqual(ledger[0]["status"],"admitted");read.assert_not_called()
+
+    def test_supported_original_reader_is_not_downgraded_by_missing_headline_facts(self):
+        rows=self.cold()+[story(excerpt_scope="headline only",source_excerpt="")]
+        def fetch(url):
+            return {"status":"ok","url":url,"body":original_page(),"fetched_at_epoch":NOW.timestamp()} if url==URL else {"status":"error","error":"Synthetic unavailable body"}
+        read=Mock(side_effect=fetch);found,_=inputs.collect_stories(rows,inputs.window(NOW),NOW,read)
+        self.assertEqual(found[0]["publisher_symbol"],"NOC");self.assertLessEqual(read.call_count,6)
+
+    def test_new_current_feed_proof_wins_over_a_duplicate_old_archive_lead(self):
+        rows,_=self.leads([self.archived()],[story()]);read=Mock(side_effect=AssertionError("Fresh original is already available"))
+        found,ledger=inputs.collect_stories(rows,inputs.window(NOW),NOW,read)
+        self.assertEqual(len(found),1);self.assertEqual(len(ledger),1);read.assert_not_called()
+
+    def test_stale_unreviewed_feed_lead_is_not_freshened_as_an_archive(self):
+        read=Mock(side_effect=AssertionError("Unverified stale feed should be excluded"))
+        found,_=inputs.collect_stories([story(source_checked_at=(NOW-timedelta(hours=7)).isoformat())],inputs.window(NOW),NOW,read)
+        self.assertFalse(found);read.assert_not_called()
+
+    def test_one_claims_release_is_not_three_independent_calendar_events(self):
+        snapshot=calendar();base=snapshot["economic"][0]
+        snapshot["economic"]=[{**base,"eventName":label} for label in ("Initial Jobless Claims","Continuing Jobless Claims","Jobless Claims 4-Week Avg.")]
+        packet=inputs.calendar_packet([],inputs.window(NOW),NOW,snapshot)
+        self.assertEqual(len(packet["macro"]),1);self.assertEqual(packet["macro"][0]["event"],"Weekly jobless claims")
+
+    def test_previously_recorded_separate_claims_entries_remain_readable(self):
+        value=edition();old_inputs=deepcopy(value["inputs"]);base=old_inputs["calendar"]["macro"][0]
+        old_inputs["calendar"]["macro"]=[{**base,"event":label} for label in ("Initial Jobless Claims","Continuing Jobless Claims","Jobless Claims 4-Week Avg.")]
+        old=report.assemble(old_inputs);self.assertEqual(report.checked(old),old)
+        self.assertIn("Continuing Jobless Claims",old["report_text"])
+
+
 class SQLiteCleanupChecks(unittest.TestCase):
     def test_weekend_database_handles_close_before_fixture_cleanup(self):
         # Retain every connection so garbage collection cannot hide a leak on Linux.
@@ -541,7 +646,7 @@ def main():
         if args.windows_socketpair:stack.enter_context(patch.object(socket,"socketpair",portable_tcp_socketpair))
         traffic=stack.enter_context(offline_network_guard())
         suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case) for case in
-            (WindowChecks,PriceChecks,StoryChecks,CalendarChecks,EditionChecks,StorageCommandChecks,SQLiteCleanupChecks))
+            (WindowChecks,PriceChecks,StoryChecks,CalendarChecks,EditionChecks,StorageCommandChecks,WeeklyDiscoveryChecks,SQLiteCleanupChecks))
         result=unittest.TextTestRunner(verbosity=1).run(suite)
     good=result.wasSuccessful() and not traffic["blocked"]
     print(f"Weekend Outlook Check: {'PASS' if good else 'FAIL'} ({result.testsRun} tests)")

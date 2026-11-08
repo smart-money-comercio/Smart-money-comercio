@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from hashlib import sha256
 import json
+import sqlite3
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -186,12 +187,35 @@ def collect_stories(raw, periods, now, fetch=None, *, force=False):
     for value in raw[:1000]:
         try:
             if not editor.primary_source(value) or value.get("official") is not True or calendar_notice(value["title"]):continue
-            at=clock(value.get("published"));fresh(value.get("source_checked_at"),now)
+            at=clock(value.get("published"))
+            if value.get("weekend_archive_lead") is not True:fresh(value.get("source_checked_at"),now)
             if not clock(periods["evidence_start"])<=at<=now:continue
             eligible.append(value)
         except (ValueError,TypeError,KeyError,AttributeError):continue
-    eligible.sort(key=lambda row:(not bool(editor.materiality({**row,"disclosure_version":1})),
-                                  row.get("excerpt_scope")!="original release excerpt",-clock(row["published"]).timestamp(),row["url"]))
+    def priority(row):
+        observed=row.get("evidence_checked_at") or row.get("source_checked_at")
+        body=row.get("source_excerpt","")
+        if row.get("excerpt_scope")=="original release excerpt" and isinstance(body,str) and 80<=len(body)<=6000:
+            try:
+                fresh(observed,now)
+            except (ValueError,TypeError):pass
+            else:
+                try:
+                    proof=admit_story(row,body,observed,periods,now)
+                    return (0,-min(len(proof["event_evidence"]["facts"]),6))
+                except (ValueError,KeyError,TypeError,AttributeError):return (4,0)
+        if row.get("weekend_archive_lead") is True:
+            try:
+                p=analysis.checked_evidence(row)
+                if p["scope"]=="original release excerpt" and len(p["facts"])>=2:return (1,-min(len(p["facts"]),6))
+            except (ValueError,KeyError,TypeError,AttributeError):pass
+        try:
+            if fact_schema(row) in {9,10,11,12,13}:return (2,0)
+            return (3,not bool(editor.materiality({**row,"disclosure_version":1})))
+        except (ValueError,KeyError,TypeError,AttributeError):return (4,0)
+    # Local fact inspection does not consume a network read. Prefer useful
+    # verified bodies and previously reviewed weekly disclosures over a headline.
+    eligible.sort(key=lambda row:(*priority(row),-clock(row["published"]).timestamp(),row["url"]))
     # One first pass per publisher keeps a prolific feed from consuming the budget.
     first,extra,seen=[],[],set()
     for row in eligible:
@@ -217,6 +241,8 @@ def collect_stories(raw, periods, now, fetch=None, *, force=False):
                 observed=value.get("fetched_at_epoch")
             proof=admit_story(row,text,observed,periods,now)
             log.update(status="admitted",facts=len(proof["event_evidence"]["facts"]),reason="Original body, weekly dates and concrete facts verified")
+            if row.get("weekend_archive_lead") is True:
+                log["reason"]="Prior edition supplied the lead; original body and observation verified for this build"
             return proof,log
         except (ValueError,TypeError,KeyError,AttributeError,UnicodeError,OverflowError) as error:
             log.update(status="held",facts=0,reason=str(error)[:180])
@@ -228,7 +254,26 @@ def collect_stories(raw, periods, now, fetch=None, *, force=False):
 
 def raw_candidates(now):
     rows,issues=editor.cache_candidates(now,editor.editorial_symbols([]))
-    return rows,issues[:5]
+    from src.intelligence.news_editor_store import read_editions
+    archived=[];seen=set();periods=window(now)
+    try:
+        for record in read_editions(limit=50):
+            for raw in record.get("candidates",[])[:180]:
+                try:
+                    if raw.get("decision")!="selected" or not editor.primary_source(raw) or raw.get("official") is not True:continue
+                    at=clock(raw["published"])
+                    if not clock(periods["evidence_start"])<=at<=now or raw["url"] in seen:continue
+                    profile=analysis.checked_evidence(raw)
+                    if profile["scope"]!="original release excerpt" or len(profile["facts"])<2:continue
+                    lead=deepcopy(raw)
+                    lead.update(source_excerpt=profile["source_text"],excerpt_scope=profile["scope"],
+                        evidence_checked_at=profile["observed_at"],weekend_archive_lead=True)
+                    archived.append(lead);seen.add(raw["url"])
+                except (ValueError,KeyError,TypeError,AttributeError):continue
+    except (OSError,ValueError,TypeError,sqlite3.Error) as error:
+        issues=[*issues,"Prior-edition weekly discovery unavailable ("+type(error).__name__+")"]
+    issues=[f"Weekly discovery: {len(archived)} reviewed original disclosures from prior editions; stale observations require a new article read",*issues]
+    return (archived+rows)[:1000],issues[:5]
 
 
 def calendar_packet(raw, periods, now, snapshot=None):
@@ -247,7 +292,8 @@ def calendar_packet(raw, periods, now, snapshot=None):
                     if calendar_sources.SOURCE_URLS.get(row["publisher"])!=row.get("timing_url"):continue
                     if at.astimezone(NY).date().isoformat()!=row.get("source_date"):continue
                     if row["time_status"]=="cached":fresh(row["timing_checked_at"],now)
-                    result["macro"].append({"event":row["eventName"],"at":at.isoformat(),"publisher":row["publisher"],
+                    label=("Weekly jobless claims" if row["publisher"]=="DOL" and calendar_sources.category(row["eventName"],"DOL")=="claims" else row["eventName"])
+                    result["macro"].append({"event":label,"at":at.isoformat(),"publisher":row["publisher"],
                         "url":row["timing_url"],"time_status":row["time_status"],"observed":checked.isoformat(),
                         "timing_observed":row.get("timing_checked_at") or checked.isoformat()})
                 except (ValueError,KeyError,TypeError,AttributeError):continue

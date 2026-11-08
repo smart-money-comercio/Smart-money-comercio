@@ -215,6 +215,11 @@ class WorkflowChecks(unittest.TestCase):
 
 
 class TelegramChecks(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        env = patch.dict(os.environ,{"DAILY_AGENT_DELIVERY_STATE_FILE":str(Path(temporary.name)/"delivery.json")})
+        env.start();self.addCleanup(env.stop)
+
     def update(self):
         loading = SimpleNamespace(edit_text=AsyncMock())
         chat = SimpleNamespace(send_message=AsyncMock())
