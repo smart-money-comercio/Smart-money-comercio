@@ -1,5 +1,7 @@
 # Weekend Outlook — editorial rules 30
 
+New builds use narration revision 2: publication wording is grammatical, technical names have explicit spoken forms, and calendar gaps are summarized once while the written five-day grid stays complete. All spoken words, including the edition title, are inside the JSON scenes. Existing editions retain revision 1 and their exact hashes. See `README_WEEKEND_NARRATION.md` for paired-export, native media preflight and reviewed-renderer sibling instructions. `/weekendstatus` displays the narration revision.
+
 The SQLite cleanup correction explicitly closes the corruption-test connection before temporary-file cleanup. A regression retains connection references across the save, read, corruption and reuse fixtures, so garbage collection cannot conceal an open handle. This corrects the Windows installer check; the production store already closes its connections explicitly.
 
 `/weekend` builds a separate Saturday/Sunday research edition using New York dates. It combines true weekly benchmark price returns, one business theme from concrete original disclosures, company follow-up questions, the coming Monday–Friday calendar and conditional scenarios. It is available on demand; no new public delivery job is installed.

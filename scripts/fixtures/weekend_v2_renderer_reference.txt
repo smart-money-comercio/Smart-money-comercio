@@ -1,0 +1,329 @@
+"""Smart Money Project branded YouTube renderer v0.3 (original intro visual identity).
+
+Runs entirely locally for --demo, no AI calls or uploads. A production render still
+requires a source-reviewed episode, ElevenLabs voice credentials and manual review.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+
+load_dotenv()
+ROOT = Path(__file__).resolve().parent
+BRAND = ROOT / "assets" / "brand"
+W, H, FPS = 1920, 1080, 30
+NAVY = (8, 20, 37)
+GOLD = (216, 173, 87)
+TEAL = (35, 142, 153)
+WHITE = (245, 247, 249)
+INTRO_SEC, OUTRO_SEC = 1.5, 2.8
+
+
+def run(args):
+    proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if proc.returncode:
+        raise RuntimeError(f"FFmpeg command failed: {proc.stderr[-1800:]}")
+
+
+def duration(path):
+    p = subprocess.run([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", str(path)
+    ], capture_output=True, text=True, check=True)
+    return float(p.stdout.strip())
+
+
+def font(size, bold=False):
+    choices = (
+        ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
+        if bold else
+        ["C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+    )
+    for path in choices:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def wrap(draw, text, f, max_px):
+    lines = []
+    line = ""
+    for word in " ".join(str(text).split()).split():
+        candidate = (line + " " + word).strip()
+        if line and draw.textbbox((0, 0), candidate, font=f)[2] > max_px:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        lines.append(line)
+    return lines
+
+
+def background_for(heading, index):
+    name = heading.lower()
+    if any(x in name for x in ("defense", "cyber", "drone", "warfare")):
+        return "defense.png"
+    if any(x in name for x in ("congress", "policy", "fed", "washington")):
+        return "policy.png"
+    if any(x in name for x in ("ai ", "artificial", "technology", "research")):
+        return "ai.png"
+    if any(x in name for x in ("global", "econom", "inflation", "oil")):
+        return "global.png"
+    return ["market.png", "global.png", "ai.png"][index % 3]
+
+
+def compose_slide(heading, bullets, output, index, demo=False):
+    """Reuse imagery from the *actual* intro, heavily defocused to avoid stale overlaid copy.
+
+    No source-specific stock performance is inserted into the picture.
+    All changing headlines and bullets come from the reviewed episode packet.
+    """
+    source = BRAND / background_for(heading, index)
+    if not source.exists():
+        raise FileNotFoundError(f"Brand artwork missing: {source}")
+    bg = ImageOps.fit(Image.open(source).convert("RGB"), (W, H), method=Image.Resampling.LANCZOS)
+    bg = bg.filter(ImageFilter.GaussianBlur(17)).convert("RGBA")
+    tint = Image.new("RGBA", (W, H), (3, 13, 29, 168))
+    bg = Image.alpha_composite(bg, tint)
+    # Left-side treatment mimics the intro's navy shadows and gold highlights.
+    shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shade)
+    for x in range(0, 1376, 8):
+        alpha = round(100 * (1 - x / 1376))
+        sd.rectangle((x, 0, x + 8, H), fill=(1, 10, 25, max(0, alpha)))
+    bg = Image.alpha_composite(bg, shade)
+    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(canvas)
+    # Branded header. Original circular brand icon, not recreated with text.
+    d.rounded_rectangle((82, 54, 1834, 169), radius=22, fill=(7, 21, 39, 214), outline=(216, 173, 87, 122), width=2)
+    icon_path = ROOT / "assets" / "logo.png"
+    if icon_path.exists():
+        logo = Image.open(icon_path).convert("RGBA")
+        logo.thumbnail((94, 94), Image.Resampling.LANCZOS)
+        canvas.alpha_composite(logo, (104, 64))
+    d.text((221, 73), "SMART MONEY PROJECT", font=font(46, True), fill=GOLD, stroke_width=1, stroke_fill=(26, 36, 51))
+    d.text((1480, 98), "DAILY MARKET BRIEF", font=font(27, True), fill=WHITE)
+    d.line((105, 225, 1650, 225), fill=(216, 173, 87, 160), width=3)
+    title = " ".join(str(heading).split()).upper()
+    tf = font(86 if len(title) < 36 else 70, True)
+    lines = wrap(d, title, tf, 1530)
+    while len(lines) > 3 and tf.size > 50:
+        tf = font(tf.size - 6, True)
+        lines = wrap(d, title, tf, 1530)
+    y = 284
+    for line in lines[:3]:
+        d.text((106, y), line, font=tf, fill=WHITE, stroke_width=2, stroke_fill=(6, 16, 30))
+        y += tf.size + 26
+    # Short supporting points; no made-up stats or unsourced ticker displays.
+    notes = [str(s).strip() for s in (bullets or []) if str(s).strip()][:3]
+    if notes:
+        start = max(y + 45, 616)
+        d.rounded_rectangle((100, start - 25, 1528, min(H - 90, start + 86 * len(notes) + 40)), radius=18, fill=(5, 21, 39, 178))
+        bf = font(37)
+        yy = start
+        for note in notes:
+            d.ellipse((127, yy + 13, 144, yy + 30), fill=GOLD)
+            for line in wrap(d, note, bf, 1220)[:2]:
+                d.text((170, yy), line, font=bf, fill=WHITE)
+                yy += 48
+            yy += 32
+    d.line((98, 992, 1815, 992), fill=(35, 142, 153, 220), width=3)
+    d.text((107, 1012), "RESEARCH. REAL INSIGHTS. A SMARTER TOMORROW.", font=font(28, True), fill=GOLD)
+    merged = Image.alpha_composite(bg, canvas).convert("RGB")
+    if demo:
+        dd = ImageDraw.Draw(merged)
+        dd.rectangle((0, 0, W, 57), fill=(115, 28, 30))
+        dd.text((110, 8), "DEMO ONLY — NO LIVE MARKET DATA — DO NOT PUBLISH", font=font(32, True), fill=WHITE)
+    merged.save(output, quality=92)
+
+
+def brand_frame(name, output, demo=False):
+    src = BRAND / name
+    if not src.exists():
+        raise FileNotFoundError(f"Missing intro-template asset: {src}")
+    im = ImageOps.fit(Image.open(src).convert("RGB"), (W, H))
+    if demo:
+        d = ImageDraw.Draw(im)
+        d.rectangle((0, 0, W, 57), fill=(115, 28, 30))
+        d.text((110, 8), "DEMO ONLY — NO LIVE MARKET DATA — DO NOT PUBLISH", font=font(32, True), fill=WHITE)
+    im.save(output, quality=94)
+
+
+def silence(path, seconds):
+    run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", str(seconds),
+         "-c:a", "libmp3lame", "-q:a", "4", str(path)])
+
+
+def speech(text, path, demo):
+    if demo:
+        silence(path, max(5.0, min(11.0, len(text.split()) / 2.5)))
+        return
+    key, voice = os.getenv("ELEVENLABS_API_KEY"), os.getenv("ELEVENLABS_VOICE_ID")
+    if not key or not voice:
+        raise ValueError("ELEVENLABS_API_KEY and Samara X's ELEVENLABS_VOICE_ID are required in .env")
+    response = requests.post(
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice}",
+        params={"output_format": "mp3_44100_128"},
+        headers={"xi-api-key": key, "Content-Type": "application/json"},
+        json={"text": text, "model_id": os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")},
+        timeout=180)
+    response.raise_for_status()
+    path.write_bytes(response.content)
+
+
+def make_clip(still, audio, output, duration_sec, direction=1):
+    # Original introduction uses quiet motion. Keep zoom small so brand text stays visible.
+    if direction > 0:
+        expr = "min(1.0+on*0.00012,1.025)"
+    elif direction < 0:
+        expr = "max(1.025-on*0.00012,1.0)"
+    else:
+        expr = "1.0"
+    vf = f"scale=2048:1152,zoompan=z='{expr}':d=1:s=1920x1080:fps=30,format=yuv420p"
+    run(["ffmpeg", "-y", "-loop", "1", "-framerate", "30", "-i", str(still), "-i", str(audio),
+         "-filter_complex", f"[0:v]{vf}[v]", "-map", "[v]", "-map", "1:a",
+         "-t", f"{duration_sec:.3f}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-r", "30",
+         "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p", str(output)])
+
+
+def srt_time(seconds):
+    ms = round(seconds * 1000)
+    return f"{ms//3600000:02}:{(ms//60000)%60:02}:{(ms//1000)%60:02},{ms%1000:03}"
+
+
+def subtitles(segments, lengths, output, opening_seconds):
+    """Approximate SRT only. NOT auto-publishable without alignment review."""
+    at = opening_seconds
+    entries = []
+    index = 1
+    for segment, dt in zip(segments, lengths):
+        text = " ".join(segment["narration"].split())
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()] or [text]
+        weights = [max(1, len(x.split())) for x in sentences]
+        total = sum(weights)
+        cursor = at
+        for sentence, weight in zip(sentences, weights):
+            end = cursor + dt * weight / total
+            entries.extend([str(index), f"{srt_time(cursor)} --> {srt_time(end)}", sentence, ""])
+            cursor = end
+            index += 1
+        at += dt
+    output.write_text("\n".join(entries) + "\n", encoding="utf-8")
+
+
+def main(args):
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        raise RuntimeError("FFmpeg and ffprobe must be on PATH")
+    data = json.loads(args.episode.read_text(encoding="utf-8"))
+    demo = bool(args.demo)
+    mode = data.get("mode")
+    if demo != (mode == "demo"):
+        raise ValueError("The --demo flag is permitted only for a DEMO episode")
+    if mode not in {"demo", "draft_review_required", "approved_for_render"}:
+        raise ValueError("Unsupported episode mode")
+    parts = data.get("segments", [])
+    if not (2 <= len(parts) <= 14):
+        raise ValueError("Episode requires 2–14 segments")
+    for seg in parts:
+        if not seg.get("narration") or not seg.get("heading"):
+            raise ValueError("A segment is missing narration or heading")
+    folder = args.out.resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    tmp = folder / "parts"
+    tmp.mkdir(exist_ok=True)
+    clips = []
+    spoken_durations = []
+
+    start_still, start_audio, start_clip = tmp / "brand_intro.jpg", tmp / "intro.mp3", tmp / "intro.mp4"
+    brand_frame("intro.png", start_still, demo)
+    silence(start_audio, INTRO_SEC)
+    make_clip(start_still, start_audio, start_clip, INTRO_SEC, direction=0)
+    clips.append(start_clip)
+
+    for i, seg in enumerate(parts):
+        still, audio, clip = tmp / f"scene_{i:02}.jpg", tmp / f"voice_{i:02}.mp3", tmp / f"clip_{i:02}.mp4"
+        compose_slide(seg["heading"], seg.get("bullets") or [], still, i, demo)
+        speech(seg["narration"], audio, demo)
+        dt = duration(audio)
+        spoken_durations.append(dt)
+        make_clip(still, audio, clip, dt, direction=1 if i % 2 == 0 else -1)
+        clips.append(clip)
+
+    end_still, end_audio, end_clip = tmp / "brand_outro.jpg", tmp / "outro.mp3", tmp / "outro.mp4"
+    brand_frame("outro.png", end_still, demo)
+    silence(end_audio, OUTRO_SEC)
+    make_clip(end_still, end_audio, end_clip, OUTRO_SEC, direction=0)
+    clips.append(end_clip)
+
+    concat = tmp / "clips.txt"
+    concat.write_text("".join(f"file '{p.name}'\n" for p in clips), encoding="utf-8")
+    raw = folder / "video_without_music.mp4"
+    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", str(raw)])
+    final = folder / "Smart_Money_Project_Daily_Brief.mp4"
+    music_path = os.getenv("BACKGROUND_MUSIC_PATH", "").strip()
+    if music_path:
+        music = Path(music_path).expanduser()
+        if not music.is_file():
+            raise ValueError("Configured music track does not exist")
+        run(["ffmpeg", "-y", "-i", str(raw), "-stream_loop", "-1", "-i", str(music),
+             "-filter_complex", "[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[voice];[1:a]volume=0.05[music];[voice][music]amix=inputs=2:duration=first:dropout_transition=2[a]",
+             "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", str(final)])
+    else:
+        shutil.copy2(raw, final)
+    subtitles(parts, spoken_durations, folder / "captions_review_required.srt", INTRO_SEC)
+    Image.open(tmp / "scene_00.jpg").resize((1280, 720)).save(folder / "thumbnail.jpg", quality=93)
+    description = str(data.get("description", "")) + "\n\nSources referenced in the episode:\n"
+    for sources in (data.get("sources") or {}).values():
+        for item in sources:
+            description += str(item.get("url", "")) + "\n"
+    description += "\nEducational information only. AI-narrated, with illustrative graphics. Not personalized financial advice.\n"
+    metadata = {
+        "title": data.get("title", "Smart Money Project | Daily Market Brief"),
+        "description": description,
+        "tags": ["Smart Money Project", "daily market brief", "investing", "market intelligence"],
+        "categoryId": "27",
+        "containsSyntheticMedia": bool(data.get("contains_synthetic_media", True)),
+        "brand_template": "smart_money_intro_matched_v2",
+        "mode": mode,
+        "demo": demo,
+        "video_sha256": hashlib.sha256(final.read_bytes()).hexdigest(),
+        "source_edition_date": data.get("date"),
+        "total_seconds": round(duration(final), 2),
+        "uploaded": False,
+    }
+    (folder / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    (folder / "REVIEW_REQUIRED.txt").write_text(
+        "REVIEW REQUIRED.\nThe video uses the actual Smart Money Project intro/closing artwork and illustrated, branded daily scenes.\n"
+        "Caption timings are estimated. Validate all market facts and referenced sources, verify the exact caption timings, "
+        "audio and music commercial-use licenses, and YouTube synthetic-media disclosure before any upload.\n"
+        "Do not upload the silent DEMO file. Do not publish automatically.\n", encoding="utf-8")
+    print("FINISHED:", final)
+    print("BRAND: Intro-matched v2, opener/outro included")
+    print("NOTE: REVIEW REQUIRED; no YouTube uploads are performed by this command.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--episode", type=Path, required=True)
+    parser.add_argument("--out", type=Path, default=Path("output/episode"))
+    parser.add_argument("--demo", action="store_true")
+    opt = parser.parse_args()
+    try:
+        main(opt)
+    except Exception as exc:
+        print("HOLD:", exc, file=sys.stderr)
+        sys.exit(2)

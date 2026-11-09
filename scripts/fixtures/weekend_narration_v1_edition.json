@@ -1,0 +1,655 @@
+{
+  "episode": {
+    "bot_edition_id": "80f1c76fc1290edcacfc",
+    "bot_generated_at": "2026-11-08T14:20:00+00:00",
+    "bot_report_sha256": "21e1d05c31d7bb428b50fe8bdc6ea5aa76ef1312501647bdcb6b612faa5e4c3e",
+    "contains_synthetic_media": true,
+    "date": "2026-11-08",
+    "description": "Source-reviewed weekly research and conditional business scenarios. AI narration and illustrative graphics require human review. Research only. Not financial advice.",
+    "edition_type": "weekend_outlook",
+    "mode": "draft_review_required",
+    "next_week_end": "2026-11-13",
+    "next_week_start": "2026-11-09",
+    "review_required": true,
+    "segments": [
+      {
+        "bullets": [],
+        "heading": "Week in perspective",
+        "narration": "The completed week ran from November second, two thousand twenty six through November sixth, two thousand twenty six. Weekly price returns compare the October thirtieth, two thousand twenty six close with the November sixth, two thousand twenty six close. Over that week, S and P five hundred fell three point six four percent; Nasdaq fell three point six four percent; Russell two thousand fell three point six four percent. Friday alone: S and P five hundred rose six percent; Nasdaq rose six percent; Russell two thousand rose six percent. Friday's rebound left these benchmarks below their prior-week closes. These are price returns, excluding dividends. Market prices describe the outcome; the disclosures below provide separate business evidence.",
+        "source_ids": [
+          "market_^GSPC",
+          "market_^IXIC",
+          "market_^RUT"
+        ]
+      },
+      {
+        "bullets": [
+          "Which defense milestones are moving toward funded delivery or a paying maintenance workload?"
+        ],
+        "heading": "Defense progress and the route to funded work",
+        "narration": "Which defense milestones are moving toward funded delivery or a paying maintenance workload?\n\nOriginal disclosures:\nNorthrop Grumman said its Example Bay, Louisiana facility was selected as a certified U S depot for the C one thirty Hercules fleet. Planned services include repair, overhaul and inspection. This week disclosure was published November sixth.",
+        "source_ids": [
+          "story_76f8209c790d8502"
+        ]
+      },
+      {
+        "bullets": [],
+        "heading": "Business interpretation",
+        "narration": "Analyst interpretation: Technical progress and service designations can expand a company's opportunity, but the commercial test is the work customers actually fund. A development milestone, an existing program contract and a new order describe different kinds of evidence. The useful comparison is how each disclosure changes visibility into workload, delivery costs and eventual sales.\n\nNorthrop Grumman: The designation supports a potential aircraft-maintenance workload. Sales depend on service orders, site throughput and delivery costs. Watch for maintenance orders, site utilization, staffing costs and revenue timing.",
+        "source_ids": [
+          "story_76f8209c790d8502"
+        ]
+      },
+      {
+        "bullets": [],
+        "heading": "Coming week: November 9, 2026 to November 13, 2026",
+        "narration": "Monday, November ninth: No publisher-verified entry in this edition's evidence.\nTuesday, November tenth: No publisher-verified entry in this edition's evidence.\nWednesday, November eleventh: No publisher-verified entry in this edition's evidence.\nThursday, November twelfth: Weekly jobless claims at eight thirty in the morning, Eastern Standard Time, according to DOL.\nFriday, November thirteenth: No publisher-verified entry in this edition's evidence.\nCalendar coverage is limited. Missing entries indicate missing verified coverage, rather than an absence of scheduled events. Estimated earnings dates are excluded. Labor and demand releases can test the operating backdrop; issuer results and guidance can test company sales, margins and spending.",
+        "source_ids": [
+          "calendar_0"
+        ]
+      },
+      {
+        "bullets": [],
+        "heading": "Beyond the coming week",
+        "narration": "Later horizon, outside the coming Monday-to-Friday window: Nvidia has scheduled its earnings conference call for Tuesday, November seventeenth at five in the afternoon, Eastern Standard Time, according to its company announcement.",
+        "source_ids": [
+          "later_0"
+        ]
+      },
+      {
+        "bullets": [],
+        "heading": "Conditions to watch",
+        "narration": "Conditional scenarios, not forecasts or assigned probabilities.\n\nBase case: use the disclosed stages as research context while waiting for firm order values and delivery plans. The milestones support continued monitoring; they do not establish a new revenue forecast.\n\nThe case strengthens if original customer or company disclosures add funded work, production commitments or a defined service timetable. Compare the size and timing of that work with the resources needed to deliver it.\n\nThe case weakens if disclosed funding, design progress or execution falls short. Delays and higher delivery costs would matter because technical progress alone cannot establish profitable growth.",
+        "source_ids": [
+          "story_76f8209c790d8502"
+        ]
+      },
+      {
+        "bullets": [],
+        "heading": "Research context",
+        "narration": "This outlook separates dated disclosures, analyst interpretation and conditional scenarios. It does not attribute stock moves to those disclosures. Check new original evidence before changing the investment case. Research only. Not financial advice.",
+        "source_ids": []
+      }
+    ],
+    "sources": {
+      "calendar_0": [
+        {
+          "event_at": "2026-11-12T13:30:00+00:00",
+          "kind": "publisher calendar",
+          "publisher": "DOL",
+          "url": "https://oui.doleta.gov/unemploy/claims_arch.asp",
+          "verified_at": "2026-11-08T14:20:00+00:00"
+        }
+      ],
+      "later_0": [
+        {
+          "event_date": "2026-11-17",
+          "published_at": "2026-11-03T16:00:00+00:00",
+          "publisher": "NVIDIA Newsroom",
+          "url": "https://nvidianews.nvidia.com/news/synthetic-quarterly-conference-call",
+          "verified_at": "2026-11-08T14:20:00+00:00"
+        }
+      ],
+      "market_^GSPC": [
+        {
+          "baseline_date": "2026-10-30",
+          "publisher": "Yahoo chart; may be delayed",
+          "quote_asof": "2026-11-06T22:16:00+00:00",
+          "session_date": "2026-11-06",
+          "source_sha256": "39f8e76306ace7b2febcaa9f30046db6f990935b9d808037b47a3fd0ca313839",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d&events=splits",
+          "verified_at": "2026-11-08T14:20:00+00:00"
+        }
+      ],
+      "market_^IXIC": [
+        {
+          "baseline_date": "2026-10-30",
+          "publisher": "Yahoo chart; may be delayed",
+          "quote_asof": "2026-11-06T22:16:00+00:00",
+          "session_date": "2026-11-06",
+          "source_sha256": "fa8b4faf31797e63d207fed060e813ed87f2927a5dddda35cc5317d76021db91",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?range=1mo&interval=1d&events=splits",
+          "verified_at": "2026-11-08T14:20:00+00:00"
+        }
+      ],
+      "market_^RUT": [
+        {
+          "baseline_date": "2026-10-30",
+          "publisher": "Yahoo chart; may be delayed",
+          "quote_asof": "2026-11-06T22:16:00+00:00",
+          "session_date": "2026-11-06",
+          "source_sha256": "9f9647f4b777f3193fae1197e0cf01e3a94f54a76ca5ad750c969363a1d40515",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ERUT?range=1mo&interval=1d&events=splits",
+          "verified_at": "2026-11-08T14:20:00+00:00"
+        }
+      ],
+      "story_76f8209c790d8502": [
+        {
+          "published_at": "2026-11-06T16:00:00+00:00",
+          "publisher": "Northrop Grumman Newsroom",
+          "source_sha256": "699095687d1dc7c2ce0cacad8601eef20fa79e323981de0db345ec604387cdf9",
+          "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation",
+          "verified_at": "2026-11-08T14:20:00+00:00"
+        }
+      ]
+    },
+    "title": "Smart Money Weekend Outlook | Week of 2026-11-09",
+    "voiceover_quality": {
+      "estimated_seconds": 194.6,
+      "status": "PASS",
+      "words": 519,
+      "words_per_minute": 160
+    },
+    "voiceover_schema": 2,
+    "voiceover_sha256": "056885486bc20162f1b8a2ea6fe50524c58455d7760882789e4b3ff6b770cee6",
+    "week_end": "2026-11-06",
+    "week_start": "2026-11-02"
+  },
+  "record": {
+    "edition_type": "weekend_outlook",
+    "generated_at": "2026-11-08T14:20:00+00:00",
+    "id": "80f1c76fc1290edcacfc",
+    "input_sha256": "efda788d169556dae9a3bb4f5ab4decc2676bda2064031787778ae08d1ea4cfb",
+    "inputs": {
+      "calendar": {
+        "company": [],
+        "coverage": "limited",
+        "issues": [
+          "Snapshot does not cover all five days of the coming week"
+        ],
+        "later": [
+          {
+            "event": "earnings conference call",
+            "event_at": "2026-11-17T17:00:00-05:00",
+            "event_date": "2026-11-17",
+            "precision": "time",
+            "schema": 1,
+            "source": {
+              "excerpt_scope": "publisher feed excerpt",
+              "kind": "company",
+              "official": true,
+              "published": "2026-11-03T16:00:00+00:00",
+              "publisher_symbol": "NVDA",
+              "source": "NVIDIA Newsroom",
+              "source_checked_at": "2026-11-08T14:20:00+00:00",
+              "source_excerpt": "NVIDIA will host its earnings conference call on November 17, 2026 at 5:00 p.m. Eastern Time.",
+              "symbols": [
+                "NVDA"
+              ],
+              "title": "NVIDIA Sets Conference Call for Third-Quarter Financial Results",
+              "url": "https://nvidianews.nvidia.com/news/synthetic-quarterly-conference-call"
+            },
+            "source_quote": "will host its earnings conference call on November 17, 2026 at 5:00 p.m. Eastern Time.",
+            "source_sha256": "dc89f62cda653f7344ccd291177ad5be51f6f8d018c4596b56f8518844818629",
+            "symbol": "NVDA",
+            "year_basis": "explicit year"
+          }
+        ],
+        "macro": [
+          {
+            "at": "2026-11-12T13:30:00+00:00",
+            "event": "Weekly jobless claims",
+            "observed": "2026-11-08T14:20:00+00:00",
+            "publisher": "DOL",
+            "time_status": "verified",
+            "timing_observed": "2026-11-08T14:20:00+00:00",
+            "url": "https://oui.doleta.gov/unemploy/claims_arch.asp"
+          }
+        ],
+        "observed": "2026-11-08T14:20:00+00:00",
+        "schema": 1
+      },
+      "generated_at": "2026-11-08T14:20:00+00:00",
+      "ledger": [
+        {
+          "facts": 4,
+          "published": "2026-11-06T16:00:00+00:00",
+          "reason": "Original body, weekly dates and concrete facts verified",
+          "source": "Northrop Grumman Newsroom",
+          "status": "admitted",
+          "title": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet",
+          "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation"
+        }
+      ],
+      "prices": [
+        {
+          "proof": {
+            "baseline_close": 110.0,
+            "baseline_date": "2026-10-30",
+            "basis": "dated Friday close versus the prior Friday close; price return, not total return",
+            "end_close": 106.0,
+            "end_date": "2026-11-06",
+            "friday_percent": 6.000000000000005,
+            "observed": "2026-11-08T14:20:00+00:00",
+            "quote_asof": "2026-11-06T22:16:00+00:00",
+            "quote_evidence": {
+              "events": {},
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      110,
+                      100,
+                      106
+                    ],
+                    "volume": [
+                      1000,
+                      1100,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1793998800.0,
+                    "start": 1793975400.0
+                  }
+                },
+                "dataGranularity": "1d",
+                "exchangeName": "NIM",
+                "exchangeTimezoneName": "America/New_York",
+                "hasPrePostMarketData": false,
+                "instrumentType": "INDEX",
+                "priceHint": 2,
+                "regularMarketPrice": 106,
+                "regularMarketTime": 1794003360.0,
+                "symbol": "^GSPC"
+              },
+              "request": {
+                "events": "splits",
+                "interval": "1d",
+                "range": "1mo"
+              },
+              "schema": 2,
+              "timestamp": [
+                1793370600.0,
+                1793889000.0,
+                1793975400.0
+              ]
+            },
+            "schema": 1,
+            "source": "Yahoo chart; may be delayed",
+            "source_sha256": "39f8e76306ace7b2febcaa9f30046db6f990935b9d808037b47a3fd0ca313839",
+            "symbol": "^GSPC",
+            "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d&events=splits",
+            "weekly_percent": -3.6363636363636376
+          },
+          "reason": "Exact two-Friday price basis verified",
+          "status": "available",
+          "symbol": "^GSPC"
+        },
+        {
+          "proof": {
+            "baseline_close": 110.0,
+            "baseline_date": "2026-10-30",
+            "basis": "dated Friday close versus the prior Friday close; price return, not total return",
+            "end_close": 106.0,
+            "end_date": "2026-11-06",
+            "friday_percent": 6.000000000000005,
+            "observed": "2026-11-08T14:20:00+00:00",
+            "quote_asof": "2026-11-06T22:16:00+00:00",
+            "quote_evidence": {
+              "events": {},
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      110,
+                      100,
+                      106
+                    ],
+                    "volume": [
+                      1000,
+                      1100,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1793998800.0,
+                    "start": 1793975400.0
+                  }
+                },
+                "dataGranularity": "1d",
+                "exchangeName": "NIM",
+                "exchangeTimezoneName": "America/New_York",
+                "hasPrePostMarketData": false,
+                "instrumentType": "INDEX",
+                "priceHint": 2,
+                "regularMarketPrice": 106,
+                "regularMarketTime": 1794003360.0,
+                "symbol": "^IXIC"
+              },
+              "request": {
+                "events": "splits",
+                "interval": "1d",
+                "range": "1mo"
+              },
+              "schema": 2,
+              "timestamp": [
+                1793370600.0,
+                1793889000.0,
+                1793975400.0
+              ]
+            },
+            "schema": 1,
+            "source": "Yahoo chart; may be delayed",
+            "source_sha256": "fa8b4faf31797e63d207fed060e813ed87f2927a5dddda35cc5317d76021db91",
+            "symbol": "^IXIC",
+            "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?range=1mo&interval=1d&events=splits",
+            "weekly_percent": -3.6363636363636376
+          },
+          "reason": "Exact two-Friday price basis verified",
+          "status": "available",
+          "symbol": "^IXIC"
+        },
+        {
+          "proof": {
+            "baseline_close": 110.0,
+            "baseline_date": "2026-10-30",
+            "basis": "dated Friday close versus the prior Friday close; price return, not total return",
+            "end_close": 106.0,
+            "end_date": "2026-11-06",
+            "friday_percent": 6.000000000000005,
+            "observed": "2026-11-08T14:20:00+00:00",
+            "quote_asof": "2026-11-06T22:16:00+00:00",
+            "quote_evidence": {
+              "events": {},
+              "indicators": {
+                "quote": [
+                  {
+                    "close": [
+                      110,
+                      100,
+                      106
+                    ],
+                    "volume": [
+                      1000,
+                      1100,
+                      1200
+                    ]
+                  }
+                ]
+              },
+              "meta": {
+                "currency": "USD",
+                "currentTradingPeriod": {
+                  "regular": {
+                    "end": 1793998800.0,
+                    "start": 1793975400.0
+                  }
+                },
+                "dataGranularity": "1d",
+                "exchangeName": "NIM",
+                "exchangeTimezoneName": "America/New_York",
+                "hasPrePostMarketData": false,
+                "instrumentType": "INDEX",
+                "priceHint": 2,
+                "regularMarketPrice": 106,
+                "regularMarketTime": 1794003360.0,
+                "symbol": "^RUT"
+              },
+              "request": {
+                "events": "splits",
+                "interval": "1d",
+                "range": "1mo"
+              },
+              "schema": 2,
+              "timestamp": [
+                1793370600.0,
+                1793889000.0,
+                1793975400.0
+              ]
+            },
+            "schema": 1,
+            "source": "Yahoo chart; may be delayed",
+            "source_sha256": "9f9647f4b777f3193fae1197e0cf01e3a94f54a76ca5ad750c969363a1d40515",
+            "symbol": "^RUT",
+            "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ERUT?range=1mo&interval=1d&events=splits",
+            "weekly_percent": -3.6363636363636376
+          },
+          "reason": "Exact two-Friday price basis verified",
+          "status": "available",
+          "symbol": "^RUT"
+        }
+      ],
+      "source_issues": [],
+      "stories": [
+        {
+          "disclosure_version": 1,
+          "event_evidence": {
+            "event": "maintenance certification",
+            "facts": [
+              {
+                "evidence": "Northrop Grumman has been selected as a Certified Continental U.S. depot for the C-130 Hercules fleet.",
+                "field": "maintenance_designation",
+                "status": "company-reported designation; funded orders not established",
+                "value": "Certified Continental U.S. depot"
+              },
+              {
+                "evidence": "Northrop Grumman has been selected as a Certified Continental U.S. depot for the C-130 Hercules fleet.",
+                "field": "maintenance_platform",
+                "value": "C-130 Hercules"
+              },
+              {
+                "evidence": "Northrop Grumman is expanding C-130 Hercules depot-level maintenance at its Example Bay, Louisiana, facility.",
+                "field": "maintenance_location",
+                "value": "Example Bay, Louisiana"
+              },
+              {
+                "evidence": "As a certified depot, Northrop Grumman will provide aircraft maintenance, including repair, overhaul and inspection.",
+                "field": "maintenance_scope",
+                "status": "planned services; completed work and revenue not established",
+                "value": "repair, overhaul and inspection"
+              }
+            ],
+            "observed_at": "2026-11-08T14:20:00+00:00",
+            "published": "2026-11-06T16:00:00+00:00",
+            "schema": 12,
+            "scope": "original release excerpt",
+            "source_sha256": "699095687d1dc7c2ce0cacad8601eef20fa79e323981de0db345ec604387cdf9",
+            "source_text": "Northrop Grumman is expanding C-130 Hercules depot-level maintenance at its Example Bay, Louisiana, facility. Northrop Grumman has been selected as a Certified Continental U.S. depot for the C-130 Hercules fleet. As a certified depot, Northrop Grumman will provide aircraft maintenance, including repair, overhaul and inspection.",
+            "source_url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation",
+            "stage": "company-reported designation"
+          },
+          "evidence_checked_at": "2026-11-08T14:20:00+00:00",
+          "excerpt_scope": "original release excerpt",
+          "id": "76f8209c790d8502",
+          "kind": "company",
+          "materiality": "defense sustainment",
+          "official": true,
+          "publication_label": "week disclosure",
+          "published": "2026-11-06T16:00:00+00:00",
+          "publisher_symbol": "NOC",
+          "source": "Northrop Grumman Newsroom",
+          "source_checked_at": "2026-11-08T14:20:00+00:00",
+          "source_excerpt": "Northrop Grumman is expanding C-130 Hercules depot-level maintenance at its Example Bay, Louisiana, facility. Northrop Grumman has been selected as a Certified Continental U.S. depot for the C-130 Hercules fleet. As a certified depot, Northrop Grumman will provide aircraft maintenance, including repair, overhaul and inspection.",
+          "symbols": [
+            "NOC"
+          ],
+          "title": "Northrop Grumman Facility Selected as Certified US Maintenance Depot for C-130 Hercules Fleet",
+          "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation"
+        }
+      ],
+      "window": {
+        "baseline_date": "2026-10-30",
+        "evidence_end": "2026-11-08T14:20:00+00:00",
+        "evidence_start": "2026-11-02T00:00:00-05:00",
+        "next_end": "2026-11-13",
+        "next_start": "2026-11-09",
+        "week_end": "2026-11-06",
+        "week_start": "2026-11-02"
+      }
+    },
+    "quality": {
+      "checks": {
+        "calendar_scope": true,
+        "narration": true,
+        "original_theme": true,
+        "report_bound": true,
+        "weekly_prices": true
+      },
+      "notes": [
+        "Calendar coverage is limited; unknown days remain qualified."
+      ],
+      "status": "PASS"
+    },
+    "report_sha256": "21e1d05c31d7bb428b50fe8bdc6ea5aa76ef1312501647bdcb6b612faa5e4c3e",
+    "report_text": "Smart Money Weekend Outlook\nCompleted week: 2026-11-02 to 2026-11-06\nAhead: 2026-11-09 to 2026-11-13\nGenerated: 2026-11-08T14:20:00+00:00\n\n\nWeek in perspective\nThe completed week ran from November 2, 2026 through November 6, 2026. Weekly price returns compare the October 30, 2026 close with the November 6, 2026 close. Over that week, S&P 500 fell 3.64 percent; Nasdaq fell 3.64 percent; Russell 2000 fell 3.64 percent. Friday alone: S&P 500 rose 6.00 percent; Nasdaq rose 6.00 percent; Russell 2000 rose 6.00 percent. Friday's rebound left these benchmarks below their prior-week closes. These are price returns, excluding dividends. Market prices describe the outcome; the disclosures below provide separate business evidence.\n\nDefense progress and the route to funded work\nWhich defense milestones are moving toward funded delivery or a paying maintenance workload?\n\nOriginal disclosures:\nNorthrop Grumman said its Example Bay, Louisiana facility was selected as a certified U.S. depot for the C-130 Hercules fleet. Planned services include repair, overhaul and inspection. This week disclosure was published November 6.\n\nBusiness interpretation\nAnalyst interpretation: Technical progress and service designations can expand a company's opportunity, but the commercial test is the work customers actually fund. A development milestone, an existing program contract and a new order describe different kinds of evidence. The useful comparison is how each disclosure changes visibility into workload, delivery costs and eventual sales.\n\nNorthrop Grumman: The designation supports a potential aircraft-maintenance workload. Sales depend on service orders, site throughput and delivery costs. Watch for maintenance orders, site utilization, staffing costs and revenue timing.\n\nComing week: November 9, 2026 to November 13, 2026\nMonday, November 9: No publisher-verified entry in this edition's evidence.\nTuesday, November 10: No publisher-verified entry in this edition's evidence.\nWednesday, November 11: No publisher-verified entry in this edition's evidence.\nThursday, November 12: Weekly jobless claims at 08:30 AM EST, according to DOL.\nFriday, November 13: No publisher-verified entry in this edition's evidence.\nCalendar coverage is limited. Missing entries indicate missing verified coverage, rather than an absence of scheduled events. Estimated earnings dates are excluded. Labor and demand releases can test the operating backdrop; issuer results and guidance can test company sales, margins and spending.\n\nBeyond the coming week\nLater horizon, outside the coming Monday-to-Friday window: Nvidia has scheduled its earnings conference call for Tuesday, November 17 at 05:00 PM EST, according to its company announcement.\n\nConditions to watch\nConditional scenarios, not forecasts or assigned probabilities.\n\nBase case: use the disclosed stages as research context while waiting for firm order values and delivery plans. The milestones support continued monitoring; they do not establish a new revenue forecast.\n\nThe case strengthens if original customer or company disclosures add funded work, production commitments or a defined service timetable. Compare the size and timing of that work with the resources needed to deliver it.\n\nThe case weakens if disclosed funding, design progress or execution falls short. Delays and higher delivery costs would matter because technical progress alone cannot establish profitable growth.\n\nResearch context\nThis outlook separates dated disclosures, analyst interpretation and conditional scenarios. It does not attribute stock moves to those disclosures. Check new original evidence before changing the investment case. Research only. Not financial advice.\n\nSources and observation clocks\nmarket_^GSPC — Yahoo chart; may be delayed | Observed: 2026-11-08T14:20:00+00:00\nhttps://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d&events=splits\n\nmarket_^IXIC — Yahoo chart; may be delayed | Observed: 2026-11-08T14:20:00+00:00\nhttps://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?range=1mo&interval=1d&events=splits\n\nmarket_^RUT — Yahoo chart; may be delayed | Observed: 2026-11-08T14:20:00+00:00\nhttps://query1.finance.yahoo.com/v8/finance/chart/%5ERUT?range=1mo&interval=1d&events=splits\n\nstory_76f8209c790d8502 — Northrop Grumman Newsroom | Published: 2026-11-06T16:00:00+00:00 | Observed: 2026-11-08T14:20:00+00:00\nhttps://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation\n\ncalendar_0 — DOL | Observed: 2026-11-08T14:20:00+00:00\nhttps://oui.doleta.gov/unemploy/claims_arch.asp\n\nlater_0 — NVIDIA Newsroom | Published: 2026-11-03T16:00:00+00:00 | Observed: 2026-11-08T14:20:00+00:00\nhttps://nvidianews.nvidia.com/news/synthetic-quarterly-conference-call",
+    "rules_version": 30,
+    "schema": 1,
+    "theme": {
+      "base": "Base case: use the disclosed stages as research context while waiting for firm order values and delivery plans. The milestones support continued monitoring; they do not establish a new revenue forecast.",
+      "case": "Technical progress and service designations can expand a company's opportunity, but the commercial test is the work customers actually fund. A development milestone, an existing program contract and a new order describe different kinds of evidence. The useful comparison is how each disclosure changes visibility into workload, delivery costs and eventual sales.",
+      "id": "defense",
+      "question": "Which defense milestones are moving toward funded delivery or a paying maintenance workload?",
+      "story_ids": [
+        "76f8209c790d8502"
+      ],
+      "stronger": "The case strengthens if original customer or company disclosures add funded work, production commitments or a defined service timetable. Compare the size and timing of that work with the resources needed to deliver it.",
+      "title": "Defense progress and the route to funded work",
+      "weaker": "The case weakens if disclosed funding, design progress or execution falls short. Delays and higher delivery costs would matter because technical progress alone cannot establish profitable growth."
+    },
+    "voiceover": {
+      "input_sha256": "efda788d169556dae9a3bb4f5ab4decc2676bda2064031787778ae08d1ea4cfb",
+      "quality": {
+        "estimated_seconds": 194.6,
+        "status": "PASS",
+        "words": 519,
+        "words_per_minute": 160
+      },
+      "schema": 2,
+      "script": "Smart Money Weekend Outlook.\n\nThe completed week ran from November second, two thousand twenty six through November sixth, two thousand twenty six. Weekly price returns compare the October thirtieth, two thousand twenty six close with the November sixth, two thousand twenty six close. Over that week, S and P five hundred fell three point six four percent; Nasdaq fell three point six four percent; Russell two thousand fell three point six four percent. Friday alone: S and P five hundred rose six percent; Nasdaq rose six percent; Russell two thousand rose six percent. Friday's rebound left these benchmarks below their prior-week closes. These are price returns, excluding dividends. Market prices describe the outcome; the disclosures below provide separate business evidence.\n\nWhich defense milestones are moving toward funded delivery or a paying maintenance workload?\n\nOriginal disclosures:\nNorthrop Grumman said its Example Bay, Louisiana facility was selected as a certified U S depot for the C one thirty Hercules fleet. Planned services include repair, overhaul and inspection. This week disclosure was published November sixth.\n\nAnalyst interpretation: Technical progress and service designations can expand a company's opportunity, but the commercial test is the work customers actually fund. A development milestone, an existing program contract and a new order describe different kinds of evidence. The useful comparison is how each disclosure changes visibility into workload, delivery costs and eventual sales.\n\nNorthrop Grumman: The designation supports a potential aircraft-maintenance workload. Sales depend on service orders, site throughput and delivery costs. Watch for maintenance orders, site utilization, staffing costs and revenue timing.\n\nMonday, November ninth: No publisher-verified entry in this edition's evidence.\nTuesday, November tenth: No publisher-verified entry in this edition's evidence.\nWednesday, November eleventh: No publisher-verified entry in this edition's evidence.\nThursday, November twelfth: Weekly jobless claims at eight thirty in the morning, Eastern Standard Time, according to DOL.\nFriday, November thirteenth: No publisher-verified entry in this edition's evidence.\nCalendar coverage is limited. Missing entries indicate missing verified coverage, rather than an absence of scheduled events. Estimated earnings dates are excluded. Labor and demand releases can test the operating backdrop; issuer results and guidance can test company sales, margins and spending.\n\nLater horizon, outside the coming Monday-to-Friday window: Nvidia has scheduled its earnings conference call for Tuesday, November seventeenth at five in the afternoon, Eastern Standard Time, according to its company announcement.\n\nConditional scenarios, not forecasts or assigned probabilities.\n\nBase case: use the disclosed stages as research context while waiting for firm order values and delivery plans. The milestones support continued monitoring; they do not establish a new revenue forecast.\n\nThe case strengthens if original customer or company disclosures add funded work, production commitments or a defined service timetable. Compare the size and timing of that work with the resources needed to deliver it.\n\nThe case weakens if disclosed funding, design progress or execution falls short. Delays and higher delivery costs would matter because technical progress alone cannot establish profitable growth.\n\nThis outlook separates dated disclosures, analyst interpretation and conditional scenarios. It does not attribute stock moves to those disclosures. Check new original evidence before changing the investment case. Research only. Not financial advice.",
+      "script_sha256": "056885486bc20162f1b8a2ea6fe50524c58455d7760882789e4b3ff6b770cee6",
+      "segments": [
+        {
+          "bullets": [],
+          "heading": "Week in perspective",
+          "narration": "The completed week ran from November second, two thousand twenty six through November sixth, two thousand twenty six. Weekly price returns compare the October thirtieth, two thousand twenty six close with the November sixth, two thousand twenty six close. Over that week, S and P five hundred fell three point six four percent; Nasdaq fell three point six four percent; Russell two thousand fell three point six four percent. Friday alone: S and P five hundred rose six percent; Nasdaq rose six percent; Russell two thousand rose six percent. Friday's rebound left these benchmarks below their prior-week closes. These are price returns, excluding dividends. Market prices describe the outcome; the disclosures below provide separate business evidence.",
+          "source_ids": [
+            "market_^GSPC",
+            "market_^IXIC",
+            "market_^RUT"
+          ]
+        },
+        {
+          "bullets": [
+            "Which defense milestones are moving toward funded delivery or a paying maintenance workload?"
+          ],
+          "heading": "Defense progress and the route to funded work",
+          "narration": "Which defense milestones are moving toward funded delivery or a paying maintenance workload?\n\nOriginal disclosures:\nNorthrop Grumman said its Example Bay, Louisiana facility was selected as a certified U S depot for the C one thirty Hercules fleet. Planned services include repair, overhaul and inspection. This week disclosure was published November sixth.",
+          "source_ids": [
+            "story_76f8209c790d8502"
+          ]
+        },
+        {
+          "bullets": [],
+          "heading": "Business interpretation",
+          "narration": "Analyst interpretation: Technical progress and service designations can expand a company's opportunity, but the commercial test is the work customers actually fund. A development milestone, an existing program contract and a new order describe different kinds of evidence. The useful comparison is how each disclosure changes visibility into workload, delivery costs and eventual sales.\n\nNorthrop Grumman: The designation supports a potential aircraft-maintenance workload. Sales depend on service orders, site throughput and delivery costs. Watch for maintenance orders, site utilization, staffing costs and revenue timing.",
+          "source_ids": [
+            "story_76f8209c790d8502"
+          ]
+        },
+        {
+          "bullets": [],
+          "heading": "Coming week: November 9, 2026 to November 13, 2026",
+          "narration": "Monday, November ninth: No publisher-verified entry in this edition's evidence.\nTuesday, November tenth: No publisher-verified entry in this edition's evidence.\nWednesday, November eleventh: No publisher-verified entry in this edition's evidence.\nThursday, November twelfth: Weekly jobless claims at eight thirty in the morning, Eastern Standard Time, according to DOL.\nFriday, November thirteenth: No publisher-verified entry in this edition's evidence.\nCalendar coverage is limited. Missing entries indicate missing verified coverage, rather than an absence of scheduled events. Estimated earnings dates are excluded. Labor and demand releases can test the operating backdrop; issuer results and guidance can test company sales, margins and spending.",
+          "source_ids": [
+            "calendar_0"
+          ]
+        },
+        {
+          "bullets": [],
+          "heading": "Beyond the coming week",
+          "narration": "Later horizon, outside the coming Monday-to-Friday window: Nvidia has scheduled its earnings conference call for Tuesday, November seventeenth at five in the afternoon, Eastern Standard Time, according to its company announcement.",
+          "source_ids": [
+            "later_0"
+          ]
+        },
+        {
+          "bullets": [],
+          "heading": "Conditions to watch",
+          "narration": "Conditional scenarios, not forecasts or assigned probabilities.\n\nBase case: use the disclosed stages as research context while waiting for firm order values and delivery plans. The milestones support continued monitoring; they do not establish a new revenue forecast.\n\nThe case strengthens if original customer or company disclosures add funded work, production commitments or a defined service timetable. Compare the size and timing of that work with the resources needed to deliver it.\n\nThe case weakens if disclosed funding, design progress or execution falls short. Delays and higher delivery costs would matter because technical progress alone cannot establish profitable growth.",
+          "source_ids": [
+            "story_76f8209c790d8502"
+          ]
+        },
+        {
+          "bullets": [],
+          "heading": "Research context",
+          "narration": "This outlook separates dated disclosures, analyst interpretation and conditional scenarios. It does not attribute stock moves to those disclosures. Check new original evidence before changing the investment case. Research only. Not financial advice.",
+          "source_ids": []
+        }
+      ],
+      "sources": {
+        "calendar_0": [
+          {
+            "event_at": "2026-11-12T13:30:00+00:00",
+            "kind": "publisher calendar",
+            "publisher": "DOL",
+            "url": "https://oui.doleta.gov/unemploy/claims_arch.asp",
+            "verified_at": "2026-11-08T14:20:00+00:00"
+          }
+        ],
+        "later_0": [
+          {
+            "event_date": "2026-11-17",
+            "published_at": "2026-11-03T16:00:00+00:00",
+            "publisher": "NVIDIA Newsroom",
+            "url": "https://nvidianews.nvidia.com/news/synthetic-quarterly-conference-call",
+            "verified_at": "2026-11-08T14:20:00+00:00"
+          }
+        ],
+        "market_^GSPC": [
+          {
+            "baseline_date": "2026-10-30",
+            "publisher": "Yahoo chart; may be delayed",
+            "quote_asof": "2026-11-06T22:16:00+00:00",
+            "session_date": "2026-11-06",
+            "source_sha256": "39f8e76306ace7b2febcaa9f30046db6f990935b9d808037b47a3fd0ca313839",
+            "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d&events=splits",
+            "verified_at": "2026-11-08T14:20:00+00:00"
+          }
+        ],
+        "market_^IXIC": [
+          {
+            "baseline_date": "2026-10-30",
+            "publisher": "Yahoo chart; may be delayed",
+            "quote_asof": "2026-11-06T22:16:00+00:00",
+            "session_date": "2026-11-06",
+            "source_sha256": "fa8b4faf31797e63d207fed060e813ed87f2927a5dddda35cc5317d76021db91",
+            "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?range=1mo&interval=1d&events=splits",
+            "verified_at": "2026-11-08T14:20:00+00:00"
+          }
+        ],
+        "market_^RUT": [
+          {
+            "baseline_date": "2026-10-30",
+            "publisher": "Yahoo chart; may be delayed",
+            "quote_asof": "2026-11-06T22:16:00+00:00",
+            "session_date": "2026-11-06",
+            "source_sha256": "9f9647f4b777f3193fae1197e0cf01e3a94f54a76ca5ad750c969363a1d40515",
+            "url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ERUT?range=1mo&interval=1d&events=splits",
+            "verified_at": "2026-11-08T14:20:00+00:00"
+          }
+        ],
+        "story_76f8209c790d8502": [
+          {
+            "published_at": "2026-11-06T16:00:00+00:00",
+            "publisher": "Northrop Grumman Newsroom",
+            "source_sha256": "699095687d1dc7c2ce0cacad8601eef20fa79e323981de0db345ec604387cdf9",
+            "url": "https://news.northropgrumman.com/aircraft-sustainment/synthetic-c130-depot-designation",
+            "verified_at": "2026-11-08T14:20:00+00:00"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@ from contextlib import closing
 from datetime import datetime, timedelta
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 
@@ -35,14 +36,21 @@ def save(record):
     return record["id"]
 
 
-def latest():
+def read_record(edition_id=None):
+    if edition_id is not None and (not isinstance(edition_id,str) or not re.fullmatch(r"[0-9a-f]{20}",edition_id)):
+        return None
     path=state_path()
     if not path.is_file():return None
     try:
         with closing(sqlite3.connect(path.resolve().as_uri()+"?mode=ro",uri=True,timeout=2)) as db:
-            row=db.execute("SELECT id,record FROM weekend_editions ORDER BY generated DESC,rowid DESC LIMIT 1").fetchone()
+            row=(db.execute("SELECT id,record FROM weekend_editions WHERE id=?",(edition_id,)).fetchone() if edition_id is not None else
+                 db.execute("SELECT id,record FROM weekend_editions ORDER BY generated DESC,rowid DESC LIMIT 1").fetchone())
         if row is None or not isinstance(row[1],str) or len(row[1].encode())>MAX_BYTES:return None
         record=json.loads(row[1])
         if not isinstance(record,dict) or record.get("id")!=row[0] or row[0]!=identity(record):return None
         return record
     except (OSError,sqlite3.Error,ValueError,TypeError):return None
+
+
+def latest():
+    return read_record()

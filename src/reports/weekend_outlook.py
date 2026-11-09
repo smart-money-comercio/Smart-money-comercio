@@ -12,6 +12,7 @@ from src.intelligence import company_schedule
 from src.intelligence.daily_brief_analysis import NAMES
 from src.utils.market_quote_source import BENCHMARKS
 from src.utils.speech_text import normalize
+from src.reports import weekend_narration
 
 LOCK = RLock()
 MAX_CHARACTERS = 10000
@@ -84,6 +85,7 @@ def source_map(inputs, selected):
 
 
 def content(inputs, theme):
+    narration_revision=weekend_narration.revision(inputs)
     periods=inputs["window"]
     selected=[row for row in inputs["stories"] if theme and row["id"] in theme["story_ids"]]
     sources=source_map(inputs,selected)
@@ -95,7 +97,8 @@ def content(inputs, theme):
         facts=[]
         for row in selected:
             stamp=evidence.clock(row["published"]).astimezone(evidence.NY)
-            facts.append(themes.summary(row)+f" This {row['publication_label']} was published {stamp:%B} {stamp.day}.")
+            label=("This weekend update" if row["publication_label"]=="weekend update" else "The disclosure") if narration_revision>=2 else "This "+row["publication_label"]
+            facts.append(themes.summary(row)+f" {label} was published {stamp:%B} {stamp.day}.")
         add(theme["title"],theme["question"]+"\n\nOriginal disclosures:\n"+"\n\n".join(facts),
             ["story_"+row["id"] for row in selected],[theme["question"]])
         add("Business interpretation", "Analyst interpretation: "+theme["case"]+"\n\n"+
@@ -124,13 +127,19 @@ def content(inputs, theme):
     report+="\n\nSources and observation clocks\n"+("\n\n".join(references) or "No qualified evidence references.")
     narrated=[]
     for row in sections:
-        spoken=normalize(row["narration"],brand_names=True,agency_names=True,disclosure_names=True)
+        text=row["narration"]
+        if narration_revision>=2:
+            if row["heading"].startswith("Coming week:"):text=weekend_narration.calendar(inputs["calendar"],periods)
+            spoken=weekend_narration.spoken(text)
+        else:spoken=normalize(text,brand_names=True,agency_names=True,disclosure_names=True)
         narrated.append({**row,"narration":spoken})
-    script="Smart Money Weekend Outlook.\n\n"+"\n\n".join(row["narration"] for row in narrated)
+    if narration_revision>=2:narrated[0]["narration"]="Smart Money Weekend Outlook.\n\n"+narrated[0]["narration"]
+    script=("" if narration_revision>=2 else "Smart Money Weekend Outlook.\n\n")+"\n\n".join(row["narration"] for row in narrated)
     words=len(re.findall(r"\b[\w]+(?:['-][\w]+)*\b",script))
     quality={"status":"PASS" if 300<=words<=1200 else "CHECK","words":words,"estimated_seconds":round(words*60/160,1),"words_per_minute":160}
     voice={"schema":2,"input_sha256":evidence.digest(inputs),"script":script,"script_sha256":text_hash(script),
         "segments":narrated,"sources":sources,"quality":quality}
+    if narration_revision>=2:voice["narration_revision"]=narration_revision
     return report,voice
 
 
@@ -193,7 +202,7 @@ def build(now=None,*,force=False,raw=None,market_fetch=None,body_fetch=None,cale
     with LOCK:
         if not force and raw is None and market_fetch is None and body_fetch is None:
             prior=store.latest()
-            if prior:
+            if prior and prior.get("inputs",{}).get("narration_revision")==weekend_narration.REVISION:
                 try:
                     checked(prior,now,require_publishable=True)
                     if (now-evidence.clock(prior["generated_at"])).total_seconds()<=1800:return prior
@@ -203,7 +212,7 @@ def build(now=None,*,force=False,raw=None,market_fetch=None,body_fetch=None,cale
             prices=pool.submit(evidence.collect_prices,periods,now,market_fetch,force=force)
             stories=pool.submit(evidence.collect_stories,rows,periods,now,body_fetch,force=force)
             found,ledger=stories.result()
-            inputs={"generated_at":now.isoformat(),"window":periods,"prices":prices.result(),"stories":found,
+            inputs={"generated_at":now.isoformat(),"narration_revision":weekend_narration.REVISION,"window":periods,"prices":prices.result(),"stories":found,
                 "ledger":ledger,"calendar":evidence.calendar_packet(rows,periods,now,calendar_snapshot),"source_issues":issues}
         record=assemble(inputs);checked(record)
         if persist:store.save(record)
@@ -231,6 +240,7 @@ def status(record,now=None):
     for row in inputs["ledger"]:lines.append(row["status"].upper()+" — "+row["title"]+": "+row["reason"])
     lines += [f"Calendar: {len(inputs['calendar']['macro'])} verified macro / {len(inputs['calendar']['company'])} issuer notices; {len(inputs['calendar']['later'])} later-horizon notices. Coverage limited.",
         "Voiceover: "+str(record["voiceover"]["quality"]["words"])+" words; about "+str(record["voiceover"]["quality"]["estimated_seconds"])+" seconds at 160 words/minute",
+        "Narration revision: "+str(record["voiceover"].get("narration_revision",1)),
         "Checks: "+"; ".join(key+": "+("PASS" if value else "CHECK") for key,value in record["quality"]["checks"].items())]
     lines += ["Coverage: "+str(value) for value in inputs["source_issues"]+inputs["calendar"]["issues"]]
     return "\n".join(lines)
@@ -239,7 +249,7 @@ def status(record,now=None):
 def episode(record,now=None):
     checked(record,now,require_publishable=True)
     voice=record["voiceover"];periods=record["inputs"]["window"]
-    return {"title":"Smart Money Weekend Outlook | Week of "+periods["next_start"],"date":evidence.clock(record["generated_at"]).astimezone(evidence.NY).date().isoformat(),
+    packet={"title":"Smart Money Weekend Outlook | Week of "+periods["next_start"],"date":evidence.clock(record["generated_at"]).astimezone(evidence.NY).date().isoformat(),
         "edition_type":"weekend_outlook","week_start":periods["week_start"],"week_end":periods["week_end"],
         "next_week_start":periods["next_start"],"next_week_end":periods["next_end"],
         "description":"Source-reviewed weekly research and conditional business scenarios. AI narration and illustrative graphics require human review. Research only. Not financial advice.",
@@ -247,3 +257,5 @@ def episode(record,now=None):
         "segments":deepcopy(voice["segments"]),"sources":deepcopy(voice["sources"]),"bot_edition_id":record["id"],
         "bot_report_sha256":record["report_sha256"],"bot_generated_at":record["generated_at"],
         "voiceover_sha256":voice["script_sha256"],"voiceover_schema":2,"voiceover_quality":deepcopy(voice["quality"])}
+    if voice.get("narration_revision"):packet["weekend_narration_revision"]=voice["narration_revision"]
+    return packet
