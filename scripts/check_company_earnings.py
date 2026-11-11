@@ -257,7 +257,7 @@ class CompanyEarningsChecks(IsolatedChecks):
         with patch.object(editor, "cache_candidates", return_value=([source(312)], [])):
             text = news.build_daily_news_brief(report)
         record = store.read_editions(report=text)[0]
-        self.assertIn("Advanced Micro Devices rose 8.6 percent", text.split("Market Update", 1)[0])
+        self.assertIn("The takeaway: Advanced Micro Devices rose 8.6 percent.", text.split("Market Update", 1)[0])
         self.assertIn("What We're Watching\nIntel (INTC) — Compare reported fourth quarter 2026 revenue", text)
         self.assertIn("Watchlist breadth —", text)
         self.assertFalse(editor.selected_stories(record))
@@ -269,7 +269,7 @@ class CompanyEarningsChecks(IsolatedChecks):
         scene = next(row for row in profile["segments"] if row["heading"] == "What We're Watching")
         self.assertEqual(scene["source_ids"], ["earnings_baseline_INTC"])
         self.assertIn("Dated results benchmark: INTC — USED", editor.build_editor_status())
-        self.assertIn("Brief narrative revision: 4", editor.build_editor_status())
+        self.assertIn("Brief narrative revision: 5", editor.build_editor_status())
 
     def test_benchmark_preserves_pending_price_checks_and_current_financial_context(self):
         from src.intelligence.market_priority import named_checks

@@ -124,16 +124,18 @@ def concise_checks(evidence, rows, event):
     stories = {story["id"]: story for story in evidence.get("stories", [])}
     point = opening_source(evidence) or {}
     reviews = [row for row in evidence.get("business_reviews", [])
-               if row["analysis"]["event_class"] in {"commercial rollout", "production milestone"}]
+               if row["analysis"]["event_class"] in {"commercial rollout", "production milestone", "order award"}]
     earnings_story = any(story.get("materiality") in {"earnings", "guidance"} and story.get("event_evidence", {}).get("facts")
                          for story in stories.values())
     if not reviews or earnings_story or any("Recent earnings context" in row["sources"] for row in rows):
         return rows
     review = min(reviews, key=lambda row: (row["story_id"] not in point.get("story_ids", []), row["story_id"]))
     story = stories[review["story_id"]]
-    label = "AMD's server rollout" if story.get("publisher_symbol") == "AMD" else name(story) + "'s production economics"
+    kind = review["analysis"]["event_class"]
+    topic = {"commercial rollout": "server rollout", "production milestone": "production economics", "order award": "order follow-through"}[kind]
+    label = ("AMD" if kind == "commercial rollout" else name(story)) + "'s " + topic
     decision_test = review["analysis"]["decision_test"]
-    if evidence.get("business_version", 0) >= 3 and review["analysis"]["event_class"] == "commercial rollout":
+    if evidence.get("business_version", 0) >= 3 and kind == "commercial rollout":
         decision_test = "Reported server sales and margins would show how the EPYC rollout is contributing to the business."
     test = story_watch(story, label + ": " + decision_test, evidence)
     displaced = {"watch_business", "watch_results"}

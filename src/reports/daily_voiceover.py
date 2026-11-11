@@ -90,7 +90,7 @@ def price_sentence(row, evidence):
     return row['name'] + (" was unchanged" if value == 0 else f" {'rose' if value > 0 else 'fell'} {abs(value):.1f} percent") + " in the quoted session."
 
 
-def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
+def story_copy(story, evidence, *, modern=False, refined=False, concise=False, introduced_in_takeaway=False):
     from src.intelligence.daily_brief_analysis import NAMES
     if evidence.get("disclosure_version", 0) >= 2:
         NAMES = {**NAMES, "ETN": "Eaton"}
@@ -119,6 +119,12 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
         review = enhance(story, review)
     implication = review["why"] + (" " + review["watch"] if business_version else "")
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
+    if profile["schema"] == 15:
+        name = NAMES.get(story.get("publisher_symbol"), story["source"])
+        why = review["why"]
+        if introduced_in_takeaway:
+            return "For " + name + ", " + why[0].lower() + why[1:]
+        return review["facts"] + " " + why
     if profile["schema"] == 14:
         from src.intelligence.delivery_disclosures import summary
         text = summary(profile, speech=True)
@@ -341,7 +347,8 @@ def build(record, report, research, *, schema=2):
     from src.intelligence.company_focus import issuer, grouped_price_watch
     introduced = set()
     for story in sorted(selected, key=editor.news_order):
-        copy = story_copy(story, evidence, modern=modern, refined=refined, concise=concise)
+        introduced_in_takeaway = story["id"] in opening_sources
+        copy = story_copy(story, evidence, modern=modern, refined=refined, concise=concise, introduced_in_takeaway=introduced_in_takeaway)
         if not copy:
             continue
         defense = "defense" in story_topics(story)
@@ -355,7 +362,13 @@ def build(record, report, research, *, schema=2):
             if label in introduced:
                 transition = ""
             introduced.add(label)
-        add(label, transition+copy, (story["title"],), (story["id"],))
+        bullet = story["title"]
+        if story.get("event_evidence", {}).get("schema") == 15:
+            from src.intelligence.story_analysis import investor_read
+            bullet = investor_read(story)["facts"]
+            if introduced_in_takeaway:
+                transition = ""
+        add(label, transition+copy, (bullet,), (story["id"],))
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)
     def add_peer_group():

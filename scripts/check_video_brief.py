@@ -47,8 +47,8 @@ class VideoBriefChecks(IsolatedChecks):
 
     def test_opening_card_contains_the_actual_editorial_takeaway(self):
         _,record=self.render();scene=record["voiceover"]["segments"][0]
-        self.assertIn("All three major indexes fell",scene["bullets"][0])
-        self.assertTrue(any("Intel" in line for line in scene["bullets"]))
+        self.assertIn("Intel fell 28.6 percent",scene["bullets"][0])
+        self.assertIn("All three major indexes fell",scene["bullets"][1])
         self.assertNotIn("Source-backed market research",scene["bullets"])
         self.assertFalse(any(line.startswith("Edition:") for line in scene["bullets"]))
 

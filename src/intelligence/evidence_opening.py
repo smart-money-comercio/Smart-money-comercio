@@ -52,6 +52,10 @@ def opening_source(evidence):
             else:
                 text = "Lockheed Martin reported GMLRS delivery number " + fields["delivery_milestone"] + "."
                 priority = 4
+        elif profile["schema"] == 15:
+            from src.intelligence.order_awards import summary
+            text = summary(profile, name)
+            watch, priority = "Look for delivery timing and any change to revenue guidance.", 2
         elif profile["event"] == "earnings":
             field = next((key for key in ("reported_revenue", "reported_sales", "reported_net_sales") if key in fields), None)
             match = re.fullmatch(r"(\$[\d,.]+\s*(?:billion|million)?) \(([^()]+)\)", fields[field]) if field else None
@@ -113,23 +117,31 @@ def market_observation(evidence):
 
 def opening(evidence):
     point = opening_source(evidence)
-    concise = evidence.get("business_version", 0) >= 2
+    version = evidence.get("business_version", 0)
+    concise = version >= 2
+    market = market_observation(evidence)
+    breadth = evidence.get("breadth")
+    story_first = version >= 5 and not (breadth and breadth["down"] == breadth["total"])
     if point:
-        return "The takeaway: " + market_observation(evidence) + " " + point["text"] + ("" if concise else " " + point["watch"])
+        if story_first:
+            return "The takeaway: " + point["text"] + " " + market
+        return "The takeaway: " + market + " " + point["text"] + ("" if concise else " " + point["watch"])
     from src.intelligence.company_earnings import matching
     events = evidence.get("market_event_context", {}).get("events", [])
     checked = next((row for row in events if row["status"] == "rechecked"), None)
     if checked and matching(evidence.get("earnings_context", []), checked["symbol"]):
         from src.intelligence.reader_brief import opening as older_opening
         return older_opening({**evidence,"reader_version":2})
-    text = "The takeaway: " + market_observation(evidence)
+    text = "The takeaway: " + market
     if checked:
         move = checked["reported_move"]
-        text += " " + NAMES.get(checked["symbol"], checked["symbol"]) + f" {'rose' if move > 0 else 'fell'} {abs(move):.1f} percent."
+        mover = NAMES.get(checked["symbol"], checked["symbol"]) + f" {'rose' if move > 0 else 'fell'} {abs(move):.1f} percent."
+        if story_first:
+            return "The takeaway: " + mover + " " + market
+        text += " " + mover
         if concise:
             return text
         text += " Compare the move with original results and guidance to assess the business outlook."
-        breadth = evidence.get("breadth")
         if move < 0 and breadth and breadth["down"] > breadth["up"]:
             text += " Watch for selling to ease across the names we track."
         elif move > 0 and breadth and breadth["up"] > breadth["down"]:

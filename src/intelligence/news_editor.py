@@ -68,6 +68,8 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    if story.get("event_evidence", {}).get("schema") == 15:
+        return "contract" if primary_source(story) and checked_evidence(story)["facts"] else ""
     if story.get("event_evidence", {}).get("schema") == 14:
         if not primary_source(story):
             return ""
@@ -445,11 +447,14 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                     from src.intelligence.treasury_financing import document_kind
                     from src.intelligence.defense_program import program_facts, material
                     from src.intelligence.delivery_disclosures import extract as delivery_facts
+                    from src.intelligence.order_awards import extract as order_facts
                     from src.intelligence.refinery_mix import applicable as product_mix
                     category = disclosure_family(story)
                     profile = 12 if category == "maintenance" else 13 if category == "financial sanctions" else 11 if product_mix(story) else 9 if document_kind(story) else 10 if material(program_facts(story, text)) else 8
                     if profile == 8 and delivery_facts(story, text):
                         profile = 14
+                    elif profile == 8 and order_facts(story, text):
+                        profile = 15
                     story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=profile)
                     checked_evidence(story)
             except (ValueError, TypeError, OverflowError) as exc:
@@ -536,6 +541,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             reason = f"Original {story['confirmed_by']} report; material {story['materiality']} development within the edition budget"
             if story.get("event_evidence", {}).get("schema") == 14:
                 reason = f"Original {story['confirmed_by']} report with verified {story['materiality']} facts"
+            elif story.get("event_evidence", {}).get("schema") == 15:
+                reason = f"Original {story['confirmed_by']} report with verified order terms"
             story.update(decision="selected", reason=reason)
             selected.append(story)
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
@@ -543,7 +550,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
-            if story.get("event_evidence", {}).get("schema") not in range(8, 15):
+            if story.get("event_evidence", {}).get("schema") not in range(8, 16):
                 story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
@@ -558,7 +565,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             if baseline:
                 result["intel_results_baseline"] = baseline
         from src.utils.market_quote_source import cached_health
-        result.update(rules_version=32, business_version=4, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=32, business_version=5, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -608,7 +615,7 @@ def research_focus(story: dict) -> str:
 def render_story(story: dict, zone, company_names: dict, *, style="source", business_version=0) -> str:
     if style not in {"source", "broadcast"}:
         raise ValueError("Unknown story narration style")
-    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4} or business_version and style != "broadcast":
+    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4, 5} or business_version and style != "broadcast":
         raise ValueError("Unknown business narration version")
     if style == "broadcast" and not story.get("official"):
         raise ValueError("Broadcast narration needs an admitted original publisher")
@@ -739,7 +746,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
-         + f"; {sum(story.get('event_evidence', {}).get('schema') in range(8, 15) for story in value['candidates'])} original article materiality reviews"
+         + f"; {sum(story.get('event_evidence', {}).get('schema') in range(8, 16) for story in value['candidates'])} original article materiality reviews"
          + (f"; {len(analyst_review['evidence'].get('business_reviews', []))} business-channel reviews tied to disclosed fields" if (analyst_review or {}).get("business_version") else "")
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
@@ -955,7 +962,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Not specified in reviewed text: " + "; ".join(review["undisclosed"]))
                     if review.get("not_established"):
                         lines.append("Not established by these extracted facts: " + "; ".join(review["not_established"]))
-                    if event.get("schema") in range(8, 15):
+                    if event.get("schema") in range(8, 16):
                         for fact in event["facts"]:
                             lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]

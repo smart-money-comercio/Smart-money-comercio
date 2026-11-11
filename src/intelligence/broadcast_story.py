@@ -31,7 +31,7 @@ def _company_read_v1(story: dict) -> dict:
 
 
 def company_read(story: dict, *, business_version=0) -> dict:
-    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4}:
+    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4, 5}:
         raise ValueError("Unknown business narration version")
     review = _company_read_v1(story)
     if business_version:
@@ -47,6 +47,9 @@ def _render_story_v1(story: dict, zone, names: dict) -> str:
         raise ValueError("Broadcast narration needs an admitted original publisher")
     published = dated(story["published"]).astimezone(zone)
     day = f"{published:%B} {published.day}"
+    if story.get("event_evidence", {}).get("schema") == 15:
+        review = investor_read(story)
+        return review["facts"] + f" The disclosure was published {day}. Investor take: " + review["why"] + " " + review["watch"]
     if story.get("event_evidence", {}).get("schema") == 14:
         review = investor_read(story)
         text = review["facts"] + f" The disclosure was published {day}."
@@ -123,7 +126,7 @@ def _render_story_v1(story: dict, zone, names: dict) -> str:
 
 
 def render_story(story: dict, zone, names: dict, *, business_version=0) -> str:
-    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4}:
+    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4, 5}:
         raise ValueError("Unknown business narration version")
     text = _render_story_v1(story, zone, names)
     if business_version:

@@ -27,7 +27,10 @@ def assess(story):
     why, watch = base["why"], base["watch"]
     test = "Further original disclosures are needed to assess the scale and timing of the business effect."
 
-    if profile["schema"] == 14:
+    if profile["schema"] == 15:
+        kind, channel = "order award", "delivery and revenue timing"
+        test = "Look for a delivery timetable and any change to revenue or margin guidance."
+    elif profile["schema"] == 14:
         if profile["stage"] == "available":
             kind, channel = "commercial rollout", "server adoption and margins"
             test = "Reported server sales and margins would show how the launch is contributing to the business."
@@ -121,7 +124,7 @@ def compare(stories):
 
 def narrative(story, legacy, review, day, *, concise=False):
     """Smooth only known fact renderers; legacy titles retain their qualifications."""
-    if story.get("event_evidence", {}).get("schema") not in range(8, 15):
+    if story.get("event_evidence", {}).get("schema") not in range(8, 16):
         return legacy
     if story["event_evidence"]["schema"] == 8:
         from src.intelligence.original_disclosures import summarize
@@ -140,6 +143,8 @@ def narrative(story, legacy, review, day, *, concise=False):
         return facts
     if concise and review["evidence"]["schema"] == 14:
         return facts
+    if concise and review["evidence"]["schema"] == 15:
+        return facts + " " + review["why"]
     return facts + " " + review["why"] + " " + review["watch"]
 
 
@@ -147,4 +152,6 @@ def follow_through(story, review, *, concise=False):
     if concise and review["evidence"]["schema"] == 14:
         return "Funded deliveries and production costs will shape what that pace contributes to Lockheed Martin's earnings."
     why = review["why"]
+    if concise and review["evidence"]["schema"] == 15:
+        return "For " + name(story) + ", " + why[0].lower() + why[1:]
     return "For " + name(story) + ", " + why[0].lower() + why[1:] + " " + review["watch"]

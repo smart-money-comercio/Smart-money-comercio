@@ -30,6 +30,8 @@ LAUNCH = ("AMD (NASDAQ: AMD) announced general availability of its 7th Gen AMD E
 PRODUCTION = ("Lockheed Martin reported an update on its GMLRS program. "
               "The company has delivered its 25,000th GMLRS rocket and is now producing nearly 2,500 rockets per year "
               "– a production rate achieved ahead of schedule.")
+ORDER = ("ARLINGTON, Va. — (OCTOBER 25, 2026) — AeroVironment, Inc. (“AV”) (NASDAQ: AVAV), "
+         "today announced a landmark $84.5 million international direct commercial sales order for its maintenance equipment.")
 
 
 def release(symbol, **changes):
@@ -60,7 +62,53 @@ def independently_reviewed(row):
     return value
 
 
+def order_release(**changes):
+    row = candidate("AVAV", title="AV Awarded Landmark $84.5 Million International Order",
+                    url="https://www.avinc.com/2026/10/25/synthetic-international-order/",
+                    source="AeroVironment Newsroom", source_excerpt=ORDER, excerpt_scope="original release excerpt")
+    row.update(evidence_checked_at=row["source_checked_at"])
+    row.update(changes)
+    return row
+
+
 class FactChecks(unittest.TestCase):
+    def test_order_fields_derive_from_the_attributed_original_clause(self):
+        row = order_release()
+        profile = build_evidence(row, ORDER, "original release excerpt", schema=15)
+        self.assertEqual((profile["event"], profile["stage"]), ("contract", "order award"))
+        self.assertEqual([(fact["field"], fact["value"]) for fact in profile["facts"]],
+                         [("order_value", "$84.5 million"), ("order_type", "international order")])
+        self.assertTrue(all(fact["evidence"] in ORDER for fact in profile["facts"]))
+        self.assertNotIn("equipment", profile["facts"][0]["evidence"])
+        self.assertEqual(checked_evidence({**row, "event_evidence": profile}), profile)
+
+    def test_order_ceiling_retains_its_up_to_qualification(self):
+        from src.intelligence.order_awards import summary
+        row = order_release(title="AV announces an international order")
+        text = "AeroVironment received an international purchase order worth up to $84.5 million from a customer."
+        profile = build_evidence(row, text, "original release excerpt", schema=15)
+        self.assertEqual(profile["facts"][0]["basis"], "ceiling")
+        self.assertIn("worth up to $84.5 million", summary(profile, "AeroVironment"))
+
+    def test_order_reader_supports_an_ordinary_commercial_issuer(self):
+        row = candidate("MSFT", title="Microsoft receives $18 million purchase order")
+        text = "Microsoft received a purchase order valued at $18 million from a commercial customer."
+        profile = build_evidence(row, text, "original release excerpt", schema=15)
+        self.assertEqual([fact["value"] for fact in profile["facts"]], ["$18 million", "purchase order"])
+
+    def test_order_rejects_headlines_unrelated_money_and_unconfirmed_awards(self):
+        row = order_release()
+        for body in (row["title"], ORDER.replace("$84.5 million", "$89 million"),
+                     ORDER.replace("AeroVironment, Inc.", "Another Company"),
+                     ORDER.replace("today announced", "today announced plans for"),
+                     ORDER.replace("for its maintenance equipment", "subject to regulatory approval"),
+                     ORDER.replace("today announced", "today awarded"),
+                     ORDER.replace("for its maintenance equipment", "for its equipment under a $500 million agreement")):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                build_evidence(row, body, "original release excerpt", schema=15)
+        with self.assertRaises(ValueError):
+            build_evidence(row, ORDER, "publisher feed excerpt", schema=15)
+
     def test_launch_distinguishes_available_hardware_shipping_and_future_cloud(self):
         row = release("AMD")
         profile = build_evidence(row, LAUNCH, "original release excerpt", schema=14)
@@ -127,6 +175,28 @@ class FactChecks(unittest.TestCase):
 
 
 class DailyChecks(RebuildDetailChecks):
+    def test_reviewed_order_leads_with_the_fact_and_speaks_the_value_once(self):
+        order = order_release()
+        reviewed = independently_reviewed(order)
+        text, record = self.render([order, reviewed])
+        selected = editor.selected_stories(record)
+        self.assertEqual(len(selected), 1)
+        story = selected[0]
+        self.assertEqual((story["materiality"], story["event_evidence"]["schema"]), ("contract", 15))
+        self.assertIn("verified order terms", story["reason"])
+        self.assertTrue(validate_news_brief(text)["passes"])
+        self.assertIn("The takeaway: AeroVironment reported an international order worth $84.5 million.", text)
+        self.assertIn("AeroVironment (AVAV) — Look for a delivery timetable", text)
+        self.assertNotIn(order["title"], text)
+        voice = daily_voiceover.checked(record, NOW)
+        self.assertTrue(voice["quality"]["passes"])
+        self.assertEqual(voice["script"].count("eighty four point five million dollars"), 1)
+        lead = voice["segments"][0]
+        self.assertIn("AeroVironment reported an international order", lead["narration"])
+        self.assertEqual(lead["source_ids"], [story["id"]])
+        self.assertIn("execution costs and the pace of deliveries", voice["script"])
+        self.assertIn("2 sourced fact fields", editor.build_editor_status())
+
     def test_real_daily_build_uses_source_facts_once_in_brief_and_voiceover(self):
         production = release("LMT")
         text, record = self.render([release("AMD"), independently_reviewed(production), production])
@@ -135,7 +205,7 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual({story["publisher_symbol"] for story in selected}, {"AMD", "LMT"})
         self.assertEqual(len(selected), 2)
         self.assertTrue(all(checked_evidence(story)["schema"] == 14 for story in selected))
-        self.assertEqual(record["business_version"], 4)
+        self.assertEqual(record["business_version"], 5)
         self.assertEqual(len(record["analyst_review"]["evidence"]["business_reviews"]), 2)
         copies = [story for story in record["candidates"] if story["url"] == production["url"]]
         self.assertEqual(len(copies), 2)
@@ -172,6 +242,7 @@ def main():
     args = parser.parse_args()
     tests = unittest.defaultTestLoader.loadTestsFromTestCase(FactChecks)
     tests.addTest(DailyChecks("test_real_daily_build_uses_source_facts_once_in_brief_and_voiceover"))
+    tests.addTest(DailyChecks("test_reviewed_order_leads_with_the_fact_and_speaks_the_value_once"))
     with ExitStack() as stack:
         if args.windows_socketpair:
             stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))

@@ -197,10 +197,16 @@ def _from_admitted_text(story: dict, text: str, scope: str, *, schema: int | Non
     from src.intelligence.defense_program import applicable, program_facts, material
     from src.intelligence import refinery_mix
     from src.intelligence import disclosure_details
-    if type(schema) is not int or schema not in range(1, 15) or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema >= 8 and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
+    if type(schema) is not int or schema not in range(1, 16) or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema >= 8 and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
         raise ValueError("Unknown original story evidence scope")
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
-    if schema == 14:
+    if schema == 15:
+        from src.intelligence.order_awards import extract
+        facts = extract(story, text)
+        if not facts:
+            raise ValueError("Original order value or issuer attribution is incomplete or ambiguous")
+        kind, stage = "contract", "order award"
+    elif schema == 14:
         from src.intelligence.delivery_disclosures import extract
         extracted = extract(story, text)
         if extracted is None:
@@ -251,6 +257,10 @@ def checked_evidence(story: dict) -> dict:
 
 def investor_read(story: dict) -> dict:
     evidence = checked_evidence(story)
+    if evidence["schema"] == 15:
+        from src.intelligence.business_analysis import name
+        from src.intelligence.order_awards import review
+        return review(evidence, name(story))
     if evidence["schema"] == 14:
         from src.intelligence.delivery_disclosures import review
         return review(evidence)
@@ -342,6 +352,7 @@ def investor_read(story: dict) -> dict:
               "restructuring_cost_estimate": "Estimated restructuring cost", "annual_savings_target": "Annual savings target",
               "tested_capability": "Capability demonstrated in the reported test", "planned_capacity_scale": "Announced expansion plan",
               "contract_value": "Stated award value, not obligated funding", "contract_term": "Disclosed contract term", "contract_scope": "Disclosed work", "contract_customer": "Customer named in the award",
+              "order_value": "Stated order value", "order_type": "Disclosed order type",
               "deployment_example": "Deployment example", "deployment_example_2": "Additional deployment example", "rollout_target": "Rollout target",
               "commercial_commitment": "Disclosed commercial commitment", "refinery_change": "Dated global refinery observation", "refinery_change_2": "Additional dated refinery observation"}
     if kind == "monetary policy" and stage == "rate decision":
