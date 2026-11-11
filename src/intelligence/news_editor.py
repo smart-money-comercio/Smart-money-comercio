@@ -554,7 +554,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
         from src.utils.market_quote_source import cached_health
-        result.update(rules_version=32, business_version=1, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=32, business_version=2, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -604,7 +604,7 @@ def research_focus(story: dict) -> str:
 def render_story(story: dict, zone, company_names: dict, *, style="source", business_version=0) -> str:
     if style not in {"source", "broadcast"}:
         raise ValueError("Unknown story narration style")
-    if type(business_version) is not int or business_version not in {0, 1} or business_version and style != "broadcast":
+    if type(business_version) is not int or business_version not in {0, 1, 2} or business_version and style != "broadcast":
         raise ValueError("Unknown business narration version")
     if style == "broadcast" and not story.get("official"):
         raise ValueError("Broadcast narration needs an admitted original publisher")
@@ -881,6 +881,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if analysis.get("reader_version") in {1, 2, 3, 4}:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
                     lines.append(f"Reader brief: opening takeaway and {signals} evidence-grounded watch signals; each explains the next check and why it matters.")
+                if analysis.get("business_version") == 2:
+                    lines.append("Brief narrative revision: 2")
                 voice = record.get("voiceover", {}).get("quality")
                 if voice:
                     lines.append(f"Voiceover: {'PASS' if voice['passes'] else 'HOLD'} — {voice['words']} spoken words; about {voice['estimated_seconds']:.0f} seconds at {voice['words_per_minute']} words/minute. /voiceover for the script; JSON export for ElevenLabs/YouTube.")
@@ -928,7 +930,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if story.get("event_evidence"):
                     from src.agents.analyst_agent import review_sourced_development
                     review = review_sourced_development(story)
-                    if record.get("business_version") == 1:
+                    if record.get("business_version"):
                         from src.intelligence.business_analysis import enhance
                         review = enhance(story, review)
                     event = review["evidence"]

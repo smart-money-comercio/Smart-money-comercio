@@ -61,15 +61,17 @@ def opening(evidence):
     text = "The takeaway: " + "; ".join(phrases) + " in the quoted session."
     if evidence.get("breadth"):
         text += " " + participation_scope(evidence)
-    text += " Watch whether selling eases and participation improves; original company results and guidance are the next business checks."
+    if evidence.get("business_version") != 2:
+        text += " Watch whether selling eases and participation improves; original company results and guidance are the next business checks."
     return text
 
 
 def watching(evidence):
     from src.intelligence.reader_brief import watching as older_watching, _participation_scope
+    context = evidence.get("market_event_context", {})
+    events = context.get("events", [])
     if selloff(evidence):
-        context = evidence.get("market_event_context", {})
-        events = sorted(context.get("events", []),key=lambda row:(row["status"] != "rechecked",-abs(row["reported_move"]),row["symbol"]))
+        events = sorted(events, key=lambda row: (row["status"] != "rechecked", -abs(row["reported_move"]), row["symbol"]))
         source = {**evidence,"reader_version":2,"reader_limit":3,"market_event_context":{**context,"events":events}}
         rows = older_watching(source)
         for story in evidence.get("stories",[]):
@@ -89,7 +91,7 @@ def watching(evidence):
     if evidence.get("breadth"):
         before, after = _participation_scope(evidence), participation_scope(evidence)
         rows = [{**row,"text":row["text"].replace(before,after)} for row in rows]
-    if evidence.get("business_version") == 1:
+    if evidence.get("business_version"):
         from src.intelligence.business_analysis import name
         stories = {story["id"]: story for story in evidence.get("stories", [])}
         for review in evidence.get("business_reviews", []):
@@ -99,4 +101,38 @@ def watching(evidence):
                 if row["id"] == "watch_business" and row["text"].startswith(label + "'s"):
                     topic = {"maintenance": "maintenance opportunity", "development": "next milestone"}.get(review["analysis"]["event_class"], "business follow-through")
                     row["text"] = label + "'s " + topic + ": " + review["analysis"]["decision_test"]
+    if evidence.get("business_version") == 2:
+        rows = concise_checks(evidence, rows, events[0] if events else None)
     return rows[:evidence.get("reader_limit",3)]
+
+
+def concise_checks(evidence, rows, event):
+    """Keep the participation test distinct from the observed count in the lead."""
+    breadth = evidence.get("breadth")
+    if breadth:
+        scope = participation_scope(evidence)
+        if scope in opening(evidence):
+            for row in rows:
+                if row["id"] == "watch_participation":
+                    row["text"] = row["text"].replace(scope + " ", "", 1)
+
+    from src.intelligence.business_analysis import name
+    stories = {story["id"]: story for story in evidence.get("stories", [])}
+    point = opening_source(evidence) or {}
+    reviews = [row for row in evidence.get("business_reviews", [])
+               if row["analysis"]["event_class"] in {"commercial rollout", "production milestone"}]
+    earnings_story = any(story.get("materiality") in {"earnings", "guidance"} and story.get("event_evidence", {}).get("facts")
+                         for story in stories.values())
+    if not reviews or earnings_story or any("Recent earnings context" in row["sources"] for row in rows):
+        return rows
+    review = min(reviews, key=lambda row: (row["story_id"] not in point.get("story_ids", []), row["story_id"]))
+    story = stories[review["story_id"]]
+    label = "AMD's server rollout" if story.get("publisher_symbol") == "AMD" else name(story) + "'s production economics"
+    test = {"id": "watch_business", "section": "watch", "sources": ["Verified story decisions"],
+            "text": label + ": " + review["analysis"]["decision_test"]}
+    displaced = {"watch_business", "watch_results"}
+    if event and event["status"] == "rechecked":
+        displaced.add("watch_event")
+    rows = [row for row in rows if row["id"] not in displaced]
+    rows.insert(1 if rows and rows[0]["id"] == "watch_participation" else 0, test)
+    return rows

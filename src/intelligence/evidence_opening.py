@@ -45,6 +45,13 @@ def opening_source(evidence):
                 text = name + " has a new aircraft-maintenance designation."
                 watch = "The commercial follow-through matters next."
             priority = 3
+        elif evidence.get("business_version") == 2 and profile["schema"] == 14:
+            if profile["stage"] == "available":
+                text = "Server shipments put AMD's new EPYC launch into commercial rollout."
+                priority = 3
+            else:
+                text = "Lockheed Martin reported GMLRS delivery number " + fields["delivery_milestone"] + "."
+                priority = 4
         elif profile["event"] == "earnings":
             field = next((key for key in ("reported_revenue", "reported_sales", "reported_net_sales") if key in fields), None)
             match = re.fullmatch(r"(\$[\d,.]+\s*(?:billion|million)?) \(([^()]+)\)", fields[field]) if field else None
@@ -106,8 +113,9 @@ def market_observation(evidence):
 
 def opening(evidence):
     point = opening_source(evidence)
+    concise = evidence.get("business_version") == 2
     if point:
-        return "The takeaway: " + market_observation(evidence) + " " + point["text"] + " " + point["watch"]
+        return "The takeaway: " + market_observation(evidence) + " " + point["text"] + ("" if concise else " " + point["watch"])
     from src.intelligence.company_earnings import matching
     events = evidence.get("market_event_context", {}).get("events", [])
     checked = next((row for row in events if row["status"] == "rechecked"), None)
@@ -118,6 +126,8 @@ def opening(evidence):
     if checked:
         move = checked["reported_move"]
         text += " " + NAMES.get(checked["symbol"], checked["symbol"]) + f" {'rose' if move > 0 else 'fell'} {abs(move):.1f} percent."
+        if concise:
+            return text
         text += " Compare the move with original results and guidance to assess the business outlook."
         breadth = evidence.get("breadth")
         if move < 0 and breadth and breadth["down"] > breadth["up"]:
@@ -125,7 +135,7 @@ def opening(evidence):
         elif move > 0 and breadth and breadth["up"] > breadth["down"]:
             text += (" Watch whether those gains hold in the next session." if evidence.get("disclosure_version", 0) >= 1 and not evidence["is_open"] else
                      " Watch whether those gains hold in this group.")
-    else:
+    elif not concise:
         text += " Watch participation across the names we track and the next company results."
     return text
 

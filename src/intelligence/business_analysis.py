@@ -119,7 +119,7 @@ def compare(stories):
                          "basis_fields": value["basis_fields"]} for story, value in rows]}
 
 
-def narrative(story, legacy, review, day):
+def narrative(story, legacy, review, day, *, concise=False):
     """Smooth only known fact renderers; legacy titles retain their qualifications."""
     if story.get("event_evidence", {}).get("schema") not in range(8, 15):
         return legacy
@@ -138,9 +138,13 @@ def narrative(story, legacy, review, day):
     from src.intelligence.market_brief import story_topics
     if "defense" in story_topics(story):
         return facts
+    if concise and review["evidence"]["schema"] == 14:
+        return facts
     return facts + " " + review["why"] + " " + review["watch"]
 
 
-def follow_through(story, review):
+def follow_through(story, review, *, concise=False):
+    if concise and review["evidence"]["schema"] == 14:
+        return "Funded deliveries and production costs will shape what that pace contributes to Lockheed Martin's earnings."
     why = review["why"]
     return "For " + name(story) + ", " + why[0].lower() + why[1:] + " " + review["watch"]

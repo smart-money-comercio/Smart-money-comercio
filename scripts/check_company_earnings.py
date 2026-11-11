@@ -203,8 +203,9 @@ class CompanyEarningsChecks(IsolatedChecks):
 
     def test_log_separates_available_but_unused_context_from_unavailable_evidence(self):
         from scripts.check_video_brief import agency
-        with patch.object(editor,"cache_candidates",return_value=([source(),agency()],[])),patch.object(news,"MAX_NEWS_CHARS",3000):
+        with patch.object(editor,"cache_candidates",return_value=([source(),agency()],[])),patch.object(news,"MAX_NEWS_CHARS",2650):
             text=news.build_daily_news_brief(self.research_moves())
+            self.assertTrue(news.validate_news_brief(text)["passes"])
         record=store.read_editions(report=text)[0]
         self.assertFalse(record["analyst_review"]["evidence"].get("earnings_context"))
         log=editor.build_editor_status("INTC",history=True)

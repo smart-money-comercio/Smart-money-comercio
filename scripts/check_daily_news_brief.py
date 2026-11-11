@@ -1030,7 +1030,7 @@ class MarketDefenseChecks(IsolatedChecks):
     def test_quiet_day_defense_watch_does_not_invent_an_announcement_or_holdings(self):
         text = self.render([])
         self.assertIn("No current verified defense development qualified", text)
-        self.assertIn("drones, counter-drone systems, cybersecurity and autonomy", text)
+        self.assertNotIn("drones, counter-drone systems, cybersecurity and autonomy", text)
         self.assertNotIn("your holdings", text.lower())
         self.assertNotIn("your portfolio lost", text.lower())
 

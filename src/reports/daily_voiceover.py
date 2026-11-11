@@ -61,11 +61,17 @@ def market_copy(evidence):
     if moves.get("Oil", 0) >= 1.5 and not pressure:
         figures.append(f"oil rose {moves['Oil']:g} percent")
     figures_text = (", ".join(figures[:-1])+", and "+figures[-1]) if len(figures)>2 else ", while ".join(figures)
-    text = clock + ", " + figures_text + "." + volatility
+    session_copy = clock + ", " + figures_text + "."
+    text = session_copy + volatility
     basis = "; index coverage is incomplete" if pressure and not all(key in moves for key in ("S&P","Nasdaq","Russell")) else ""
     text += " Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + basis + ". " + lens
     if words(normalize(text)) + 4 > MAX_MARKET_WORDS:
-        text = clock + ", " + figures_text + ". Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + basis + ". " + lens
+        text = session_copy + " Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + basis + ". " + lens
+    if evidence.get("business_version") == 2 and "Russell" in moves and any(key in moves for key in ("S&P", "Nasdaq")):
+        value = moves["Russell"]
+        small_caps = " The small-cap Russell 2000" + (" was unchanged." if value == 0 else f" {'rose' if value > 0 else 'fell'} {abs(value):g} percent.")
+        if words(normalize(text + small_caps)) + 4 <= MAX_MARKET_WORDS:
+            text = session_copy + small_caps + text[len(session_copy):]
     if words(normalize(text)) + 4 < MIN_MARKET_WORDS:
         text += " Watch whether gains or losses spread across more companies in the next session."
     return text
@@ -115,7 +121,11 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
     if profile["schema"] == 14:
         from src.intelligence.delivery_disclosures import summary
-        return summary(profile, speech=True) + " " + implication
+        text = summary(profile, speech=True)
+        if business_version == 2:
+            from src.intelligence.business_analysis import follow_through
+            return text if profile["stage"] == "available" else text + " " + follow_through(story, review, concise=True)
+        return text + " " + implication
     if profile["schema"] in {12, 13}:
         from src.intelligence.disclosure_details import summary
         return summary(profile, NAMES.get(story.get("publisher_symbol"), story["source"])) + " " + implication
@@ -190,10 +200,12 @@ def focus_copy(row, evidence):
         text += " For context, its " + day + " results release reported " + values[0][2] + " " + ", and ".join(labels[fact["field"]]+" of "+value[1] for fact,value in zip(facts,values)) + "."
         text += " These dated results do not establish the cause of the price move."
         if context.get("cached_after_failure"): text += " This is previously verified cached context; the latest source access was limited."
-    elif text and row["group"] == "market event" and row.get("metric"):
-        text += " Check original results and guidance before assigning a business explanation to the move."
-    elif text:
-        text += " Watch the next company update and whether price and volume support the move."
+    elif text and not (evidence.get("business_version") == 2 and any(
+            story.get("event_evidence", {}).get("schema") == 14 for story in evidence.get("stories", []))):
+        if row["group"] == "market event" and row.get("metric"):
+            text += " Check original results and guidance before assigning a business explanation to the move."
+        else:
+            text += " Watch the next company update and whether price and volume support the move."
     return text
 
 
@@ -256,14 +268,14 @@ def build(record, report, research, *, schema=2):
 
     def add(heading, text, bullets=(), source_ids=()):
         text = normalize(text, brand_names=record.get("rules_version", 0) >= 21, agency_names=refined, disclosure_names=record.get("rules_version", 0) >= 27,
-                         business_names=evidence.get("business_version") == 1)
+                         business_names=bool(evidence.get("business_version")))
         if not text: return
         scenes.append({"heading":heading, "narration":text, "bullets":list(bullets)[:3], "source_ids":list(source_ids)})
 
     greeting = re.search(r"^(Hello|Good (?:morning|afternoon|evening))\.$", report, re.M)[0]
     hook = next((row["text"] for row in review["insights"] if row["id"] == "opening_takeaway"), "")
     hook = hook.replace("The takeaway:", "The key takeaway.").replace("in the quoted session", "in the market snapshot")
-    if evidence.get("business_version") == 1:
+    if evidence.get("business_version"):
         hook = hook.removeprefix("The key takeaway.").strip()
     hook_bullets = re.split(r"(?<=[.!?])\s+", hook.replace("The key takeaway.", "").strip())[:2] if modern else ("Source-backed market research", "Edition: "+local.date().isoformat())
     context_sources = ["earnings_" + context["symbol"] for context in evidence.get("earnings_context", []) if context["symbol"] != "GOOG"]
@@ -312,7 +324,7 @@ def build(record, report, research, *, schema=2):
             label, transition = "Energy and Infrastructure", "In energy and infrastructure. "
         elif modern and refined and story.get("source") == "EIA" and story.get("materiality") == "energy":
             label, transition = "Energy Watch", "In energy. "
-        if evidence.get("business_version") == 1:
+        if evidence.get("business_version"):
             if label in introduced:
                 transition = ""
             introduced.add(label)
@@ -349,12 +361,21 @@ def build(record, report, research, *, schema=2):
         add("Companies in Focus", text, bullets, ids)
         covered.add(issuer(row["symbol"]))
     if not any("defense" in story_topics(story) for story in selected):
-        add("Defense Watch", "On defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.", ("Funded orders", "Production milestones"))
-    agenda = [paragraph for paragraph in groups.get("What's Ahead", "").split("\n\n")
+        if evidence.get("business_version") == 2:
+            add("Defense Watch", "On defense, no fresh development cleared this edition's source checks.")
+        else:
+            add("Defense Watch", "On defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.", ("Funded orders", "Production milestones"))
+    agenda_paragraphs = groups.get("What's Ahead", "").split("\n\n")
+    agenda = [paragraph for paragraph in agenda_paragraphs
               if "schedule lists" in paragraph or "has scheduled" in paragraph]
     if agenda:
         text = "Looking ahead. " + " ".join(agenda[:2])
         text = text.replace("The publisher schedule lists", "Watch").replace("A previously checked, cached schedule lists", "A previously checked schedule lists")
+        if evidence.get("business_version") == 2:
+            implication = next((row.removeprefix("Why it matters: ") for row in agenda_paragraphs
+                                if row.startswith(("Why it matters: ", "Weekly claims track "))), "")
+            if implication:
+                text += " " + implication
         add("What's Ahead", text, [agenda_bullet(row) for row in agenda[:2]] if modern else agenda[:2], calendar_ids)
     watch = [row["text"] for row in review["insights"] if row["section"] == "watch"]
     signals = []

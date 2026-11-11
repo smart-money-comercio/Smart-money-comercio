@@ -135,6 +135,7 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual({story["publisher_symbol"] for story in selected}, {"AMD", "LMT"})
         self.assertEqual(len(selected), 2)
         self.assertTrue(all(checked_evidence(story)["schema"] == 14 for story in selected))
+        self.assertEqual(record["business_version"], 2)
         self.assertEqual(len(record["analyst_review"]["evidence"]["business_reviews"]), 2)
         copies = [story for story in record["candidates"] if story["url"] == production["url"]]
         self.assertEqual(len(copies), 2)
@@ -145,6 +146,10 @@ class DailyChecks(RebuildDetailChecks):
         self.assertIn("Server vendors are shipping systems.", text)
         self.assertNotIn("90,000", text)
         self.assertNotIn(production["title"], text)
+        self.assertEqual(text.count("7 finished higher and 11 lower"), 1)
+        self.assertEqual(text.count("Reported server sales and margins"), 1)
+        self.assertNotIn("Watch cloud availability", text)
+        self.assertNotIn("No fresh Starbucks announcement", text)
         self.assertTrue(validate_news_brief(text)["passes"])
         voice = daily_voiceover.checked(record, NOW)
         self.assertTrue(voice["quality"]["passes"])

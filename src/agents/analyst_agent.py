@@ -40,17 +40,21 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
         from src.intelligence.company_focus import focus_paragraph, grouped_price_watch
         from src.intelligence.company_earnings import matching, narration
         selected = evidence["company_focus"]["selected"]
+        concise = evidence.get("business_version") == 2 and any(
+            story.get("event_evidence", {}).get("schema") == 14 for story in evidence.get("stories", []))
         if any(context["symbol"] != "GOOG" for context in evidence.get("earnings_context", [])):
             selected = sorted(selected, key=lambda row: matching(evidence["earnings_context"], row["symbol"]) is None)
         group = grouped_price_watch(evidence)
         group_added = False
         for index, row in enumerate(selected, 1):
+            if concise and row.get("basis") == "sector context":
+                continue
             if group and row["symbol"] in group["symbols"]:
                 if not group_added:
                     add("company_focus_moves", "company", group["text"], group["sources"] + ["Company focus selection"])
                     group_added = True
                 continue
-            text = focus_paragraph(row, evidence.get("stories", []))
+            text = focus_paragraph(row, evidence.get("stories", []), concise=concise)
             context = matching(evidence.get("earnings_context", []), row["symbol"])
             if context:
                 event = next(value for value in evidence["market_event_context"]["events"] if matching([context], value["symbol"]) and value["status"] == "rechecked")

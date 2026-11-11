@@ -65,7 +65,8 @@ class ReaderChecks(IsolatedChecks):
         opening = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
         watch = section(text, "What We're Watching")
         self.assertIn("Alphabet fell 12.0 percent", opening)
-        self.assertIn("Compare the move with original results and guidance", opening)
+        self.assertNotIn("Compare the move with original results and guidance", opening)
+        self.assertIn("Watch original results and guidance", watch)
         self.assertNotIn("whether selling spreads", opening)
         self.assertIn("Alphabet's business outlook", watch)
         self.assertIn("price move alone cannot explain it", watch)
@@ -83,7 +84,7 @@ class ReaderChecks(IsolatedChecks):
         report = self.research(replacements={"Executive Summary": "- Main theme: Mixed.\n- Market moves: S&P -0.17%, Nasdaq -1.04%, Russell +1.22%, VIX -2.9%, Oil -1.56%, TLT +0.53%."})
         text = self.render(report=report)
         self.assertIn("Nasdaq fell while the Russell index rose", text)
-        self.assertIn("Watch participation across the names we track", text)
+        self.assertIn("watch for fewer declines and more gains in this group", section(text, "What We're Watching"))
         self.assertNotIn("all stocks are falling", text.lower())
 
     def test_higher_indexes_and_weak_watchlist_have_a_scoped_takeaway(self):
@@ -193,7 +194,7 @@ class ReaderChecks(IsolatedChecks):
         intro = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
         self.assertLess(intro.index("All three major indexes fell"), intro.index("Alphabet fell 12.0 percent"))
         self.assertIn("All 18 stocks and funds we track finished lower", intro)
-        self.assertIn("selling to ease", intro)
+        self.assertIn("selling is easing", section(text, "What We're Watching"))
         self.assertNotIn("whether selling spreads", intro)
         self.assertNotIn("whether the move spreads", intro)
 
@@ -210,7 +211,8 @@ class ReaderChecks(IsolatedChecks):
     def test_closed_session_check_looks_forward_to_the_next_session(self):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot()}))
         watch = section(text, "What We're Watching")
-        self.assertIn("All 18 stocks and funds we track finished lower", watch)
+        self.assertEqual(text.count("All 18 stocks and funds we track finished lower"), 1)
+        self.assertNotIn("All 18 stocks and funds we track finished lower", watch)
         self.assertIn("In the next session", watch)
         self.assertIn("selling is easing", watch)
         self.assertNotIn("0 finished higher", watch)
@@ -218,7 +220,8 @@ class ReaderChecks(IsolatedChecks):
     def test_live_session_check_can_still_change_before_the_close(self):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot(live=True)}))
         watch = section(text, "What We're Watching")
-        self.assertIn("All 18 stocks and funds we track are lower", watch)
+        self.assertEqual(text.count("All 18 stocks and funds we track are lower"), 1)
+        self.assertNotIn("All 18 stocks and funds we track are lower", watch)
         self.assertIn("before the close", watch)
         self.assertNotIn("In the next session", watch)
         self.assertNotIn("finished", watch)
@@ -227,7 +230,8 @@ class ReaderChecks(IsolatedChecks):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot(up=18, down=0),
             "Executive Summary": "- Main theme: Strong.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.2%."}))
         watch = section(text, "What We're Watching")
-        self.assertIn("All 18 stocks and funds we track finished higher", watch)
+        self.assertEqual(text.count("All 18 stocks and funds we track finished higher"), 1)
+        self.assertNotIn("All 18 stocks and funds we track finished higher", watch)
         self.assertIn("whether gains continue across this group", watch)
         self.assertNotIn("more companies join", watch)
 
@@ -300,7 +304,7 @@ class ReaderChecks(IsolatedChecks):
         text = self.render(report=report)
         intro = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
         self.assertIn("Alphabet rose 12.0 percent", intro)
-        self.assertIn("whether those gains hold", intro)
+        self.assertIn("whether gains continue across this group", section(text, "What We're Watching"))
         self.assertNotIn("other companies join", intro)
 
     def test_rules19_saved_brief_and_voiceover_keep_their_original_hashes(self):

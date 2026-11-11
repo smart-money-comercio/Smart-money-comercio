@@ -90,7 +90,9 @@ def company_followup(stories: list[dict]) -> list[str]:
     return []
 
 
-def calendar_implication(families: set[str]) -> str:
+def calendar_implication(families: set[str], *, concise=False) -> str:
+    if concise and families == {"claims"}:
+        return "Weekly claims track new filings for unemployment benefits and offer an early read on layoffs."
     if "fomc_decision" in families:
         return "Why it matters: Watch the Fed's guidance on the rate outlook and what it could mean for growth-company financing and valuations."
     if families & {"cpi", "ppi", "pce"}:
@@ -213,6 +215,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     event_context = context_for_report(research_report, now)
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
     plan = editor.build_editorial_plan(brief, now, event_context=event_context, research_report=research_report)
+    concise = plan.get("business_version") == 2
     story_paragraphs = {story["id"]: editor.render_story(story, zone, NAMES, style="broadcast", business_version=plan.get("business_version", 0)) for story in editor.selected_stories(plan)}
     no_company_story = "No new source-confirmed company report met the editorial checks for this edition."
     ahead = []
@@ -239,7 +242,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     macro_limit = 1 if company_schedules else 2
     ahead.extend(macro[:macro_limit])
     ahead.extend(schedule_narration(row, zone, NAMES) for row in company_schedules)
-    implication = calendar_implication(set(macro_families[:macro_limit]))
+    implication = calendar_implication(set(macro_families[:macro_limit]), concise=concise)
     if implication:
         ahead.append(implication)
     if not ahead:
@@ -248,6 +251,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         ahead.append("Calendar or company-news coverage is incomplete; unverified dates and times remain uncertain.")
     notes = ["The full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans",
              "Sources and full evidence: /storylog · /catalysts · /calendar · /specialalerts", "Research only. Not financial advice."]
+    if concise:
+        notes[0] = "See company rankings, trade-plan conditions and risk checks in /fullreport · /tradeplans"
     initial_stories = sorted(editor.selected_stories(plan), key=editor.news_order)
     from src.intelligence.company_focus import history_context
     focus_history = history_context(now)

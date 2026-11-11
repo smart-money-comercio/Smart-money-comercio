@@ -175,11 +175,12 @@ class EditionChecks(IsolatedChecks):
         self.assertIn("Critical Design Review",script);self.assertNotIn(TITLE,script)
         self.assertNotIn("new contract award",script)
 
-    def test_grouped_price_moves_have_one_shared_company_disclosure_check(self):
+    def test_grouped_price_moves_keep_the_causal_qualification(self):
         _,record=self.render();scenes=[s for s in record["voiceover"]["segments"] if s["heading"]=="Companies in Focus"]
         self.assertEqual(len(scenes),1);text=scenes[0]["narration"]
         for name in ("Apple","Amazon","Microsoft"):self.assertIn(name,text)
-        self.assertEqual(record["voiceover"]["script"].count("Check original company results and guidance"),1)
+        self.assertIn("These moves do not establish a shared cause",text)
+        self.assertNotIn("Check original company results and guidance",text)
         self.assertNotIn("Across semiconductor",text)
 
     def test_pending_quote_remains_separate_from_rechecked_group(self):
@@ -204,7 +205,8 @@ class EditionChecks(IsolatedChecks):
     def test_without_treasury_the_named_program_can_supply_the_takeaway(self):
         _,record=self.render([release()]);first=record["voiceover"]["segments"][0]
         self.assertIn("XR-forty two",first["narration"])
-        self.assertIn("Critical Design Review",first["narration"])
+        program=next(row for row in record["voiceover"]["segments"] if row["heading"]=="Defense and Innovation")
+        self.assertIn("Critical Design Review",program["narration"])
         self.assertEqual(first["source_ids"],[editor.selected_stories(record)[0]["id"]])
 
     def test_contract_opening_preserves_the_natural_award_worth_amount_word_order(self):

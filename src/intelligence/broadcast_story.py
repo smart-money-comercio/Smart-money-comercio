@@ -31,7 +31,7 @@ def _company_read_v1(story: dict) -> dict:
 
 
 def company_read(story: dict, *, business_version=0) -> dict:
-    if type(business_version) is not int or business_version not in {0, 1}:
+    if type(business_version) is not int or business_version not in {0, 1, 2}:
         raise ValueError("Unknown business narration version")
     review = _company_read_v1(story)
     if business_version:
@@ -123,7 +123,7 @@ def _render_story_v1(story: dict, zone, names: dict) -> str:
 
 
 def render_story(story: dict, zone, names: dict, *, business_version=0) -> str:
-    if type(business_version) is not int or business_version not in {0, 1}:
+    if type(business_version) is not int or business_version not in {0, 1, 2}:
         raise ValueError("Unknown business narration version")
     text = _render_story_v1(story, zone, names)
     if business_version:
@@ -132,5 +132,5 @@ def render_story(story: dict, zone, names: dict, *, business_version=0) -> str:
         published = dated(story["published"]).astimezone(zone)
         day = f"{published:%B} {published.day}"
         review = company_read(story, business_version=1) if story["kind"] == "company" else enhance(story, investor_read(story))
-        return narrative(story, text, review, day)
+        return narrative(story, text, review, day, concise=business_version == 2)
     return text
