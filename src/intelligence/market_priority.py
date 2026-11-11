@@ -89,4 +89,14 @@ def watching(evidence):
     if evidence.get("breadth"):
         before, after = _participation_scope(evidence), participation_scope(evidence)
         rows = [{**row,"text":row["text"].replace(before,after)} for row in rows]
+    if evidence.get("business_version") == 1:
+        from src.intelligence.business_analysis import name
+        stories = {story["id"]: story for story in evidence.get("stories", [])}
+        for review in evidence.get("business_reviews", []):
+            story = stories[review["story_id"]]
+            label = name(story)
+            for row in rows:
+                if row["id"] == "watch_business" and row["text"].startswith(label + "'s"):
+                    topic = {"maintenance": "maintenance opportunity", "development": "next milestone"}.get(review["analysis"]["event_class"], "business follow-through")
+                    row["text"] = label + "'s " + topic + ": " + review["analysis"]["decision_test"]
     return rows[:evidence.get("reader_limit",3)]

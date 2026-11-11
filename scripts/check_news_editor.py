@@ -1528,7 +1528,7 @@ class StoryAnalysisChecks(IsolatedChecks):
 
     def test_completed_acquisition_gets_integration_analysis_and_source_facts(self):
         text = self.render([self.story(text="The acquisition expands capabilities in anti-submarine warfare.")])
-        self.assertIn("After the reported close", text)
+        self.assertIn("after the reported close", text.lower())
         self.assertIn("integration costs", text)
         self.assertIn("anti-submarine warfare", text)
         self.assertNotIn("Contract ceilings", text)
@@ -1542,7 +1542,7 @@ class StoryAnalysisChecks(IsolatedChecks):
     def test_proposed_and_cancelled_acquisitions_have_different_next_checks(self):
         proposed = self.render([self.story("Example Defense agrees to acquire a maritime business")])
         self.assertIn("closing conditions", proposed)
-        self.assertNotIn("After the reported close", proposed)
+        self.assertNotIn("after the reported close", proposed.lower())
         cancelled = self.render([self.story("Example Defense terminates its acquisition agreement")])
         self.assertIn("cancelled transaction", cancelled)
         self.assertIn("termination costs", cancelled)
@@ -2056,7 +2056,7 @@ class NewsFirstChecks(IsolatedChecks):
         deal = self.story("Example Defense completes a maritime acquisition")
         text = self.render([product, deal])
         self.assertLess(text.index(deal["title"]), text.index("Market Update"))
-        self.assertLess(text.index("After the reported close"), text.index("Market Update"))
+        self.assertLess(text.lower().index("after the reported close"), text.index("Market Update"))
         self.assertLess(text.index(deal["title"]), text.index(product["title"]))
 
     def test_guidance_story_takes_the_same_issuer_slot_before_a_product(self):

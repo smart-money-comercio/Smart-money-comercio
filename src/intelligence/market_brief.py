@@ -126,21 +126,35 @@ def market_segment(evidence: dict) -> str:
     return text
 
 
-def defense_segment(stories: list[dict], *, broadcast=False) -> str:
+def defense_segment(stories: list[dict], *, broadcast=False, business_version=0) -> str:
     defense = [story for story in stories if "defense" in story_topics(story)]
     if defense:
         companies = [story for story in defense if story.get("kind") == "company"]
         if companies:
             from src.agents.analyst_agent import review_sourced_development
             from src.intelligence.daily_brief_analysis import NAMES
+            if business_version:
+                from src.intelligence.business_analysis import compare, name
+                from src.intelligence.broadcast_story import company_read
+                comparison = compare(companies)
+                if comparison:
+                    watches = []
+                    for story in companies:
+                        watch = company_read(story, business_version=1)["watch"]
+                        watches.append("For " + name(story) + ", " + watch[0].lower() + watch[1:])
+                    return comparison["text"] + " " + " ".join(watches)
             parts = []
             for story in companies:
                 review = review_sourced_development(story)
                 symbol = story.get("publisher_symbol") or story["symbols"][0]
                 if broadcast:
                     from src.intelligence.broadcast_story import company_read, next_check
-                    review = company_read(story)
-                    parts.append(f"Our view on {NAMES.get(symbol, symbol)}: " + review["why"] + " " + next_check(review["watch"]))
+                    review = company_read(story, business_version=business_version)
+                    if business_version:
+                        from src.intelligence.business_analysis import follow_through
+                        parts.append(follow_through(story, review))
+                    else:
+                        parts.append(f"Our view on {NAMES.get(symbol, symbol)}: " + review["why"] + " " + next_check(review["watch"]))
                 else:
                     parts.append(f"For {NAMES.get(symbol, symbol)}, our analysis: " + review["why"] + " Watch next: " + review["watch"])
             if any(story.get("kind") != "company" and re.search(r"\b(prototype|demonstrat\w*|tests?|concept)\b", story["title"], re.I) for story in defense):

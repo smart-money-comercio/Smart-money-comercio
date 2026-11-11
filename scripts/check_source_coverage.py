@@ -339,12 +339,13 @@ class EditionChecks(IsolatedChecks):
 
     def test_new_edition_retains_facts_and_tells_full_maintenance_details_once(self):
         report,record=self.render([maintenance(),sanctions()])
-        self.assertEqual(record["rules_version"],30)
+        self.assertEqual(record["rules_version"],31)
         self.assertEqual(record["analyst_review"]["disclosure_version"],2)
         self.assertTrue(validate_news_brief(report)["passes"])
         self.assertEqual(sum(len(s["event_evidence"]["facts"]) for s in editor.selected_stories(record)),8)
         self.assertEqual(report.count("said its Example Bay, Louisiana facility was selected"),1)
-        self.assertIn("disclosed service-order value and delivery timetable",report)
+        self.assertIn("disclosed service-order value",report)
+        self.assertIn("delivery schedule",report)
         self.assertNotIn("Watch for maintenance orders, site utilization, staffing costs and revenue timing.",report)
         script=voice.checked(record,NOW)["script"]
         self.assertEqual(script.count("said its Example Bay, Louisiana facility was selected"),1)

@@ -544,7 +544,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         from src.intelligence.company_earnings import cached_context
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
         from src.utils.market_quote_source import cached_health
-        result.update(rules_version=30, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=31, business_version=1, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -591,14 +591,16 @@ def research_focus(story: dict) -> str:
     return "Research focus: check the published details and rate-sensitive, energy or sector exposure; the headline does not establish a market cause."
 
 
-def render_story(story: dict, zone, company_names: dict, *, style="source") -> str:
+def render_story(story: dict, zone, company_names: dict, *, style="source", business_version=0) -> str:
     if style not in {"source", "broadcast"}:
         raise ValueError("Unknown story narration style")
+    if type(business_version) is not int or business_version not in {0, 1} or business_version and style != "broadcast":
+        raise ValueError("Unknown business narration version")
     if style == "broadcast" and not story.get("official"):
         raise ValueError("Broadcast narration needs an admitted original publisher")
     if style == "broadcast" and story.get("official") and not story.get("ipo") and not story.get("sec_filing"):
         from src.intelligence.broadcast_story import render_story as render_broadcast
-        return render_broadcast(story, zone, company_names)
+        return render_broadcast(story, zone, company_names, business_version=business_version)
     published = dated(story["published"]).astimezone(zone)
     at = f"{published:%B} {published.day} at {published.strftime('%I:%M').lstrip('0')} {published:%p %Z}"
     headline = "“" + story["title"].rstrip(".") + "”"
@@ -691,7 +693,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             checked_evidence(story)
         if report.count(paragraphs[story["id"]]) != 1:
             raise ValueError("Selected story evidence or qualification changed during narration")
-        if broadcast and paragraphs[story["id"]] != render_story(story, zone, NAMES, style="broadcast"):
+        if broadcast and paragraphs[story["id"]] != render_story(story, zone, NAMES, style="broadcast", business_version=plan.get("business_version", 0)):
             raise ValueError("Broadcast wording does not match the admitted source facts")
     if len(selected) > MAX_STORIES:
         raise ValueError("News story budget exceeded")
@@ -706,6 +708,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         if analyst_review.get("earnings_context") is not None and analyst_review["earnings_context"] != plan.get("earnings_context_candidates"):
             raise ValueError("Earnings context lost its admitted source record")
         validate_review(analyst_review, research_report, report, selected)
+        if analyst_review.get("business_version", 0) != plan.get("business_version", 0):
+            raise ValueError("Business review version does not match the editorial plan")
         value["analyst_review"] = deepcopy(analyst_review)
         if analyst_review.get("reader_version") in {1, 2, 3, 4}:
             value["reader_version"] = analyst_review["reader_version"]
@@ -720,6 +724,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
          + f"; {sum(story.get('event_evidence', {}).get('schema') in {8, 9, 10, 11, 12, 13} for story in value['candidates'])} original article materiality reviews"
+         + (f"; {len(analyst_review['evidence'].get('business_reviews', []))} business-channel reviews tied to disclosed fields" if (analyst_review or {}).get("business_version") else "")
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
     if broadcast and (analyst_review or {}).get("reader_version") in {1, 2, 3, 4}:
@@ -913,6 +918,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if story.get("event_evidence"):
                     from src.agents.analyst_agent import review_sourced_development
                     review = review_sourced_development(story)
+                    if record.get("business_version") == 1:
+                        from src.intelligence.business_analysis import enhance
+                        review = enhance(story, review)
                     event = review["evidence"]
                     lines.append("Event: " + event["event"] + " | Stage: " + event["stage"] + " | Evidence read: " + event["scope"])
                     if review["facts"]:
@@ -925,6 +933,11 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         for fact in event["facts"]:
                             lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]
+                    if review.get("business_basis"):
+                        basis = review["business_basis"]
+                        lines += ["Business channel: " + basis["channel"],
+                                  "Business analysis fields: " + ", ".join(basis["basis_fields"]),
+                                  "Decision test: " + basis["decision_test"]]
                 if story.get("ipo"):
                     from src.intelligence.ipo_monitor import STAGES
                     lines.append("IPO stage: " + STAGES[story["ipo"]["stage"]])

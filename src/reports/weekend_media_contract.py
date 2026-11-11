@@ -15,6 +15,12 @@ NY=ZoneInfo("America/New_York")
 # The saved branded v2 renderer was inspected without invoking speech or FFmpeg.
 REFERENCE_RENDERER_SHA256="2c275c853a087760fe9b916e2ad388bacc16568adc81893ab5863f8c63b000dc"
 WEEKEND_RENDERER_SHA256="63d2c82f3b59b3ee96d00bf196391f6fe6b28736148fb11aa481f0f44cb748e6"
+REFINED_RENDERER_SHA256="61c7b2feb4ce1faa46f86a7132ae777e128b45e4c1070d63c148db6d878a02f1"
+REFINED_WEEKEND_RENDERER_SHA256="948c06289700c9c3b165e807415d446be08ef72003000bdbf9322fefb17e3985"
+REVIEWED_RENDERERS={
+    REFERENCE_RENDERER_SHA256: WEEKEND_RENDERER_SHA256,
+    REFINED_RENDERER_SHA256: REFINED_WEEKEND_RENDERER_SHA256,
+}
 
 
 def digest(text):
@@ -95,8 +101,8 @@ def inspect_renderer(path):
     tree = ast.parse(source)
     constants={node.value for node in ast.walk(tree) if isinstance(node,ast.Constant) and isinstance(node.value,str)}
     fingerprint=digest(source)
-    known=fingerprint in {REFERENCE_RENDERER_SHA256,WEEKEND_RENDERER_SHA256}
-    adapted=fingerprint==WEEKEND_RENDERER_SHA256
+    adapted=fingerprint in REVIEWED_RENDERERS.values()
+    known=adapted or fingerprint in REVIEWED_RENDERERS
     return {"status":"PREVIEW_COMPATIBLE" if adapted else "WEEKEND_BANNER_ADAPTER_REQUIRED" if known else "CUSTOM_RENDERER_REVIEW_REQUIRED",
         "renderer_sha256":sha256(raw).hexdigest(),"known_saved_v2":known,"weekend_adapter":adapted,
         "scene_structure":"2–14 dynamic scenes accepted by the saved v2 renderer" if known else "unverified renderer revision",
@@ -107,23 +113,57 @@ def inspect_renderer(path):
 
 
 def adapted_renderer(source):
-    if digest(source)!=REFERENCE_RENDERER_SHA256:raise ValueError("Renderer differs from the reviewed v2 source; inspect the deployed customization before adapting it")
+    fingerprint = digest(source)
+    if fingerprint not in REVIEWED_RENDERERS:
+        raise ValueError("Renderer differs from the reviewed v2 source; inspect the deployed customization before adapting it")
     replacements=(
         ('def compose_slide(heading, bullets, output, index, demo=False):',
          'def compose_slide(heading, bullets, output, index, demo=False, edition_label="DAILY MARKET BRIEF"):'),
         ('d.text((1480, 98), "DAILY MARKET BRIEF", font=font(27, True), fill=WHITE)',
-         'd.text((1480, 98), edition_label, font=font(27, True), fill=WHITE)'),
-        ('compose_slide(seg["heading"], seg.get("bullets") or [], still, i, demo)',
-         'compose_slide(seg["heading"], seg.get("bullets") or [], still, i, demo, edition_label="WEEKEND OUTLOOK" if data.get("edition_type") == "weekend_outlook" else "DAILY MARKET BRIEF")'),
-        ('final = folder / "Smart_Money_Project_Daily_Brief.mp4"',
-         'final = folder / ("Smart_Money_Project_Weekend_Outlook.mp4" if data.get("edition_type") == "weekend_outlook" else "Smart_Money_Project_Daily_Brief.mp4")'),
-        ('"tags": ["Smart Money Project", "daily market brief", "investing", "market intelligence"],',
-         '"tags": ["Smart Money Project", "weekend outlook" if data.get("edition_type") == "weekend_outlook" else "daily market brief", "investing", "market intelligence"],'),
-        ('"source_edition_date": data.get("date"),',
-         '"source_edition_date": data.get("date"),\n        "source_edition_type": data.get("edition_type", "daily_brief"),\n        "bot_edition_id": data.get("bot_edition_id"),\n        "voiceover_sha256": data.get("voiceover_sha256"),\n        "weekend_narration_revision": data.get("weekend_narration_revision"),'),
-        ('illustrated, branded daily scenes.', 'illustrated, branded research scenes.'))
+         'd.text((1480, 98), edition_label, font=font(27, True), fill=WHITE)'))
+    if fingerprint == REFINED_RENDERER_SHA256:
+        replacements += (
+            ('    mode = data.get("mode")\n',
+             '''    mode = data.get("mode")
+    if not getattr(args, "preview_only", False):
+        raise ValueError("Weekend production is on hold; use --preview-only")
+    revision = data.get("weekend_narration_revision")
+    schema = data.get("voiceover_schema")
+    if (data.get("edition_type") != "weekend_outlook" or mode != "draft_review_required"
+            or data.get("review_required") is not True or data.get("contains_synthetic_media") is not True
+            or type(revision) is not int or revision != 2 or type(schema) is not int or schema != 2):
+        raise ValueError("Use a native review-required Weekend Outlook revision-2 export")
+'''),
+            ('            compose_slide(seg["heading"], seg.get("bullets") or [], folder / f"preview_{i:02}.jpg", i, demo)',
+             '''            compose_slide(seg["heading"], seg.get("bullets") or [], folder / f"preview_{i:02}.jpg", i,
+                          demo, edition_label="WEEKEND OUTLOOK")'''),
+            ('''        (folder / "preview.json").write_text(json.dumps({"mode":"visual_preview_only","audio_generated":False,
+            "uploaded":False,"bot_edition_id":data.get("bot_edition_id"),"scene_count":len(parts)},indent=2),encoding="utf-8")''',
+             '''        preview = {
+            "mode": "visual_preview_only", "edition_type": data["edition_type"],
+            "bot_edition_id": data["bot_edition_id"], "weekend_narration_revision": revision,
+            "voiceover_sha256": data["voiceover_sha256"], "scene_count": len(parts),
+            "audio_generated": False, "uploaded": False, "review_required": True,
+            "paid_production_ready": False,
+        }
+        (folder / "preview.json").write_text(json.dumps(preview, indent=2), encoding="utf-8")'''),
+        )
+    else:
+        replacements += (
+            ('compose_slide(seg["heading"], seg.get("bullets") or [], still, i, demo)',
+             'compose_slide(seg["heading"], seg.get("bullets") or [], still, i, demo, edition_label="WEEKEND OUTLOOK" if data.get("edition_type") == "weekend_outlook" else "DAILY MARKET BRIEF")'),
+            ('final = folder / "Smart_Money_Project_Daily_Brief.mp4"',
+             'final = folder / ("Smart_Money_Project_Weekend_Outlook.mp4" if data.get("edition_type") == "weekend_outlook" else "Smart_Money_Project_Daily_Brief.mp4")'),
+            ('"tags": ["Smart Money Project", "daily market brief", "investing", "market intelligence"],',
+             '"tags": ["Smart Money Project", "weekend outlook" if data.get("edition_type") == "weekend_outlook" else "daily market brief", "investing", "market intelligence"],'),
+            ('"source_edition_date": data.get("date"),',
+             '"source_edition_date": data.get("date"),\n        "source_edition_type": data.get("edition_type", "daily_brief"),\n        "bot_edition_id": data.get("bot_edition_id"),\n        "voiceover_sha256": data.get("voiceover_sha256"),\n        "weekend_narration_revision": data.get("weekend_narration_revision"),'),
+            ('illustrated, branded daily scenes.', 'illustrated, branded research scenes.'),
+        )
     for before,after in replacements:
         if source.count(before)!=1:raise ValueError("Reviewed renderer anchor changed")
         source=source.replace(before,after,1)
+    if digest(source) != REVIEWED_RENDERERS[fingerprint]:
+        raise ValueError("Weekend renderer output differs from the reviewed source")
     compile(source,"weekend_render_episode.py","exec")
     return source

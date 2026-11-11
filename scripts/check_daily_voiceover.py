@@ -76,7 +76,8 @@ class VoiceChecks(IsolatedChecks):
     def test_script_has_flow_without_metadata_commands_or_repeated_breadth(self):
         _, record = self.render(); text = record["voiceover"]["script"]
         self.assertTrue(text.startswith("Good afternoon. This is Smart Money"))
-        self.assertIn("The key takeaway.", text)
+        self.assertIn("All three major indexes fell in the completed session.", text)
+        self.assertNotIn("The key takeaway.", text)
         self.assertIn("Here are the next checks.", text)
         self.assertEqual(text.count("seven finished higher"), 1)
         for label in ("Generated:", "Research Notes", "/fullreport", "https://", "Investor take:", "Portfolio lens:"):

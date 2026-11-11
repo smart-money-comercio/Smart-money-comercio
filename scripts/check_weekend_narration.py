@@ -1,7 +1,7 @@
 """Offline narration revisions, native pairing, renderer routing and no-paid-call checks."""
 
 import argparse
-from contextlib import ExitStack,redirect_stdout
+from contextlib import ExitStack,redirect_stdout,redirect_stderr
 from copy import deepcopy
 from hashlib import sha256
 import json
@@ -58,7 +58,7 @@ class NarrationChecks(PrivateState):
     def test_grammar_cleanup_applies_to_report_and_new_narration(self):
         value,_=self.native()
         self.assertNotIn("This week disclosure",value["report_text"]);self.assertNotIn("This week disclosure",value["voiceover"]["script"])
-        self.assertIn("The disclosure was published",value["report_text"])
+        self.assertIn("In its November 6 disclosure",value["report_text"])
 
     def test_pronunciation_is_explicit_for_program_and_accounting_terms(self):
         text=narration.spoken("Mk21A supports the Defense Enterprise Accounting and Management System (DEAMS). DEAMS reporting.")
@@ -262,6 +262,125 @@ class RendererChecks(PrivateState):
         with patch.dict(os.environ,{"BACKGROUND_MUSIC_PATH":""}),redirect_stdout(StringIO()):namespace["main"](SimpleNamespace(episode=path,out=out,demo=False))
         self.assertTrue(all(call.kwargs["edition_label"]=="DAILY MARKET BRIEF" for call in namespace["compose_slide"].call_args_list))
         self.assertTrue((out/'Smart_Money_Project_Daily_Brief.mp4').exists());requests.post.assert_not_called()
+
+    def refined_reference(self):
+        return (ROOT/'scripts/fixtures/weekend_refined_v2_renderer_reference.txt').read_text(encoding="utf-8")
+
+    def test_refined_reviewed_fingerprints_and_windows_inspection_match(self):
+        source = self.refined_reference()
+        self.assertEqual(contract.digest(source), contract.REFINED_RENDERER_SHA256)
+        changed = contract.adapted_renderer(source)
+        self.assertEqual(contract.digest(changed), contract.REFINED_WEEKEND_RENDERER_SHA256)
+        path = self.root / "refined.py"
+        for text, expected in ((source, "WEEKEND_BANNER_ADAPTER_REQUIRED"),
+                               (changed, "PREVIEW_COMPATIBLE"),
+                               (source + "\n# Local edit\n", "CUSTOM_RENDERER_REVIEW_REQUIRED")):
+            for encoding, newline in (("utf-8", "\n"), ("utf-8", "\r\n"), ("utf-8-sig", "\r\n")):
+                with self.subTest(expected=expected, encoding=encoding, newline=newline):
+                    path.write_text(text, encoding=encoding, newline=newline)
+                    value = contract.inspect_renderer(path)
+                    self.assertEqual(value["status"], expected)
+                    self.assertEqual(value["renderer_sha256"], sha256(path.read_bytes()).hexdigest())
+                    self.assertFalse(value["paid_production_ready"])
+        with self.assertRaises(ValueError):
+            contract.adapted_renderer(source + "\n# Local edit\n")
+
+    def test_refined_preparer_preserves_original_and_existing_sibling(self):
+        path = self.root / "render_episode.py"
+        path.write_text(self.refined_reference(), encoding="utf-8-sig", newline="\r\n")
+        before = path.read_bytes()
+        with redirect_stdout(StringIO()):
+            self.assertEqual(adapter.main(["--renderer", str(path)]), 0)
+        sibling = path.with_name("weekend_render_episode.py")
+        generated = sibling.read_bytes()
+        self.assertEqual(contract.digest(sibling.read_text()), contract.REFINED_WEEKEND_RENDERER_SHA256)
+        with redirect_stdout(StringIO()):
+            self.assertEqual(adapter.main(["--renderer", str(path)]), 0)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(sibling.read_bytes(), generated)
+        sibling.write_text("# Local work\n")
+        with redirect_stderr(StringIO()):
+            self.assertEqual(adapter.main(["--renderer", str(path)]), 1)
+        self.assertEqual(sibling.read_text(), "# Local work\n")
+
+    def load_refined_renderer(self):
+        blocked = lambda *a, **kw: (_ for _ in ()).throw(AssertionError("No audio, video or HTTP permitted"))
+        requests = ModuleType("requests"); requests.post = Mock(side_effect=blocked)
+        dotenv = ModuleType("dotenv"); dotenv.load_dotenv = lambda: None
+        pil = ModuleType("PIL")
+        pil.Image = SimpleNamespace(new=lambda *a: object())
+        pil.ImageDraw = SimpleNamespace(Draw=lambda *a: object())
+        for key in ("ImageFont", "ImageFilter", "ImageOps"):
+            setattr(pil, key, SimpleNamespace())
+        refinements = ModuleType("video_refinements")
+        refinements.card_layout = Mock(return_value={})
+        refinements.caption_lines = Mock(return_value=[])
+        refinements.text_hash = lambda text: sha256(text.encode()).hexdigest()
+        refinements.timed_speech = Mock(side_effect=blocked)
+        refinements.write_captions = Mock(side_effect=blocked)
+        namespace = {"__name__": "offline_refined_weekend_renderer", "__file__": str(self.root/'weekend_render_episode.py')}
+        with patch.dict(sys.modules, {"requests": requests, "dotenv": dotenv, "PIL": pil, "video_refinements": refinements}):
+            exec(compile(contract.adapted_renderer(self.refined_reference()), namespace["__file__"], "exec"), namespace)
+        namespace["shutil"] = SimpleNamespace(which=lambda _: "offline")
+        namespace["subprocess"] = SimpleNamespace(run=Mock(side_effect=blocked))
+        namespace["compose_slide"] = Mock(side_effect=lambda heading, bullets, output, *a, **kw: output.write_bytes(b"synthetic still"))
+        for key in ("speech", "silence", "make_clip", "brand_frame", "run"):
+            namespace[key] = Mock(side_effect=blocked)
+        return namespace, requests, refinements
+
+    def test_refined_preview_writes_complete_native_metadata_without_paid_calls(self):
+        value, packet = self.native()
+        path = self.root/'episode.json'; path.write_text(json.dumps(packet))
+        out = self.root/'stills'
+        namespace, requests, refinements = self.load_refined_renderer()
+        with redirect_stdout(StringIO()):
+            namespace["main"](SimpleNamespace(episode=path, out=out, demo=False, preview_only=True))
+        result = json.loads((out/'preview.json').read_text())
+        for key in ("edition_type", "bot_edition_id", "voiceover_sha256", "weekend_narration_revision"):
+            self.assertEqual(result[key], packet[key])
+        self.assertEqual(result["scene_count"], len(packet["segments"]))
+        self.assertTrue(result["review_required"])
+        self.assertFalse(result["audio_generated"] or result["uploaded"] or result["paid_production_ready"])
+        self.assertEqual(len(list(out.glob("preview_*.jpg"))), len(packet["segments"]))
+        self.assertTrue(all(call.kwargs["edition_label"] == "WEEKEND OUTLOOK" for call in namespace["compose_slide"].call_args_list))
+        self.assertEqual(refinements.caption_lines.call_count, len(packet["segments"]))
+        for key in ("speech", "silence", "make_clip", "brand_frame", "run"):
+            namespace[key].assert_not_called()
+        namespace["subprocess"].run.assert_not_called(); requests.post.assert_not_called()
+        refinements.timed_speech.assert_not_called(); refinements.write_captions.assert_not_called()
+
+    def test_refined_weekend_production_stops_before_any_scene_or_paid_call(self):
+        _, packet = self.native()
+        path = self.root/'episode.json'; path.write_text(json.dumps(packet))
+        namespace, requests, refinements = self.load_refined_renderer()
+        with self.assertRaisesRegex(ValueError, "production is on hold"):
+            namespace["main"](SimpleNamespace(episode=path, out=self.root/'output', demo=False, preview_only=False))
+        namespace["compose_slide"].assert_not_called(); namespace["speech"].assert_not_called()
+        requests.post.assert_not_called(); refinements.timed_speech.assert_not_called()
+        self.assertFalse((self.root/'output').exists())
+
+    def test_refined_preview_rejects_daily_and_wrong_revision_packets(self):
+        _, original = self.native()
+        for key, bad in (("edition_type", "daily_brief"), ("weekend_narration_revision", 1),
+                         ("weekend_narration_revision", True), ("voiceover_schema", True), ("review_required", False)):
+            packet = deepcopy(original); packet[key] = bad
+            path = self.root/'episode.json'; path.write_text(json.dumps(packet))
+            namespace, requests, refinements = self.load_refined_renderer()
+            with self.subTest(key=key, bad=bad), self.assertRaises(ValueError):
+                namespace["main"](SimpleNamespace(episode=path, out=self.root/'output', demo=False, preview_only=True))
+            namespace["compose_slide"].assert_not_called(); namespace["speech"].assert_not_called()
+            requests.post.assert_not_called(); refinements.timed_speech.assert_not_called()
+
+    def test_refined_preview_rejects_changed_narration_before_creating_stills(self):
+        _, packet = self.native()
+        packet["segments"][0]["narration"] += " Changed narration."
+        path = self.root/'episode.json'; path.write_text(json.dumps(packet))
+        namespace, requests, refinements = self.load_refined_renderer()
+        with self.assertRaisesRegex(ValueError, "unchanged native episode"):
+            namespace["main"](SimpleNamespace(episode=path, out=self.root/'output', demo=False, preview_only=True))
+        namespace["compose_slide"].assert_not_called(); namespace["speech"].assert_not_called()
+        requests.post.assert_not_called(); refinements.timed_speech.assert_not_called()
+        self.assertFalse((self.root/'output').exists())
 
 
 def main():

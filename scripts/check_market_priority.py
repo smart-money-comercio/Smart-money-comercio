@@ -246,7 +246,7 @@ class EditionChecks(IsolatedChecks):
         report,record=self.render();story=next(row for row in editor.selected_stories(record) if row["source"]=="EIA")
         self.assertEqual(story["event_evidence"]["schema"],11);self.assertEqual(len(story["event_evidence"]["facts"]),5)
         self.assertIn("January through June 2026",report);self.assertIn("at or above 11 percent through June 2026",report)
-        self.assertIn("published October 25",report);self.assertNotIn("Review the original report for scope",report)
+        self.assertIn("In its October 25 report",report);self.assertNotIn("Review the original report for scope",report)
 
     def test_eia_headline_without_original_body_is_held(self):
         row=release();row.pop("source_excerpt");row.pop("excerpt_scope")
@@ -281,7 +281,7 @@ class EditionChecks(IsolatedChecks):
 
     def test_new_report_and_private_schema2_export_pass_all_budgets(self):
         report,record=self.render();episode=voice.episode(record,NOW)
-        self.assertEqual(record["rules_version"],30);self.assertEqual(record["analyst_review"]["reader_version"],4)
+        self.assertEqual(record["rules_version"],31);self.assertEqual(record["analyst_review"]["reader_version"],4)
         self.assertTrue(validate_news_brief(report)["passes"]);self.assertTrue(record["voiceover"]["quality"]["passes"])
         self.assertEqual(episode["voiceover_schema"],2);self.assertEqual(episode["mode"],"draft_review_required")
 

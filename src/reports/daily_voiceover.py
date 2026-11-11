@@ -106,27 +106,32 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
         from src.intelligence.sec_research import checked, narration
         filing = checked(story)
         return filing["issuer"] + " disclosed financing terms in a current SEC report. " + narration(story)
-    review = company_read(story) if story["kind"] == "company" else investor_read(story)
+    business_version = evidence.get("business_version", 0)
+    review = company_read(story, business_version=business_version) if story["kind"] == "company" else investor_read(story)
+    if business_version and story["kind"] != "company":
+        from src.intelligence.business_analysis import enhance
+        review = enhance(story, review)
+    implication = review["why"] + (" " + review["watch"] if business_version else "")
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
     if profile["schema"] in {12, 13}:
         from src.intelligence.disclosure_details import summary
-        return summary(profile, NAMES.get(story.get("publisher_symbol"), story["source"])) + " " + review["why"]
+        return summary(profile, NAMES.get(story.get("publisher_symbol"), story["source"])) + " " + implication
     if profile["schema"] == 11:
-        return review["facts"] + " " + review["why"]
+        return review["facts"] + " " + implication
     if profile["schema"] == 10:
         from src.intelligence.defense_program import summary
-        return summary(profile, NAMES.get(story["publisher_symbol"], story["publisher_symbol"])) + " " + review["why"]
+        return summary(profile, NAMES.get(story["publisher_symbol"], story["publisher_symbol"])) + " " + implication
     if profile["schema"] == 9:
         if concise:
             from src.intelligence.treasury_financing import summary
-            return summary(profile,speech=True) + " " + review["why"]
-        return review["facts"] + " " + review["why"]
+            return summary(profile,speech=True) + " " + implication
+        return review["facts"] + " " + implication
     if profile["schema"] == 8:
         from src.intelligence.original_disclosures import summarize
         name = NAMES.get(story.get("publisher_symbol"), story["source"])
         summary = summarize(story, profile, name, for_speech=refined)
         if summary:
-            return summary + " " + review["why"]
+            return summary + " " + implication
     if story["kind"] != "company":
         if profile["event"] == "monetary policy" and profile["stage"] == "rate decision":
             return review["facts"] + " " + review["why"]
@@ -247,13 +252,16 @@ def build(record, report, research, *, schema=2):
         calendar_ids.append(key)
 
     def add(heading, text, bullets=(), source_ids=()):
-        text = normalize(text, brand_names=record.get("rules_version", 0) >= 21, agency_names=refined, disclosure_names=record.get("rules_version", 0) >= 27)
+        text = normalize(text, brand_names=record.get("rules_version", 0) >= 21, agency_names=refined, disclosure_names=record.get("rules_version", 0) >= 27,
+                         business_names=evidence.get("business_version") == 1)
         if not text: return
         scenes.append({"heading":heading, "narration":text, "bullets":list(bullets)[:3], "source_ids":list(source_ids)})
 
     greeting = re.search(r"^(Hello|Good (?:morning|afternoon|evening))\.$", report, re.M)[0]
     hook = next((row["text"] for row in review["insights"] if row["id"] == "opening_takeaway"), "")
     hook = hook.replace("The takeaway:", "The key takeaway.").replace("in the quoted session", "in the market snapshot")
+    if evidence.get("business_version") == 1:
+        hook = hook.removeprefix("The key takeaway.").strip()
     hook_bullets = re.split(r"(?<=[.!?])\s+", hook.replace("The key takeaway.", "").strip())[:2] if modern else ("Source-backed market research", "Edition: "+local.date().isoformat())
     context_sources = ["earnings_" + context["symbol"] for context in evidence.get("earnings_context", []) if context["symbol"] != "GOOG"]
     from src.intelligence.company_earnings import matching
@@ -289,6 +297,7 @@ def build(record, report, research, *, schema=2):
         [f"{key}: {evidence['moves'][key]:+.2f}%" for key in ("S&P","Nasdaq","VIX") if key in evidence["moves"]], market_sources)
     covered = set()
     from src.intelligence.company_focus import issuer, grouped_price_watch
+    introduced = set()
     for story in sorted(selected, key=editor.news_order):
         copy = story_copy(story, evidence, modern=modern, refined=refined, concise=concise)
         if not copy:
@@ -300,6 +309,10 @@ def build(record, report, research, *, schema=2):
             label, transition = "Energy and Infrastructure", "In energy and infrastructure. "
         elif modern and refined and story.get("source") == "EIA" and story.get("materiality") == "energy":
             label, transition = "Energy Watch", "In energy. "
+        if evidence.get("business_version") == 1:
+            if label in introduced:
+                transition = ""
+            introduced.add(label)
         add(label, transition+copy, (story["title"],), (story["id"],))
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)

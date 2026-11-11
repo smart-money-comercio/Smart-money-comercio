@@ -27,7 +27,7 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
     add("market_pulse", "market", market_segment(evidence), ["Executive Summary", "Market Snapshot"]
         + (["Verified story decisions"] if evidence.get("stories") else []))
     broadcast = evidence.get("narration_version") == 2
-    add("defense_watch", "global", defense_segment(evidence.get("stories", []), broadcast=broadcast),
+    add("defense_watch", "global", defense_segment(evidence.get("stories", []), broadcast=broadcast, business_version=evidence.get("business_version", 0)),
         ["Verified story decisions"] if evidence.get("stories") else ["Research coverage policy"])
     if breadth:
         up, down, total = (breadth[key] for key in ("up", "down", "total"))

@@ -165,7 +165,7 @@ class EditionChecks(IsolatedChecks):
 
     def test_both_substantive_stories_fit_without_dropping_the_defense_item(self):
         report,record=self.render();self.assertEqual(len(editor.selected_stories(record)),2)
-        self.assertEqual(record["rules_version"],30);self.assertEqual(record["analyst_review"]["reader_version"],4)
+        self.assertEqual(record["rules_version"],31);self.assertEqual(record["analyst_review"]["reader_version"],4)
         self.assertTrue(validate_news_brief(report)["passes"]);self.assertLessEqual(len(report),3800)
 
     def test_program_summary_uses_past_tense_and_keeps_existing_contract_context(self):

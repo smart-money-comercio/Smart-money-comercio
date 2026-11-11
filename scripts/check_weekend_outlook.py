@@ -311,10 +311,10 @@ class CalendarChecks(unittest.TestCase):
 
 
 class EditionChecks(unittest.TestCase):
-    def test_complete_edition_has_one_business_theme_and_three_conditions(self):
+    def test_complete_edition_has_checked_business_theme_and_conditions(self):
         row=edition();self.assertEqual(row["quality"]["status"],"PASS")
         self.assertEqual(row["theme"]["id"],"defense");text=row["report_text"]
-        for term in ("Analyst interpretation:","Original disclosures:","Conditional scenarios", "Base case:","case strengthens if","case weakens if"):
+        for term in ("Business interpretation", "Conditions to watch", "For now", "would make", "would weaken"):
             self.assertIn(term,text)
 
     def test_weekly_recap_distinguishes_rebound_from_weekly_loss(self):
@@ -419,7 +419,7 @@ class EditionChecks(unittest.TestCase):
 
     def test_status_includes_basis_facts_and_horizons(self):
         text=report.status(edition(),NOW)
-        for value in ("Editorial rules: 30","2026-10-30 close","Concrete fact fields: 4","later-horizon notices","ready for review-only export"):
+        for value in ("Editorial rules: 31","2026-10-30 close","Concrete fact fields: 4","later-horizon notices","ready for review-only export"):
             self.assertIn(value,text)
 
     def test_frozen_rules29_daily_hashes_and_schema2_export_remain_exact(self):

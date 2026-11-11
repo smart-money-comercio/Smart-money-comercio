@@ -17,7 +17,7 @@ def copilot_reveal(story: dict, review: dict) -> bool:
             and bool(re.search(r"\bmulti-model\b", story["title"], re.I)))
 
 
-def company_read(story: dict) -> dict:
+def _company_read_v1(story: dict) -> dict:
     review = investor_read(story)
     if review["evidence"]["schema"] in {10, 12}:
         return review
@@ -30,7 +30,17 @@ def company_read(story: dict) -> dict:
     return review
 
 
-def render_story(story: dict, zone, names: dict) -> str:
+def company_read(story: dict, *, business_version=0) -> dict:
+    if type(business_version) is not int or business_version not in {0, 1}:
+        raise ValueError("Unknown business narration version")
+    review = _company_read_v1(story)
+    if business_version:
+        from src.intelligence.business_analysis import enhance
+        return enhance(story, review)
+    return review
+
+
+def _render_story_v1(story: dict, zone, names: dict) -> str:
     from src.intelligence.news_editor import dated, primary_source
     from src.intelligence.policy_analysis import is_fomc_statement
     if not primary_source(story):
@@ -104,3 +114,17 @@ def render_story(story: dict, zone, names: dict) -> str:
             text += " Investor take: " + review["why"] + " " + next_check(review["watch"])
         return text
     return f"{story['source']}'s {day} announcement: “{story['title'].rstrip('.')}”. Review the original report for scope and context."
+
+
+def render_story(story: dict, zone, names: dict, *, business_version=0) -> str:
+    if type(business_version) is not int or business_version not in {0, 1}:
+        raise ValueError("Unknown business narration version")
+    text = _render_story_v1(story, zone, names)
+    if business_version:
+        from src.intelligence.business_analysis import enhance, narrative
+        from src.intelligence.news_editor import dated
+        published = dated(story["published"]).astimezone(zone)
+        day = f"{published:%B} {published.day}"
+        review = company_read(story, business_version=1) if story["kind"] == "company" else enhance(story, investor_read(story))
+        return narrative(story, text, review, day)
+    return text

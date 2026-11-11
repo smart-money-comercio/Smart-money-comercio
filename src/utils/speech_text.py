@@ -35,7 +35,7 @@ def ordinal(value):
     return ORDINAL[value] if value in ORDINAL else TENS[value//10] + " " + ORDINAL[value%10]
 
 
-def normalize(text, *, brand_names=False, agency_names=False, disclosure_names=False):
+def normalize(text, *, brand_names=False, agency_names=False, disclosure_names=False, business_names=False):
     text = str(text).replace("’", "'").replace("“", '"').replace("”", '"')
     if agency_names:
         def agency(match):
@@ -45,6 +45,11 @@ def normalize(text, *, brand_names=False, agency_names=False, disclosure_names=F
         text = re.sub(r"\bEIA\b", agency, text)
     if brand_names:
         text = re.sub(r"\bNVIDIA\b", "Nvidia", text)
+    if business_names:
+        text = re.sub(r"\bMk[- ]?21A\b", "Mark twenty-one A", text, flags=re.I)
+        text = re.sub(r"\bDefense Enterprise Accounting and Management System\s*\(DEAMS\)",
+                      "Defense Enterprise Accounting and Management System", text)
+        text = re.sub(r"\bDEAMS\b", "D E A M S", text)
     if disclosure_names:
         text = re.sub(r"\bC[-\u2011 ]?130J[- ]30\b", "C one thirty J thirty", text, flags=re.I)
         text = re.sub(r"\bC[-\u2011 ]?130J\b", "C one thirty J", text, flags=re.I)
