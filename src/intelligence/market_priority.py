@@ -146,11 +146,13 @@ def concise_checks(evidence, rows, event):
 def named_checks(evidence, rows):
     """Use the selected issuer or quote symbol, including the actual share class."""
     from src.intelligence.company_focus import COMPANY_NAMES, company
+    from src.intelligence.company_earnings import BASELINE_SOURCE, baseline_watch
 
     stories = {story["id"]: story for story in evidence.get("stories", [])}
     market_labels = {"watch_participation": "Watchlist breadth", "watch_market": "Major indexes",
                      "watch_energy": "Oil and business costs", "watch_results": "Issuer disclosures"}
     named = []
+    baseline = evidence.get("intel_results_baseline")
     for row in rows:
         label, _, body = row["text"].partition(": ")
         story = stories.get(row.get("story_id"), {})
@@ -164,6 +166,9 @@ def named_checks(evidence, rows):
             row = {**row, "symbol": symbol}
         else:
             label = market_labels.get(row["id"], label)
+        if baseline and row["id"] == "watch_event" and symbol == "INTC":
+            body = baseline_watch(baseline)
+            row = {**row, "sources": [*row["sources"], BASELINE_SOURCE]}
         named.append({**row, "text": f"{label} — {body}"})
 
     if not any(row.get("symbol") for row in named):

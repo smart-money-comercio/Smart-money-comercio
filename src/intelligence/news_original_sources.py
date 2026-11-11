@@ -167,30 +167,34 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
 
 
 def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *, budget=None) -> dict:
-    """At most two fresh issuer/agency articles; Intel context keeps its one-page budget."""
+    """Read fresh articles first. Intel can use its one page for a prior result."""
     fed = source.get("name") == "Federal Reserve" and source.get("category") == "fed"
-    # Intel's older marker only checked the 24-hour news window. Reprocess that
-    # cached feed once after upgrading; keep its observation/publication clocks.
-    profile = 2 if source.get("company_symbol") == "INTC" else 4 if source.get("company_symbol") == "AMD" else 3
+    intel = source.get("company_symbol") == "INTC"
+    # Reprocess Intel's cached listing once under the new lookback.
+    profile = 5 if intel else 4 if source.get("company_symbol") == "AMD" else 3
     agency = source.get("name") in {"EIA", "DARPA"}
     if (not source.get("company_symbol") and not fed and not agency) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:
         return payload
     observed = payload.get("fetched_at_epoch")
     if not authorized_response(source, payload) or type(observed) not in (int, float) or not math.isfinite(observed) or not -60 <= now.timestamp() - observed <= 6 * 3600:
         return payload
-    candidates = []
+    from src.intelligence.company_earnings import MAX_AGE, MAX_BASELINE_AGE, intel_period
+    candidates, prior_results = [], []
     for row in parse_feed(payload.get("body", ""), source, full_titles=True):
         published = timestamp(row["published"])
         from src.intelligence.policy_analysis import is_fomc_statement
         allowed = (is_fomc_statement({"source": source["name"], "title": row["title"]})
                    and authorized_response(source, {"url": row["link"]})) if fed else authorized_response(source, {"url": row["link"]})
-        from src.intelligence.company_earnings import intel_period
-        context_release = source.get("company_symbol") == "INTC" and intel_period(row["title"])
-        max_age = 72 * 3600 if context_release else 24 * 3600
+        context_release = intel and intel_period(row["title"])
+        max_age = MAX_AGE if context_release else 24 * 3600
         from src.intelligence.original_disclosures import calendar_notice
         if (published and not calendar_notice(row["title"]) and 0 <= (now - published).total_seconds() <= max_age
                 and allowed):
             candidates.append((published, row))
+        elif context_release and published and allowed and MAX_AGE < (now-published).total_seconds() <= MAX_BASELINE_AGE:
+            prior_results.append((published, row))
+    if not candidates and prior_results:
+        candidates.append(max(prior_results, key=lambda value: value[0]))
     candidates.sort(key=lambda value: value[0], reverse=True)
     if source.get("requires_original_body") and source.get("company_symbol"):
         from src.intelligence.news_editor import materiality
@@ -204,7 +208,7 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *
     unique = {}
     for value in candidates:
         unique.setdefault(value[1]["link"], value)
-    limit = 1 if fed or source.get("company_symbol") == "INTC" else MAX_FEED_DETAIL_PAGES
+    limit = 1 if fed or intel else MAX_FEED_DETAIL_PAGES
     details, issues, reviews = [], [], []
     for _, row in list(unique.values())[:limit]:
         if budget is not None and not budget.take():

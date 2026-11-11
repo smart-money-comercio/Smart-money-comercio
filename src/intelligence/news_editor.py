@@ -551,8 +551,12 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     if event_context is not None:
         from src.intelligence.company_schedule import notices
         result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
-        from src.intelligence.company_earnings import cached_context
+        from src.intelligence.company_earnings import cached_baseline, cached_context, matching
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
+        if matching(contexts, "INTC") is None:
+            baseline = cached_baseline(cached, now, event_context["events"])
+            if baseline:
+                result["intel_results_baseline"] = baseline
         from src.utils.market_quote_source import cached_health
         result.update(rules_version=32, business_version=3, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
@@ -717,6 +721,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         from src.intelligence.daily_brief_analysis import validate_review
         if analyst_review.get("earnings_context") is not None and analyst_review["earnings_context"] != plan.get("earnings_context_candidates"):
             raise ValueError("Earnings context lost its admitted source record")
+        if analyst_review.get("intel_results_baseline") is not None and analyst_review["intel_results_baseline"] != plan.get("intel_results_baseline"):
+            raise ValueError("Intel results benchmark lost its admitted source record")
         validate_review(analyst_review, research_report, report, selected)
         if analyst_review.get("business_version", 0) != plan.get("business_version", 0):
             raise ValueError("Business review version does not match the editorial plan")
@@ -788,7 +794,7 @@ def hold_reasons(candidates: list[dict]) -> list[tuple[str, int]]:
 
 def earnings_context_decisions(record: dict, symbol: str = "") -> list[str]:
     """Explain source admission separately from what the saved edition used."""
-    from src.intelligence.company_earnings import matching
+    from src.intelligence.company_earnings import BASELINE_SOURCE, matching
     used = record.get("analyst_review", {}).get("evidence", {}).get("earnings_context", [])
     admitted = record.get("earnings_context_candidates", [])
     lines = []
@@ -805,6 +811,11 @@ def earnings_context_decisions(record: dict, symbol: str = "") -> list[str]:
         else:
             state, reason = "UNAVAILABLE", health["reason"]
         lines.append("Recent results context: " + issuer_symbol + " — " + state + "; " + reason)
+    baseline = record.get("intel_results_baseline")
+    if baseline and symbol in {"", "INTC"}:
+        watch = record.get("analyst_review", {}).get("insights", [])
+        state = "USED" if any(BASELINE_SOURCE in row["sources"] for row in watch) else "NOT USED"
+        lines.append(f"Dated results benchmark: INTC — {state}; original release {baseline['release_date']}")
     if symbol == "INTC" and record.get("rules_version", 0) < 18:
         lines.append("Recent results context: INTC — NOT RECORDED; this saved edition predates Intel results-context evaluation")
     return lines
@@ -893,7 +904,10 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Focus decision: " + company["symbol"] + " — " + company["role"] + ". " + company["why"])
         else:
             lines += earnings_context_decisions(record, symbol)
-            contexts = record.get("analyst_review", {}).get("evidence", {}).get("earnings_context", [])
+            evidence = record.get("analyst_review", {}).get("evidence", {})
+            contexts = list(evidence.get("earnings_context", []))
+            if evidence.get("intel_results_baseline"):
+                contexts.append(evidence["intel_results_baseline"])
             if contexts:
                 from src.intelligence.company_earnings import audit, matching
                 for context in contexts:

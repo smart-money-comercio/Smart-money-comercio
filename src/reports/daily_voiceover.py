@@ -234,7 +234,7 @@ def focus_bullet(row, evidence):
 
 
 def named_watch_scene(rows, sources, earnings_context):
-    from src.intelligence.company_earnings import matching
+    from src.intelligence.company_earnings import BASELINE_SOURCE, matching
 
     narration, bullets, source_ids = [], [], []
     for row in rows:
@@ -247,6 +247,8 @@ def named_watch_scene(rows, sources, earnings_context):
         narration.append(body)
         if row.get("story_id") in sources:
             source_ids.append(row["story_id"])
+        if BASELINE_SOURCE in row["sources"]:
+            source_ids.append("earnings_baseline_INTC")
         if "Recent earnings context" in row["sources"]:
             context = matching(earnings_context, symbol)
             if context:
@@ -279,6 +281,10 @@ def build(record, report, research, *, schema=2):
     for context in evidence.get("earnings_context", []):
         sources["earnings_" + context["symbol"]] = [{"url":url, "publisher":context["source"], "published_at":context["published"], "verified_at":context["observed"]}
             for url in dict.fromkeys((context.get("primary_url", context["url"]), context.get("document_url", context["url"])))]
+    baseline = evidence.get("intel_results_baseline")
+    if baseline:
+        sources["earnings_baseline_INTC"] = [{"url": baseline["url"], "publisher": baseline["source"],
+            "published_at": baseline["published"], "verified_at": baseline["observed"]}]
     calendar_ids = []
     for notice in record.get("narrated_company_schedules", []):
         from src.intelligence.company_schedule import checked_notice

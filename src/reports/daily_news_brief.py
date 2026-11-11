@@ -258,16 +258,22 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     focus_history = history_context(now)
     chosen = None
     last_result = None
+    recent = plan.get("earnings_context_candidates") or None
+    baseline = plan.get("intel_results_baseline")
+    context_choices = [(recent, baseline)]
+    if baseline:
+        context_choices.append((recent, None))
+    if recent:
+        context_choices.append((None, None))
     # At most three stories: try the fuller, higher-priority editions first.
     # Each attempt starts from all sourced market/calendar context.
     for count in range(len(initial_stories), -1, -1):
-        context_choices = (plan["earnings_context_candidates"], None) if plan.get("earnings_context_candidates") else (None,)
         # Preserve company coverage while trying shorter follow-up sections.
         # Otherwise a smaller focus can silently remove the very company whose
         # verified results context this attempt is meant to include.
-        for indexes, context_values, focus_limit, reader_limit in product(combinations(range(len(initial_stories)), count), context_choices, (3, 2, 1), (3, 2, 1)):
+        for indexes, (context_values, intel_baseline), focus_limit, reader_limit in product(combinations(range(len(initial_stories)), count), context_choices, (3, 2, 1), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
-            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit, earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0))
+            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit, earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0), intel_results_baseline=intel_baseline)
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")

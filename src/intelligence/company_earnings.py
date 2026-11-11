@@ -20,6 +20,8 @@ INTEL_FEED = "https://www.intc.com/news-events/press-releases/rss"
 INTEL_TITLE = r"Intel Reports (First|Second|Third|Fourth)[ -]Quarter (20\d{2}) Financial Results"
 QUARTERS = ("first", "second", "third", "fourth")
 MAX_AGE = 72 * 3600
+MAX_BASELINE_AGE = 120 * 86400
+BASELINE_SOURCE = "Dated Intel results"
 
 
 def intel_period(title):
@@ -80,12 +82,13 @@ def intel_facts(text, title):
     return actual + forecasts
 
 
-def checked(record, now):
+def checked(record, now, *, baseline=False):
     if not isinstance(record, dict):
         raise ValueError("Company earnings context must be an original-source record")
-    if record.get("symbol") == "GOOG":
+    if record.get("symbol") == "GOOG" and not baseline:
         return alphabet.checked(record, now)
-    if (type(record.get("schema")) is not int or record["schema"] != 2 or record.get("symbol") != "INTC"
+    schema = 3 if baseline else 2
+    if (type(record.get("schema")) is not int or record["schema"] != schema or record.get("symbol") != "INTC"
             or record.get("route") != "issuer" or record.get("source") != "Intel Investor Relations"
             or not isinstance(record.get("text"), str) or len(record["text"]) > 3000
             or sha256(record["text"].encode()).hexdigest() != record.get("sha256")
@@ -98,10 +101,12 @@ def checked(record, now):
     except ValueError:
         original = parsedate_to_datetime(native)
     published, observed = timestamp(record.get("published")), timestamp(record.get("observed"))
+    age = (now-published).total_seconds() if published else -1
+    valid_age = MAX_AGE < age <= MAX_BASELINE_AGE if baseline else 0 <= age <= MAX_AGE
     url = urlsplit(record.get("url", ""))
     slug = re.sub(r"[ -]+", "-", record["title"].lower())
     if (original.tzinfo is None or timestamp(native) != published or published is None or observed is None
-            or not 0 <= (now-published).total_seconds() <= MAX_AGE
+            or not valid_age
             or not -60 <= (now-observed).total_seconds() <= 21600 or (published-observed).total_seconds() > 60
             or original.date().isoformat() != record.get("release_date")
             or url.scheme != "https" or url.netloc != "www.intc.com" or url.query or url.fragment
@@ -114,7 +119,7 @@ def checked(record, now):
     return deepcopy(record)
 
 
-def from_issuer(raw, now):
+def from_issuer(raw, now, *, baseline=False):
     if (raw.get("publisher_symbol") != "INTC" or raw.get("source") != "Intel Investor Relations"
             or raw.get("official") is not True or raw.get("excerpt_scope") != "original release excerpt"):
         raise ValueError("Original Intel release body required")
@@ -127,10 +132,11 @@ def from_issuer(raw, now):
     published = timestamp(clock)
     if published is None:
         raise ValueError("Intel release needs its original zoned feed clock")
-    return checked({"schema": 2, "route": "issuer", "symbol": "INTC", "source": raw["source"],
+    observed = raw.get("evidence_checked_at") if baseline else raw.get("evidence_checked_at") or raw["source_checked_at"]
+    return checked({"schema": 3 if baseline else 2, "route": "issuer", "symbol": "INTC", "source": raw["source"],
         "title": raw["title"], "text": text, "sha256": sha256(text.encode()).hexdigest(),
         "release_date": native.date().isoformat(), "publisher_clock": clock, "published": published.isoformat(),
-        "observed": raw.get("evidence_checked_at") or raw["source_checked_at"], "url": raw["url"]}, now)
+        "observed": observed, "url": raw["url"]}, now, baseline=baseline)
 
 
 def matching(values, symbol):
@@ -138,34 +144,61 @@ def matching(values, symbol):
     return next((row for row in values if row.get("symbol") == issuer), None)
 
 
-def cached_context(raw, now, events):
-    values, backup_health = alphabet.cached_context(raw, now, events)
-    mover = next((row for row in events if row.get("symbol") == "INTC" and row.get("status") == "rechecked"
-                  and abs(row["reported_move"]) >= 5), None)
-    health = []
-    if mover:
-        records = []
-        known = [item for item in raw if item.get("publisher_symbol") == "INTC" and item.get("source") == "Intel Investor Relations"
-                 and item.get("official") is True and intel_period(item.get("title", "")) and timestamp(item.get("published"))
-                 and 0 <= (now-timestamp(item["published"])).total_seconds() <= MAX_AGE]
-        latest_clock = max((timestamp(item["published"]) for item in known), default=None)
-        for item in known:
-            if timestamp(item["published"]) != latest_clock:
-                continue
+def rechecked_intel(event):
+    return event.get("symbol") == "INTC" and event.get("status") == "rechecked" and abs(event["reported_move"]) >= 5
+
+
+def latest_intel_result(raw, now, *, baseline=False):
+    max_age = MAX_BASELINE_AGE if baseline else MAX_AGE
+    known = []
+    for item in raw:
+        if (item.get("publisher_symbol") == "INTC" and item.get("source") == "Intel Investor Relations"
+                and item.get("official") is True and intel_period(item.get("title", ""))):
+            published = timestamp(item.get("published"))
+            if published and 0 <= (now-published).total_seconds() <= max_age:
+                known.append((published, item))
+    latest_clock = max((published for published, _ in known), default=None)
+    records = []
+    for published, item in known:
+        if published == latest_clock:
             try:
-                records.append(from_issuer(item, now))
+                records.append(from_issuer(item, now, baseline=baseline))
             except (ValueError, TypeError, KeyError, AttributeError):
                 pass
-        records.sort(key=lambda row: row["published"], reverse=True)
-        latest = [row for row in records if row["published"] == records[0]["published"]] if records else []
-        conflict = len({repr(intel_facts(row["text"], row["title"])) for row in latest}) > 1
-        if latest and not conflict:
-            values.append(latest[0])
-        health.append({"symbol": "INTC", "status": "available" if latest and not conflict else "limited",
-            "reason": "Dated original results available; context only" if latest and not conflict else
+    conflict = len({repr(intel_facts(row["text"], row["title"])) for row in records}) > 1
+    return (records[0] if records and not conflict else None), conflict
+
+
+def cached_baseline(raw, now, events):
+    if any(rechecked_intel(event) for event in events):
+        return latest_intel_result(raw, now, baseline=True)[0]
+    return None
+
+
+def cached_context(raw, now, events):
+    values, backup_health = alphabet.cached_context(raw, now, events)
+    health = []
+    if any(rechecked_intel(event) for event in events):
+        latest, conflict = latest_intel_result(raw, now)
+        if latest:
+            values.append(latest)
+        health.append({"symbol": "INTC", "status": "available" if latest else "limited",
+            "reason": "Dated original results available; context only" if latest else
                       "Conflicting original results; context withheld" if conflict else
                       "No usable original results summary within 72 hours and a six-hour source observation"})
     return values, backup_health, health
+
+
+def retain_intel(record, now, events, stories, focus, *, baseline=False):
+    value = checked(record, now, baseline=baseline)
+    if not any(rechecked_intel(event) for event in events):
+        raise ValueError("Earnings context needs a matching rechecked major move")
+    current_events = {"earnings", "guidance"} if baseline else {"earnings"}
+    fresh = any("INTC" in story.get("symbols", []) and story.get("event_evidence", {}).get("event") in current_events
+                for story in stories)
+    if not fresh and any(item["symbol"] == "INTC" for item in (focus or {}).get("selected", [])):
+        return value
+    return None
 
 
 def retain(values, now, events, stories, focus):
@@ -178,15 +211,21 @@ def retain(values, now, events, stories, focus):
     for row in values:
         if row.get("symbol") == "GOOG":
             continue
-        value = checked(row, now)
-        symbol = value["symbol"]
-        if not any(event["symbol"] == symbol and event.get("status") == "rechecked"
-                   and abs(event["reported_move"]) >= 5 for event in events):
-            raise ValueError("Earnings context needs a matching rechecked major move")
-        fresh = any(symbol in story.get("symbols", []) and story.get("event_evidence", {}).get("event") == "earnings" for story in stories)
-        if not fresh and symbol in {item["symbol"] for item in (focus or {}).get("selected", [])}:
+        value = retain_intel(row, now, events, stories, focus)
+        if value:
             retained.append(value)
     return retained
+
+
+def baseline_watch(record):
+    actual, *outlook = intel_facts(record["text"], record["title"])
+    day = datetime.fromisoformat(record["release_date"]).strftime("%B %d, %Y").replace(" 0", " ")
+    if outlook:
+        forecast = outlook[0]
+        return (f"Compare reported {forecast['period']} revenue with the {forecast['value']} forecast from its {day} release. "
+                "Check how much cash operations generate alongside those sales.")
+    return (f"Compare the next reported sales with {actual['period']} revenue of {actual['value']} from its {day} release. "
+            "Check operating costs and cash flow for signs of improving profitability.")
 
 
 def intel_narration(record, *, day=None):
@@ -226,9 +265,13 @@ def narration(record, event):
 def audit(record):
     if record["symbol"] == "GOOG":
         return alphabet.audit(record)
-    lines = ["DATED EARNINGS CONTEXT — Intel", "Release: " + record["title"], "Release date: " + record["release_date"],
+    baseline = record["schema"] == 3
+    heading = "DATED RESULTS BENCHMARK — Intel" if baseline else "DATED EARNINGS CONTEXT — Intel"
+    purpose = ("Purpose: compare the next results with a dated issuer benchmark." if baseline else
+               "Purpose: dated context for a rechecked move; not counted as a fresh news story or proof of its cause.")
+    lines = [heading, "Release: " + record["title"], "Release date: " + record["release_date"],
              "Original publisher clock: " + record["published"], "Source: " + record["source"] + " | Checked: " + record["observed"],
-             "Purpose: dated context for a rechecked move; not counted as a fresh news story or proof of its cause."]
+             purpose]
     lines.extend("Retained fact: " + fact["field"] + " | " + fact["value"] + " | " + fact["period"] + " | " + fact["basis"]
                  + "\nSupporting source text: " + fact["evidence"] for fact in intel_facts(record["text"], record["title"]))
     return lines + ["Release document: " + record["url"]]

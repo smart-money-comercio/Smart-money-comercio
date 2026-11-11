@@ -154,23 +154,94 @@ class CompanyEarningsChecks(IsolatedChecks):
         body='<article><h1>'+TITLE+'</h1>'+''.join('<p>'+line+'</p>' for line in raw["source_excerpt"].splitlines()[1:])+'</article>'
         old=payload(INTEL["url"],rss(TITLE,URL,raw["published"]),release_excerpt_schema=1,release_evidence=[])
         value=originals.enrich_feed(INTEL,old,feeds.parse_rss_items,lambda url:(calls.append(url) or payload(url,body)),NOW)
-        self.assertEqual(calls,[URL]); self.assertEqual(value["release_excerpt_schema"],2)
+        self.assertEqual(calls,[URL]); self.assertEqual(value["release_excerpt_schema"],5)
         self.assertEqual(value["fetched_at_epoch"],old["fetched_at_epoch"])
         self.assertEqual(value["release_evidence"][0]["published"],raw["published"])
         self.assertIs(originals.enrich_feed(INTEL,value,feeds.parse_rss_items,
             lambda _:self.fail("A current enrichment must not consume another read"),NOW),value)
 
     def test_upgrading_an_expired_feed_does_not_fetch_or_change_its_clock(self):
-        old=payload(INTEL["url"],rss(TITLE,URL,(NOW-timedelta(hours=73)).isoformat()),release_excerpt_schema=1,release_evidence=[])
+        old=payload(INTEL["url"],rss(TITLE,URL,(NOW-timedelta(days=121)).isoformat()),release_excerpt_schema=1,release_evidence=[])
         value=originals.enrich_feed(INTEL,old,feeds.parse_rss_items,lambda _:self.fail("Expired results are not fetched"),NOW)
         self.assertEqual(value["release_evidence"],[]); self.assertEqual(value["fetched_at_epoch"],old["fetched_at_epoch"])
 
     def test_only_supported_results_can_use_the_context_age_window(self):
-        for title, hours in ((TITLE,73), ("Intel announces a new product",30), ("Intel to report quarterly financial results",30)):
+        for title, hours in ((TITLE,121*24), ("Intel announces a new product",30), ("Intel to report quarterly financial results",30)):
             calls = []
             originals.enrich_feed(INTEL,payload(INTEL["url"],rss(title,URL,(NOW-timedelta(hours=hours)).isoformat())),
                 feeds.parse_rss_items,lambda url:calls.append(url),NOW)
             self.assertFalse(calls)
+
+    def test_prior_results_supply_a_dated_watch_benchmark_from_the_publisher_cache(self):
+        raw = source(312)
+        body = '<article><h1>'+TITLE+'</h1>'+''.join('<p>'+line+'</p>' for line in raw["source_excerpt"].splitlines()[1:])+'</article>'
+        calls = []
+        original = payload(INTEL["url"], rss(TITLE, URL, raw["published"]), release_excerpt_schema=2)
+        enriched = originals.enrich_feed(INTEL, original, feeds.parse_rss_items,
+            lambda url: (calls.append(url) or payload(url, body)), NOW)
+        self.assertEqual(calls, [URL])
+        self.assertEqual(enriched["release_evidence"][0]["published"], raw["published"])
+        self.assertEqual(feeds.describe_source(INTEL, enriched, NOW)["fresh"], 0)
+        feeds.CACHE_FILE.write_text(json.dumps({INTEL["url"]: enriched}), encoding="utf-8")
+        report = self.research_moves()
+        with patch.dict("os.environ", {"NEWS_LIVE_SOURCE_CACHE_FILE": str(feeds.CACHE_FILE)}):
+            text = news.build_daily_news_brief(report)
+        record = store.read_editions(report=text)[0]
+        self.assertTrue(news.validate_news_brief(text)["passes"])
+        self.assertFalse(editor.selected_stories(record))
+        self.assertIn("Intel (INTC) — Compare reported fourth quarter 2026 revenue with the $13.0 billion to $14.0 billion forecast", text)
+        self.assertIn("from its October 12, 2026 release", text)
+        self.assertIn("cash operations generate", text)
+        self.assertNotIn("Intel — recent earnings context", text)
+        self.assertEqual(record["intel_results_baseline"]["schema"], 3)
+        self.assertFalse(record["analyst_review"]["score_changes"])
+        profile = voice.checked(record, NOW)
+        watch = next(row for row in profile["segments"] if row["heading"] == "What We're Watching")
+        self.assertEqual(watch["source_ids"], ["earnings_baseline_INTC"])
+        self.assertEqual(profile["sources"][watch["source_ids"][0]][0]["url"], URL)
+        self.assertIn("Dated results benchmark: INTC — USED", editor.build_editor_status())
+        self.assertIn("DATED RESULTS BENCHMARK — Intel", editor.build_editor_status("INTC", history=True))
+        changed = deepcopy(record["analyst_review"])
+        changed["intel_results_baseline"]["text"] = changed["intel_results_baseline"]["text"].replace("$13.0", "$99.0")
+        with self.assertRaises(ValueError):
+            analysis.validate_review(changed, report, text, editor.selected_stories(record))
+
+    def test_fresh_intel_release_keeps_the_one_page_read_budget(self):
+        old = source(312)
+        fresh_url = URL.rsplit('/', 1)[0] + '/intel-announces-a-new-product'
+        fresh = rss("Intel announces a new product", fresh_url, (NOW-timedelta(hours=2)).isoformat())
+        listing = fresh.replace('</channel>', rss(TITLE, URL, old["published"]).split('<channel>', 1)[1].split('</channel>', 1)[0]+'</channel>')
+        calls = []
+        originals.enrich_feed(INTEL, payload(INTEL["url"], listing), feeds.parse_rss_items,
+            lambda url: (calls.append(url) or {"status": "error", "error": "Fixture article unavailable"}), NOW)
+        self.assertEqual(calls, [fresh_url])
+
+    def test_prior_results_need_a_rechecked_move_and_current_body_observation(self):
+        event = {"symbol": "INTC", "status": "rechecked", "reported_move": 9.2}
+        old = source(312)
+        self.assertIsNone(earnings.cached_baseline([old], NOW, [{**event, "status": "pending"}]))
+        self.assertIsNone(earnings.cached_baseline([old], NOW, [{**event, "reported_move": 4.9}]))
+        for changes in ({"evidence_checked_at": ""}, {"evidence_checked_at": (NOW-timedelta(hours=7)).isoformat()},
+                        {"excerpt_scope": "publisher feed excerpt"}):
+            with self.subTest(changes=changes):
+                self.assertIsNone(earnings.cached_baseline([{**old, **changes}], NOW, [event]))
+        newer = source(100)
+        newer["source_excerpt"] = "Unread newer original"
+        self.assertIsNone(earnings.cached_baseline([old, newer], NOW, [event]))
+
+    def test_prior_results_use_reported_sales_when_the_release_has_no_forecast(self):
+        raw = source(312)
+        raw["source_excerpt"] = "\n".join(line for line in raw["source_excerpt"].splitlines() if not line.startswith("Forecasting"))
+        text, record = self.render(raw)
+        self.assertIn("Intel (INTC) — Compare the next reported sales with third quarter 2026 revenue of $12.5 billion", text)
+        self.assertNotIn("forecast from its October 12", text)
+        self.assertTrue(voice.checked(record, NOW)["quality"]["passes"])
+
+    def test_fresh_guidance_takes_precedence_over_a_prior_benchmark(self):
+        event = {"symbol": "INTC", "status": "rechecked", "reported_move": 9.2}
+        original = earnings.from_issuer(source(312), NOW, baseline=True)
+        fresh = {"symbols": ["INTC"], "event_evidence": {"event": "guidance"}}
+        self.assertIsNone(earnings.retain_intel(original, NOW, [event], [fresh], {"selected": [{"symbol": "INTC"}]}, baseline=True))
 
     def test_dated_context_enriches_brief_without_increasing_fresh_story_count(self):
         text, record = self.render()
