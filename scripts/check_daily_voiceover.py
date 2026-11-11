@@ -78,7 +78,9 @@ class VoiceChecks(IsolatedChecks):
         self.assertTrue(text.startswith("Good afternoon. This is Smart Money"))
         self.assertIn("All three major indexes fell in the completed session.", text)
         self.assertNotIn("The key takeaway.", text)
-        self.assertIn("Here are the next checks.", text)
+        watch = next(row for row in record["voiceover"]["segments"] if row["heading"] == "What We're Watching")
+        self.assertTrue(watch["narration"].startswith("For "))
+        self.assertIn(" — Check the next original results", watch["bullets"][0])
         self.assertEqual(text.count("seven finished higher"), 1)
         for label in ("Generated:", "Research Notes", "/fullreport", "https://", "Investor take:", "Portfolio lens:"):
             self.assertNotIn(label, text)

@@ -45,7 +45,7 @@ def opening_source(evidence):
                 text = name + " has a new aircraft-maintenance designation."
                 watch = "The commercial follow-through matters next."
             priority = 3
-        elif evidence.get("business_version") == 2 and profile["schema"] == 14:
+        elif evidence.get("business_version", 0) >= 2 and profile["schema"] == 14:
             if profile["stage"] == "available":
                 text = "Server shipments put AMD's new EPYC launch into commercial rollout."
                 priority = 3
@@ -113,7 +113,7 @@ def market_observation(evidence):
 
 def opening(evidence):
     point = opening_source(evidence)
-    concise = evidence.get("business_version") == 2
+    concise = evidence.get("business_version", 0) >= 2
     if point:
         return "The takeaway: " + market_observation(evidence) + " " + point["text"] + ("" if concise else " " + point["watch"])
     from src.intelligence.company_earnings import matching
@@ -141,7 +141,7 @@ def opening(evidence):
 
 
 def watching(evidence):
-    from src.intelligence.reader_brief import watching as older_watching
+    from src.intelligence.reader_brief import story_watch, watching as older_watching
     from src.intelligence.company_earnings import matching
     rows = older_watching({**evidence,"reader_version":2,"reader_limit":3})
     financial = any(story.get("materiality") in {"earnings", "guidance"} and story.get("event_evidence", {}).get("facts")
@@ -160,7 +160,7 @@ def watching(evidence):
                 if evidence.get("disclosure_version", 0) >= 2:
                     text = label + ": Watch for a disclosed service-order value and delivery timetable. Those details would help establish the scale and timing of the opportunity."
                 rows = [row for row in rows if row["id"] not in {"watch_business", "watch_event"}]
-                rows.insert(1 if rows else 0, {"id":"watch_business", "section":"watch", "text":text, "sources":["Verified story decisions"]})
+                rows.insert(1 if rows else 0, story_watch(story, text, evidence))
                 break
             if profile.get("schema") != 10 or "next_program_gate" not in fields:
                 continue
@@ -171,7 +171,7 @@ def watching(evidence):
             text = (name + "'s next milestone: Watch for the " + fields["next_program_gate"]
                     + " outcome and updated delivery plans. Those disclosures will help assess development progress and the route to production revenue.")
             rows = [row for row in rows if row["id"] not in {"watch_business", "watch_event"}]
-            rows.insert(1 if rows else 0,{"id":"watch_business","section":"watch","text":text,"sources":["Verified story decisions"]})
+            rows.insert(1 if rows else 0, story_watch(story, text, evidence))
             break
     if evidence.get("disclosure_version", 0) >= 1:
         for row in rows:

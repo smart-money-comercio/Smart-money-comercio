@@ -164,7 +164,7 @@ class EarningsContextChecks(IsolatedChecks):
         self.assertIn("do not establish the cause of the price move", text)
         self.assertFalse(editor.selected_stories(record))
         self.assertTrue(validate_news_brief(text)["passes"])
-        self.assertIn("earnings follow-through", text)
+        self.assertIn("Alphabet (GOOGL) — Compare the dated results with later guidance", text)
 
     def test_pending_quotes_do_not_admit_earnings_context(self):
         text, _ = self.render(False)

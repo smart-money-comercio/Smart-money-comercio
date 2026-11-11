@@ -179,7 +179,7 @@ class CompanyEarningsChecks(IsolatedChecks):
         self.assertIn("fourth quarter 2026 revenue of $13.0 billion to $14.0 billion", text)
         self.assertIn("not a reported result", text); self.assertIn("do not establish the cause", text)
         self.assertFalse(editor.selected_stories(record)); self.assertTrue(news.validate_news_brief(text)["passes"])
-        self.assertIn("Intel's earnings follow-through", text)
+        self.assertIn("Intel (INTC) — Compare the next sales report", text)
 
     def test_contextualized_company_leaves_peer_group_without_duplicating_prices(self):
         _, record = self.render(); review = record["analyst_review"]
@@ -197,7 +197,7 @@ class CompanyEarningsChecks(IsolatedChecks):
         self.assertEqual({row["symbol"] for row in review["evidence"]["company_focus"]["selected"]},{"INTC","ASML","AMD"})
         self.assertEqual(len(editor.selected_stories(record)),1)
         self.assertLessEqual(len(text),3800); self.assertTrue(news.validate_news_brief(text)["passes"])
-        self.assertIn("earnings follow-through",text)
+        self.assertIn("Intel (INTC) — Compare the next sales report",text)
         self.assertIn("earnings_INTC",voice.checked(record,NOW)["sources"])
         self.assertIn("Recent results context: INTC — USED",editor.build_editor_status("INTC",history=True))
 
@@ -331,6 +331,7 @@ class CompanyEarningsChecks(IsolatedChecks):
             text=news.build_daily_news_brief(report)
         record=store.read_editions(report=text)[0]
         self.assertEqual({value["symbol"] for value in record["analyst_review"]["evidence"]["earnings_context"]},{"GOOG","INTC"})
+        self.assertIn("Alphabet (GOOGL) — Compare the dated results", text)
         profile=voice.checked(record,NOW)
         self.assertIn("Alphabet",profile["segments"][0]["narration"])
         self.assertEqual(profile["segments"][0]["source_ids"],["earnings_GOOG"])

@@ -215,7 +215,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     event_context = context_for_report(research_report, now)
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
     plan = editor.build_editorial_plan(brief, now, event_context=event_context, research_report=research_report)
-    concise = plan.get("business_version") == 2
+    concise = plan.get("business_version", 0) >= 2
     story_paragraphs = {story["id"]: editor.render_story(story, zone, NAMES, style="broadcast", business_version=plan.get("business_version", 0)) for story in editor.selected_stories(plan)}
     no_company_story = "No new source-confirmed company report met the editorial checks for this edition."
     ahead = []

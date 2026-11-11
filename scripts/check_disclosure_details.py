@@ -215,7 +215,7 @@ class RebuildDetailChecks(IsolatedChecks):
         self.assertEqual(sum(len(s["event_evidence"]["facts"]) for s in selected),8)
         self.assertIn("payment and counterparty exposure",report)
         self.assertNotIn("cross-border costs and supply chains",report)
-        self.assertIn("maintenance opportunity",report)
+        self.assertIn("Northrop Grumman (NOC) — A disclosed service-order value and delivery schedule",report)
         self.assertTrue(validate_news_brief(report)["passes"])
 
     def test_spoken_maintenance_is_summarized_without_headline_copy(self):

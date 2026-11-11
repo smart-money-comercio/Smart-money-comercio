@@ -10,6 +10,13 @@ def company_name(story):
     return NAMES.get(symbol, symbol), issuer(symbol)
 
 
+def story_watch(story, text, evidence, *, signal_id="watch_business"):
+    row = {"id": signal_id, "section": "watch", "text": text, "sources": ["Verified story decisions"]}
+    if evidence.get("business_version", 0) >= 3:
+        row["story_id"] = story["id"]
+    return row
+
+
 def _opening_v1(evidence):
     moves, breadth = evidence["moves"], evidence["breadth"]
     events = evidence.get("market_event_context", {}).get("events", [])
@@ -93,10 +100,14 @@ def _watching_v1(evidence):
                 if len(intel_facts(context["text"], context["title"])) > 1:
                     text = (f"{label}'s earnings follow-through: Watch whether sales reach management's revenue outlook and whether operating costs leave room for profits and cash. "
                             "The forecast is a target to test, and the dated results alone do not explain the share-price move.")
-        rows.append({"id": "watch_event", "text": text, "sources": event_sources})
-    if any(story.get("ipo") for story in evidence.get("stories", [])):
-        rows.append({"id": "watch_ipo", "text": "IPO details: Watch the proposed price, share count and new shares being issued. Compare that valuation with the disclosed sales, losses and funding needs before judging the offering's business case.",
-                     "sources": ["Verified story decisions"]})
+        row = {"id": "watch_event", "text": text, "sources": event_sources}
+        if evidence.get("business_version", 0) >= 3:
+            row["symbol"] = event.get("source_symbol", event["symbol"])
+        rows.append(row)
+    ipo = next((story for story in evidence.get("stories", []) if story.get("ipo")), None)
+    if ipo:
+        rows.append(story_watch(ipo, "IPO details: Watch the proposed price, share count and new shares being issued. Compare that valuation with the disclosed sales, losses and funding needs before judging the offering's business case.",
+                                evidence, signal_id="watch_ipo"))
     stories = [row for row in evidence.get("stories", []) if row.get("kind") == "company" and row.get("event_evidence")]
     priority = {"earnings": 0, "guidance": 0, "acquisition": 1, "contract": 1, "product": 2}
     stories.sort(key=lambda row: (priority.get(row["event_evidence"]["event"], 3), row["id"]))
@@ -127,7 +138,7 @@ def _watching_v1(evidence):
             text = f"{label}'s cost changes: Watch disclosed savings, one-time charges and service capacity. Lower spending would help only if the business can keep serving customers and protect future sales."
         else:
             continue
-        rows.append({"id": "watch_business", "text": text, "sources": ["Verified story decisions"]})
+        rows.append(story_watch(story, text, evidence))
         break
     if len(rows) < 3 and moves.get("Oil", 0) >= 1.5:
         rows.append({"id": "watch_energy", "text": "Energy costs: Watch whether oil's rise lasts and whether companies warn about higher fuel or shipping bills. Passing those costs to customers could protect profits; absorbing them could reduce margins.",

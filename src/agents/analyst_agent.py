@@ -40,7 +40,7 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
         from src.intelligence.company_focus import focus_paragraph, grouped_price_watch
         from src.intelligence.company_earnings import matching, narration
         selected = evidence["company_focus"]["selected"]
-        concise = evidence.get("business_version") == 2 and any(
+        concise = evidence.get("business_version", 0) >= 2 and any(
             story.get("event_evidence", {}).get("schema") == 14 for story in evidence.get("stories", []))
         if any(context["symbol"] != "GOOG" for context in evidence.get("earnings_context", [])):
             selected = sorted(selected, key=lambda row: matching(evidence["earnings_context"], row["symbol"]) is None)

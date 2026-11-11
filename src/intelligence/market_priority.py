@@ -61,7 +61,7 @@ def opening(evidence):
     text = "The takeaway: " + "; ".join(phrases) + " in the quoted session."
     if evidence.get("breadth"):
         text += " " + participation_scope(evidence)
-    if evidence.get("business_version") != 2:
+    if evidence.get("business_version", 0) < 2:
         text += " Watch whether selling eases and participation improves; original company results and guidance are the next business checks."
     return text
 
@@ -98,11 +98,13 @@ def watching(evidence):
             story = stories[review["story_id"]]
             label = name(story)
             for row in rows:
-                if row["id"] == "watch_business" and row["text"].startswith(label + "'s"):
+                if row["id"] == "watch_business" and (row.get("story_id") == story["id"] or row["text"].startswith(label + "'s")):
                     topic = {"maintenance": "maintenance opportunity", "development": "next milestone"}.get(review["analysis"]["event_class"], "business follow-through")
                     row["text"] = label + "'s " + topic + ": " + review["analysis"]["decision_test"]
-    if evidence.get("business_version") == 2:
+    if evidence.get("business_version", 0) >= 2:
         rows = concise_checks(evidence, rows, events[0] if events else None)
+    if evidence.get("business_version", 0) >= 3:
+        rows = named_checks(evidence, rows)
     return rows[:evidence.get("reader_limit",3)]
 
 
@@ -117,6 +119,7 @@ def concise_checks(evidence, rows, event):
                     row["text"] = row["text"].replace(scope + " ", "", 1)
 
     from src.intelligence.business_analysis import name
+    from src.intelligence.reader_brief import story_watch
     stories = {story["id"]: story for story in evidence.get("stories", [])}
     point = opening_source(evidence) or {}
     reviews = [row for row in evidence.get("business_reviews", [])
@@ -128,11 +131,49 @@ def concise_checks(evidence, rows, event):
     review = min(reviews, key=lambda row: (row["story_id"] not in point.get("story_ids", []), row["story_id"]))
     story = stories[review["story_id"]]
     label = "AMD's server rollout" if story.get("publisher_symbol") == "AMD" else name(story) + "'s production economics"
-    test = {"id": "watch_business", "section": "watch", "sources": ["Verified story decisions"],
-            "text": label + ": " + review["analysis"]["decision_test"]}
+    decision_test = review["analysis"]["decision_test"]
+    if evidence.get("business_version", 0) >= 3 and review["analysis"]["event_class"] == "commercial rollout":
+        decision_test = "Reported server sales and margins would show how the EPYC rollout is contributing to the business."
+    test = story_watch(story, label + ": " + decision_test, evidence)
     displaced = {"watch_business", "watch_results"}
     if event and event["status"] == "rechecked":
         displaced.add("watch_event")
     rows = [row for row in rows if row["id"] not in displaced]
     rows.insert(1 if rows and rows[0]["id"] == "watch_participation" else 0, test)
     return rows
+
+
+def named_checks(evidence, rows):
+    """Use the selected issuer or quote symbol, including the actual share class."""
+    from src.intelligence.company_focus import COMPANY_NAMES, company
+
+    stories = {story["id"]: story for story in evidence.get("stories", [])}
+    market_labels = {"watch_participation": "Watchlist breadth", "watch_market": "Major indexes",
+                     "watch_energy": "Oil and business costs", "watch_results": "Issuer disclosures"}
+    named = []
+    for row in rows:
+        label, _, body = row["text"].partition(": ")
+        story = stories.get(row.get("story_id"), {})
+        symbol = row.get("symbol") or story.get("publisher_symbol") or next(iter(story.get("symbols", [])), None)
+        if story.get("ipo"):
+            from src.intelligence.ipo_monitor import issuers
+            label = issuers()[story["ipo"]["issuer_id"]]["name"] + " IPO"
+        elif company(symbol):
+            name = COMPANY_NAMES.get(symbol, symbol)
+            label = f"{name} ({symbol})" if name != symbol else symbol
+            row = {**row, "symbol": symbol}
+        else:
+            label = market_labels.get(row["id"], label)
+        named.append({**row, "text": f"{label} — {body}"})
+
+    if not any(row.get("symbol") for row in named):
+        focused = evidence.get("company_focus", {}).get("selected", [])
+        target = next((row["symbol"] for row in focused if company(row["symbol"])), None)
+        if target:
+            name = COMPANY_NAMES.get(target, target)
+            label = f"{name} ({target})" if name != target else target
+            named = [row for row in named if row["id"] != "watch_results"]
+            named.append({"id": "watch_results", "section": "watch", "symbol": target,
+                          "text": f"{label} — Check the next original results for sales growth and margins. Growth that also lifts margins would strengthen the earnings outlook.",
+                          "sources": ["Company focus selection"]})
+    return sorted(named, key=lambda row: not row.get("symbol"))

@@ -107,7 +107,7 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         raise ValueError("Invalid reader watch-signal limit")
     if type(disclosure_version) is not int or disclosure_version not in {0, 1, 2} or disclosure_version and (presentation != "news" or narration_version != 2):
         raise ValueError("Unknown disclosure presentation version")
-    if type(business_version) is not int or business_version not in {0, 1, 2} or business_version and (presentation != "news" or narration_version != 2):
+    if type(business_version) is not int or business_version not in {0, 1, 2, 3} or business_version and (presentation != "news" or narration_version != 2):
         raise ValueError("Unknown business interpretation version")
     evidence = report_evidence(report)
     if disclosure_version:

@@ -279,8 +279,9 @@ SMART_MONEY_LABEL_TRANSLATIONS = {
 }
 
 
-def get_market_status_label() -> str:
-    now_et = datetime.now(ZoneInfo(MARKET_TIMEZONE))
+def get_market_status_label(*, now: datetime | None = None) -> str:
+    market_zone = ZoneInfo(MARKET_TIMEZONE)
+    now_et = now.astimezone(market_zone) if now is not None else datetime.now(market_zone)
 
     if now_et.weekday() >= 5:
         return "Closed — weekend. Price moves reflect the last completed regular session."
@@ -843,18 +844,25 @@ def build_market_tone(movers: list[dict]) -> str:
     return "Mixed / neutral"
 
 
-def build_market_snapshot(symbols: list[str], movers: list[dict], *, market_context: dict | None = None) -> str:
+def build_market_snapshot(
+    symbols: list[str],
+    movers: list[dict],
+    *,
+    market_context: dict | None = None,
+    now: datetime | None = None,
+) -> str:
     benchmark_session = (market_context or {}).get("_benchmark_session", "")
     if not symbols and not benchmark_session:
         return "Watchlist unavailable."
 
+    market_status = get_market_status_label(now=now)
     if not movers:
         quote_status = "Off" if not DAILY_REPORT_LIVE_QUOTES else "Unavailable"
         baseline = ("\nQuote session: " + benchmark_session + "\nScope: benchmark regular-session returns; watchlist breadth unavailable."
                     if benchmark_session else "")
 
         return f"""
-Market Session: {get_market_status_label()}{baseline}
+Market Session: {market_status}{baseline}
 Tone: Quote data unavailable
 Watchlist: {len(symbols)} symbols
 Live Quotes: {quote_status}
@@ -878,7 +886,7 @@ Use: /global, /headlines, /watchlist movers, or /ticker SYMBOL for live context.
         quote_basis += "\nQuote timestamps (UTC): " + stamps[0] + (" to " + stamps[-1] if len(stamps) > 1 else "")
 
     return f"""
-Market Session: {get_market_status_label()}
+Market Session: {market_status}
 {quote_basis}
 Tone: {build_market_tone(movers)}
 Breadth: {positive} up / {negative} down / {len(movers)} quoted
@@ -1876,7 +1884,7 @@ Theme Read
 {theme_read}
 
 Market Snapshot
-{build_market_snapshot(watchlist_symbols, movers, market_context=global_context)}
+{build_market_snapshot(watchlist_symbols, movers, market_context=global_context, now=now)}
 
 {calendar_report}
 

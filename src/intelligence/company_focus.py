@@ -259,7 +259,7 @@ def grouped_price_watch(evidence: dict) -> dict | None:
     prices = "; ".join(clauses) + " in the quoted regular session."
     proof = (" Repeat quotes from the same provider support these price readings." if all(
         events.get(row["symbol"], {}).get("status") == "rechecked" for row in rows) else "")
-    if evidence.get("business_version") == 2:
+    if evidence.get("business_version", 0) >= 2:
         return {"symbols": [row["symbol"] for row in rows], "label": label,
                 "text": label + " — " + prices + proof + " These moves do not establish a shared cause.",
                 "sources": list(dict.fromkeys(source for row in rows for source in row["sources"]))}

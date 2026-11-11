@@ -152,7 +152,7 @@ def defense_segment(stories: list[dict], *, broadcast=False, business_version=0)
                     review = company_read(story, business_version=business_version)
                     if business_version:
                         from src.intelligence.business_analysis import follow_through
-                        parts.append(follow_through(story, review, concise=business_version == 2))
+                        parts.append(follow_through(story, review, concise=business_version >= 2))
                     else:
                         parts.append(f"Our view on {NAMES.get(symbol, symbol)}: " + review["why"] + " " + next_check(review["watch"]))
                 else:
@@ -165,7 +165,7 @@ def defense_segment(stories: list[dict], *, broadcast=False, business_version=0)
                     "A prototype or demonstration alone does not establish orders or revenue; those are the next tests for defense exposure.")
         return ("Defense portfolio lens: Check funded commitments, procurement approvals and delivery timing behind these reports. "
                 "Contract ceilings and geopolitical attention alone do not establish near-term revenue, margins or investment returns.")
-    if business_version == 2:
+    if business_version >= 2:
         return "No current verified defense development qualified in this edition."
     return ("Defense and innovation remain on our research watch, including drones, counter-drone systems, cybersecurity and autonomy. "
             "No current verified defense development qualified in this edition; check funded orders and production milestones before changing the industry outlook.")

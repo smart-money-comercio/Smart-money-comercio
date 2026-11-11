@@ -196,6 +196,7 @@ class IPOChecks(IsolatedChecks):
         with patch.object(news_editor, "cache_candidates", return_value=([], [])):
             text = build_daily_news_brief(self.research())
         self.assertIn("Anthropic", text); self.assertIn("Public IPO registration filed", text)
+        self.assertIn("Anthropic IPO — Watch the proposed price", text)
         self.assertLess(text.index("Anthropic"), text.index("Market Update"))
         self.assertTrue(validate_news_brief(text)["passes"])
         self.assertIn("SEC EDGAR", news_editor.build_editor_status("ANTHROPIC", history=True))

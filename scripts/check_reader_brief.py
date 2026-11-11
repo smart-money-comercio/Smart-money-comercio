@@ -53,7 +53,11 @@ class ReaderChecks(IsolatedChecks):
         self.assertIn("In the next session, watch for fewer declines", watch)
         self.assertIn("reduce margins", watch)
         self.assertNotIn("disclosures, price and volume support these research ideas", watch)
-        self.assertTrue(2 <= len(self.record(text)["analyst_review"]["insights"]) <= 20)
+        review = self.record(text)["analyst_review"]
+        target = review["evidence"]["company_focus"]["selected"][0]
+        self.assertTrue(watch.startswith(f"{target['name']} ({target['symbol']}) — "))
+        self.assertIn("Watchlist breadth —", watch)
+        self.assertTrue(2 <= len(review["insights"]) <= 20)
 
     def test_watch_uses_plain_language_instead_of_model_or_entry_jargon(self):
         watch = section(self.render(), "What We're Watching").lower()
@@ -68,7 +72,7 @@ class ReaderChecks(IsolatedChecks):
         self.assertNotIn("Compare the move with original results and guidance", opening)
         self.assertIn("Watch original results and guidance", watch)
         self.assertNotIn("whether selling spreads", opening)
-        self.assertIn("Alphabet's business outlook", watch)
+        self.assertTrue(watch.startswith("Alphabet (GOOGL) — Watch original results and guidance"))
         self.assertIn("price move alone cannot explain it", watch)
         self.assertNotIn("caused", text.lower())
 
@@ -77,8 +81,16 @@ class ReaderChecks(IsolatedChecks):
         opening = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
         self.assertNotIn("Alphabet's sharp decline", opening)
         self.assertNotIn("12.0 percent", text)
-        self.assertIn("Alphabet's price check", section(text, "What We're Watching"))
+        self.assertTrue(section(text, "What We're Watching").startswith("Alphabet (GOOGL) — The unusually large reported move"))
         self.assertIn("stock split could change the reading", text)
+
+    def test_watch_keeps_the_quoted_share_class(self):
+        events.review_quotes({"GOOG": quote("GOOG", -12)}, lambda _: quote("GOOG", -12), NOW)
+        text = self.render(report=self.research(replacements={
+            "Watchlist Movers": "Largest regular-session movers:\n• GOOG: $88.00 (-12.00%)"}))
+        watch = section(text, "What We're Watching")
+        self.assertTrue(watch.startswith("Alphabet (GOOG) — Watch original results and guidance"))
+        self.assertNotIn("Alphabet (GOOGL)", watch)
 
     def test_opposing_index_directions_are_explained_without_a_market_wide_claim(self):
         report = self.research(replacements={"Executive Summary": "- Main theme: Mixed.\n- Market moves: S&P -0.17%, Nasdaq -1.04%, Russell +1.22%, VIX -2.9%, Oil -1.56%, TLT +0.53%."})
@@ -103,7 +115,7 @@ class ReaderChecks(IsolatedChecks):
         report = self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"})
         text = self.render([candidate()], report)
         self.assertIn("Market coverage is incomplete", text)
-        self.assertIn("missing market check", section(text, "What We're Watching"))
+        self.assertIn("Major indexes — We still need a dated view", section(text, "What We're Watching"))
         self.assertNotIn("7 finished higher", text)
         self.assertNotIn("Rising oil prices", text)
 
@@ -113,7 +125,7 @@ class ReaderChecks(IsolatedChecks):
         with patch.dict("os.environ", {"SPECIAL_ALERT_SYMBOLS": "MSFT,NVDA,TSM,CACI"}):
             text = self.render([story])
         watch = section(text, "What We're Watching")
-        self.assertIn("CACI International's contract follow-through", watch)
+        self.assertTrue(watch.startswith("CACI International (CACI) —"))
         self.assertIn("committed funding and a start date", watch)
         self.assertIn("potential award can become sales", watch)
         self.assertNotIn("booked $185 million", text)
@@ -121,14 +133,14 @@ class ReaderChecks(IsolatedChecks):
     def test_product_watch_explains_the_commercial_test(self):
         text = self.render([candidate("MSFT", title="Microsoft introduces a multi-model AI platform")])
         watch = section(text, "What We're Watching")
-        self.assertIn("Microsoft's commercial test", watch)
+        self.assertTrue(watch.startswith("Microsoft (MSFT) —"))
         self.assertIn("paying customers and the cost of serving them", watch)
         self.assertIn("profits and cash generation", watch)
 
     def test_removed_or_unconfirmed_story_does_not_supply_a_business_watch(self):
         value = candidate("NVDA", official=False, title="Nvidia announces record quarterly earnings")
         text = self.render([value])
-        self.assertNotIn("Nvidia's next results", section(text, "What We're Watching"))
+        self.assertNotIn("Compare sales, profits and cash generation with management's outlook", section(text, "What We're Watching"))
         self.assertNotIn(value["title"], text)
 
     def test_opening_and_every_watch_signal_are_bound_to_the_research_edition(self):
@@ -250,7 +262,7 @@ class ReaderChecks(IsolatedChecks):
     def test_tied_participation_does_not_assert_a_recovery_or_a_rally(self):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot(up=9, down=9)}))
         watch = section(text, "What We're Watching")
-        self.assertIn("The next move:", watch)
+        self.assertIn("Watchlist breadth —", watch)
         self.assertIn("establish a direction within this group", watch)
         self.assertNotIn("Market recovery:", watch)
 

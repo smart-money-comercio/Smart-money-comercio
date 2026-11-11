@@ -381,16 +381,20 @@ class EditionChecks(IsolatedChecks):
         q=quote("^GSPC",value=raw("^GSPC",index=True))
         payload={"cached_at":NOW.timestamp(),"market_moves":[{"symbol":"^GSPC","move":round(q["change_percent"],2),"quote_evidence":q["quote_evidence"]}]}
         context,rows=research_context.align_report_sessions({"_market_payload":payload},[],NOW)
-        snapshot=daily_report.build_market_snapshot([],rows,market_context=context)
+        snapshot=daily_report.build_market_snapshot([],rows,market_context=context,now=NOW)
         self.assertIn("Quote session: 2026-11-06",snapshot)
         self.assertIn("watchlist breadth unavailable",snapshot);self.assertNotIn("Breadth: 0",snapshot)
 
     def test_news_brief_keeps_benchmark_moves_when_watchlist_breadth_is_unavailable(self):
-        snapshot=daily_report.build_market_snapshot([],[],market_context={"_benchmark_session":"2026-11-06"})
+        with patch.object(daily_report, "datetime") as clock:
+            clock.now.side_effect = AssertionError("A dated snapshot must use the report clock")
+            snapshot = daily_report.build_market_snapshot(
+                [], [], market_context={"_benchmark_session": "2026-11-06"}, now=NOW,
+            )
         research=self.research(now=NOW,replacements={"Market Snapshot":snapshot,"Executive Summary":"- Main theme: dated benchmark context.\n- Market moves: S&P +0.31%, Nasdaq +1.09%, Russell +0.89%, VIX -9.01%, Oil +0.13%, TLT -0.01%."})
         with patch.object(editor,"cache_candidates",return_value=([],[])):
             report=build_daily_news_brief(research)
-        self.assertIn("completed regular session 2026-11-06",report)
+        self.assertIn("Market data: completed regular session 2026-11-06",report)
         self.assertIn("Nasdaq Composite rose 1.09 percent",report)
         self.assertNotIn("0 finished higher",report);self.assertTrue(validate_news_brief(report)["passes"])
 

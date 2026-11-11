@@ -67,7 +67,7 @@ def market_copy(evidence):
     text += " Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + basis + ". " + lens
     if words(normalize(text)) + 4 > MAX_MARKET_WORDS:
         text = session_copy + " Our read is " + ("incomplete" if mood == "limited by incomplete coverage" else mood) + basis + ". " + lens
-    if evidence.get("business_version") == 2 and "Russell" in moves and any(key in moves for key in ("S&P", "Nasdaq")):
+    if evidence.get("business_version", 0) >= 2 and "Russell" in moves and any(key in moves for key in ("S&P", "Nasdaq")):
         value = moves["Russell"]
         small_caps = " The small-cap Russell 2000" + (" was unchanged." if value == 0 else f" {'rose' if value > 0 else 'fell'} {abs(value):g} percent.")
         if words(normalize(text + small_caps)) + 4 <= MAX_MARKET_WORDS:
@@ -122,7 +122,7 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
     if profile["schema"] == 14:
         from src.intelligence.delivery_disclosures import summary
         text = summary(profile, speech=True)
-        if business_version == 2:
+        if business_version >= 2:
             from src.intelligence.business_analysis import follow_through
             return text if profile["stage"] == "available" else text + " " + follow_through(story, review, concise=True)
         return text + " " + implication
@@ -200,7 +200,7 @@ def focus_copy(row, evidence):
         text += " For context, its " + day + " results release reported " + values[0][2] + " " + ", and ".join(labels[fact["field"]]+" of "+value[1] for fact,value in zip(facts,values)) + "."
         text += " These dated results do not establish the cause of the price move."
         if context.get("cached_after_failure"): text += " This is previously verified cached context; the latest source access was limited."
-    elif text and not (evidence.get("business_version") == 2 and any(
+    elif text and not (evidence.get("business_version", 0) >= 2 and any(
             story.get("event_evidence", {}).get("schema") == 14 for story in evidence.get("stories", []))):
         if row["group"] == "market event" and row.get("metric"):
             text += " Check original results and guidance before assigning a business explanation to the move."
@@ -231,6 +231,27 @@ def focus_bullet(row, evidence):
         label = row["name"] + (f" ({row['symbol']})" if row["name"] != row["symbol"] else "")
         return label + f": {value:+.1f}%"
     return row["role"] + ": " + row["name"]
+
+
+def named_watch_scene(rows, sources, earnings_context):
+    from src.intelligence.company_earnings import matching
+
+    narration, bullets, source_ids = [], [], []
+    for row in rows:
+        label, _, body = row["text"].partition(" — ")
+        symbol = row.get("symbol")
+        bullets.append(label + " — " + re.split(r"(?<=[.!?])\s+", body, maxsplit=1)[0])
+        if symbol or row["id"] == "watch_ipo":
+            subject = label.removesuffix(f" ({symbol})") if symbol else "the " + label
+            body = f"For {subject}, " + body[:1].lower() + body[1:]
+        narration.append(body)
+        if row.get("story_id") in sources:
+            source_ids.append(row["story_id"])
+        if "Recent earnings context" in row["sources"]:
+            context = matching(earnings_context, symbol)
+            if context:
+                source_ids.append("earnings_" + context["symbol"])
+    return " ".join(narration), bullets, list(dict.fromkeys(source_ids))
 
 
 def build(record, report, research, *, schema=2):
@@ -361,7 +382,7 @@ def build(record, report, research, *, schema=2):
         add("Companies in Focus", text, bullets, ids)
         covered.add(issuer(row["symbol"]))
     if not any("defense" in story_topics(story) for story in selected):
-        if evidence.get("business_version") == 2:
+        if evidence.get("business_version", 0) >= 2:
             add("Defense Watch", "On defense, no fresh development cleared this edition's source checks.")
         else:
             add("Defense Watch", "On defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.", ("Funded orders", "Production milestones"))
@@ -371,24 +392,28 @@ def build(record, report, research, *, schema=2):
     if agenda:
         text = "Looking ahead. " + " ".join(agenda[:2])
         text = text.replace("The publisher schedule lists", "Watch").replace("A previously checked, cached schedule lists", "A previously checked schedule lists")
-        if evidence.get("business_version") == 2:
+        if evidence.get("business_version", 0) >= 2:
             implication = next((row.removeprefix("Why it matters: ") for row in agenda_paragraphs
                                 if row.startswith(("Why it matters: ", "Weekly claims track "))), "")
             if implication:
                 text += " " + implication
         add("What's Ahead", text, [agenda_bullet(row) for row in agenda[:2]] if modern else agenda[:2], calendar_ids)
-    watch = [row["text"] for row in review["insights"] if row["section"] == "watch"]
-    signals = []
-    for i, text in enumerate(watch):
-        label, _, body = text.partition(": ")
-        if label.startswith(("Market ", "Staying ", "The ", "Energy ", "IPO ")): label = label[:1].lower()+label[1:]
-        signals.append(("First, " if i == 0 else "Second, " if i == 1 else "Finally, ")+label+". "+body)
-    watch_bullets = [re.split(r"(?<=[.!?])\s+",text.partition(": ")[2])[0] for text in watch] if modern else [text.partition(": ")[0] for text in watch]
-    watch_context = matching(evidence.get("earnings_context", []), attention[0]["symbol"]) if attention else None
-    watch_sources = (["earnings_" + watch_context["symbol"]]
-                     if watch_context and (context_sources or review.get("reader_version") in {2, 3, 4}) else [])
-    add("What We're Watching", "Here are the next checks. "+" ".join(signals), watch_bullets,
-        watch_sources if any("earnings follow-through" in text for text in watch) else ())
+    watch_rows = [row for row in review["insights"] if row["section"] == "watch"]
+    if evidence.get("business_version", 0) >= 3:
+        add("What We're Watching", *named_watch_scene(watch_rows, sources, evidence.get("earnings_context", [])))
+    else:
+        watch = [row["text"] for row in watch_rows]
+        signals = []
+        for i, text in enumerate(watch):
+            label, _, body = text.partition(": ")
+            if label.startswith(("Market ", "Staying ", "The ", "Energy ", "IPO ")): label = label[:1].lower()+label[1:]
+            signals.append(("First, " if i == 0 else "Second, " if i == 1 else "Finally, ")+label+". "+body)
+        watch_bullets = [re.split(r"(?<=[.!?])\s+",text.partition(": ")[2])[0] for text in watch] if modern else [text.partition(": ")[0] for text in watch]
+        watch_context = matching(evidence.get("earnings_context", []), attention[0]["symbol"]) if attention else None
+        watch_sources = (["earnings_" + watch_context["symbol"]]
+                         if watch_context and (context_sources or review.get("reader_version") in {2, 3, 4}) else [])
+        add("What We're Watching", "Here are the next checks. "+" ".join(signals), watch_bullets,
+            watch_sources if any("earnings follow-through" in text for text in watch) else ())
     if review.get("reader_version") == 4:
         from src.intelligence.market_priority import selloff
         if selloff(evidence):

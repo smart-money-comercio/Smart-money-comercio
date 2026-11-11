@@ -135,7 +135,7 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual({story["publisher_symbol"] for story in selected}, {"AMD", "LMT"})
         self.assertEqual(len(selected), 2)
         self.assertTrue(all(checked_evidence(story)["schema"] == 14 for story in selected))
-        self.assertEqual(record["business_version"], 2)
+        self.assertEqual(record["business_version"], 3)
         self.assertEqual(len(record["analyst_review"]["evidence"]["business_reviews"]), 2)
         copies = [story for story in record["candidates"] if story["url"] == production["url"]]
         self.assertEqual(len(copies), 2)
@@ -148,6 +148,8 @@ class DailyChecks(RebuildDetailChecks):
         self.assertNotIn(production["title"], text)
         self.assertEqual(text.count("7 finished higher and 11 lower"), 1)
         self.assertEqual(text.count("Reported server sales and margins"), 1)
+        self.assertIn("What We're Watching\nAdvanced Micro Devices (AMD) — Reported server sales and margins", text)
+        self.assertIn("Watchlist breadth — Of the 18 stocks and funds", text)
         self.assertNotIn("Watch cloud availability", text)
         self.assertNotIn("No fresh Starbucks announcement", text)
         self.assertTrue(validate_news_brief(text)["passes"])
@@ -155,6 +157,13 @@ class DailyChecks(RebuildDetailChecks):
         self.assertTrue(voice["quality"]["passes"])
         self.assertIn("Server vendors are shipping systems.", voice["script"])
         self.assertIn("G M L R S delivery number", voice["script"])
+        watch = next(row for row in voice["segments"] if row["heading"] == "What We're Watching")
+        self.assertTrue(watch["narration"].startswith("For Advanced Micro Devices, reported server sales and margins"))
+        self.assertTrue(watch["bullets"][0].startswith("Advanced Micro Devices (AMD) —"))
+        self.assertEqual(watch["source_ids"], [next(story["id"] for story in selected if story["publisher_symbol"] == "AMD")])
+        from src.intelligence.market_priority import watching
+        only = watching({**record["analyst_review"]["evidence"], "reader_limit": 1})
+        self.assertEqual([row["symbol"] for row in only], ["AMD"])
 
 
 def main():
