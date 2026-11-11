@@ -27,7 +27,14 @@ def assess(story):
     why, watch = base["why"], base["watch"]
     test = "Further original disclosures are needed to assess the scale and timing of the business effect."
 
-    if profile["schema"] == 12:
+    if profile["schema"] == 14:
+        if profile["stage"] == "available":
+            kind, channel = "commercial rollout", "server adoption and margins"
+            test = "Reported server sales and margins would show how the launch is contributing to the business."
+        else:
+            kind, channel = "production milestone", "delivery volume and production costs"
+            test = "Funded delivery schedules and program costs would clarify how the reported pace affects earnings."
+    elif profile["schema"] == 12:
         kind, channel = "maintenance", "maintenance services"
         basis = [key for key in ("maintenance_designation", "maintenance_platform", "maintenance_location", "maintenance_scope") if key in facts]
         why = "The certification defines a maintenance role for the site. Sales depend on service orders and the cost of performing that work."
@@ -114,7 +121,7 @@ def compare(stories):
 
 def narrative(story, legacy, review, day):
     """Smooth only known fact renderers; legacy titles retain their qualifications."""
-    if story.get("event_evidence", {}).get("schema") not in {8, 9, 10, 11, 12, 13}:
+    if story.get("event_evidence", {}).get("schema") not in range(8, 15):
         return legacy
     if story["event_evidence"]["schema"] == 8:
         from src.intelligence.original_disclosures import summarize

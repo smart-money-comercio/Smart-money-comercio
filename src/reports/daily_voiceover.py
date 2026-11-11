@@ -113,6 +113,9 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False):
         review = enhance(story, review)
     implication = review["why"] + (" " + review["watch"] if business_version else "")
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
+    if profile["schema"] == 14:
+        from src.intelligence.delivery_disclosures import summary
+        return summary(profile, speech=True) + " " + implication
     if profile["schema"] in {12, 13}:
         from src.intelligence.disclosure_details import summary
         return summary(profile, NAMES.get(story.get("publisher_symbol"), story["source"])) + " " + implication

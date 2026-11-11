@@ -139,7 +139,7 @@ def fact_schema(story):
     return 8
 
 
-def admit_story(raw, text, observed, periods, now):
+def admit_story(raw, text, observed, periods, now, *, delivery_facts=True):
     from src.intelligence.original_disclosures import calendar_notice
     story = deepcopy(raw)
     for key in ("event_evidence","canonical_url","discovery_evidence","sec_filing","ipo","materiality"):
@@ -160,7 +160,12 @@ def admit_story(raw, text, observed, periods, now):
     story["materiality"] = editor.materiality(story)
     # article_excerpt and the verified cache already produce admitted plain text.
     # Preserve that exact text; decoding it again can alter evidence sentences.
-    story["event_evidence"] = analysis._from_admitted_text(story,text,"original release excerpt",schema=fact_schema(story))
+    schema = fact_schema(story)
+    if schema == 8 and delivery_facts:
+        from src.intelligence.delivery_disclosures import extract
+        if extract(story, text):
+            schema = 14
+    story["event_evidence"] = analysis._from_admitted_text(story,text,"original release excerpt",schema=schema)
     if len(story["event_evidence"]["facts"]) < 2:
         raise ValueError("Fewer than two concrete original-source fact fields were extracted")
     story["materiality"] = editor.materiality(story)
@@ -173,7 +178,8 @@ def admit_story(raw, text, observed, periods, now):
 
 
 def checked_story(story, periods, now):
-    expected = admit_story(story,story["source_excerpt"],story["evidence_checked_at"],periods,now)
+    expected = admit_story(story,story["source_excerpt"],story["evidence_checked_at"],periods,now,
+                           delivery_facts=story["event_evidence"]["schema"] == 14)
     if story != expected:
         raise ValueError("Weekly disclosure facts, stage, dates or original proof changed")
     analysis.checked_evidence(story)
@@ -211,6 +217,8 @@ def collect_stories(raw, periods, now, fetch=None, *, force=False):
             except (ValueError,KeyError,TypeError,AttributeError):pass
         try:
             if fact_schema(row) in {9,10,11,12,13}:return (2,0)
+            from src.intelligence.delivery_disclosures import family
+            if family(row):return (2,0)
             return (3,not bool(editor.materiality({**row,"disclosure_version":1})))
         except (ValueError,KeyError,TypeError,AttributeError):return (4,0)
     # Local fact inspection does not consume a network read. Prefer useful

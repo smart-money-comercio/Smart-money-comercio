@@ -91,6 +91,9 @@ def name(story):
 
 def summary(story):
     p=checked_evidence(story);label=name(story)
+    if p["schema"] == 14:
+        from src.intelligence.delivery_disclosures import summary as render
+        return render(p, speech=True)
     if p["schema"] in {12,13}:
         from src.intelligence.disclosure_details import summary as render
         return render(p,label)

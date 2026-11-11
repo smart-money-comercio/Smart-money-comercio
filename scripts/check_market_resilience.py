@@ -344,7 +344,7 @@ class EditionChecks(IsolatedChecks):
         with patch.object(editor,"cache_candidates",return_value=([maintenance(),sanctions()],[])):
             report=build_daily_news_brief(self.research())
         record=store.read_editions(report=report)[0]
-        self.assertEqual(record["rules_version"],31);self.assertTrue(validate_news_brief(report)["passes"])
+        self.assertEqual(record["rules_version"],32);self.assertTrue(validate_news_brief(report)["passes"])
         self.assertEqual(sum(len(s["event_evidence"]["facts"]) for s in editor.selected_stories(record)),8)
         self.assertTrue(voice.checked(record,EDITOR_NOW)["quality"]["passes"])
 

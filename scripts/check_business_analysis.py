@@ -121,7 +121,7 @@ class DailyChecks(RebuildDetailChecks):
     # Keep only the new tests in this class; the inherited regressions run separately.
     def test_new_daily_retains_both_stories_and_all_research_scores(self):
         text, record = self.render([maintenance(), sanctions()])
-        self.assertEqual(record["rules_version"], 31)
+        self.assertEqual(record["rules_version"], 32)
         self.assertEqual(record["business_version"], 1)
         self.assertEqual(len(news_editor.selected_stories(record)), 2)
         self.assertTrue(validate_news_brief(text)["passes"])
