@@ -101,10 +101,11 @@ def watching(evidence):
                 if row["id"] == "watch_business" and (row.get("story_id") == story["id"] or row["text"].startswith(label + "'s")):
                     topic = {"maintenance": "maintenance opportunity", "development": "next milestone"}.get(review["analysis"]["event_class"], "business follow-through")
                     row["text"] = label + "'s " + topic + ": " + review["analysis"]["decision_test"]
+    lead_event = next(iter(events), None)
     if evidence.get("business_version", 0) >= 2:
-        rows = concise_checks(evidence, rows, events[0] if events else None)
+        rows = concise_checks(evidence, rows, lead_event)
     if evidence.get("business_version", 0) >= 3:
-        rows = named_checks(evidence, rows)
+        rows = named_checks(evidence, rows, lead_event)
     return rows[:evidence.get("reader_limit",3)]
 
 
@@ -143,9 +144,9 @@ def concise_checks(evidence, rows, event):
     return rows
 
 
-def named_checks(evidence, rows):
+def named_checks(evidence, rows, lead_event=None):
     """Use the selected issuer or quote symbol, including the actual share class."""
-    from src.intelligence.company_focus import COMPANY_NAMES, company
+    from src.intelligence.company_focus import COMPANY_NAMES, company, issuer
     from src.intelligence.company_earnings import BASELINE_SOURCE, baseline_watch
 
     stories = {story["id"]: story for story in evidence.get("stories", [])}
@@ -153,10 +154,20 @@ def named_checks(evidence, rows):
                      "watch_energy": "Oil and business costs", "watch_results": "Issuer disclosures"}
     named = []
     baseline = evidence.get("intel_results_baseline")
+    prefer_baseline = False
+    if baseline and evidence.get("business_version", 0) >= 4 and lead_event and lead_event["status"] == "rechecked":
+        lead_symbol = lead_event["symbol"]
+        lead_financials = any(story.get("event_evidence", {}).get("event") in {"earnings", "guidance"}
+                              and any(issuer(symbol) == lead_symbol for symbol in story.get("symbols", []))
+                              for story in stories.values())
+        intel_story_watch = any(stories.get(row.get("story_id"), {}).get("publisher_symbol") == "INTC" for row in rows)
+        prefer_baseline = lead_symbol != "INTC" and not (lead_financials or intel_story_watch)
     for row in rows:
         label, _, body = row["text"].partition(": ")
         story = stories.get(row.get("story_id"), {})
         symbol = row.get("symbol") or story.get("publisher_symbol") or next(iter(story.get("symbols", [])), None)
+        if prefer_baseline and row["id"] == "watch_event" and row["sources"] == ["Market event checks"]:
+            symbol = "INTC"
         if story.get("ipo"):
             from src.intelligence.ipo_monitor import issuers
             label = issuers()[story["ipo"]["issuer_id"]]["name"] + " IPO"

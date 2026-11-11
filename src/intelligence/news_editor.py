@@ -558,7 +558,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             if baseline:
                 result["intel_results_baseline"] = baseline
         from src.utils.market_quote_source import cached_health
-        result.update(rules_version=32, business_version=3, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=32, business_version=4, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -608,7 +608,7 @@ def research_focus(story: dict) -> str:
 def render_story(story: dict, zone, company_names: dict, *, style="source", business_version=0) -> str:
     if style not in {"source", "broadcast"}:
         raise ValueError("Unknown story narration style")
-    if type(business_version) is not int or business_version not in {0, 1, 2, 3} or business_version and style != "broadcast":
+    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4} or business_version and style != "broadcast":
         raise ValueError("Unknown business narration version")
     if style == "broadcast" and not story.get("official"):
         raise ValueError("Broadcast narration needs an admitted original publisher")

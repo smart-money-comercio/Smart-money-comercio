@@ -243,6 +243,48 @@ class CompanyEarningsChecks(IsolatedChecks):
         fresh = {"symbols": ["INTC"], "event_evidence": {"event": "guidance"}}
         self.assertIsNone(earnings.retain_intel(original, NOW, [event], [fresh], {"selected": [{"symbol": "INTC"}]}, baseline=True))
 
+    def test_dated_intel_benchmark_can_supply_watch_when_amd_is_the_lead_mover(self):
+        from scripts.check_event_news import quote
+        from src.intelligence import market_event_desk as events, market_priority
+
+        moves = {"AMD": 8.62, "INTC": 8.0, "AVGO": 5.2}
+        events.review_quotes({symbol: quote(symbol, value) for symbol, value in moves.items()},
+                             lambda symbol: quote(symbol, moves[symbol]), NOW)
+        report = self.research(replacements={
+            "Executive Summary": "- Main theme: Growth.\n- Market moves: S&P +1.43%, Nasdaq +1.88%, Russell +0.90%, VIX -9.87%, Oil -0.08%, TLT +0.03%.",
+            "Watchlist Movers": "Largest regular-session movers:\n" + "\n".join(f"• {symbol}: $88.00 ({value:+.2f}%)" for symbol, value in moves.items()),
+        })
+        with patch.object(editor, "cache_candidates", return_value=([source(312)], [])):
+            text = news.build_daily_news_brief(report)
+        record = store.read_editions(report=text)[0]
+        self.assertIn("Advanced Micro Devices rose 8.6 percent", text.split("Market Update", 1)[0])
+        self.assertIn("What We're Watching\nIntel (INTC) — Compare reported fourth quarter 2026 revenue", text)
+        self.assertIn("Watchlist breadth —", text)
+        self.assertFalse(editor.selected_stories(record))
+        self.assertTrue(news.validate_news_brief(text)["passes"])
+        evidence = record["analyst_review"]["evidence"]
+        only = market_priority.watching({**evidence, "reader_limit": 1})
+        self.assertEqual([row["symbol"] for row in only], ["INTC"])
+        profile = voice.checked(record, NOW)
+        scene = next(row for row in profile["segments"] if row["heading"] == "What We're Watching")
+        self.assertEqual(scene["source_ids"], ["earnings_baseline_INTC"])
+        self.assertIn("Dated results benchmark: INTC — USED", editor.build_editor_status())
+        self.assertIn("Brief narrative revision: 4", editor.build_editor_status())
+
+    def test_benchmark_preserves_pending_price_checks_and_current_financial_context(self):
+        from src.intelligence.market_priority import named_checks
+
+        evidence = {"business_version": 4, "intel_results_baseline": earnings.from_issuer(source(312), NOW, baseline=True)}
+        row = {"id": "watch_event", "symbol": "AMD", "text": "AMD's outlook: Check company results.",
+               "sources": ["Market event checks"]}
+        lead = {"symbol": "AMD", "status": "rechecked"}
+        fresh = {"id": "fresh-amd", "symbols": ["AMD"], "event_evidence": {"event": "guidance"}}
+        for inputs, watch, event in ((evidence, row, {**lead, "status": "pending"}),
+                                     (evidence, {**row, "sources": [*row["sources"], "Recent earnings context"]}, lead),
+                                     ({**evidence, "stories": [fresh]}, row, lead)):
+            with self.subTest(event=event, sources=watch["sources"], stories=bool(inputs.get("stories"))):
+                self.assertEqual(named_checks(inputs, [watch], event)[0]["symbol"], "AMD")
+
     def test_dated_context_enriches_brief_without_increasing_fresh_story_count(self):
         text, record = self.render()
         self.assertIn("Intel — recent earnings context", text)

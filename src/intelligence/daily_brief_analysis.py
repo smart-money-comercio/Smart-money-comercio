@@ -107,7 +107,7 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         raise ValueError("Invalid reader watch-signal limit")
     if type(disclosure_version) is not int or disclosure_version not in {0, 1, 2} or disclosure_version and (presentation != "news" or narration_version != 2):
         raise ValueError("Unknown disclosure presentation version")
-    if type(business_version) is not int or business_version not in {0, 1, 2, 3} or business_version and (presentation != "news" or narration_version != 2):
+    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4} or business_version and (presentation != "news" or narration_version != 2):
         raise ValueError("Unknown business interpretation version")
     evidence = report_evidence(report)
     if disclosure_version:
@@ -181,7 +181,7 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
             evidence["source_sections"].append("Recent earnings context")
     if intel_results_baseline is not None:
         from src.intelligence.company_earnings import BASELINE_SOURCE, matching, retain_intel
-        if event_context is None or reader_version != 4 or business_version != 3 or matching(evidence.get("earnings_context", []), "INTC"):
+        if event_context is None or reader_version != 4 or business_version < 3 or matching(evidence.get("earnings_context", []), "INTC"):
             raise ValueError("Intel results benchmark requires a named watch and separate dated evidence")
         retained = retain_intel(intel_results_baseline, now, event_context["events"], evidence["stories"], evidence.get("company_focus"), baseline=True)
         if retained:
