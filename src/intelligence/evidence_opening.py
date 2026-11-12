@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import re
+from zoneinfo import ZoneInfo
 
 from src.intelligence.daily_brief_analysis import NAMES
 
@@ -54,7 +55,12 @@ def opening_source(evidence):
                 priority = 4
         elif profile["schema"] == 15:
             from src.intelligence.order_awards import summary
-            text = summary(profile, name)
+            day = None
+            if evidence.get("business_version", 0) >= 6:
+                from src.intelligence.news_editor import dated
+                published = dated(story["published"]).astimezone(ZoneInfo(evidence["publication_timezone"]))
+                day = f"{published:%B} {published.day}"
+            text = summary(profile, name, day=day)
             watch, priority = "Look for delivery timing and any change to revenue guidance.", 2
         elif profile["event"] == "earnings":
             field = next((key for key in ("reported_revenue", "reported_sales", "reported_net_sales") if key in fields), None)

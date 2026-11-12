@@ -86,7 +86,38 @@ def portfolio_lens(moves: dict, topics: set[str], mood: str, *, pressure_first=F
     return "Check sector exposure and upcoming catalysts; broad signals alone do not settle the entry conditions for individual companies."
 
 
+def rally_leadership(evidence: dict) -> str:
+    """Compare dated index gains when the difference is large enough to discuss."""
+    if evidence.get("business_version", 0) < 6 or not evidence.get("session"):
+        return ""
+    moves = evidence["moves"]
+    if sentiment(moves) != "constructive" or abs(moves.get("Oil", 0)) >= 1.5 or abs(moves.get("TLT", 0)) >= 0.5:
+        return ""
+    topics = set().union(*(story_topics(story) for story in evidence.get("stories", [])))
+    if topics & {"trade", "geopolitics", "policy", "energy", "financial sanctions", "IPO", "AI financing"}:
+        return ""
+    leader, middle, laggard = sorted(("S&P", "Nasdaq", "Russell"), key=moves.__getitem__, reverse=True)
+    if round(moves[leader] - moves[laggard], 2) < 0.50:
+        return ""
+    labels = {"S&P": "S&P 500", "Nasdaq": "Nasdaq Composite", "Russell": "small-cap Russell 2000"}
+    day = datetime.strptime(evidence["session"], "%Y-%m-%d").strftime("%A")
+    opened = evidence["is_open"]
+    clock = f"During the {day} session" if opened else f"At {day}'s close"
+    horizon = "through the close" if opened else "in the next session"
+    lagging_market = "small caps" if laggard == "Russell" else f"the {labels[laggard]}"
+    volatility = ("A dated VIX reading was unavailable." if "VIX" not in moves else
+                  f"The VIX fell {abs(moves['VIX']):.2f} percent." if moves["VIX"] < 0 else "The VIX was unchanged.")
+    text = (f"{clock}, the {labels[leader]} rose {moves[leader]:.2f} percent, leading the three indexes we track. "
+            f"The {labels[middle]} rose {moves[middle]:.2f} percent and the {labels[laggard]} gained {moves[laggard]:.2f} percent. "
+            f"{volatility} Watch whether {lagging_market} can narrow the gap {horizon}.")
+    from src.utils.speech_text import normalize, words
+    return text if word_count(text) >= MIN_MARKET_WORDS and words(normalize(text)) <= PREFERRED_MARKET_WORDS else ""
+
+
 def market_segment(evidence: dict) -> str:
+    leadership = rally_leadership(evidence)
+    if leadership:
+        return leadership
     moves = evidence["moves"]
     if not moves or not evidence["session"]:
         return ("A dated broad-market snapshot is unavailable, so an overall sentiment call would be premature. "

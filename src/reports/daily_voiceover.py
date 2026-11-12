@@ -266,7 +266,7 @@ def build(record, report, research, *, schema=2):
     """Derive a spoken companion only after the original edition passes review."""
     from src.intelligence import news_editor as editor
     from src.intelligence.daily_brief_analysis import NAMES, validate_review
-    from src.intelligence.market_brief import story_topics
+    from src.intelligence.market_brief import rally_leadership, story_topics
     from src.reports.daily_news_brief import validate_news_brief
     if type(schema) is not int or schema not in {1, 2}:
         raise ValueError("Unknown voiceover presentation schema")
@@ -318,6 +318,7 @@ def build(record, report, research, *, schema=2):
     opening_context = matching(evidence.get("earnings_context", []), first_checked.get("symbol"))
     opening_sources = (["earnings_" + opening_context["symbol"]]
                        if opening_context and (context_sources or review.get("reader_version") in {2, 3, 4}) else [])
+    edition_intro = " This is Smart Money for " + local.strftime("%B %d").replace(" 0", " ") + ". "
     if review.get("reader_version") in {3,4}:
         if review["reader_version"] == 4:
             from src.intelligence.market_priority import opening_source, selloff
@@ -328,21 +329,28 @@ def build(record, report, research, *, schema=2):
         point = opening_source(evidence)
         if point:
             opening_sources = point["story_ids"]
+            if evidence.get("business_version", 0) >= 6:
+                order = next((story for story in selected if story["id"] in opening_sources
+                              and story.get("event_evidence", {}).get("schema") == 15), None)
+                if order and editor.dated(order["published"]).astimezone(local.tzinfo).date() == local.date():
+                    edition_intro = " This is Smart Money. "
     if modern and review.get("reader_version") in {2, 3, 4} and first_checked:
         label = NAMES.get(first_checked["symbol"], first_checked["symbol"])
         company_line = next((line for line in re.split(r"(?<=[.!?])\s+", hook) if label in line), "")
         if company_line and company_line not in hook_bullets:
             hook_bullets = [hook_bullets[0], company_line]
-    add("The Takeaway", greeting+" This is Smart Money for "+local.strftime("%B %d").replace(" 0", " ")+". "+hook,
+    add("The Takeaway", greeting + edition_intro + hook,
         hook_bullets, opening_sources if review.get("reader_version") in {2, 3, 4} or "Recent earnings provide" in hook else ())
-    market = market_copy(evidence)
+    leadership = rally_leadership(evidence)
+    market = leadership or "First, the market. " + market_copy(evidence)
+    market_keys = ("S&P", "Nasdaq", "Russell") if leadership else ("S&P", "Nasdaq", "VIX")
     market_sources = [story["id"] for story in selected if story_topics(story) & {"trade", "geopolitics", "policy", "energy", "IPO", "AI financing"}] if modern else ()
     if review.get("reader_version") == 4:
         from src.intelligence.market_priority import selloff
         if selloff(evidence):
             market_sources = []
-    add("Market Update", "First, the market. "+market,
-        [f"{key}: {evidence['moves'][key]:+.2f}%" for key in ("S&P","Nasdaq","VIX") if key in evidence["moves"]], market_sources)
+    add("Market Update", market,
+        [f"{key}: {evidence['moves'][key]:+.2f}%" for key in market_keys if key in evidence["moves"]], market_sources)
     covered = set()
     from src.intelligence.company_focus import issuer, grouped_price_watch
     introduced = set()
@@ -368,6 +376,8 @@ def build(record, report, research, *, schema=2):
             bullet = investor_read(story)["facts"]
             if introduced_in_takeaway:
                 transition = ""
+                if evidence.get("business_version", 0) >= 6:
+                    bullet = "Delivery timing and execution costs"
         add(label, transition+copy, (bullet,), (story["id"],))
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)

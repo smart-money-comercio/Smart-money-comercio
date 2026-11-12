@@ -182,6 +182,27 @@ class MarketChecks(unittest.TestCase):
         for value in (self.evidence(session=None),self.evidence(moves={"S&P":1,"Nasdaq":1.2,"VIX":50}),self.evidence(moves={})):
             self.assertFalse(priority.selloff(value))
 
+    def test_live_small_cap_leadership_uses_the_observed_leader_and_horizon(self):
+        evidence = self.evidence(business_version=6, stories=[], moves={"S&P": 0.4, "Nasdaq": 0.6, "Russell": 1.2})
+        text = market_brief.rally_leadership(evidence)
+        self.assertIn("the small-cap Russell 2000 rose 1.20 percent, leading the three indexes we track", text)
+        self.assertIn("A dated VIX reading was unavailable.", text)
+        self.assertIn("the S&P 500 can narrow the gap through the close", text)
+
+    def test_rally_comparison_keeps_dated_coverage_and_material_context(self):
+        moves = {"S&P": 1.1, "Nasdaq": 1.5, "Russell": 0.6, "VIX": -2.0}
+        evidence = self.evidence(business_version=6, stories=[], moves=moves)
+        self.assertTrue(market_brief.rally_leadership(evidence))
+        for changes in ({"session": None}, {"business_version": 5},
+                        {"moves": {"S&P": 1.1, "Nasdaq": 1.5}},
+                        {"moves": {**moves, "Russell": 1.3}},
+                        {"moves": {**moves, "VIX": 8.0}},
+                        {"moves": {**moves, "Oil": -2.0}},
+                        {"moves": {**moves, "TLT": 0.7}},
+                        {"stories": [{"title": "Treasury announces export restrictions on AI chips"}]}):
+            with self.subTest(changes=changes):
+                self.assertEqual(market_brief.rally_leadership({**evidence, **changes}), "")
+
     def test_nonfinite_and_boolean_values_are_not_pressure_evidence(self):
         for moves in ({"Nasdaq":float("nan")},{"S&P":float("-inf")},{"S&P":False}):
             self.assertFalse(priority.sharp_loss(moves))

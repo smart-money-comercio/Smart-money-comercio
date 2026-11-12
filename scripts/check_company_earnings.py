@@ -269,7 +269,7 @@ class CompanyEarningsChecks(IsolatedChecks):
         scene = next(row for row in profile["segments"] if row["heading"] == "What We're Watching")
         self.assertEqual(scene["source_ids"], ["earnings_baseline_INTC"])
         self.assertIn("Dated results benchmark: INTC — USED", editor.build_editor_status())
-        self.assertIn("Brief narrative revision: 5", editor.build_editor_status())
+        self.assertIn("Brief narrative revision: 6", editor.build_editor_status())
 
     def test_benchmark_preserves_pending_price_checks_and_current_financial_context(self):
         from src.intelligence.market_priority import named_checks

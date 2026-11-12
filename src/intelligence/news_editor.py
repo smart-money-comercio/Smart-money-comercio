@@ -565,7 +565,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             if baseline:
                 result["intel_results_baseline"] = baseline
         from src.utils.market_quote_source import cached_health
-        result.update(rules_version=32, business_version=5, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=32, business_version=6, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -615,7 +615,7 @@ def research_focus(story: dict) -> str:
 def render_story(story: dict, zone, company_names: dict, *, style="source", business_version=0) -> str:
     if style not in {"source", "broadcast"}:
         raise ValueError("Unknown story narration style")
-    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4, 5} or business_version and style != "broadcast":
+    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4, 5, 6} or business_version and style != "broadcast":
         raise ValueError("Unknown business narration version")
     if style == "broadcast" and not story.get("official"):
         raise ValueError("Broadcast narration needs an admitted original publisher")
@@ -674,7 +674,9 @@ def render_story(story: dict, zone, company_names: dict, *, style="source", busi
 
 
 def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str, analyst_review: dict | None = None) -> str:
+    from src.intelligence.market_priority import order_in_takeaway
     selected = selected_stories(plan)
+    opening_order = order_in_takeaway((analyst_review or {}).get("evidence", {}))
     if "market_event_context" in plan:
         from src.intelligence.market_event_desk import checked_context, story_priority
         when = dated(plan["generated_at"])
@@ -714,8 +716,11 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             checked_evidence(story)
         if report.count(paragraphs[story["id"]]) != 1:
             raise ValueError("Selected story evidence or qualification changed during narration")
-        if broadcast and paragraphs[story["id"]] != render_story(story, zone, NAMES, style="broadcast", business_version=plan.get("business_version", 0)):
-            raise ValueError("Broadcast wording does not match the admitted source facts")
+        if broadcast:
+            expected = (opening_order["text"] if opening_order and story["id"] in opening_order["story_ids"]
+                        else render_story(story, zone, NAMES, style="broadcast", business_version=plan.get("business_version", 0)))
+            if paragraphs[story["id"]] != expected:
+                raise ValueError("Broadcast wording does not match the admitted source facts")
     if len(selected) > MAX_STORIES:
         raise ValueError("News story budget exceeded")
     value = deepcopy(plan)

@@ -175,7 +175,25 @@ class FactChecks(unittest.TestCase):
 
 
 class DailyChecks(RebuildDetailChecks):
-    def test_reviewed_order_leads_with_the_fact_and_speaks_the_value_once(self):
+    def test_market_comparison_is_shared_by_the_brief_and_voiceover(self):
+        research = self.research(replacements={
+            "Executive Summary": "- Main theme: Market advance.\n- Market moves: S&P +1.31%, Nasdaq +1.60%, Russell +0.88%, VIX -10.12%, Oil +0.01%, TLT +0.05%.",
+            "Market Snapshot": "Market Session: Closed.\nQuote session: 2026-10-23\nBreadth: 13 up / 5 down / 18 quoted",
+        })
+        with patch.object(self, "research", return_value=research):
+            text, record = self.render([order_release()])
+        from src.utils.speech_text import normalize
+        market = daily_voiceover.sections(text)["Market Update"]
+        self.assertIn("the Nasdaq Composite rose 1.60 percent, leading the three indexes we track", market)
+        self.assertIn("the small-cap Russell 2000 gained 0.88 percent", market)
+        self.assertIn("The VIX fell 10.12 percent", market)
+        self.assertIn("Watch whether small caps can narrow the gap in the next session.", market)
+        voice = daily_voiceover.checked(record, NOW)
+        self.assertEqual(voice["segments"][1]["narration"], normalize(market))
+        self.assertEqual(voice["segments"][1]["source_ids"], [])
+        self.assertTrue(validate_news_brief(text)["passes"])
+
+    def test_reviewed_order_leads_with_the_dated_fact_and_uses_the_value_once(self):
         order = order_release()
         reviewed = independently_reviewed(order)
         text, record = self.render([order, reviewed])
@@ -185,7 +203,11 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual((story["materiality"], story["event_evidence"]["schema"]), ("contract", 15))
         self.assertIn("verified order terms", story["reason"])
         self.assertTrue(validate_news_brief(text)["passes"])
-        self.assertIn("The takeaway: AeroVironment reported an international order worth $84.5 million.", text)
+        fact = "AeroVironment reported an international order worth $84.5 million in its October 25 announcement."
+        self.assertIn("The takeaway: " + fact, text)
+        self.assertEqual(record["story_narrations"][story["id"]], fact)
+        self.assertEqual(text.count("$84.5 million"), 1)
+        self.assertIn("Global and Defense Watch\nFor AeroVironment, execution costs and the pace of deliveries", text)
         self.assertIn("AeroVironment (AVAV) — Look for a delivery timetable", text)
         self.assertNotIn(order["title"], text)
         voice = daily_voiceover.checked(record, NOW)
@@ -193,9 +215,34 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual(voice["script"].count("eighty four point five million dollars"), 1)
         lead = voice["segments"][0]
         self.assertIn("AeroVironment reported an international order", lead["narration"])
+        self.assertEqual(lead["narration"].count("October twenty fifth"), 1)
         self.assertEqual(lead["source_ids"], [story["id"]])
+        self.assertEqual(sum("$84.5 million" in bullet for scene in voice["segments"] for bullet in scene["bullets"]), 1)
         self.assertIn("execution costs and the pace of deliveries", voice["script"])
         self.assertIn("2 sourced fact fields", editor.build_editor_status())
+
+    def test_non_defense_order_keeps_its_business_implications(self):
+        body = "Microsoft received a purchase order valued at $18 million from a commercial customer."
+        order = candidate("MSFT", title="Microsoft receives $18 million purchase order",
+                          url="https://news.microsoft.com/source/2026/10/25/synthetic-order/",
+                          source="Microsoft News", source_excerpt=body, excerpt_scope="original release excerpt")
+        order["evidence_checked_at"] = order["source_checked_at"]
+        text, record = self.render([order])
+        self.assertIn("The takeaway: Microsoft reported a purchase order worth $18 million", text)
+        self.assertEqual(text.count("$18 million"), 1)
+        self.assertIn("Companies in Focus\nFor Microsoft, execution costs and the pace of deliveries", text)
+        self.assertTrue(daily_voiceover.checked(record, NOW)["quality"]["passes"])
+
+    def test_market_first_selloff_keeps_the_order_fact_in_its_story(self):
+        research = self.research(replacements={
+            "Executive Summary": "- Main theme: Growth pressure.\n- Market moves: S&P -2.79%, Nasdaq -4.30%, Russell -2.27%, VIX +49.43%.",
+        })
+        with patch.object(self, "research", return_value=research):
+            text, record = self.render([order_release()])
+        self.assertIn("The takeaway: The Nasdaq fell 4.30 percent", text)
+        self.assertNotIn("$84.5 million", text.split("\nMarket Update\n", 1)[0])
+        self.assertEqual(text.count("$84.5 million"), 1)
+        self.assertTrue(daily_voiceover.checked(record, NOW)["quality"]["passes"])
 
     def test_real_daily_build_uses_source_facts_once_in_brief_and_voiceover(self):
         production = release("LMT")
@@ -205,7 +252,7 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual({story["publisher_symbol"] for story in selected}, {"AMD", "LMT"})
         self.assertEqual(len(selected), 2)
         self.assertTrue(all(checked_evidence(story)["schema"] == 14 for story in selected))
-        self.assertEqual(record["business_version"], 5)
+        self.assertEqual(record["business_version"], 6)
         self.assertEqual(len(record["analyst_review"]["evidence"]["business_reviews"]), 2)
         copies = [story for story in record["candidates"] if story["url"] == production["url"]]
         self.assertEqual(len(copies), 2)
@@ -242,7 +289,10 @@ def main():
     args = parser.parse_args()
     tests = unittest.defaultTestLoader.loadTestsFromTestCase(FactChecks)
     tests.addTest(DailyChecks("test_real_daily_build_uses_source_facts_once_in_brief_and_voiceover"))
-    tests.addTest(DailyChecks("test_reviewed_order_leads_with_the_fact_and_speaks_the_value_once"))
+    tests.addTest(DailyChecks("test_reviewed_order_leads_with_the_dated_fact_and_uses_the_value_once"))
+    tests.addTest(DailyChecks("test_non_defense_order_keeps_its_business_implications"))
+    tests.addTest(DailyChecks("test_market_first_selloff_keeps_the_order_fact_in_its_story"))
+    tests.addTest(DailyChecks("test_market_comparison_is_shared_by_the_brief_and_voiceover"))
     with ExitStack() as stack:
         if args.windows_socketpair:
             stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))

@@ -107,18 +107,21 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         raise ValueError("Invalid reader watch-signal limit")
     if type(disclosure_version) is not int or disclosure_version not in {0, 1, 2} or disclosure_version and (presentation != "news" or narration_version != 2):
         raise ValueError("Unknown disclosure presentation version")
-    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4, 5} or business_version and (presentation != "news" or narration_version != 2):
+    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4, 5, 6} or business_version and (presentation != "news" or narration_version != 2):
         raise ValueError("Unknown business interpretation version")
     evidence = report_evidence(report)
     if disclosure_version:
         evidence["disclosure_version"] = disclosure_version
-    if event_context is not None:
-        from src.intelligence.market_event_desk import checked_context
+    if event_context is not None or business_version >= 6:
         generated = re.search(r"^Generated: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\S+)$", report, re.M)
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
         if presentation != "news" or generated is None:
             raise ValueError("Market event attention belongs to a dated news edition")
+        if business_version >= 6:
+            evidence["publication_timezone"] = generated[2]
+    if event_context is not None:
+        from src.intelligence.market_event_desk import checked_context
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
         now = datetime.strptime(generated[1], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo(generated[2]))
         evidence["market_event_context"] = deepcopy(checked_context(event_context, report, now))
         evidence["source_sections"].append("Market event checks")

@@ -23,12 +23,21 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
     def add(key, section, text, sources):
         insights.append({"id": key, "section": section, "text": text, "sources": sources})
 
-    from src.intelligence.market_brief import market_segment, defense_segment
+    from src.intelligence.market_brief import market_segment, defense_segment, story_topics
     add("market_pulse", "market", market_segment(evidence), ["Executive Summary", "Market Snapshot"]
         + (["Verified story decisions"] if evidence.get("stories") else []))
     broadcast = evidence.get("narration_version") == 2
     add("defense_watch", "global", defense_segment(evidence.get("stories", []), broadcast=broadcast, business_version=evidence.get("business_version", 0)),
         ["Verified story decisions"] if evidence.get("stories") else ["Research coverage policy"])
+    from src.intelligence.market_priority import order_in_takeaway
+    opening_order = order_in_takeaway(evidence)
+    if opening_order:
+        story = next(story for story in evidence["stories"] if story["id"] in opening_order["story_ids"])
+        if "defense" not in story_topics(story):
+            from src.intelligence.broadcast_story import company_read
+            from src.intelligence.business_analysis import follow_through
+            add("order_impact", "company", follow_through(story, company_read(story, business_version=6), concise=True),
+                ["Verified story decisions", "Business interpretation"])
     if breadth:
         up, down, total = (breadth[key] for key in ("up", "down", "total"))
         scope = (f"Within the {total}-symbol research watchlist, {up} are higher and {down} lower." if evidence["is_open"] else

@@ -37,6 +37,16 @@ def opening_source(evidence):
     return older_source(evidence)
 
 
+def order_in_takeaway(evidence):
+    if evidence.get("business_version", 0) < 6 or evidence.get("reader_version") != 4:
+        return None
+    point = opening_source(evidence)
+    if point and any(story["id"] in point["story_ids"] and story.get("event_evidence", {}).get("schema") == 15
+                     for story in evidence["stories"]):
+        return point
+    return None
+
+
 def opening(evidence):
     if not selloff(evidence):
         from src.intelligence.evidence_opening import opening as older_opening
@@ -91,6 +101,10 @@ def watching(evidence):
     if evidence.get("breadth"):
         before, after = _participation_scope(evidence), participation_scope(evidence)
         rows = [{**row,"text":row["text"].replace(before,after)} for row in rows]
+    elif evidence.get("business_version", 0) >= 6 and all(key in evidence["moves"] for key in ("S&P", "Nasdaq", "Russell")):
+        for row in rows:
+            if row["id"] == "watch_market":
+                row.update(id="watch_participation", text="Watchlist breadth: Check how many of the stocks and funds we track are advancing or declining. That would show how widely the index move is shared within the watchlist.")
     if evidence.get("business_version"):
         from src.intelligence.business_analysis import name
         stories = {story["id"]: story for story in evidence.get("stories", [])}

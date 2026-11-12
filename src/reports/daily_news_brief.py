@@ -12,6 +12,7 @@ from src.intelligence.company_catalyst_context import build_company_catalyst_bri
 from src.intelligence import news_editor as editor
 from src.intelligence.daily_brief_analysis import analyze_report, retained_review
 from src.intelligence.market_brief import MIN_MARKET_WORDS, MAX_MARKET_WORDS, story_topics, word_count
+from src.intelligence.market_priority import order_in_takeaway, selloff
 from src.utils.report_consistency import report_greeting, validate_report_greeting
 
 
@@ -282,7 +283,13 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             global_body = []
             ipo_body = []
             policy_body = []
+            narrations = dict(story_paragraphs)
+            opening_order = order_in_takeaway(analysis["evidence"])
+            opening_order_id = opening_order["story_ids"][0] if opening_order else None
             for story in sorted(retained, key=editor.news_order):
+                if story["id"] == opening_order_id:
+                    narrations[opening_order_id] = opening_order["text"]
+                    continue
                 body = (ipo_body if story.get("ipo") or story.get("sec_filing") else
                         global_body if "defense" in story_topics(story) else
                         policy_body if story["kind"] == "macro" else company_body)
@@ -320,7 +327,6 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                                "Global and Defense Watch" if "defense" in story_topics(lead) else
                                POLICY_HEADER if lead["kind"] == "macro" else "Companies in Focus")
                 groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, ALL_HEADERS.index(group[0])))
-            from src.intelligence.market_priority import selloff
             if selloff(analysis["evidence"]):
                 groups.sort(key=lambda group: (0 if group[0] == "Market Update" else 1 if group[0] == "Companies in Focus" else 2, ALL_HEADERS.index(group[0])))
 
@@ -337,7 +343,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 body.append(paragraph)
                 text = render()
 
-            protected = set(story_paragraphs.values()) | {no_company_story} | {
+            protected = set(narrations.values()) | {no_company_story} | {
                 row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
             protected.update(schedule_narration(row, zone, NAMES) for row in company_schedules)
             if brief.get("market_events"):
@@ -361,7 +367,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if last_result is None or result["spoken_words"] > last_result["spoken_words"]:
                 last_result = result
             if result["passes"]:
-                chosen = (text, retained, analysis)
+                chosen = (text, retained, analysis, narrations)
                 break
         if chosen:
             break
@@ -370,12 +376,12 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         if last_result["chars"] > MAX_NEWS_CHARS:
             errors.append(f"A complete {MIN_NARRATION_WORDS}-word narration does not fit the {MAX_NEWS_CHARS}-character budget.")
         raise ValueError("News brief quality review failed: " + "; ".join(errors))
-    text, retained, analysis = chosen
+    text, retained, analysis, narrations = chosen
     plan["narrated_company_schedules"] = [row for row in company_schedules if schedule_narration(row, zone, NAMES) in text]
     plan["lead_story_id"] = min(retained, key=editor.news_order)["id"] if retained else ""
     retained_ids = {story["id"] for story in retained}
     for story in initial_stories:
         if story["id"] not in retained_ids:
             story.update(decision="skip", reason="Narration length budget; sufficient spoken context and complete source qualifications retained")
-    editor.review_and_record(plan, text, story_paragraphs, research_report, analyst_review=retained_review(analysis, text))
+    editor.review_and_record(plan, text, narrations, research_report, analyst_review=retained_review(analysis, text))
     return text

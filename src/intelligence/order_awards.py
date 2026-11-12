@@ -67,12 +67,13 @@ def extract(story, text):
     ]
 
 
-def summary(profile, name):
+def summary(profile, name, *, day=None):
     fields = {row["field"]: row for row in profile["facts"]}
     instrument = fields["order_type"]["value"]
     value = fields["order_value"]
     article = "an" if instrument.startswith(("international", "initial")) else "a"
-    return f"{name} reported {article} {instrument} worth {value['value']}."
+    when = f" in its {day} announcement" if day else ""
+    return f"{name} reported {article} {instrument} worth {value['value']}{when}."
 
 
 def review(profile, name):

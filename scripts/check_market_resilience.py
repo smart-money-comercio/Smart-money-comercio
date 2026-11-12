@@ -396,6 +396,7 @@ class EditionChecks(IsolatedChecks):
             report=build_daily_news_brief(research)
         self.assertIn("Market data: completed regular session 2026-11-06",report)
         self.assertIn("Nasdaq Composite rose 1.09 percent",report)
+        self.assertIn("Watchlist breadth — Check how many of the stocks and funds we track are advancing or declining",report)
         self.assertNotIn("0 finished higher",report);self.assertTrue(validate_news_brief(report)["passes"])
 
     def test_editorstatus_reports_benchmark_source_health_without_relabeling_a_missing_quote(self):
