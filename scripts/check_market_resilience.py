@@ -5,6 +5,7 @@ from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlsplit
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
@@ -53,6 +55,12 @@ def quote(symbol="TSM",price=106,*,value=None):
 
 def response(value):
     return json.dumps({"chart":{"result":[value],"error":None}})
+
+
+def missing_close(value):
+    held = deepcopy(value)
+    held["indicators"]["quote"][0]["close"][-1] = None
+    return held
 
 
 def split(value,when=OPEN,*,dated=True):
@@ -161,6 +169,77 @@ class PriceChecks(unittest.TestCase):
 
 
 class RecoveryChecks(PrivateState):
+    def test_missing_completed_equity_close_uses_one_dated_history_read(self):
+        history = raw("AMD", 107.3)
+        read = Mock(side_effect=[response(missing_close(raw("AMD", 107))), response(history)])
+        value, result = source.read_chart("AMD", read, NOW)
+        urls = [call.args[0] for call in read.call_args_list]
+        self.assertEqual([parse_qs(urlsplit(url).query)["range"] for url in urls], [["5d"], ["1mo"]])
+        self.assertEqual(urlsplit(urls[0]).hostname, urlsplit(urls[1]).hostname)
+        self.assertTrue(value["return_usable"])
+        self.assertAlmostEqual(value["change_percent"], 7.3)
+        self.assertEqual(value["closing_price_basis"], parser.CLOSING_HISTORY_BASIS)
+        evidence = source.source_evidence(result)
+        self.assertEqual(parser.evidence_quote("AMD", evidence, NOW), value)
+        evidence["meta"]["regularMarketTime"] = (END - timedelta(minutes=5)).timestamp()
+        with self.assertRaisesRegex(parser.QuoteDataError, "dated regular-session close"):
+            parser.evidence_quote("AMD", evidence, NOW)
+        self.assertEqual(source.cached_health(NOW)[0]["reason"], "Dated closing bar verified from daily history")
+
+    def test_recovery_preserves_hold_on_stale_ambiguous_or_conflicting_history(self):
+        initial = missing_close(raw("AMD"))
+        changed_prior = raw("AMD")
+        changed_prior["indicators"]["quote"][0]["close"][1] = 98
+        incomplete = raw("AMD")
+        incomplete["indicators"]["quote"][0]["close"].append(107)
+        earlier = raw("AMD")
+        earlier["meta"]["regularMarketTime"] = (END - timedelta(minutes=15)).timestamp()
+        for history in (initial, changed_prior, incomplete, earlier, raw("INTC"), split(raw("AMD")), raw("AMD", 150)):
+            with self.subTest(history=history):
+                read = Mock(side_effect=[response(initial), response(history)])
+                value, result = source.read_chart("AMD", read, NOW)
+                self.assertFalse(value["return_usable"])
+                self.assertEqual(result["request"]["range"], "5d")
+                self.assertEqual(read.call_count, 2)
+                self.assertEqual(source.cached_health(NOW)[0]["status"], "limited")
+
+    def test_recovery_can_use_completed_history_after_the_source_rolls_its_schedule(self):
+        history = raw("INTC", 107.52)
+        regular = history["meta"]["currentTradingPeriod"]["regular"]
+        history["meta"]["currentTradingPeriod"]["regular"] = {key: stamp + 3 * 86400 for key, stamp in regular.items()}
+        read = Mock(side_effect=[response(missing_close(history)), response(history)])
+        evening = END + timedelta(hours=5)
+        value, result = source.read_chart("INTC", read, evening)
+        self.assertTrue(value["return_usable"])
+        self.assertEqual(value["session_date"], OPEN.date().isoformat())
+        self.assertAlmostEqual(value["change_percent"], 7.52)
+        self.assertEqual(parser.evidence_quote("INTC", source.source_evidence(result), evening), value)
+
+    def test_history_recovery_respects_shared_budget_and_provider_cooldown(self):
+        budget = source.RecoveryBudget(1)
+        denied = HTTPError("https://query1.finance.yahoo.com", 429, "fixture", {"Retry-After": "1800"}, None)
+        read = Mock(side_effect=[response(missing_close(raw("AMD"))), denied, response(missing_close(raw("INTC")))])
+        value, _ = source.read_chart("AMD", read, NOW, budget=budget)
+        self.assertFalse(value["return_usable"])
+        with self.assertRaisesRegex(parser.QuoteDataError, "cooldown"):
+            source.read_chart("AMD", read, NOW + timedelta(minutes=1), closing_history=True)
+        value, _ = source.read_chart("INTC", read, NOW, budget=budget)
+        self.assertFalse(value["return_usable"])
+        self.assertEqual(read.call_count, 3)
+        health = {row["symbol"]: row for row in source.cached_health(NOW)}
+        self.assertEqual(health["AMD"]["reason"], "HTTPError 429")
+        self.assertEqual(len(health["INTC"]["attempts"]), 1)
+
+    def test_missing_intraday_or_small_return_bar_does_not_start_recovery(self):
+        intraday = missing_close(raw("AMD"))
+        intraday["meta"]["regularMarketTime"] = (END - timedelta(minutes=10)).timestamp()
+        for when, fixture in ((END - timedelta(minutes=5), intraday), (NOW, missing_close(raw("AMD", 102)))):
+            with self.subTest(when=when):
+                read = Mock(return_value=response(fixture))
+                value, _ = source.read_chart("AMD", read, when)
+                self.assertTrue(value["return_usable"])
+                self.assertEqual(read.call_count, 1)
+
     def test_one_transient_benchmark_failure_uses_one_same_provider_fallback(self):
         calls=[]
         def read(url):
@@ -313,6 +392,19 @@ class ActionChecks(PrivateState):
         first=self.review();second=events.review_quotes({"TSM":quote()},Mock(side_effect=AssertionError("Unexpected extra read")),NOW+timedelta(minutes=5))[0]
         self.assertEqual(first["recheck_at"],second["recheck_at"])
 
+    def test_recovered_close_requires_a_verified_history_repeat(self):
+        history = raw("TSM")
+        history["request"]["range"] = "1mo"
+        recovered = quote(value=history)
+        self.review()
+        fetch = Mock(return_value=recovered)
+        row = events.review_quotes({"TSM": recovered}, fetch, NOW + timedelta(minutes=1))[0]
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(row["status"], "rechecked")
+        replay = {**row, "second": quote()}
+        self.assertEqual(events.verdict(replay, NOW), "quote check pending")
+        self.assertEqual(events.checked_row(row, NOW + timedelta(minutes=1)), row)
+
     def test_tampering_with_return_qualifications_is_rejected(self):
         value=quote(value=split(raw()));value["return_usable"]=True
         with self.assertRaises(ValueError):events.packet(value,"TSM",NOW)
@@ -325,6 +417,51 @@ class ActionChecks(PrivateState):
 
 
 class EditionChecks(IsolatedChecks):
+    def test_recovered_closes_reach_the_real_brief_and_voiceover(self):
+        prices = {"AMD": 107.3, "INTC": 107.52, "MU": 106.1, "TSM": 104.25}
+        recovery_symbols = {"AMD", "INTC", "MU"}
+        calls = []
+
+        def read(request, *, timeout):
+            parsed = urlsplit(request.full_url)
+            symbol = parsed.path.rsplit("/", 1)[-1]
+            history = parse_qs(parsed.query)["range"] == ["1mo"]
+            calls.append((symbol, history))
+            result = raw(symbol, prices[symbol])
+            if symbol in recovery_symbols and not history:
+                result = missing_close(result)
+            return BytesIO(response(result).encode())
+
+        with patch.object(parser, "datetime", wraps=datetime) as chart_clock, \
+                patch.object(events, "datetime", wraps=datetime) as event_clock, \
+                patch("src.commands.watchlist_commands.urllib.request.urlopen", side_effect=read), \
+                patch.object(daily_report, "load_watchlist", return_value=[]), \
+                patch.object(daily_report, "build_evolved_watchlist_universe", return_value=list(prices)), \
+                patch.object(daily_report, "DAILY_REPORT_LIVE_QUOTES", True):
+            chart_clock.now.return_value = event_clock.now.return_value = NOW
+            symbols, quotes = daily_report.fetch_watchlist_quotes()
+
+        self.assertEqual(set(quotes), set(prices))
+        self.assertTrue(all(row["ok"] for row in quotes.values()))
+        self.assertEqual(sorted(symbol for symbol, history in calls if history), sorted(list(recovery_symbols) * 2))
+        self.assertEqual(len(calls), 10)
+        movers = daily_report.collect_watchlist_movers(symbols, quotes)
+        research = self.research(now=NOW, replacements={
+            "Market Snapshot": daily_report.build_market_snapshot(symbols, movers, now=NOW),
+            "Watchlist Movers": daily_report.build_watchlist_snapshot(symbols, movers),
+        })
+        with patch.object(editor, "cache_candidates", return_value=([], [])):
+            report = build_daily_news_brief(research)
+        record = store.read_editions(report=report)[0]
+        market_events = record["market_event_context"]["events"]
+        self.assertEqual({row["symbol"] for row in market_events}, recovery_symbols)
+        self.assertTrue(all(row["status"] == "rechecked" for row in market_events))
+        self.assertIn("Semiconductor watch", report)
+        self.assertIn("Advanced Micro Devices rose 7.3 percent", report)
+        self.assertIn("Dated closing bar verified from daily history", editor.build_editor_status())
+        self.assertTrue(validate_news_brief(report)["passes"])
+        self.assertTrue(voice.checked(record, NOW)["quality"]["passes"])
+
     def test_new_context_qualification_is_source_bound_and_legacy_context_still_checks(self):
         report=self.research(replacements={"Watchlist Movers":"• TSM: $106.00 (+6.00%)"})
         context=events.context_for_report(report,EDITOR_NOW)

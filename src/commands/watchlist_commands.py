@@ -179,7 +179,7 @@ def parse_alert_threshold(raw_args: list[str]) -> tuple[float | None, str | None
     return threshold, None
 
 
-def fetch_chart_quote(symbol: str) -> dict:
+def fetch_chart_quote(symbol: str, *, budget=None, closing_history=False) -> dict:
     from src.utils.market_quote_source import read_chart, source_evidence
     def read(url):
         request = urllib.request.Request(url, headers={
@@ -190,7 +190,7 @@ def fetch_chart_quote(symbol: str) -> dict:
             raise QuoteDataError("Chart response exceeds its bounded size")
         return raw.decode("utf-8")
     try:
-        value, result = read_chart(symbol, read)
+        value, result = read_chart(symbol, read, budget=budget, closing_history=closing_history)
         value["quote_evidence"] = source_evidence(result)
         if value.get("return_usable") is False:
             value.update(ok=False, error=value["return_note"])
@@ -234,11 +234,13 @@ def fetch_quotes_for_symbols(symbols: list[str]) -> dict[str, dict]:
     if not symbols:
         return quote_results
 
+    from src.utils.market_quote_source import RecoveryBudget
+    recovery_budget = RecoveryBudget(3)
     worker_count = min(MAX_WORKERS, len(symbols))
 
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         future_to_symbol = {
-            executor.submit(fetch_chart_quote, symbol): symbol
+            executor.submit(fetch_chart_quote, symbol, budget=recovery_budget): symbol
             for symbol in symbols
         }
 

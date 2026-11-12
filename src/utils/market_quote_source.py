@@ -1,4 +1,4 @@
-"""Bounded same-provider benchmark recovery and source-health records."""
+"""Bounded same-provider chart recovery and source-health records."""
 
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -11,7 +11,14 @@ from threading import RLock
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 
-from src.utils.yahoo_quote import QuoteDataError, parse_regular_quote, finite_number
+from src.utils.yahoo_quote import (
+    CLOSING_HISTORY_BASIS,
+    CLOSING_HISTORY_RANGE,
+    MISSING_CLOSING_BAR,
+    QuoteDataError,
+    finite_number,
+    parse_regular_quote,
+)
 from src.utils import yahoo_quote as dated
 
 
@@ -55,8 +62,10 @@ def record_health(symbol, now, attempts, quote_value=None, error="", retry_at=No
            "reason": error[:180] if error else "Dated source quote verified", "attempts": attempts}
     if quote_value:
         row.update({key: quote_value[key] for key in ("session_date", "previous_session_date", "asof", "quote_timing", "closing_price_basis")})
-        if quote_value.get("return_usable") is False:
+        if quote_value.get("return_usable") is False and not error:
             row.update(status="limited", reason=quote_value["return_note"])
+        elif not error and quote_value["closing_price_basis"] == CLOSING_HISTORY_BASIS:
+            row["reason"] = "Dated closing bar verified from daily history"
     if retry_at is not None:
         row["retry_after_epoch"] = retry_at
     temporary = None
@@ -96,8 +105,8 @@ def cached_health(now=None):
     return sorted(rows, key=lambda row: (row["symbol"] not in BENCHMARKS, row["symbol"]))
 
 
-def read_chart(symbol, reader, now=None, *, budget=None):
-    """One normal read, at most one bounded transport recovery for a benchmark."""
+def read_chart(symbol, reader, now=None, *, budget=None, closing_history=False):
+    """Read one chart, with one bounded recovery for a missing close or benchmark outage."""
     now = now or dated.datetime.now(timezone.utc)
     with LOCK:
         prior = load_health().get(symbol, {})
@@ -109,11 +118,16 @@ def read_chart(symbol, reader, now=None, *, budget=None):
         valid_retry = False
     if valid_retry:
         raise QuoteDataError("Quote source cooldown; retry after " + datetime.fromtimestamp(retry, timezone.utc).strftime("%m-%d %H:%M UTC"))
-    attempts = []
-    for index, host in enumerate(("query1.finance.yahoo.com", "query2.finance.yahoo.com")):
-        if index and (symbol not in BENCHMARKS or budget is not None and not budget.take()):
+    attempts, held = [], None
+    retry_at = None
+    for index in range(2):
+        if index and (closing_history or (held is None and symbol not in BENCHMARKS)
+                      or budget is not None and not budget.take()):
             break
-        url = "https://"+host+"/v8/finance/chart/"+quote(symbol, safe="")+"?range=5d&interval=1d&events=splits"
+        history = closing_history or held is not None
+        host = "query2.finance.yahoo.com" if index and not history else "query1.finance.yahoo.com"
+        chart_range = CLOSING_HISTORY_RANGE if history else "5d"
+        url = "https://"+host+"/v8/finance/chart/"+quote(symbol, safe="")+"?range="+chart_range+"&interval=1d&events=splits"
         try:
             text = reader(url)
             if not isinstance(text, str) or len(text.encode()) > 2_000_000:
@@ -123,8 +137,22 @@ def read_chart(symbol, reader, now=None, *, budget=None):
             rows = chart.get("result")
             if chart.get("error") or not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
                 raise QuoteDataError("Original chart result unavailable or ambiguous")
-            result = {**rows[0], "request": {"range": "5d", "interval": "1d", "events": "splits"}}
+            result = {**rows[0], "request": {"range": chart_range, "interval": "1d", "events": "splits"}}
             value = parse_regular_quote(symbol, result, now, profile=2)
+            if not index and not history and value.get("return_note") == MISSING_CLOSING_BAR:
+                held = value, result
+                reason = MISSING_CLOSING_BAR
+                attempts.append({"host": host, "status": reason})
+                continue
+            if history and value.get("closing_price_basis") != CLOSING_HISTORY_BASIS:
+                raise QuoteDataError("Daily history does not establish an equity or fund closing bar")
+            if held:
+                first = held[0]
+                same_basis = all(value[key] == first[key] for key in (
+                    "session_date", "previous_session_date", "currency", "exchange", "instrument_type"))
+                same_previous_close = math.isclose(value["previous_close"], first["previous_close"], rel_tol=1e-6, abs_tol=1e-6)
+                if not value["return_usable"] or not same_basis or not same_previous_close:
+                    raise QuoteDataError(value["return_note"] or "Daily history disagrees with the original session or prior close")
             attempts.append({"host": host, "status": "verified"})
             record_health(symbol, now, attempts, value)
             return value, result
@@ -137,22 +165,20 @@ def read_chart(symbol, reader, now=None, *, budget=None):
                     delay = min(21600, max(delay, int(error.headers.get("Retry-After", delay))))
                 except (ValueError, TypeError, AttributeError):
                     pass
-                record_health(symbol, now, attempts, error=reason, retry_at=now.timestamp()+delay)
-                raise QuoteDataError(reason) from None
+                retry_at = now.timestamp() + delay
+                break
             if error.code not in {500, 502, 503, 504}:
-                record_health(symbol, now, attempts, error=reason)
-                raise QuoteDataError(reason) from None
+                break
         except (URLError, TimeoutError, ConnectionError):
             reason = "Quote source timeout or network failure"
             attempts.append({"host": host, "status": reason})
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as error:
             reason = str(error)[:180] if isinstance(error, QuoteDataError) else "Invalid chart response ("+type(error).__name__+")"
             attempts.append({"host": host, "status": reason})
-            record_health(symbol, now, attempts, error=reason)
-            raise QuoteDataError(reason) from None
-        if index == 0 and symbol not in BENCHMARKS:
             break
-    record_health(symbol, now, attempts, error=reason)
+    record_health(symbol, now, attempts, held[0] if held else None, error=reason, retry_at=retry_at)
+    if held:
+        return held
     raise QuoteDataError(reason)
 
 

@@ -720,8 +720,16 @@ def fetch_watchlist_quotes(context: dict | None = None) -> tuple[list[str], dict
 
     from src.intelligence.market_event_desk import review_quotes
     from src.commands.watchlist_commands import fetch_chart_quote
+    from src.utils.market_quote_source import RecoveryBudget
+    from src.utils.yahoo_quote import CLOSING_HISTORY_BASIS
+    repeat_budget = RecoveryBudget(0)
+
+    def recheck(symbol):
+        history = quotes[symbol].get("closing_price_basis") == CLOSING_HISTORY_BASIS
+        return fetch_chart_quote(symbol, budget=repeat_budget, closing_history=history)
+
     try:
-        review_quotes(quotes, fetch_chart_quote)
+        review_quotes(quotes, recheck)
     except (OSError, ValueError, TypeError):
         pass  # A missing event check never becomes confirmation or blocks the report.
     return symbols, quotes

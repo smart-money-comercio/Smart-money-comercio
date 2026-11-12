@@ -10,7 +10,7 @@ import re
 import tempfile
 from threading import RLock
 
-from src.utils.yahoo_quote import finite_number, parse_regular_quote, evidence_quote
+from src.utils.yahoo_quote import CLOSING_HISTORY_BASIS, CLOSING_HISTORY_RANGE, finite_number, parse_regular_quote, evidence_quote
 from src.intelligence.special_alert_sources import timestamp
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -56,6 +56,8 @@ def verdict(row, now):
         if first.get("return_usable") is False or second and second.get("return_usable") is False:
             return "price basis review"
         if second is None or second.get("quote_schema") != 2:
+            return "quote check pending"
+        if first.get("closing_price_basis") == CLOSING_HISTORY_BASIS and second.get("closing_price_basis") != CLOSING_HISTORY_BASIS:
             return "quote check pending"
         same = (first["session_date"] == second["session_date"] and first["previous_session_date"] == second["previous_session_date"]
                 and abs(first["previous_close"]-second["previous_close"]) <= max(.000001, first["previous_close"]*.000001)
@@ -143,8 +145,11 @@ def review_quotes(quotes, fetch, now=None):
             identity = issuer(symbol)
             if identity in seen: continue
             seen.add(identity)
+            recovered = quote.get("closing_price_basis") == CLOSING_HISTORY_BASIS
             prior = next((row for row in previous if row["symbol"] == symbol and
                           row.get("verification_version", 1) == (2 if first.get("quote_evidence", {}).get("schema") == 2 else 1) and
+                          (not recovered or row["status"] == "rechecked" and
+                           row["second"]["quote_evidence"].get("request", {}).get("range") == CLOSING_HISTORY_RANGE) and
                           -60 <= (now-timestamp(row.get("recheck_at", row["checked_at"]))).total_seconds() <= RECHECK_SECONDS), None)
             value = {"symbol": symbol, "issuer": identity, "first": deepcopy(first),
                      "checked_at": now.isoformat(), "recheck_at": prior.get("recheck_at", prior["checked_at"]) if prior else now.isoformat()}

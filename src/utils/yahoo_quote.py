@@ -7,6 +7,11 @@ import math
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
+CLOSING_HISTORY_RANGE = "1mo"
+CLOSING_HISTORY_BASIS = "dated daily history"
+MISSING_CLOSING_BAR = "Completed equity quote needs its dated closing bar"
+
+
 class QuoteDataError(ValueError):
     """The source cannot establish a usable, dated daily price return."""
 
@@ -104,17 +109,27 @@ def parse_regular_quote(symbol: str, result: dict, now: datetime | None = None, 
     elif asof >= start:
         raise QuoteDataError("Quote is ahead of the upcoming regular session")
 
+    equity = meta.get("instrumentType") in {"EQUITY", "ETF"}
+    request = result.get("request")
+    closing_history = profile == 2 and equity and isinstance(request, dict) and request.get("range") == CLOSING_HISTORY_RANGE
+    previous_session = now < start and quote_day < regular_day
     quote_rows = result.get("indicators", {}).get("quote") or []
     if not quote_rows:
         raise QuoteDataError("Dated closing history unavailable")
     row = quote_rows[0]
     timestamps = result.get("timestamp") or []
+    closes = row.get("close") or []
+    if closing_history and (len(quote_rows) != 1 or not isinstance(timestamps, list) or not isinstance(closes, list)
+                            or not 2 <= len(timestamps) == len(closes) <= 40):
+        raise QuoteDataError("Daily history has incomplete or ambiguous closing bars")
     prior_dates, prior_closes = set(), {}
     seen_days, current_closes = set(), []
     latest_observed_day = quote_day
-    for epoch, raw_close in zip(timestamps, row.get("close") or []):
+    for epoch, raw_close in zip(timestamps, closes):
         when, close = source_time(epoch), finite_number(raw_close)
         if when is None or when > now + timedelta(seconds=60):
+            if closing_history:
+                raise QuoteDataError("Daily history has an invalid closing-bar timestamp")
             continue
         day = when.astimezone(exchange_zone).date()
         if profile == 2:
@@ -122,7 +137,7 @@ def parse_regular_quote(symbol: str, result: dict, now: datetime | None = None, 
                 raise QuoteDataError("Duplicate daily bars make the return basis ambiguous")
             seen_days.add(day)
             latest_observed_day = max(latest_observed_day, day)
-            if day == quote_day:
+            if day == quote_day and (not closing_history or previous_session or start <= when <= end):
                 current_closes.append(close)
         if close is not None and close > 0:
             latest_observed_day = max(latest_observed_day, day)
@@ -159,17 +174,23 @@ def parse_regular_quote(symbol: str, result: dict, now: datetime | None = None, 
             "return_basis": "regular-session price vs dated previous-session close"}
     if profile == 2:
         missing_equity_close = False
-        if timing == "completed_session" and meta.get("instrumentType") in {"EQUITY", "ETF"}:
-            if len(current_closes) != 1 or current_closes[0] is None or current_closes[0] <= 0:
+        has_closing_bar = len(current_closes) == 1 and current_closes[0] is not None and current_closes[0] > 0
+        native_close = end < now and quote_day == regular_day and abs((asof - end).total_seconds()) <= 60
+        if closing_history and (not (native_close or previous_session) or not has_closing_bar or meta.get("dataGranularity") != "1d"
+                or request.get("interval") != "1d" or request.get("events") != "splits"):
+            raise QuoteDataError("Daily history does not establish the dated regular-session close")
+        if timing == "completed_session" and equity:
+            if not has_closing_bar:
                 missing_equity_close = abs(change_percent) >= 5
             elif abs(price-current_closes[0]) > max(.01, price*.0001):
                 raise QuoteDataError("Completed equity price conflicts with its dated closing bar")
         action = return_actions(result, value)
         note = ("Split or action evidence needs review for this return interval" if action != "clear" else
-                "Completed equity quote needs its dated closing bar" if missing_equity_close else
-                "Large return needs independent price-basis review" if meta.get("instrumentType") in {"EQUITY", "ETF"} and abs(change_percent) >= 25 else "")
+                MISSING_CLOSING_BAR if missing_equity_close else
+                "Large return needs independent price-basis review" if equity and abs(change_percent) >= 25 else "")
+        basis = CLOSING_HISTORY_BASIS if closing_history else "dated daily closing bar matched" if closing_update else "native regular-session quote"
         value.update(quote_schema=2, return_usable=not bool(note), return_note=note,
-                     action_check=action, closing_price_basis="dated daily closing bar matched" if closing_update else "native regular-session quote")
+                     action_check=action, closing_price_basis=basis)
     return value
 
 

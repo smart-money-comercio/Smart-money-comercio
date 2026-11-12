@@ -879,11 +879,14 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             market_health = record.get("market_data_health", [])
             if market_health:
                 from src.utils.market_quote_source import BENCHMARKS
+                from src.utils.yahoo_quote import CLOSING_HISTORY_BASIS
                 selected_health = [row for row in market_health if row["symbol"] in BENCHMARKS]
+                selected_health += [row for row in market_health if row["status"] == "available" and
+                                    row.get("closing_price_basis") == CLOSING_HISTORY_BASIS][:3]
                 selected_health += [row for row in market_health if row["symbol"] not in BENCHMARKS and row["status"] == "limited"][:3]
                 for row in selected_health:
                     session = " | session " + row["session_date"] if row.get("session_date") else ""
-                    recovery = " | secondary endpoint, same provider" if len(row["attempts"]) > 1 and row["status"] == "available" else ""
+                    recovery = " | secondary endpoint, same provider" if row["symbol"] in BENCHMARKS and len(row["attempts"]) > 1 and row["status"] == "available" else ""
                     lines.append("Quote check: " + BENCHMARKS.get(row["symbol"], row["symbol"]) + " — " + row["status"] + session + recovery + " | " + row["reason"])
             for event in record.get("market_event_context", {}).get("events", []):
                 lines.append("Market event check: " + event["symbol"] + " — " + event["status"] + "; issuer-disclosure search cue, market cause not inferred")
