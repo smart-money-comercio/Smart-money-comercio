@@ -378,6 +378,8 @@ def build(record, report, research, *, schema=2):
                 transition = ""
                 if evidence.get("business_version", 0) >= 6:
                     bullet = "Delivery timing and execution costs"
+        elif story.get("event_evidence", {}).get("stage") == "initial purchases":
+            bullet = "Commercial availability and initial purchases"
         add(label, transition+copy, (bullet,), (story["id"],))
         covered.update(issuer(symbol) for symbol in story.get("symbols", []))
     group = grouped_price_watch(evidence)
@@ -411,7 +413,10 @@ def build(record, report, research, *, schema=2):
         add("Companies in Focus", text, bullets, ids)
         covered.add(issuer(row["symbol"]))
     if not any("defense" in story_topics(story) for story in selected):
-        if evidence.get("business_version", 0) >= 2:
+        if evidence.get("business_version", 0) >= 7:
+            from src.intelligence.market_brief import defense_segment
+            add("Defense Watch", defense_segment([], business_version=7))
+        elif evidence.get("business_version", 0) >= 2:
             add("Defense Watch", "On defense, no fresh development cleared this edition's source checks.")
         else:
             add("Defense Watch", "On defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.", ("Funded orders", "Production milestones"))
@@ -426,6 +431,9 @@ def build(record, report, research, *, schema=2):
                                 if row.startswith(("Why it matters: ", "Weekly claims track "))), "")
             if implication:
                 text += " " + implication
+        if evidence.get("business_version", 0) >= 7 and record.get("narrated_company_schedules"):
+            from src.intelligence.company_schedule import earnings_focus
+            text += " " + earnings_focus(record["narrated_company_schedules"][0])
         add("What's Ahead", text, [agenda_bullet(row) for row in agenda[:2]] if modern else agenda[:2], calendar_ids)
     watch_rows = [row for row in review["insights"] if row["section"] == "watch"]
     if evidence.get("business_version", 0) >= 3:

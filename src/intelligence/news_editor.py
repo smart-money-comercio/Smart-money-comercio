@@ -73,7 +73,8 @@ def materiality(story: dict) -> str:
     if story.get("event_evidence", {}).get("schema") == 14:
         if not primary_source(story):
             return ""
-        return "product" if checked_evidence(story)["stage"] == "available" else "defense production"
+        stage = checked_evidence(story)["stage"]
+        return "defense production" if stage == "production" else "defense product sales" if stage == "initial purchases" else "product"
     if story.get("disclosure_version") == 1 or story.get("event_evidence", {}).get("schema") in {12, 13}:
         from src.intelligence.disclosure_details import family, material
         category = family(story)
@@ -565,7 +566,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             if baseline:
                 result["intel_results_baseline"] = baseline
         from src.utils.market_quote_source import cached_health
-        result.update(rules_version=32, business_version=6, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
+        result.update(rules_version=32, business_version=7, market_data_health=cached_health(now), earnings_context_candidates=contexts, earnings_backup_health=backup_health,
                       earnings_context_health=context_health)
     result["publisher_scan_omissions"] = dict(Counter(item.get("publisher_symbol") for item in candidates[MAX_CANDIDATES:] if item.get("publisher_symbol")))
     return result
@@ -588,7 +589,7 @@ def news_order(story: dict) -> tuple:
     tier = {"IPO": 4, "monetary policy": 4, "economic data": 4, "guidance": 3, "regulation": 3,
             "AI infrastructure financing": 3, "financing disclosure": 2,
             "earnings": 2, "acquisition": 2, "divestiture": 2, "restructuring": 2,
-            "contract": 1, "product": 1, "defense innovation": 1, "defense production": 1}.get(topic, 0)
+            "contract": 1, "product": 1, "defense innovation": 1, "defense production": 1, "defense product sales": 1}.get(topic, 0)
     if type(story.get("event_priority")) is int and 0 <= story["event_priority"] <= 7:
         tier = story["event_priority"]
     return (-tier, -story.get("priority", 0), -dated(story["published"]).timestamp(), story["id"])
@@ -615,7 +616,7 @@ def research_focus(story: dict) -> str:
 def render_story(story: dict, zone, company_names: dict, *, style="source", business_version=0) -> str:
     if style not in {"source", "broadcast"}:
         raise ValueError("Unknown story narration style")
-    if type(business_version) is not int or business_version not in {0, 1, 2, 3, 4, 5, 6} or business_version and style != "broadcast":
+    if type(business_version) is not int or not 0 <= business_version <= 7 or business_version and style != "broadcast":
         raise ValueError("Unknown business narration version")
     if style == "broadcast" and not story.get("official"):
         raise ValueError("Broadcast narration needs an admitted original publisher")
@@ -702,11 +703,13 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         if generated is None:
             raise ValueError("Broadcast evidence needs the research edition's timezone")
         zone = ZoneInfo(generated[1])
-        from src.intelligence.company_schedule import checked_notice, narration
+        from src.intelligence.company_schedule import checked_notice, earnings_focus, narration
         for notice in plan.get("narrated_company_schedules", []):
             checked_notice(notice, dated(plan["generated_at"]))
             if notice not in plan.get("company_schedules", []) or report.count(narration(notice, zone, NAMES)) != 1:
                 raise ValueError("Company schedule narration lost its original evidence")
+            if plan.get("business_version", 0) >= 7 and report.count(earnings_focus(notice)) != 1:
+                raise ValueError("Company schedule narration lost its earnings follow-through")
     for story in selected:
         if story.get("title_truncated"):
             raise ValueError("Selected story headline is incomplete")

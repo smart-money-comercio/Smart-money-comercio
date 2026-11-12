@@ -50,7 +50,7 @@ def opening_source(evidence):
             if profile["stage"] == "available":
                 text = "Server shipments put AMD's new EPYC launch into commercial rollout."
                 priority = 3
-            else:
+            elif profile["stage"] == "production":
                 text = "Lockheed Martin reported GMLRS delivery number " + fields["delivery_milestone"] + "."
                 priority = 4
         elif profile["schema"] == 15:

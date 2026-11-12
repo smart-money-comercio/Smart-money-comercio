@@ -14,6 +14,10 @@ COUNT = r"(?:\d{1,3}(?:,\d{3})+|\d+)"
 DELIVERED = re.compile(r"^(?:The company|Lockheed Martin) has delivered its (?P<count>" + COUNT + r")(?:st|nd|rd|th) GMLRS[®™]? rockets?\b", re.I)
 RATE = re.compile(r"\s+and is now producing (?P<qualifier>nearly |about |approximately )?(?P<count>" + COUNT + r") rockets per year\b", re.I)
 AHEAD = re.compile(r"\s*[,—–-]\s*a production rate achieved ahead of schedule\b", re.I)
+RECON = r"KnownSpace[®™]?\s+Recon\+[®™]?"
+RECON_RELEASE = re.compile(r"\bKratos Defense (?:&|and) Security Solutions,? Inc\..{0,160}?\bannounced the release of " + RECON, re.I)
+RECON_AVAILABLE = re.compile(r"(?:KnownSpace[®™]?\s+)?Recon\+[®™]? is (?:a commercially available product|commercially available)\.", re.I)
+RECON_PURCHASED = re.compile(r"Units have (?:already )?been purchased by multiple U\.S\. government agencies\.", re.I)
 
 
 def family(story):
@@ -25,6 +29,8 @@ def family(story):
         return "server launch"
     if symbol == "LMT" and re.search(r"\bGMLRS\b.{0,45}\bproduction milestone\b", title, re.I):
         return "production milestone"
+    if symbol == "KTOS" and re.match(r"Kratos introduces " + RECON, title, re.I):
+        return "initial purchases"
     return ""
 
 
@@ -91,12 +97,23 @@ def extract(story, text):
     if category == "server launch":
         facts = server_facts(story, rows)
         return ("product", "available", facts) if facts else None
+    if category == "initial purchases":
+        for release, available, purchased in zip(rows, rows[1:], rows[2:]):
+            if (RECON_RELEASE.search(release) and not re.search(UNCONFIRMED, release, re.I)
+                    and RECON_AVAILABLE.fullmatch(available) and RECON_PURCHASED.fullmatch(purchased)):
+                return "product", "initial purchases", [
+                    fact("commercial_availability", "KnownSpace Recon+ is commercially available", available),
+                    fact("customer_purchases", "multiple U.S. government agencies purchased units", purchased),
+                ]
+        return None
     facts = production_facts(rows)
     return ("product", "production", facts) if facts else None
 
 
 def summary(evidence, *, speech=False):
     values = {row["field"]: row["value"] for row in evidence["facts"]}
+    if evidence["stage"] == "initial purchases":
+        return "Kratos said its KnownSpace Recon+ product is commercially available and multiple U.S. government agencies have bought units."
     if evidence["stage"] == "available":
         text = "AMD said its " + values["product_availability"] + " are generally available. Server vendors are shipping systems."
         if "cloud_rollout" in values:
@@ -110,7 +127,10 @@ def summary(evidence, *, speech=False):
 
 
 def review(evidence):
-    if evidence["stage"] == "available":
+    if evidence["stage"] == "initial purchases":
+        why = "The purchases show early demand. Sales volume and delivery costs will determine what the product contributes to earnings."
+        watch = "Look for repeat purchases and disclosed order values."
+    elif evidence["stage"] == "available":
         why = "Shipping systems put customer adoption and server margins in focus."
         watch = "Watch cloud availability and what AMD reports about server sales and margins."
     else:

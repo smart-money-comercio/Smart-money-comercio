@@ -18,6 +18,16 @@ def participation_scope(evidence):
     from src.intelligence.reader_brief import _participation_scope
     value = _participation_scope(evidence)
     breadth = evidence["breadth"]
+    if evidence.get("business_version", 0) >= 7 and breadth["total"] > 1:
+        up, down, total = (breadth[key] for key in ("up", "down", "total"))
+        if up == total or down == total:
+            direction = "higher" if up == total else "lower"
+            verb = "are" if evidence["is_open"] else "finished"
+            return f"All {total} quoted stocks and funds on our watchlist {verb} {direction}."
+        unchanged = total - up - down
+        verb = ("is" if up == 1 else "are") if evidence["is_open"] else "finished"
+        flat = f", with {unchanged} unchanged" if unchanged else ""
+        return f"Of the {total} quoted stocks and funds on our watchlist, {up} {verb} higher and {down} lower{flat}."
     if breadth["total"] == 1:
         direction = "higher" if breadth["up"] else "lower" if breadth["down"] else "unchanged"
         verb = "is" if evidence["is_open"] else "finished"
@@ -28,6 +38,22 @@ def participation_scope(evidence):
         if breadth["down"] == 1:
             value = value.replace("and 1 lower", "and 1 is lower")
     return value
+
+
+def breadth_read(evidence):
+    up, down, total = (evidence["breadth"][key] for key in ("up", "down", "total"))
+    moves = evidence["moves"]
+    indexes = ("S&P", "Nasdaq", "Russell")
+    horizon = "by the close" if evidence["is_open"] else "in the next session"
+    if all(moves.get(key, 0) < 0 for key in indexes) and down <= total / 2:
+        return f"With all three indexes lower, watch whether most of the quoted list turns lower {horizon}. That would show selling spreading within the watchlist."
+    if all(moves.get(key, 0) > 0 for key in indexes) and up <= total / 2:
+        return f"With all three indexes higher, a majority of the quoted list rising {horizon} would show the rally reaching more of our watchlist."
+    if up > down:
+        return f"Watch whether the share of advancers holds {horizon}. A smaller share would suggest the gains are narrowing within the watchlist."
+    if down > up:
+        return f"Watch whether the share of decliners falls {horizon}. That would show selling is easing across the watchlist."
+    return f"Watch whether advancers or decliners take a majority {horizon} for a clearer direction across the watchlist."
 
 
 def opening_source(evidence):
@@ -101,6 +127,10 @@ def watching(evidence):
     if evidence.get("breadth"):
         before, after = _participation_scope(evidence), participation_scope(evidence)
         rows = [{**row,"text":row["text"].replace(before,after)} for row in rows]
+        if evidence.get("business_version", 0) >= 7:
+            for row in rows:
+                if row["id"] == "watch_participation":
+                    row["text"] = "Watchlist breadth: " + after + " " + breadth_read(evidence)
     elif evidence.get("business_version", 0) >= 6 and all(key in evidence["moves"] for key in ("S&P", "Nasdaq", "Russell")):
         for row in rows:
             if row["id"] == "watch_market":

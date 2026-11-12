@@ -215,6 +215,35 @@ class CompanyScheduleChecks(IsolatedChecks):
             excerpt_scope="publisher feed excerpt")
         value.update(changes); return value
 
+    def reaffirmation(self):
+        return self.notice(title="Nvidia Announces a Leadership Update", excerpt_scope="original release excerpt",
+                           text="Nvidia will report its quarterly financial results on Tuesday, November 3, at 1:20 p.m. PT, as previously scheduled, followed by its earnings call at 2 p.m. PT.")
+
+    def test_reaffirmed_issuer_call_keeps_the_call_time_separate_from_results(self):
+        value = self.reaffirmation()
+        row = schedules.parse_notice(value, NOW)
+        self.assertEqual((row["schema"], row["event_at"]), (2, "2026-11-03T17:00:00-05:00"))
+        schedules.checked_notice(row, NOW)
+        with patch.object(editor, "cache_candidates", return_value=([value], [])):
+            report = build_daily_news_brief(self.research())
+        record = store.read_editions(report=report)[0]
+        self.assertIn("Tuesday, November 03 at 05:00 PM EST", report)
+        self.assertIn("data center sales and margin guidance", report)
+        self.assertIn("data center sales and margin guidance", record["voiceover"]["script"])
+        self.assertTrue(record["voiceover"]["quality"]["passes"])
+
+    def test_reaffirmation_needs_an_original_issuer_body_and_ordered_clocks(self):
+        value = self.reaffirmation()
+        text = value["source_excerpt"]
+        for candidate in ({**value, "excerpt_scope": "publisher feed excerpt"},
+                          {**value, "source_excerpt": text.replace("Nvidia will report", "Other Company will report")},
+                          {**value, "source_excerpt": text.replace("2 p.m. PT", "1 p.m. PT")},
+                          {**value, "source_excerpt": text.replace("2 p.m. PT", "2 p.m.")},
+                          {**value, "source_excerpt": text.replace("2 p.m. PT", "2 p.m. PT (4 p.m. ET)")},
+                          {**value, "evidence_checked_at": (NOW-timedelta(hours=7)).isoformat()}):
+            with self.subTest(candidate=candidate):
+                self.assertIsNone(schedules.parse_notice(candidate, NOW))
+
     def test_original_call_notice_resolves_the_unique_year_and_both_explicit_timezones(self):
         row = schedules.parse_notice(self.notice(), NOW)
         self.assertEqual(row["event_at"], "2026-11-03T17:00:00-05:00")

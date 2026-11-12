@@ -327,7 +327,7 @@ class NewsChecks(IsolatedChecks):
         self.assertIn("oil rose 4.32 percent", text)
         self.assertIn("Market data: completed regular session 2026-10-23", text)
         self.assertIn("Friday, October 23", text)
-        self.assertIn("18 stocks and funds we track", text)
+        self.assertIn("18 quoted stocks and funds on our watchlist", text)
 
     def test_intraday_language_does_not_call_the_open_session_finished(self):
         research = self.research(replacements={"Market Snapshot": "Market Session: Open — live session.\nQuote session: 2026-10-23\nBreadth: 8 up / 10 down / 18 quoted"})
@@ -470,7 +470,7 @@ class NewsChecks(IsolatedChecks):
     def test_index_gains_and_watchlist_declines_are_explained_with_scope(self):
         text = build_daily_news_brief(self.research(replacements={"Executive Summary": "- Main theme: Macro / earnings setup.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.1%."}))
         self.assertIn("sentiment read is constructive", text)
-        self.assertIn("Index gains are not shared by most names in this research watchlist", text)
+        self.assertIn("a majority of the quoted list rising in the next session would show the rally reaching more of our watchlist", text)
 
     def test_undated_data_cannot_drive_the_theme_or_interpretation(self):
         text = build_daily_news_brief(self.research(replacements={"Market Snapshot": "Market Session: Closed.\nBreadth: 7 up / 11 down / 18 quoted"}), self.confirmed_news_without_prices())
@@ -1029,7 +1029,8 @@ class MarketDefenseChecks(IsolatedChecks):
 
     def test_quiet_day_defense_watch_does_not_invent_an_announcement_or_holdings(self):
         text = self.render([])
-        self.assertIn("No current verified defense development qualified", text)
+        self.assertIn("Today's defense coverage is limited.", text)
+        self.assertIn("Funded orders and delivery schedules", text)
         self.assertNotIn("drones, counter-drone systems, cybersecurity and autonomy", text)
         self.assertNotIn("your holdings", text.lower())
         self.assertNotIn("your portfolio lost", text.lower())

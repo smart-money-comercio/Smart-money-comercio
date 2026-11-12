@@ -32,6 +32,8 @@ PRODUCTION = ("Lockheed Martin reported an update on its GMLRS program. "
               "– a production rate achieved ahead of schedule.")
 ORDER = ("ARLINGTON, Va. — (OCTOBER 25, 2026) — AeroVironment, Inc. (“AV”) (NASDAQ: AVAV), "
          "today announced a landmark $84.5 million international direct commercial sales order for its maintenance equipment.")
+RECON = ("Kratos Defense & Security Solutions, Inc. (Nasdaq: KTOS) announced the release of KnownSpace® Recon+™. "
+         "Recon+ is a commercially available product. Units have already been purchased by multiple U.S. government agencies.")
 
 
 def release(symbol, **changes):
@@ -72,6 +74,16 @@ def order_release(**changes):
 
 
 class FactChecks(unittest.TestCase):
+    def test_defense_product_sales_require_both_availability_and_actual_purchases(self):
+        row = candidate("KTOS", title="Kratos Introduces KnownSpace® Recon+™")
+        profile = build_evidence(row, RECON, "original release excerpt", schema=14)
+        self.assertEqual(profile["stage"], "initial purchases")
+        self.assertEqual([item["field"] for item in profile["facts"]], ["commercial_availability", "customer_purchases"])
+        for text in (RECON.replace("have already been", "may be"), RECON.replace("is a commercially", "will be a commercially"),
+                     RECON.replace("Recon+ is", "Another product is"), row["title"]):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                build_evidence(row, text, "original release excerpt", schema=14)
+
     def test_order_fields_derive_from_the_attributed_original_clause(self):
         row = order_release()
         profile = build_evidence(row, ORDER, "original release excerpt", schema=15)
@@ -175,6 +187,22 @@ class FactChecks(unittest.TestCase):
 
 
 class DailyChecks(RebuildDetailChecks):
+    def test_defense_segment_explains_the_disclosed_purchases_in_text_and_speech(self):
+        row = candidate("KTOS", title="Kratos Introduces KnownSpace® Recon+™", source="Kratos Newsroom",
+                        url="https://www.kratosdefense.com/newsroom/fixture-initial-purchases",
+                        source_excerpt=RECON, excerpt_scope="original release excerpt")
+        row["evidence_checked_at"] = row["source_checked_at"]
+        text, record = self.render([row])
+        story = editor.selected_stories(record)[0]
+        self.assertEqual(story["materiality"], "defense product sales")
+        block = daily_voiceover.sections(text)["Global and Defense Watch"]
+        self.assertIn("government agencies have bought units", block)
+        self.assertIn("Sales volume and delivery costs", block)
+        voice = daily_voiceover.checked(record, NOW)
+        scene = next(scene for scene in voice["segments"] if scene["source_ids"] == [story["id"]])
+        self.assertIn("Sales volume and delivery costs", scene["narration"])
+        self.assertTrue(validate_news_brief(text)["passes"])
+
     def test_market_comparison_is_shared_by_the_brief_and_voiceover(self):
         research = self.research(replacements={
             "Executive Summary": "- Main theme: Market advance.\n- Market moves: S&P +1.31%, Nasdaq +1.60%, Russell +0.88%, VIX -10.12%, Oil +0.01%, TLT +0.05%.",
@@ -252,7 +280,7 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual({story["publisher_symbol"] for story in selected}, {"AMD", "LMT"})
         self.assertEqual(len(selected), 2)
         self.assertTrue(all(checked_evidence(story)["schema"] == 14 for story in selected))
-        self.assertEqual(record["business_version"], 6)
+        self.assertEqual(record["business_version"], 7)
         self.assertEqual(len(record["analyst_review"]["evidence"]["business_reviews"]), 2)
         copies = [story for story in record["candidates"] if story["url"] == production["url"]]
         self.assertEqual(len(copies), 2)
@@ -266,7 +294,7 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual(text.count("7 finished higher and 11 lower"), 1)
         self.assertEqual(text.count("Reported server sales and margins"), 1)
         self.assertIn("What We're Watching\nAdvanced Micro Devices (AMD) — Reported server sales and margins", text)
-        self.assertIn("Watchlist breadth — Of the 18 stocks and funds", text)
+        self.assertIn("Watchlist breadth — Of the 18 quoted stocks and funds", text)
         self.assertNotIn("Watch cloud availability", text)
         self.assertNotIn("No fresh Starbucks announcement", text)
         self.assertTrue(validate_news_brief(text)["passes"])
@@ -288,6 +316,7 @@ def main():
     parser.add_argument("--windows-socketpair", action="store_true")
     args = parser.parse_args()
     tests = unittest.defaultTestLoader.loadTestsFromTestCase(FactChecks)
+    tests.addTest(DailyChecks("test_defense_segment_explains_the_disclosed_purchases_in_text_and_speech"))
     tests.addTest(DailyChecks("test_real_daily_build_uses_source_facts_once_in_brief_and_voiceover"))
     tests.addTest(DailyChecks("test_reviewed_order_leads_with_the_dated_fact_and_uses_the_value_once"))
     tests.addTest(DailyChecks("test_non_defense_order_keeps_its_business_implications"))

@@ -238,7 +238,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         status = "A previously checked, cached schedule lists" if row["time_status"] == "cached" else "The publisher schedule lists"
         macro.append(f"{status} {families[family]} for {at.strftime('%A, %B %d at %I:%M %p %Z')}."
                      + (" Recheck the publisher because live coverage is limited." if row["time_status"] == "cached" else ""))
-    from src.intelligence.company_schedule import narration as schedule_narration
+    from src.intelligence.company_schedule import earnings_focus, narration as schedule_narration
     company_schedules = plan.get("company_schedules", [])[:1]
     macro_limit = 1 if company_schedules else 2
     ahead.extend(macro[:macro_limit])
@@ -246,6 +246,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     implication = calendar_implication(set(macro_families[:macro_limit]), concise=concise)
     if implication:
         ahead.append(implication)
+    if company_schedules and plan.get("business_version", 0) >= 7:
+        ahead.append(earnings_focus(company_schedules[0]))
     if not ahead:
         ahead.append("The available company announcements and calendars did not establish a dated catalyst. Check company sources before planning around an event.")
     if plan["issues"]:
@@ -346,6 +348,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             protected = set(narrations.values()) | {no_company_story} | {
                 row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
             protected.update(schedule_narration(row, zone, NAMES) for row in company_schedules)
+            if plan.get("business_version", 0) >= 7:
+                protected.update(earnings_focus(row) for row in company_schedules)
             if brief.get("market_events"):
                 protected.update(paragraph for paragraph in market_body if paragraph.startswith("An active market-alert record reports "))
             if plan["issues"]:

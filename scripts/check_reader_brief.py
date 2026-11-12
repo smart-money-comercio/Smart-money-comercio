@@ -48,9 +48,9 @@ class ReaderChecks(IsolatedChecks):
 
     def test_watch_explains_the_next_observation_and_why_it_matters(self):
         text = self.render(); watch = section(text, "What We're Watching")
-        self.assertIn("18 stocks and funds we track", watch)
+        self.assertIn("18 quoted stocks and funds on our watchlist", watch)
         self.assertIn("7 finished higher and 11 lower", watch)
-        self.assertIn("In the next session, watch for fewer declines", watch)
+        self.assertIn("Watch whether the share of decliners falls in the next session", watch)
         self.assertIn("reduce margins", watch)
         self.assertNotIn("disclosures, price and volume support these research ideas", watch)
         review = self.record(text)["analyst_review"]
@@ -96,7 +96,7 @@ class ReaderChecks(IsolatedChecks):
         report = self.research(replacements={"Executive Summary": "- Main theme: Mixed.\n- Market moves: S&P -0.17%, Nasdaq -1.04%, Russell +1.22%, VIX -2.9%, Oil -1.56%, TLT +0.53%."})
         text = self.render(report=report)
         self.assertIn("Nasdaq fell while the Russell index rose", text)
-        self.assertIn("watch for fewer declines and more gains in this group", section(text, "What We're Watching"))
+        self.assertIn("Watch whether the share of decliners falls in the next session", section(text, "What We're Watching"))
         self.assertNotIn("all stocks are falling", text.lower())
 
     def test_higher_indexes_and_weak_watchlist_have_a_scoped_takeaway(self):
@@ -104,7 +104,7 @@ class ReaderChecks(IsolatedChecks):
         text = self.render(report=report)
         self.assertIn("All three major indexes rose in the completed session", text)
         self.assertIn("Most names in our tracked group still finished lower", text)
-        self.assertIn("Index gains are not shared by most names in this research watchlist", text)
+        self.assertIn("a majority of the quoted list rising in the next session", text)
 
     def test_closed_session_watch_preserves_completed_session_tense(self):
         watch = section(self.render(), "What We're Watching")
@@ -205,7 +205,7 @@ class ReaderChecks(IsolatedChecks):
         text = self.render(report=report)
         intro = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
         self.assertLess(intro.index("All three major indexes fell"), intro.index("Alphabet fell 12.0 percent"))
-        self.assertIn("All 18 stocks and funds we track finished lower", intro)
+        self.assertIn("All 18 quoted stocks and funds on our watchlist finished lower", intro)
         self.assertIn("selling is easing", section(text, "What We're Watching"))
         self.assertNotIn("whether selling spreads", intro)
         self.assertNotIn("whether the move spreads", intro)
@@ -215,36 +215,36 @@ class ReaderChecks(IsolatedChecks):
             "Executive Summary": "- Main theme: Uneven.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.2%."})
         text = self.render(report=report)
         intro = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
-        self.assertIn("All 18 stocks and funds we track finished lower", intro)
+        self.assertIn("All 18 quoted stocks and funds on our watchlist finished lower", intro)
         self.assertNotIn("All three major indexes fell", intro)
         self.assertNotIn("every stock", text.lower())
-        self.assertIn("Index gains are not shared by most names in this research watchlist", text)
+        self.assertIn("a majority of the quoted list rising in the next session", text)
 
     def test_closed_session_check_looks_forward_to_the_next_session(self):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot()}))
         watch = section(text, "What We're Watching")
-        self.assertEqual(text.count("All 18 stocks and funds we track finished lower"), 1)
-        self.assertNotIn("All 18 stocks and funds we track finished lower", watch)
-        self.assertIn("In the next session", watch)
+        self.assertEqual(text.count("All 18 quoted stocks and funds on our watchlist finished lower"), 1)
+        self.assertNotIn("All 18 quoted stocks and funds on our watchlist finished lower", watch)
+        self.assertIn("in the next session", watch)
         self.assertIn("selling is easing", watch)
         self.assertNotIn("0 finished higher", watch)
 
     def test_live_session_check_can_still_change_before_the_close(self):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot(live=True)}))
         watch = section(text, "What We're Watching")
-        self.assertEqual(text.count("All 18 stocks and funds we track are lower"), 1)
-        self.assertNotIn("All 18 stocks and funds we track are lower", watch)
-        self.assertIn("before the close", watch)
-        self.assertNotIn("In the next session", watch)
+        self.assertEqual(text.count("All 18 quoted stocks and funds on our watchlist are lower"), 1)
+        self.assertNotIn("All 18 quoted stocks and funds on our watchlist are lower", watch)
+        self.assertIn("by the close", watch)
+        self.assertNotIn("in the next session", watch)
         self.assertNotIn("finished", watch)
 
     def test_all_gains_are_a_staying_power_check_not_a_request_for_more_names(self):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot(up=18, down=0),
             "Executive Summary": "- Main theme: Strong.\n- Market moves: S&P +0.5%, Nasdaq +0.4%, Russell +0.2%."}))
         watch = section(text, "What We're Watching")
-        self.assertEqual(text.count("All 18 stocks and funds we track finished higher"), 1)
-        self.assertNotIn("All 18 stocks and funds we track finished higher", watch)
-        self.assertIn("whether gains continue across this group", watch)
+        self.assertEqual(text.count("All 18 quoted stocks and funds on our watchlist finished higher"), 1)
+        self.assertNotIn("All 18 quoted stocks and funds on our watchlist finished higher", watch)
+        self.assertIn("whether the share of advancers holds", watch)
         self.assertNotIn("more companies join", watch)
 
     def test_missing_session_cannot_supply_the_new_participation_claim(self):
@@ -256,14 +256,14 @@ class ReaderChecks(IsolatedChecks):
     def test_unknown_index_directions_are_not_filled_from_the_watchlist(self):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot(),
             "Executive Summary": "- Main theme: Limited.\n- Market moves: Nasdaq -1.5%."}))
-        self.assertIn("All 18 stocks and funds we track finished lower", text)
+        self.assertIn("All 18 quoted stocks and funds on our watchlist finished lower", text)
         self.assertNotIn("All three major indexes fell", text)
 
     def test_tied_participation_does_not_assert_a_recovery_or_a_rally(self):
         text = self.render(report=self.research(replacements={"Market Snapshot": self.snapshot(up=9, down=9)}))
         watch = section(text, "What We're Watching")
         self.assertIn("Watchlist breadth —", watch)
-        self.assertIn("establish a direction within this group", watch)
+        self.assertIn("would show selling spreading within the watchlist", watch)
         self.assertNotIn("Market recovery:", watch)
 
     def test_dated_intel_outlook_explains_the_test_and_keeps_scene_sources(self):
@@ -316,7 +316,7 @@ class ReaderChecks(IsolatedChecks):
         text = self.render(report=report)
         intro = text.split("The takeaway:", 1)[1].split("\n\n", 1)[0]
         self.assertIn("Alphabet rose 12.0 percent", intro)
-        self.assertIn("whether gains continue across this group", section(text, "What We're Watching"))
+        self.assertIn("whether the share of advancers holds", section(text, "What We're Watching"))
         self.assertNotIn("other companies join", intro)
 
     def test_rules19_saved_brief_and_voiceover_keep_their_original_hashes(self):

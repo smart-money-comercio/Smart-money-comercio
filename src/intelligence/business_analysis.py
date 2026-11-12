@@ -34,6 +34,9 @@ def assess(story):
         if profile["stage"] == "available":
             kind, channel = "commercial rollout", "server adoption and margins"
             test = "Reported server sales and margins would show how the launch is contributing to the business."
+        elif profile["stage"] == "initial purchases":
+            kind, channel = "early sales", "initial demand and repeat orders"
+            test = "Repeat orders and disclosed order values would help establish the scale of the business."
         else:
             kind, channel = "production milestone", "delivery volume and production costs"
             test = "Funded delivery schedules and program costs would clarify how the reported pace affects earnings."
@@ -150,6 +153,8 @@ def narrative(story, legacy, review, day, *, concise=False):
 
 def follow_through(story, review, *, concise=False):
     if concise and review["evidence"]["schema"] == 14:
+        if review["evidence"]["stage"] == "initial purchases":
+            return review["why"]
         return "Funded deliveries and production costs will shape what that pace contributes to Lockheed Martin's earnings."
     why = review["why"]
     if concise and review["evidence"]["schema"] == 15:

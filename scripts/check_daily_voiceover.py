@@ -87,7 +87,8 @@ class VoiceChecks(IsolatedChecks):
 
     def test_no_story_script_retains_useful_company_checks_without_inventing_news(self):
         _, record = self.render(); text = record["voiceover"]["script"]
-        self.assertIn("no fresh development cleared", text)
+        self.assertIn("Today's defense coverage is limited", text)
+        self.assertIn("Funded orders and delivery schedules", text)
         self.assertIn("higher fuel or shipping bills", text)
         self.assertNotIn("announced a new", text)
 
