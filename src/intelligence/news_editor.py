@@ -900,6 +900,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 lines.append("Alphabet SEC earnings context: " + backup["status"] + " — " + backup["reason"])
             for context_health in record.get("earnings_context_health", []):
                 lines.append("Company earnings context: " + context_health["symbol"] + " — " + context_health["status"] + "; " + context_health["reason"])
+            if "transaction_disclosures" in record:
+                from src.intelligence.transaction_disclosures import status_lines
+                lines.extend(status_lines(record["transaction_disclosures"]))
             lines += earnings_context_decisions(record)
             analysis = record.get("analyst_review")
             if analysis:

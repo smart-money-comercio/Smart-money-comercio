@@ -377,7 +377,8 @@ def normalize_fmp_trade(record: dict, source: str) -> dict | None:
             "firstLast",
             "first_last",
         ],
-    ) or "Unknown"
+    ) or " ".join(filter(None, (first_value(record, ["firstName", "first_name"]),
+                               first_value(record, ["lastName", "last_name"])))) or "Unknown"
 
     sector = description or first_value(record, ["sector", "assetType", "asset_type"]) or "Congress Disclosure"
 
@@ -389,6 +390,7 @@ def normalize_fmp_trade(record: dict, source: str) -> dict | None:
             first_value(record, ["transaction", "transactionType", "transaction_type", "type", "action"])
         ),
         "sector": sector,
+        "asset_type": first_value(record, ["assetType", "asset_type", "securityType", "security_type"]),
         "amount_range": normalize_amount(
             first_value(record, ["amount", "amountRange", "amount_range", "value", "valueRange", "value_range", "range"])
         ),
@@ -525,6 +527,7 @@ def normalize_stockwatcher_trade(record: dict, chamber: str) -> dict | None:
         "ticker": ticker,
         "transaction": normalize_transaction(first_value(record, ["type", "transaction", "transaction_type"])),
         "sector": sector,
+        "asset_type": first_value(record, ["asset_type", "assetType", "security_type", "securityType"]),
         "amount_range": normalize_amount(first_value(record, ["amount", "amount_range", "amountRange", "value"])),
         "disclosure_date": first_value(
             record,

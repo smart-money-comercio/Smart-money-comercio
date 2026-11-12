@@ -545,6 +545,7 @@ def parse_form4_xml(xml_text: str, filing: dict) -> list[dict]:
     )
     issuer_name = xml_find_text(root, ".//issuerName", filing.get("company", ""))
     owner_info = parse_owner_relationship(root)
+    plan_box = xml_find_text(root, "./aff10b5One", "").casefold() in {"1", "true"}
 
     transactions = []
 
@@ -559,6 +560,7 @@ def parse_form4_xml(xml_text: str, filing: dict) -> list[dict]:
         )
 
         if trade:
+            trade["rule_10b5_1"] = plan_box
             transactions.append(trade)
 
     for node in root.findall(".//derivativeTransaction"):

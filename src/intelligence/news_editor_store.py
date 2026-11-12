@@ -85,6 +85,8 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
                         or hashlib.sha256(value["report_text"].encode()).hexdigest() != report_digest
                         or hashlib.sha256(value["research_text"].encode()).hexdigest() != value.get("research_sha256")):
                     continue
+                from src.intelligence.transaction_disclosures import validate_section
+                validate_section(value.get("transaction_disclosures"), value["report_text"], datetime.fromisoformat(value["generated_at"]))
             if analysis is not None and (not isinstance(analysis, dict) or analysis.get("schema") != 1
                     or not isinstance(analysis.get("evidence"), dict) or not isinstance(analysis["evidence"].get("source_sections"), list)
                     or any(not isinstance(section, str) for section in analysis["evidence"]["source_sections"])

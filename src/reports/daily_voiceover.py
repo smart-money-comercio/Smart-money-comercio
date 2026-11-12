@@ -19,9 +19,12 @@ def digest(value):
 
 
 def packet(record, report, research):
-    return {"report_sha256": digest(report), "research_sha256": digest(research),
-            "generated_at": record["generated_at"], "candidates": record["candidates"],
-            "analyst_review": record.get("analyst_review"), "company_schedules": record.get("narrated_company_schedules", [])}
+    value = {"report_sha256": digest(report), "research_sha256": digest(research),
+             "generated_at": record["generated_at"], "candidates": record["candidates"],
+             "analyst_review": record.get("analyst_review"), "company_schedules": record.get("narrated_company_schedules", [])}
+    if "transaction_disclosures" in record:
+        value["transaction_disclosures"] = record["transaction_disclosures"]
+    return value
 
 
 def sections(report):
@@ -279,6 +282,9 @@ def build(record, report, research, *, schema=2):
     if not validate_news_brief(report)["passes"]: raise ValueError("Voiceover needs a passing original news brief")
     evidence = review["evidence"]; groups = sections(report); scenes = []; sources = {}
     generated = datetime.fromisoformat(record["generated_at"])
+    from src.intelligence import transaction_disclosures as transactions
+    disclosure_review = record.get("transaction_disclosures")
+    transactions.validate_section(disclosure_review, report, generated)
     match = re.search(r"^Generated: .+ (\S+)$", report, re.M)
     local = generated.astimezone(ZoneInfo(match[1]))
     for story in selected:
@@ -420,6 +426,20 @@ def build(record, report, research, *, schema=2):
             add("Defense Watch", "On defense, no fresh development cleared this edition's source checks.")
         else:
             add("Defense Watch", "On defense, no fresh development cleared this edition's source checks. Funded orders and production milestones remain the useful checkpoints.", ("Funded orders", "Production milestones"))
+    if disclosure_review is not None:
+        refs = transactions.sources(disclosure_review)
+        if refs:
+            sources.update(refs)
+            copy = transactions.paragraphs(disclosure_review)
+            bullets = []
+            for index, lane in enumerate(transactions.LANES):
+                lead = disclosure_review[lane]["lead"]
+                if lead:
+                    company = transactions.display_company(lead)
+                    bullets.append(company + " — " + transactions.LABELS[lane])
+                    copy[index] = copy[index].replace(company, lead["company"], 1)
+            narration = "In the filings. " + " ".join(copy)
+            add(transactions.HEADER, narration.replace("FMP lists", "F M P lists"), bullets, refs)
     agenda_paragraphs = groups.get("What's Ahead", "").split("\n\n")
     agenda = [paragraph for paragraph in agenda_paragraphs
               if "schedule lists" in paragraph or "has scheduled" in paragraph]

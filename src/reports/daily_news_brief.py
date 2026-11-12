@@ -13,6 +13,7 @@ from src.intelligence import news_editor as editor
 from src.intelligence.daily_brief_analysis import analyze_report, retained_review
 from src.intelligence.market_brief import MIN_MARKET_WORDS, MAX_MARKET_WORDS, story_topics, word_count
 from src.intelligence.market_priority import order_in_takeaway, selloff
+from src.intelligence import transaction_disclosures as transactions
 from src.utils.report_consistency import report_greeting, validate_report_greeting
 
 
@@ -24,7 +25,7 @@ MIN_NARRATION_WORDS = 180
 HEADERS = ["Market Update", "Companies in Focus", "Global and Defense Watch", "What's Ahead", "What We're Watching", "Research Notes"]
 IPO_HEADER = "IPO & Capital Markets"
 POLICY_HEADER = "Policy & Economy"
-ALL_HEADERS = [IPO_HEADER, POLICY_HEADER] + HEADERS
+ALL_HEADERS = [IPO_HEADER, POLICY_HEADER] + HEADERS[:3] + [transactions.HEADER] + HEADERS[3:]
 NAMES = {"MSFT": "Microsoft", "NVDA": "Nvidia", "PLTR": "Palantir", "TSLA": "Tesla",
          "TSM": "Taiwan Semiconductor", "AVGO": "Broadcom", "AVAV": "AeroVironment", "CRWD": "CrowdStrike",
          "AAPL": "Apple", "AMZN": "Amazon", "GOOG": "Alphabet", "GOOGL": "Alphabet", "META": "Meta Platforms",
@@ -216,6 +217,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     event_context = context_for_report(research_report, now)
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
     plan = editor.build_editorial_plan(brief, now, event_context=event_context, research_report=research_report)
+    disclosure_review = transactions.capture(now)
+    plan["transaction_disclosures"] = disclosure_review
+    disclosure_body = transactions.paragraphs(disclosure_review)
     concise = plan.get("business_version", 0) >= 2
     story_paragraphs = {story["id"]: editor.render_story(story, zone, NAMES, style="broadcast", business_version=plan.get("business_version", 0)) for story in editor.selected_stories(plan)}
     no_company_story = "No new source-confirmed company report met the editorial checks for this edition."
@@ -253,7 +257,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     if plan["issues"]:
         ahead.append("Calendar or company-news coverage is incomplete; unverified dates and times remain uncertain.")
     notes = ["The full research edition includes the company rankings, trade-plan conditions and risk checks behind this brief: /fullreport · /tradeplans",
-             "Sources and full evidence: /storylog · /catalysts · /calendar · /specialalerts", "Research only. Not financial advice."]
+             "Sources and full evidence: /storylog · /catalysts · /calendar · /specialalerts · /editorstatus", "Research only. Not financial advice."]
     if concise:
         notes[0] = "See company rankings, trade-plan conditions and risk checks in /fullreport · /tradeplans"
     initial_stories = sorted(editor.selected_stories(plan), key=editor.news_order)
@@ -319,6 +323,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:
                 notes_body.insert(-1, no_company_story)
             groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
+            groups.insert(3, (transactions.HEADER, disclosure_body))
             if ipo_body:
                 groups.insert(0, (IPO_HEADER, ipo_body))
             if policy_body:
