@@ -197,10 +197,16 @@ def _from_admitted_text(story: dict, text: str, scope: str, *, schema: int | Non
     from src.intelligence.defense_program import applicable, program_facts, material
     from src.intelligence import refinery_mix
     from src.intelligence import disclosure_details
-    if type(schema) is not int or schema not in range(1, 16) or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema >= 8 and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
+    if type(schema) is not int or schema not in range(1, 17) or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema >= 8 and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
         raise ValueError("Unknown original story evidence scope")
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
-    if schema == 15:
+    if schema == 16:
+        from src.intelligence.editorial_context import intel_facts, intel_inference
+        facts = intel_facts(text) if intel_inference(story) else []
+        if not facts:
+            raise ValueError("Intel inference collaboration requires the original release and named software scope")
+        kind, stage = "technology collaboration", "announced"
+    elif schema == 15:
         from src.intelligence.order_awards import extract
         facts = extract(story, text)
         if not facts:
@@ -257,6 +263,9 @@ def checked_evidence(story: dict) -> dict:
 
 def investor_read(story: dict) -> dict:
     evidence = checked_evidence(story)
+    if evidence["schema"] == 16:
+        from src.intelligence.editorial_context import intel_review
+        return intel_review(evidence)
     if evidence["schema"] == 15:
         from src.intelligence.business_analysis import name
         from src.intelligence.order_awards import review

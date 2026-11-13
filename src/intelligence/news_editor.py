@@ -19,6 +19,7 @@ from src.intelligence.special_alert_engine import company_event
 from src.intelligence.market_brief import story_topics
 from src.intelligence.story_analysis import build_evidence, checked_evidence, event_type
 from src.intelligence.policy_analysis import is_fomc_statement
+from src.intelligence.editorial_context import fed_calendar_notice, intel_inference
 
 
 MAX_STORIES = 3
@@ -68,6 +69,8 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    if story.get("event_evidence", {}).get("schema") == 16:
+        return "technology collaboration" if primary_source(story) and checked_evidence(story)["facts"] else ""
     if story.get("event_evidence", {}).get("schema") == 15:
         return "contract" if primary_source(story) and checked_evidence(story)["facts"] else ""
     if story.get("event_evidence", {}).get("schema") == 14:
@@ -418,6 +421,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 raise ValueError("Original publisher release body must match its listed title and publication time")
             if story.get("disclosure_version") == 1 and (raw.get("excerpt_scope") != "original release excerpt" or len(raw.get("source_excerpt", "")) < 80):
                 raise ValueError("Original disclosure body is required for maintenance or financial-sanctions facts")
+            if intel_inference(story) and raw.get("excerpt_scope") != "original release excerpt":
+                raise ValueError("Intel inference collaboration needs the original release body")
             if story.get("publisher_symbol") == "NOC" and raw.get("discovery_evidence") and raw["discovery_evidence"].get("scope") != "original release excerpt":
                 raise ValueError("Original Northrop discovery text needs a scoped article-body review")
             story["published"] = published.isoformat()
@@ -442,7 +447,11 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                     raise ValueError("Original article observation is stale, future-dated or predates publication")
                 specialized = (is_fomc_statement(story) or solar_storage_report(story)
                                or story.get("publisher_symbol") in {"GOOG", "GOOGL", "INTC"})
-                if len(text) >= 80 and not specialized:
+                if intel_inference(story):
+                    story["evidence_checked_at"] = observed
+                    story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=16)
+                    checked_evidence(story)
+                elif len(text) >= 80 and not specialized:
                     story["materiality"] = materiality(story)
                     story["evidence_checked_at"] = observed
                     from src.intelligence.treasury_financing import document_kind
@@ -468,6 +477,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         story["story_type"] = story_type(story)
         if not raw.get("relevant", True) or (story["kind"] == "company" and not story["symbols"]):
             story.update(decision="skip", reason="Outside monitored companies and market themes")
+        elif fed_calendar_notice(story) and primary_source(story):
+            story.update(decision="skip", reason="Tentative policy calendar update; use verified meeting dates in the calendar")
         elif story["story_type"] == "roundup":
             story.update(decision="skip", reason="Broad market preview or stock-pick roundup; no discrete company development established by the headline")
         elif story["story_type"] in {"personal wealth", "retrospective"}:
@@ -551,7 +562,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
-            if story.get("event_evidence", {}).get("schema") not in range(8, 16):
+            if story.get("event_evidence", {}).get("schema") not in range(8, 17):
                 story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
@@ -754,7 +765,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
-         + f"; {sum(story.get('event_evidence', {}).get('schema') in range(8, 16) for story in value['candidates'])} original article materiality reviews"
+         + f"; {sum(story.get('event_evidence', {}).get('schema') in range(8, 17) for story in value['candidates'])} original article materiality reviews"
          + (f"; {len(analyst_review['evidence'].get('business_reviews', []))} business-channel reviews tied to disclosed fields" if (analyst_review or {}).get("business_version") else "")
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
@@ -976,7 +987,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Not specified in reviewed text: " + "; ".join(review["undisclosed"]))
                     if review.get("not_established"):
                         lines.append("Not established by these extracted facts: " + "; ".join(review["not_established"]))
-                    if event.get("schema") in range(8, 16):
+                    if event.get("schema") in range(8, 17):
                         for fact in event["facts"]:
                             lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]

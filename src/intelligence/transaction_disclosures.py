@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 import json
 from math import isfinite
 import re
+from typing import NamedTuple
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -156,7 +157,9 @@ def normalized(raw, lane, today, observed_day):
 
 
 def stake_fraction(row):
-    """Compare this transaction line with its immediately preceding direct holding."""
+    """Calculate a line-item fraction only for a single standalone sale or purchase."""
+    if row.get("related_exercise") or row.get("sale_count", 1) > 1:
+        return None
     after = row["shares_owned_after"]
     shares = row["shares"]
     if after is None:
@@ -171,12 +174,59 @@ def priority(row, lane):
         if low >= 15001:
             return row["disclosure_date"], low, row["transaction_date"]
         return None
-    amount = row["shares"] * row["price"]
+    amount = row.get("gross_sale_value", row["shares"] * row["price"])
     fraction = stake_fraction(row) or 0
     purchase = row["transaction_code"] == "P"
     if amount >= (100000 if purchase else 1000000) or (not purchase and amount >= 100000 and fraction >= .10 and not row["rule_10b5_1"]):
         return row["filing_date"], purchase, not row["rule_10b5_1"], amount
     return None
+
+
+class FilingSale(NamedTuple):
+    related_exercise: bool
+    sales: tuple
+
+
+def filing_sales(raw_rows):
+    """Group same-day direct sale and exercise rows by filer and accession."""
+    groups = defaultdict(list)
+    for raw in raw_rows:
+        if (raw.get("security_type") == "Non-Derivative" and raw.get("ownership") == "D"
+                and raw.get("transaction_code") in ("M", "S")):
+            key = sale_key(raw)
+            if all(key[:4]):
+                groups[key].append(raw)
+    result = {}
+    for key, group in groups.items():
+        exercise = any(raw["transaction_code"] == "M" and raw.get("acquired_disposed") == "A" for raw in group)
+        sales = set()
+        for raw in group:
+            if raw["transaction_code"] != "S" or raw.get("acquired_disposed") != "D":
+                continue
+            try:
+                shares, price = number(raw.get("shares")), number(raw.get("price"))
+            except ValueError:
+                continue
+            if shares and price:
+                holding = raw.get("shares_owned_after")
+                holding = holding if isinstance(holding, (int, float)) and isfinite(holding) else -1
+                sales.add((shares, price, holding))
+        if sales:
+            result[key] = FilingSale(exercise, tuple(sorted(sales)))
+    return result
+
+
+def sale_key(row):
+    return (scope("sec", row), label(row.get("accession"), 20), label(row.get("insider_name"), 64).casefold(),
+            label(row.get("transaction_date"), 10), label(row.get("security_title"), 100).casefold())
+
+
+def sale_fields(context):
+    total = round(sum(shares * price for shares, price, _ in context.sales), 2)
+    if not 0 < total <= 10**11 or len(context.sales) > 100:
+        raise ValueError("Form 4 sale values exceed the review limits")
+    return {"related_exercise": context.related_exercise, "sale_count": len(context.sales),
+            "gross_sale_value": total, "sale_components": [list(component) for component in context.sales]}
 
 
 def unambiguous_sec_rows(rows):
@@ -247,7 +297,9 @@ def cache_review(lane, path, now, companies):
     today = now.astimezone(NY).date()
     rows = []
     observations_by_row = {}
-    for raw in transaction_cache.rows(payload):
+    raw_rows = transaction_cache.rows(payload)
+    sale_contexts = filing_sales(raw_rows) if lane == "sec" else {}
+    for raw in raw_rows:
         observation = observations.get(scope(lane, raw))
         if not observation or now - observed_at(observation["at"]) > CACHE_AGE:
             continue
@@ -258,7 +310,14 @@ def cache_review(lane, path, now, companies):
             row = normalized({**raw, "company": companies[raw["ticker"]]}, lane, today, observed_at(observation["at"]).astimezone(NY).date())
         except (ValueError, TypeError):
             continue
-        identity = tuple(row.values())
+        if lane == "sec" and row["transaction_code"] == "S":
+            context = sale_contexts.get(sale_key(raw))
+            if context and (context.related_exercise or len(context.sales) > 1):
+                try:
+                    row.update(sale_fields(context))
+                except ValueError:
+                    continue
+        identity = json.dumps(row, sort_keys=True)
         if identity not in observations_by_row:
             observations_by_row[identity] = observation
             rows.append(row)
@@ -267,7 +326,7 @@ def cache_review(lane, path, now, companies):
     eligible = [(key, row) for row in rows if (key := priority(row, lane)) is not None]
     if eligible:
         lead = max(eligible, key=lambda item: (item[0], item[1]["ticker"], json.dumps(item[1], sort_keys=True)))[1]
-        source = observations_by_row[tuple(lead.values())]
+        source = observations_by_row[json.dumps(lead, sort_keys=True)]
         review.update(lead=lead, observed_at=observed_at(source["at"]).isoformat(), provider=source["provider"])
     review["eligible"] = len(eligible)
     return review
@@ -281,12 +340,12 @@ def capture(now):
 
     companies = {row["ticker"]: COMPANY_NAMES.get(row["ticker"], row["ticker"])
                  for row in WATCHLIST if "ETF" not in row["category"].upper()}
-    return {"schema": 2, "sec": cache_review("sec", insider_data.CACHE_FILE, now, companies),
+    return {"schema": 3, "sec": cache_review("sec", insider_data.CACHE_FILE, now, companies),
             "congress": cache_review("congress", congress_data.CACHE_FILE, now, companies)}
 
 
 def checked(profile, now):
-    if not isinstance(profile, dict) or set(profile) != {"schema", *LANES} or type(profile["schema"]) is not int or profile["schema"] not in {1, 2}:
+    if not isinstance(profile, dict) or set(profile) != {"schema", *LANES} or type(profile["schema"]) is not int or profile["schema"] not in {1, 2, 3}:
         raise ValueError("Unknown daily transaction disclosure schema")
     for lane in LANES:
         review = profile[lane]
@@ -305,9 +364,29 @@ def checked(profile, now):
             raise ValueError("Transaction source observation disagrees with the edition clock")
         if status == "stale" and (scanned or eligible or lead is not None) or (profile["schema"] == 1 and status == "current" and not scanned):
             raise ValueError("Transaction source freshness disagrees with the review")
-        if (lead is None) != (eligible == 0) or lead is not None and (
-                normalized(lead, lane, now.astimezone(NY).date(), observed.astimezone(NY).date()) != lead or priority(lead, lane) is None):
+        if (lead is None) != (eligible == 0):
             raise ValueError("Transaction lead does not meet the daily brief screen")
+        if lead is not None:
+            expected = normalized(lead, lane, now.astimezone(NY).date(), observed.astimezone(NY).date())
+            if lane == "sec" and profile["schema"] >= 3 and expected["transaction_code"] == "S" and "sale_components" in lead:
+                related = lead.get("related_exercise")
+                components = lead["sale_components"]
+                if type(related) is not bool or not isinstance(components, list) or not 1 <= len(components) <= min(100, scanned):
+                    raise ValueError("Form 4 sale context is invalid")
+                sales = set()
+                for component in components:
+                    if not isinstance(component, list) or len(component) != 3:
+                        raise ValueError("Form 4 sale component is invalid")
+                    shares, price, holding = component
+                    if not (number(shares) and number(price)):
+                        raise ValueError("Form 4 sale component needs shares and price")
+                    sales.add((shares, price, -1 if holding == -1 else number(holding)))
+                reference = expected["shares"], expected["price"], expected["shares_owned_after"] if expected["shares_owned_after"] is not None else -1
+                if reference not in sales or not (related or len(sales) > 1):
+                    raise ValueError("Form 4 sale context lost its original line item")
+                expected.update(sale_fields(FilingSale(related, tuple(sorted(sales)))))
+            if expected != lead or priority(lead, lane) is None:
+                raise ValueError("Transaction lead does not meet the daily brief screen")
     return profile
 
 
@@ -326,22 +405,29 @@ def short_value(amount):
     return f"${amount:,.0f}"
 
 
-def sec_copy(row):
+def sec_copy(row, schema=3):
     purchase = row["transaction_code"] == "P"
     trade = "purchase" if purchase else "sale"
     filed = brief_day(row["filing_date"])
     actor = row["insider_name"]
     if row["role"] and row["role"].casefold() != "insider":
         actor += " (" + row["role"] + ")"
-    amount = short_value(row["shares"] * row["price"])
+    amount = short_value(row.get("gross_sale_value", row["shares"] * row["price"]))
     form = "Form 4 amendment" if row["form"] == "4/A" else "Form 4"
-    text = f"{display_company(row)} — A {form} for {actor}, filed {filed}, reports a {brief_day(row['transaction_date'])} {trade} worth about {amount}."
+    trade_text = f"{row['sale_count']} sales on {brief_day(row['transaction_date'])} totaling about {amount} in gross proceeds" if row.get("sale_count", 1) > 1 else f"a {brief_day(row['transaction_date'])} {trade} worth about {amount}"
+    text = f"{display_company(row)} — A {form} for {actor}, filed {filed}, reports {trade_text}."
+    if row.get("related_exercise"):
+        text += " The filing also reports same-day exercises or conversions of derivative securities."
     fraction = stake_fraction(row)
     if row["rule_10b5_1"]:
         return text + " The filing indicates use of a trading plan."
-    if fraction is not None and 0.01 <= fraction <= 10:
+    if fraction is not None and 0.01 <= fraction <= 10 and row.get("sale_count", 1) == 1:
         change = "raised" if purchase else "reduced"
-        return text + f" The {trade} {change} the reported direct holding by about {fraction:.0%}."
+        if purchase or schema < 3:
+            return text + f" The {trade} {change} the reported direct holding by about {fraction:.0%}."
+        return text + f" The shares sold equal about {fraction:.0%} of the implied direct holding immediately before that line item."
+    if row.get("related_exercise"):
+        return text
     return text + " Watch for another reporting owner to make a similar trade."
 
 
@@ -364,7 +450,7 @@ def paragraphs(profile):
         review = profile[lane]
         lead = review["lead"]
         if lead is not None:
-            output.append(sec_copy(lead) if lane == "sec" else congress_copy(lead, review["provider"]))
+            output.append(sec_copy(lead, profile["schema"]) if lane == "sec" else congress_copy(lead, review["provider"]))
         elif review["status"] == "current":
             output.append(f"{LABELS[lane]} — No watchlist trade in the current feed met the brief's size, timing and source checks.")
         else:

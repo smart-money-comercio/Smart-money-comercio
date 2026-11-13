@@ -70,7 +70,7 @@ class DisclosureChecks(IsolatedChecks):
         self.assertIn("raised the reported direct holding by about 25%", report)
         self.assertIn("Nvidia (NVDA) purchase of $15,001 to $50,000 (spouse's holding), disclosed 29 days later on October 23", report)
         status = editor.build_editor_status()
-        self.assertIn("Transaction disclosure review: 2", status)
+        self.assertIn("Transaction disclosure review: 3", status)
         self.assertIn(form4()["url"], status)
         self.assertIn(ptr()["source_url"], status)
         profile = voice.checked(record, NOW)
@@ -110,11 +110,28 @@ class DisclosureChecks(IsolatedChecks):
     def test_sales_are_read_against_the_prior_direct_holding(self):
         self.seed("sec", [form4(transaction_code="S", acquired_disposed="D", shares_owned_after=3000)])
         row = self.capture()["sec"]["lead"]
-        self.assertIn("sale reduced the reported direct holding by about 25%", disclosures.sec_copy(row))
+        self.assertIn("about 25% of the implied direct holding immediately before that line item", disclosures.sec_copy(row))
         self.seed("sec", [form4(transaction_code="S", acquired_disposed="D", shares_owned_after=3000, rule_10b5_1=True)])
         self.assertIsNone(self.capture()["sec"]["lead"])
         self.seed("sec", [form4(transaction_code="S", acquired_disposed="D", shares=5000, rule_10b5_1=True)])
         self.assertIn("filing indicates use of a trading plan", disclosures.sec_copy(self.capture()["sec"]["lead"]))
+
+    def test_chevron_style_exercise_and_sale_rows_are_reported_together(self):
+        first = form4(ticker="CVX", transaction_code="S", acquired_disposed="D", shares=81900, price=210.4734, shares_owned_after=41747)
+        second = {**first, "shares": 30100, "price": 210.4828, "shares_owned_after": 11647}
+        exercise = {**first, "transaction_code": "M", "acquired_disposed": "A", "price": 88.20}
+        self.seed("sec", [first, second, second, exercise])
+        report, record = self.render()
+        self.assertIn("two sales", voice.checked(record, NOW)["script"])
+        self.assertIn("2 sales on October 20 totaling about $23.57 million in gross proceeds", report)
+        self.assertIn("same-day exercises or conversions of derivative securities", report)
+        self.assertNotIn("reduced the reported direct holding", report)
+        profile = record["transaction_disclosures"]
+        row = profile["sec"]["lead"]
+        self.assertEqual(row["sale_count"], 2)
+        row["gross_sale_value"] += 100
+        with self.assertRaises(ValueError):
+            disclosures.checked(profile, NOW)
 
     def test_amendments_preserve_identical_facts_and_hold_conflicts(self):
         amendment = form4(form="4/A", filing_date="2026-10-23", accession="0000789019-26-999998")

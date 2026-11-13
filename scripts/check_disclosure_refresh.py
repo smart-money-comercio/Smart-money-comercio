@@ -120,12 +120,12 @@ class RefreshChecks(IsolatedChecks):
         result = job.refresh_due(NOW)
         self.assertEqual(result["status"], "pass")
         self.assertIn("2/2 issuers", result["detail"])
-        self.assertIn("2/2 chambers", result["detail"])
+        self.assertIn("2/2 chambers with current dated coverage", result["detail"])
         report, record = self.render()
         self.assertIn("Microsoft (MSFT) — A Form 4", report)
         self.assertIn("Nvidia (NVDA) purchase of $15,001 to $50,000", report)
         self.assertTrue(voice.checked(record, NOW)["quality"]["passes"])
-        self.assertEqual(record["transaction_disclosures"]["schema"], 2)
+        self.assertEqual(record["transaction_disclosures"]["schema"], 3)
 
     def test_fresh_caches_reuse_original_filings_and_respect_each_feed_interval(self):
         job.refresh_due(NOW)
@@ -290,7 +290,40 @@ class RefreshChecks(IsolatedChecks):
             status, detail = job.refresh_congress_now()
         self.assertEqual(status, "limited")
         self.assertIn("Senate HTTP 429", detail)
-        self.assertEqual(self.requests, [])
+        self.assertFalse(any("senate-latest" in url for url in self.requests))
+        self.assertTrue(any("house-latest" in url for url in self.requests))
+
+    def test_house_402_leaves_senate_usable_and_surfaces_the_access_problem(self):
+        self.fail["house-latest"] = HTTPError("https://host.test/", 402, "restricted", {}, None)
+        result = job.refresh_due(NOW)
+        self.assertEqual(result["status"], "limited")
+        self.assertIn("1/2 chambers with current dated coverage", result["detail"])
+        self.assertIn("House HTTP 402 from FMP", result["detail"])
+        rows, coverage = congress.cached_coverage(NOW)
+        self.assertEqual({row["chamber"] for row in rows}, {"Senate"})
+        self.assertIn("House — Unavailable | HTTP 402 from FMP", coverage)
+        self.assertIn("Senate — Current | FMP", coverage)
+        brief, _ = self.render()
+        self.assertIn("Senate disclosure", brief)
+
+    def test_first_congress_page_survives_an_access_error_on_the_second(self):
+        self.fail["page=1"] = HTTPError("https://host.test/", 402, "restricted", {}, None)
+        with patch.object(congress, "PAGE_LIMIT", 1):
+            result = job.refresh_due(NOW)
+        self.assertEqual(result["status"], "limited")
+        self.assertIn("2/2 chambers with current dated coverage", result["detail"])
+        self.assertIn("additional FMP page HTTP 402", result["detail"])
+        self.assertEqual({row["chamber"] for row in congress.cached_coverage(NOW)[0]}, {"House", "Senate"})
+
+    def test_legacy_house_retry_does_not_block_senate(self):
+        stamp = NOW.timestamp()
+        cache.reserve(self.congress, stamp)
+        cache.finish(self.congress, stamp, stamp + 21600, 0, "limited", "Congress — 1/2 chambers checked recently; House HTTP 402")
+        result = job.refresh_due(NOW + timedelta(minutes=1))
+        self.assertIn("1/2 chambers with current dated coverage", result["detail"])
+        self.assertFalse(any("house-latest" in url for url in self.requests))
+        self.assertTrue(any("senate-latest" in url for url in self.requests))
+        self.assertIn("House — Unavailable | HTTP 402", congress.cached_coverage(NOW + timedelta(minutes=1))[1])
 
     def test_congress_command_reports_limited_instead_of_celebrating_archive(self):
         from src.commands import intelligence_commands as commands

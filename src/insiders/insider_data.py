@@ -539,6 +539,7 @@ def parse_transaction_node(
         "role": owner_info["role"],
         "source": "SEC Form 4",
         "security_type": "Derivative" if derivative else "Non-Derivative",
+        "security_title": xml_find_text(node, "./securityTitle/value", ""),
         "url": build_filing_url(filing),
     }
 
@@ -630,6 +631,8 @@ def dedupe_trades(trades: list[dict]) -> list[dict]:
             trade.get("shares"),
             trade.get("price"),
             trade.get("security_type"),
+            trade.get("security_title", ""),
+            trade.get("shares_owned_after"),
         )
 
         if key in seen:

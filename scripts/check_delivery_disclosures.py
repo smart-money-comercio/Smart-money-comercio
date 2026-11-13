@@ -34,6 +34,9 @@ ORDER = ("ARLINGTON, Va. — (OCTOBER 25, 2026) — AeroVironment, Inc. (“AV�
          "today announced a landmark $84.5 million international direct commercial sales order for its maintenance equipment.")
 RECON = ("Kratos Defense & Security Solutions, Inc. (Nasdaq: KTOS) announced the release of KnownSpace® Recon+™. "
          "Recon+ is a commercially available product. Units have already been purchased by multiple U.S. government agencies.")
+INFERENCE = ("Intel announced a collaboration with RadixArk to optimize SGLang, an open-source AI inference stack, for Intel platforms. "
+             "The companies describe software improvements for developers deploying AI models.")
+INFERENCE_TITLE = "Intel, RadixArk Collaborate to Advance Open AI Inference on Intel Platforms"
 
 
 def release(symbol, **changes):
@@ -74,6 +77,16 @@ def order_release(**changes):
 
 
 class FactChecks(unittest.TestCase):
+    def test_intel_software_scope_requires_the_original_release(self):
+        row = candidate("INTC", title=INFERENCE_TITLE)
+        profile = build_evidence(row, INFERENCE, "original release excerpt", schema=16)
+        self.assertEqual((profile["event"], profile["stage"]), ("technology collaboration", "announced"))
+        self.assertEqual([fact["field"] for fact in profile["facts"]], ["collaboration_partner", "optimization_target"])
+        with self.assertRaises(ValueError):
+            build_evidence(row, INFERENCE_TITLE, "original release excerpt", schema=16)
+        with self.assertRaises(ValueError):
+            build_evidence(row, INFERENCE, "publisher feed excerpt", schema=16)
+
     def test_defense_product_sales_require_both_availability_and_actual_purchases(self):
         row = candidate("KTOS", title="Kratos Introduces KnownSpace® Recon+™")
         profile = build_evidence(row, RECON, "original release excerpt", schema=14)
@@ -187,6 +200,30 @@ class FactChecks(unittest.TestCase):
 
 
 class DailyChecks(RebuildDetailChecks):
+    def test_intel_inference_and_fed_schedule_in_the_same_edition(self):
+        intel = candidate("INTC", title=INFERENCE_TITLE, source="Intel Newsroom",
+                          url="https://www.intel.com/content/www/us/en/newsroom/news/artificial-intelligence/radixark-open-ai-inference.html",
+                          source_excerpt=INFERENCE, excerpt_scope="original release excerpt")
+        fed = candidate("", title="Federal Reserve announces revised tentative schedule of Federal Open Market Committee meetings in 2027",
+                        kind="macro", symbols=[], source="Federal Reserve", url="https://www.federalreserve.gov/newsevents/pressreleases/example.htm",
+                        source_excerpt="The Federal Reserve announced a revised tentative schedule. This is a calendar notice for next year.",
+                        excerpt_scope="original release excerpt")
+        text, record = self.render([intel, fed])
+        story = next(row for row in editor.selected_stories(record) if row["publisher_symbol"] == "INTC")
+        self.assertEqual(story["event_evidence"]["schema"], 16)
+        self.assertIn("optimize SGLang", text)
+        self.assertIn("customers to report using them in production", text)
+        self.assertNotIn("task orders", text)
+        self.assertNotIn("committed funding", text)
+        self.assertNotIn(fed["title"], text)
+        calendar = next(row for row in record["candidates"] if row["url"] == fed["url"])
+        self.assertEqual(calendar["decision"], "skip")
+        self.assertIn("Tentative policy calendar", calendar["reason"])
+        voice = daily_voiceover.checked(record, NOW)
+        scene = next(scene for scene in voice["segments"] if story["id"] in scene["source_ids"])
+        self.assertIn("optimize SGLang", scene["narration"])
+        self.assertNotIn("award", scene["narration"])
+
     def test_defense_segment_explains_the_disclosed_purchases_in_text_and_speech(self):
         row = candidate("KTOS", title="Kratos Introduces KnownSpace® Recon+™", source="Kratos Newsroom",
                         url="https://www.kratosdefense.com/newsroom/fixture-initial-purchases",
@@ -316,6 +353,7 @@ def main():
     parser.add_argument("--windows-socketpair", action="store_true")
     args = parser.parse_args()
     tests = unittest.defaultTestLoader.loadTestsFromTestCase(FactChecks)
+    tests.addTest(DailyChecks("test_intel_inference_and_fed_schedule_in_the_same_edition"))
     tests.addTest(DailyChecks("test_defense_segment_explains_the_disclosed_purchases_in_text_and_speech"))
     tests.addTest(DailyChecks("test_real_daily_build_uses_source_facts_once_in_brief_and_voiceover"))
     tests.addTest(DailyChecks("test_reviewed_order_leads_with_the_dated_fact_and_uses_the_value_once"))

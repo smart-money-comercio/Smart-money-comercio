@@ -1,6 +1,7 @@
 """Coordinate disclosure refresh attempts and publish complete cache snapshots."""
 
 from contextlib import closing, contextmanager
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import tempfile
 MAX_BYTES = 8 * 1024 * 1024
 MAX_ROWS = 12000
 UNCONDITIONAL = object()
+REFRESH_KEYS = {"": 1, "House": 2, "Senate": 3}
 
 
 def revision(stat):
@@ -42,9 +44,27 @@ def rows(payload):
 @contextmanager
 def locked(path):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with closing(sqlite3.connect(path.with_suffix(".refresh.sqlite3"), timeout=1)) as db, db:
+    with closing(sqlite3.connect(status_path(path), timeout=1)) as db, db:
         db.execute("BEGIN IMMEDIATE")
         yield db
+
+
+def status_path(path):
+    return path.with_suffix(".refresh.sqlite3")
+
+
+def refresh_row(db, scope):
+    query = "SELECT attempt, due, cursor, status, detail FROM refresh WHERE id = ?"
+    row = db.execute(query, (REFRESH_KEYS[scope],)).fetchone()
+    if row is None and scope:
+        # Honor a provider retry already recorded by the previous shared scheduler.
+        legacy = db.execute(query, (REFRESH_KEYS[""],)).fetchone()
+        if legacy and legacy[1] - legacy[0] > 900:
+            reason = next((part.strip().removeprefix(scope + " ") for part in legacy[4].split(";")
+                           if part.strip().startswith(scope + " HTTP ")), "")
+            if reason:
+                return (*legacy[:4], reason)
+    return row
 
 
 def publish(path, payload, expected=UNCONDITIONAL):
@@ -73,19 +93,39 @@ def publish(path, payload, expected=UNCONDITIONAL):
     return True
 
 
-def reserve(path, now, force=False):
+def reserve(path, now, force=False, *, scope=""):
     with locked(path) as db:
         db.execute("CREATE TABLE IF NOT EXISTS refresh (id INTEGER PRIMARY KEY, attempt REAL, due REAL, cursor INTEGER, status TEXT, detail TEXT)")
-        row = db.execute("SELECT attempt, due, cursor, status, detail FROM refresh WHERE id = 1").fetchone()
+        key = REFRESH_KEYS[scope]
+        row = refresh_row(db, scope)
         if row and now < row[1] and (not force or row[4] == "Refresh in progress" or (row[3] == "limited" and row[1] - row[0] > 900)):
             return None, row[3], row[4]
         cursor = row[2] if row else 0
-        db.execute("INSERT OR REPLACE INTO refresh VALUES (1, ?, ?, ?, ?, ?)",
-                   (now, now + 900, cursor, "limited", "Refresh in progress"))
+        db.execute("INSERT OR REPLACE INTO refresh VALUES (?, ?, ?, ?, ?, ?)",
+                   (key, now, now + 900, cursor, "limited", "Refresh in progress"))
     return cursor, "", ""
 
 
-def finish(path, started, due, cursor, status, detail):
+def finish(path, started, due, cursor, status, detail, *, scope=""):
     with locked(path) as db:
-        db.execute("UPDATE refresh SET due = ?, cursor = ?, status = ?, detail = ? WHERE id = 1 AND attempt = ?",
-                   (due, cursor, status, detail, started))
+        db.execute("UPDATE refresh SET due = ?, cursor = ?, status = ?, detail = ? WHERE id = ? AND attempt = ?",
+                   (due, cursor, status, detail, REFRESH_KEYS[scope], started))
+
+
+def refresh_note(path, scope, now):
+    """Read the most recent chamber attempt without creating a database."""
+    status_file = status_path(path)
+    try:
+        with closing(sqlite3.connect(status_file.resolve().as_uri() + "?mode=ro", uri=True, timeout=.2)) as db:
+            row = refresh_row(db, scope)
+    except (sqlite3.Error, OSError):
+        return ""
+    if not row or row[0] > now.timestamp() or row[3] != "limited":
+        return ""
+    detail = row[4]
+    if row[1] <= now.timestamp() and detail == "Refresh in progress":
+        return ""
+    if row[1] > now.timestamp() and detail != "Refresh in progress":
+        retry = datetime.fromtimestamp(row[1], timezone.utc).strftime("%b %d %H:%M UTC")
+        detail += f"; next check after {retry}"
+    return detail

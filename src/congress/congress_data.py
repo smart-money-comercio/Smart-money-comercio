@@ -545,6 +545,9 @@ def cached_coverage(now=None):
             traded = max(parse_date_value(row.get("transaction_date")) for row in chamber_rows)
             if traded != datetime.min:
                 detail += f" | Latest cached trade {traded.date().isoformat()} | Disclosure dates unavailable"
+        note = transaction_cache.refresh_note(CACHE_FILE, chamber, now)
+        if note:
+            detail += " | " + note
         lines.append(f"{chamber} — {status}{detail}")
     if not current:
         lines.append("Congress input is neutral (50/100) while recent dated trade evidence is unavailable.")

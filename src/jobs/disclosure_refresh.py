@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 import json
 import logging
 import re
+import sqlite3
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -189,17 +190,22 @@ def refresh_sec(payload, now, cursor):
     return result, cursor, wait, status, detail
 
 
-def fmp_rows(chamber, reader):
+def fmp_rows(chamber, reader, today):
     endpoint = congress.HOUSE_LATEST_ENDPOINT if chamber == "House" else congress.SENATE_LATEST_ENDPOINT
     rows = []
     for page in range(max(1, min(congress.MAX_PAGES, 2))):
-        payload = reader.json(congress.build_fmp_url(endpoint, page))
+        try:
+            payload = reader.json(congress.build_fmp_url(endpoint, page))
+        except (OSError, ValueError, TypeError) as error:
+            if any(congress.recently_filed(row, today) for row in rows):
+                return rows, error
+            raise
         if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
             raise ValueError("Unrecognized congressional disclosure response")
         rows.extend(trade for row in payload if (trade := congress.normalize_fmp_trade(row, chamber)))
         if len(payload) < congress.PAGE_LIMIT:
             break
-    return rows
+    return rows, None
 
 
 def stockwatcher_rows(chamber, reader):
@@ -217,8 +223,9 @@ def stockwatcher_rows(chamber, reader):
 
 
 def chamber_rows(chamber, configured, reader, today):
+    page_error = None
     if configured in {"auto", "fmp"} and congress.get_fmp_api_key():
-        rows, provider = fmp_rows(chamber, reader), "FMP"
+        (rows, page_error), provider = fmp_rows(chamber, reader, today), "FMP"
     elif configured in {"auto", "stockwatcher", "stock_watcher"}:
         rows, provider = stockwatcher_rows(chamber, reader), "Stock Watcher"
     else:
@@ -229,62 +236,52 @@ def chamber_rows(chamber, configured, reader, today):
         if configured == "auto" and provider == "Stock Watcher":
             reason += "; configure FMP_API_KEY for the current feed"
         return None, reason
-    return (dated, provider), ""
+    return (dated, provider, page_error), ""
 
 
-def refresh_congress(payload, now, cursor, *, force=False):
+def refresh_chamber(payload, now, cursor, chamber, force):
     configured = congress.get_provider()
     if configured == "fmp" and not congress.get_fmp_api_key():
         return None, cursor, 0, "limited", "FMP_API_KEY required for the configured provider"
     observations = scope_observations("congress", payload, now)
-    trades = cache.rows(payload)
     current = now.timestamp()
     today = now.astimezone(NY).date()
-    checked, problems = 0, []
+    prior = observations.get(chamber, {})
     wait = CHECK_SECONDS - 5
-    for chamber in CHAMBERS:
-        prior = observations.get(chamber, {})
-        if not force and current - prior.get("at", 0) < congress.CACHE_TTL_SECONDS:
-            continue
-        reader = Reader(seconds=9, requests=2, user_agent="SmartMoneyAI/1.0")
-        try:
-            result, reason = chamber_rows(chamber, configured, reader, today)
-        except (OSError, ValueError, TypeError, AttributeError, KeyError) as error:
-            result, reason = None, error_reason(error)
-            wait = max(wait, retry_delay(error, now))
-        if not result:
-            problems.append(f"{chamber} {reason}")
-            # Avoid repeating a provider-wide permission or rate-limit failure against the other endpoint.
-            if wait >= 3600:
-                break
-            continue
-        incoming, provider = result
-        earlier = [row for row in trades if scope("congress", row) == chamber and prior.get("provider") == provider
-                   and congress.recently_filed(row, today)]
-        other = [row for row in trades if scope("congress", row) != chamber]
-        ordered = congress.sort_trades(incoming + earlier)
-        ordered.sort(key=lambda row: congress.parse_date_value(row.get("disclosure_date")), reverse=True)
-        trades = other + ordered[:max(300, congress.STOCKWATCHER_MAX_RECORDS)]
-        observations[chamber] = {"at": current, "provider": provider}
-        checked += 1
-    covered = sum(current - observations.get(key, {}).get("at", 0) < congress.CACHE_TTL_SECONDS for key in CHAMBERS)
-    detail = f"{covered}/2 chambers checked recently"
-    if checked:
-        detail += f"; {checked} updated"
-    if problems:
-        detail += "; " + "; ".join(problems)
-        wait = max(wait, 3600)
-    status = "pass" if covered == len(CHAMBERS) and not problems else "limited"
-    if not checked:
-        return None, cursor, wait, status, detail
+    if not force and current - prior.get("at", 0) < congress.CACHE_TTL_SECONDS:
+        return None, cursor, wait, "pass", "Recent dated disclosures available"
+    reader = Reader(seconds=9, requests=2, user_agent="SmartMoneyAI/1.0")
+    try:
+        result, reason = chamber_rows(chamber, configured, reader, today)
+    except (OSError, ValueError, TypeError, AttributeError, KeyError) as error:
+        reason = error_reason(error)
+        if isinstance(error, HTTPError) and error.code == 402 and configured in {"auto", "fmp"} and congress.get_fmp_api_key():
+            reason += " from FMP (endpoint access denied)"
+        return None, cursor, max(3600, retry_delay(error, now)), "limited", reason
+    if not result:
+        return None, cursor, 3600, "limited", reason
+
+    incoming, provider, page_error = result
+    trades = cache.rows(payload)
+    earlier = [row for row in trades if scope("congress", row) == chamber and prior.get("provider") == provider
+               and congress.recently_filed(row, today)]
+    other = [row for row in trades if scope("congress", row) != chamber]
+    ordered = congress.sort_trades(incoming + earlier)
+    ordered.sort(key=lambda row: congress.parse_date_value(row.get("disclosure_date")), reverse=True)
+    trades = other + ordered[:max(300, congress.STOCKWATCHER_MAX_RECORDS)]
+    observations[chamber] = {"at": current, "provider": provider}
     source = FMP_SOURCE if any(value["provider"] == "FMP" for value in observations.values()) else STOCKWATCHER_SOURCE
+    status, detail = "pass", "Dated disclosures updated"
+    if page_error is not None:
+        wait = max(3600, congress.CACHE_TTL_SECONDS, retry_delay(page_error, now))
+        status, detail = "limited", f"Dated disclosures updated; additional FMP page {error_reason(page_error)}"
     return {"fetched_at": current, "source": source, "provider": configured, "observations": observations,
             "trades": trades[:cache.MAX_ROWS]}, cursor, wait, status, detail
 
 
-def refresh_source(path, refresh, now, *, force=False):
+def refresh_source(path, refresh, now, *, force=False, scope=""):
     started = now.timestamp()
-    cursor, status, detail = cache.reserve(path, started, force=force)
+    cursor, status, detail = cache.reserve(path, started, force=force, scope=scope)
     if cursor is None:
         return status, detail
     try:
@@ -295,21 +292,37 @@ def refresh_source(path, refresh, now, *, force=False):
             detail = "Newer cache saved during refresh; automatic check will retry"
     except Exception as error:
         wait, status, detail = max(3600, retry_delay(error, now)), "limited", error_reason(error)
-    cache.finish(path, started, started + wait, cursor, status, detail)
+    cache.finish(path, started, started + wait, cursor, status, detail, scope=scope)
     return status, detail
 
 
+def refresh_congress(now, *, force=False):
+    path = congress.CACHE_FILE
+    problems = []
+    for chamber in CHAMBERS:
+        try:
+            status, detail = refresh_source(path, lambda payload, now, cursor: refresh_chamber(payload, now, cursor, chamber, force),
+                                            now, force=force, scope=chamber)
+        except (OSError, ValueError, sqlite3.Error) as error:
+            status, detail = "limited", f"Refresh state unavailable ({type(error).__name__})"
+        if status == "limited":
+            problems.append(detail if detail.startswith(chamber + " ") else f"{chamber} {detail}")
+    observations = scope_observations("congress", cache.read(path)[0], now)
+    covered = sum(now.timestamp() - value["at"] <= congress.CACHE_MAX_AGE.total_seconds() for value in observations.values())
+    detail = "; ".join([f"{covered}/2 chambers with current dated coverage", *problems])
+    return ("pass" if covered == len(CHAMBERS) and not problems else "limited"), detail
+
+
 def refresh_congress_now():
-    return refresh_source(congress.CACHE_FILE, lambda payload, now, cursor: refresh_congress(payload, now, cursor, force=True),
-                          datetime.now(timezone.utc), force=True)
+    return refresh_congress(datetime.now(timezone.utc), force=True)
 
 
 def refresh_due(now=None):
     now = now or datetime.now(timezone.utc)
     checks, details = [], []
-    for label, path, refresh in ((SEC_SOURCE, sec.CACHE_FILE, refresh_sec), ("Congress", congress.CACHE_FILE, refresh_congress)):
+    for label, refresh in ((SEC_SOURCE, lambda: refresh_source(sec.CACHE_FILE, refresh_sec, now)), ("Congress", lambda: refresh_congress(now))):
         try:
-            status, detail = refresh_source(path, refresh, now)
+            status, detail = refresh()
         except Exception as error:
             status, detail = "limited", f"Refresh state unavailable ({type(error).__name__})"
         checks.append(status)

@@ -122,6 +122,8 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False, i
         review = enhance(story, review)
     implication = review["why"] + (" " + review["watch"] if business_version else "")
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
+    if profile["schema"] == 16:
+        return review["facts"] + " " + review["why"]
     if profile["schema"] == 15:
         name = NAMES.get(story.get("publisher_symbol"), story["source"])
         why = review["why"]
