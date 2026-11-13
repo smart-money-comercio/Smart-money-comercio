@@ -8,6 +8,8 @@ import re
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
+from src.intelligence import transaction_cache
+
 
 HEADER = "Insider and Congressional Disclosures"
 LANES = ("sec", "congress")
@@ -17,8 +19,7 @@ CONGRESS_PROVIDERS = {
     "House/Senate Stock Watcher public JSON datasets": "Stock Watcher",
 }
 CACHE_AGE = timedelta(hours=36)
-MAX_CACHE_BYTES = 8 * 1024 * 1024
-MAX_ROWS = 12000
+MAX_ROWS = transaction_cache.MAX_ROWS
 NY = ZoneInfo("America/New_York")
 SYMBOL = re.compile(r"[A-Z][A-Z0-9.-]{0,9}")
 MONEY = r"(?:[0-9]{1,11}|[0-9]{1,3}(?:,[0-9]{3}){1,3})"
@@ -96,9 +97,16 @@ def sec_fields(raw):
             "rule_10b5_1": planned, "filing_date": day(raw.get("filing_date")).isoformat(), "url": raw["url"]}
 
 
-def congress_fields(raw):
-    chamber = {"house of representatives": "House", "house": "House", "senate": "Senate"}.get(
+def scope(lane, raw):
+    if lane == "sec":
+        cik = raw.get("cik")
+        return cik.zfill(10) if isinstance(cik, str) and re.fullmatch(r"[0-9]{1,10}", cik) and int(cik) else None
+    return {"house of representatives": "House", "house": "House", "senate": "Senate"}.get(
         label(raw.get("chamber"), 40).casefold())
+
+
+def congress_fields(raw):
+    chamber = scope("congress", raw)
     if chamber == "House":
         path = filing_path(raw.get("source_url"), "disclosures-clerk.house.gov")
         if not re.fullmatch(r"/public_disc/ptr-pdfs/20[0-9]{2}/[0-9]{5,12}\.pdf", path):
@@ -194,46 +202,72 @@ def observed_at(value):
     return datetime.fromtimestamp(int(value), timezone.utc)
 
 
+def scope_observations(lane, payload, now):
+    valid_providers = ("SEC Form 4",) if lane == "sec" else tuple(CONGRESS_PROVIDERS.values())
+    if "observations" in payload:
+        observations = payload["observations"]
+        if not isinstance(observations, dict) or len(observations) > 256:
+            return {}
+    else:
+        source = payload.get("source")
+        provider = source if lane == "sec" else CONGRESS_PROVIDERS.get(source) if isinstance(source, str) else None
+        stamp = payload.get("cached_at" if lane == "sec" else "fetched_at")
+        observations = {key: {"provider": provider, "at": stamp} for row in transaction_cache.rows(payload)
+                        if (key := scope(lane, row))}
+    result = {}
+    for key, value in observations.items():
+        if (not isinstance(value, dict) or value.get("provider") not in valid_providers
+                or scope(lane, {"cik": key, "chamber": key}) != key):
+            continue
+        try:
+            clock = observed_at(value.get("at"))
+        except ValueError:
+            continue
+        if clock <= now:
+            result[key] = {"at": clock.timestamp(), "provider": value["provider"]}
+    return result
+
+
 def cache_review(lane, path, now, companies):
     review = {"status": "unavailable", "provider": "", "observed_at": "", "reviewed": 0, "eligible": 0, "lead": None}
     try:
-        with path.open("rb") as file:
-            raw = file.read(MAX_CACHE_BYTES + 1)
-        if len(raw) > MAX_CACHE_BYTES:
-            return review
-        cache = json.loads(raw)
-        if not isinstance(cache, dict) or not isinstance(cache.get("trades"), list) or not 0 < len(cache["trades"]) <= MAX_ROWS:
-            return review
-        provider = ("SEC Form 4" if cache.get("source") == "SEC Form 4" else "") if lane == "sec" else CONGRESS_PROVIDERS.get(cache.get("source"), "")
-        observed = observed_at(cache.get("cached_at" if lane == "sec" else "fetched_at"))
-    except (OSError, ValueError, TypeError, OverflowError, RecursionError):
+        payload, _ = transaction_cache.read(path)
+        observations = scope_observations(lane, payload, now)
+    except (OSError, ValueError, TypeError, OverflowError):
         return review
-    age = now - observed
-    if not provider or age < timedelta(0):
+    if not observations:
         return review
-    review.update(provider=provider, observed_at=observed.isoformat(), status="stale" if age > CACHE_AGE else "current")
-    if age > CACHE_AGE:
+    latest = max(observations.values(), key=lambda row: row["at"])
+    latest_clock = observed_at(latest["at"])
+    review.update(provider=latest["provider"], observed_at=latest_clock.isoformat(), status="stale" if now - latest_clock > CACHE_AGE else "current")
+    if review["status"] == "stale":
         return review
-    today, observed_day = now.astimezone(NY).date(), observed.astimezone(NY).date()
+    today = now.astimezone(NY).date()
     rows = []
-    seen = set()
-    for raw in cache["trades"]:
-        if not isinstance(raw, dict) or not isinstance(raw.get("ticker"), str) or raw["ticker"] not in companies:
+    observations_by_row = {}
+    for raw in transaction_cache.rows(payload):
+        observation = observations.get(scope(lane, raw))
+        if not observation or now - observed_at(observation["at"]) > CACHE_AGE:
+            continue
+        review["reviewed"] += 1
+        if not isinstance(raw.get("ticker"), str) or raw["ticker"] not in companies:
             continue
         try:
-            row = normalized({**raw, "company": companies[raw["ticker"]]}, lane, today, observed_day)
+            row = normalized({**raw, "company": companies[raw["ticker"]]}, lane, today, observed_at(observation["at"]).astimezone(NY).date())
         except (ValueError, TypeError):
             continue
         identity = tuple(row.values())
-        if identity not in seen:
-            seen.add(identity)
+        if identity not in observations_by_row:
+            observations_by_row[identity] = observation
             rows.append(row)
     if lane == "sec":
         rows = unambiguous_sec_rows(rows)
     eligible = [(key, row) for row in rows if (key := priority(row, lane)) is not None]
     if eligible:
-        review["lead"] = max(eligible, key=lambda item: (item[0], item[1]["ticker"], json.dumps(item[1], sort_keys=True)))[1]
-    review.update(reviewed=len(cache["trades"]), eligible=len(eligible))
+        lead = max(eligible, key=lambda item: (item[0], item[1]["ticker"], json.dumps(item[1], sort_keys=True)))[1]
+        source = observations_by_row[tuple(lead.values())]
+        review.update(lead=lead, observed_at=observed_at(source["at"]).isoformat(), provider=source["provider"])
+    review["eligible"] = len(eligible)
     return review
 
 
@@ -245,12 +279,12 @@ def capture(now):
 
     companies = {row["ticker"]: COMPANY_NAMES.get(row["ticker"], row["ticker"])
                  for row in WATCHLIST if "ETF" not in row["category"].upper()}
-    return {"schema": 1, "sec": cache_review("sec", insider_data.CACHE_FILE, now, companies),
+    return {"schema": 2, "sec": cache_review("sec", insider_data.CACHE_FILE, now, companies),
             "congress": cache_review("congress", congress_data.CACHE_FILE, now, companies)}
 
 
 def checked(profile, now):
-    if not isinstance(profile, dict) or set(profile) != {"schema", *LANES} or type(profile["schema"]) is not int or profile["schema"] != 1:
+    if not isinstance(profile, dict) or set(profile) != {"schema", *LANES} or type(profile["schema"]) is not int or profile["schema"] not in {1, 2}:
         raise ValueError("Unknown daily transaction disclosure schema")
     for lane in LANES:
         review = profile[lane]
@@ -267,7 +301,7 @@ def checked(profile, now):
         observed = datetime.fromisoformat(stamp)
         if observed.tzinfo is None or observed > now or status != ("stale" if now - observed > CACHE_AGE else "current"):
             raise ValueError("Transaction source observation disagrees with the edition clock")
-        if status == "stale" and (scanned or eligible or lead is not None) or (status == "current" and not scanned):
+        if status == "stale" and (scanned or eligible or lead is not None) or (profile["schema"] == 1 and status == "current" and not scanned):
             raise ValueError("Transaction source freshness disagrees with the review")
         if (lead is None) != (eligible == 0) or lead is not None and (
                 normalized(lead, lane, now.astimezone(NY).date(), observed.astimezone(NY).date()) != lead or priority(lead, lane) is None):
@@ -368,7 +402,7 @@ def sources(profile):
 
 
 def status_lines(profile):
-    lines = ["Transaction disclosure review: 1"]
+    lines = [f"Transaction disclosure review: {profile['schema']}"]
     refs = sources(profile)
     for lane in LANES:
         review = profile[lane]

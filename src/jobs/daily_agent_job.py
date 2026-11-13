@@ -292,6 +292,7 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
     os.environ.setdefault("DAILY_REPORT_LIVE_QUOTES", "0" if dry_run else "1")
 
     if dry_run:
+        add_step(steps, "Disclosure Source Refresh", "skip", "Skipped during dry run.")
         add_step(steps, "Morning Brief Refresh", "skip", "Skipped during dry run.")
         add_step(steps, "Calendar Review", "skip", "Skipped during dry run.")
         add_step(steps, "News Intelligence", "skip", "Skipped during dry run.")
@@ -300,6 +301,10 @@ def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
     else:
         run_step(steps, "Morning Brief Refresh", refresh_morning_brief_step)
         run_step(steps, "Calendar Review", refresh_calendar_step)
+        from src.jobs.disclosure_refresh import refresh_due
+        disclosures = run_step(steps, "Disclosure Source Refresh", refresh_due, result_detail=lambda result: result["detail"])
+        if disclosures:
+            steps[-1]["status"] = disclosures["status"]
         run_step(steps, "News Intelligence", refresh_news_intelligence)
         run_step(steps, "Alert Monitor", refresh_alert_monitor)
         run_step(steps, "StockAnalysis Refresh", refresh_stockanalysis_top_names)

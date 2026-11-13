@@ -709,7 +709,10 @@ def load_cache() -> list[dict] | None:
     except Exception:
         return None
 
-    fetched_at = float(payload.get("fetched_at", 0) or 0)
+    try:
+        fetched_at = float(payload.get("fetched_at", 0) or 0)
+    except (AttributeError, TypeError, ValueError):
+        return None
     trades = payload.get("trades", [])
 
     if not isinstance(trades, list):
@@ -717,7 +720,7 @@ def load_cache() -> list[dict] | None:
 
     age = time.time() - fetched_at
 
-    if age <= CACHE_TTL_SECONDS:
+    if 0 <= age <= CACHE_TTL_SECONDS:
         return trades
 
     return None
@@ -736,9 +739,9 @@ def load_stale_cache() -> list[dict]:
 
 
 def save_cache(trades: list[dict], source: str) -> None:
-    try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    from src.intelligence.transaction_cache import publish
 
+    try:
         payload = {
             "fetched_at": time.time(),
             "source": source,
@@ -746,7 +749,7 @@ def save_cache(trades: list[dict], source: str) -> None:
             "trades": trades,
         }
 
-        CACHE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        publish(CACHE_FILE, payload)
 
     except Exception:
         pass
@@ -755,15 +758,14 @@ def save_cache(trades: list[dict], source: str) -> None:
 def get_congress_trades(force_refresh: bool = False) -> list[dict]:
     global _MEMORY_CACHE
 
-    if _MEMORY_CACHE is not None and not force_refresh:
-        return _MEMORY_CACHE
-
     if not force_refresh:
         cached = load_cache()
 
         if cached is not None:
             _MEMORY_CACHE = cached
             return _MEMORY_CACHE
+        if _MEMORY_CACHE is not None:
+            return load_stale_cache() or _MEMORY_CACHE
 
     _MEMORY_CACHE = fetch_live_congress_trades()
     return _MEMORY_CACHE

@@ -110,6 +110,10 @@ class WorkflowChecks(unittest.TestCase):
                 self.actions.append(name)
                 return name + " completed"
             self.mocks[name] = self.stack.enter_context(patch.object(daily, name, side_effect=action))
+        def refresh_disclosures():
+            self.actions.append("refresh_disclosures")
+            return {"status": "limited", "detail": "SEC check current | Senate provider unavailable"}
+        self.disclosures = self.stack.enter_context(patch("src.jobs.disclosure_refresh.refresh_due", side_effect=refresh_disclosures))
         def build():
             self.actions.append("build_daily_report_step")
             return REPORT
@@ -122,6 +126,10 @@ class WorkflowChecks(unittest.TestCase):
         self.assertEqual(self.actions[0], "refresh_morning_brief_step")
         self.assertLess(self.actions.index("refresh_morning_brief_step"), self.actions.index("build_daily_report_step"))
         self.assertLess(self.actions.index("refresh_calendar_step"), self.actions.index("build_daily_report_step"))
+        self.assertLess(self.actions.index("refresh_disclosures"), self.actions.index("build_daily_report_step"))
+        refresh = next(step for step in result["steps"] if step["name"] == "Disclosure Source Refresh")
+        self.assertEqual(refresh["status"], "limited")
+        self.assertIn("Senate provider unavailable", refresh["detail"])
 
     def test_dry_run_skips_all_source_refreshes(self):
         result = daily.run_daily_agent(True)
@@ -130,6 +138,8 @@ class WorkflowChecks(unittest.TestCase):
         step = next(item for item in result["steps"] if item["name"] == "Morning Brief Refresh")
         self.assertEqual(step["status"], "skip")
         self.assertEqual(next(item for item in result["steps"] if item["name"] == "Calendar Review")["status"], "skip")
+        self.disclosures.assert_not_called()
+        self.assertEqual(next(item for item in result["steps"] if item["name"] == "Disclosure Source Refresh")["status"], "skip")
 
     def test_full_report_is_returned_once_and_not_saved_inside_workflow_steps(self):
         result = daily.run_daily_agent(False)

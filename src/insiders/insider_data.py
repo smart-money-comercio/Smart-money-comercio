@@ -2,12 +2,14 @@ import gzip
 import json
 import os
 import re
+import sqlite3
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 
 from src.scoring.watchlist import WATCHLIST
 
@@ -141,13 +143,11 @@ def read_json_file(path: Path, default: Any):
 
 
 def write_json_file(path: Path, data: Any) -> None:
+    from src.intelligence.transaction_cache import publish
+
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        with path.open("w", encoding="utf-8") as file:
-            json.dump(data, file, indent=2, sort_keys=True)
-
-    except Exception:
+        publish(path, data)
+    except (OSError, ValueError, sqlite3.Error):
         return
 
 
@@ -212,14 +212,14 @@ def get_watchlist_symbols() -> list[str]:
     return symbols[:MAX_TICKERS]
 
 
-def load_company_ticker_map(force_refresh: bool = False) -> dict:
+def load_company_ticker_map(force_refresh: bool = False, *, reader=None) -> dict:
     cached = read_json_file(CIK_CACHE_FILE, {})
 
     if (
         not force_refresh
         and isinstance(cached, dict)
         and cached.get("cached_at")
-        and utc_now_ts() - float(cached.get("cached_at", 0)) <= CIK_CACHE_TTL_SECONDS
+        and 0 <= utc_now_ts() - (safe_float(cached.get("cached_at"), 0) or 0) <= CIK_CACHE_TTL_SECONDS
         and isinstance(cached.get("tickers"), dict)
     ):
         ticker_map = dict(cached["tickers"])
@@ -227,8 +227,12 @@ def load_company_ticker_map(force_refresh: bool = False) -> dict:
         return ticker_map
 
     try:
-        data = fetch_json(COMPANY_TICKERS_URL)
-    except Exception:
+        data = (reader or fetch_json)(COMPANY_TICKERS_URL)
+        if not isinstance(data, dict) or not data:
+            raise ValueError("SEC company identifier response unavailable")
+    except Exception as error:
+        if reader is not None and isinstance(error, HTTPError) and error.code in {401, 403, 429}:
+            raise
         if isinstance(cached, dict) and isinstance(cached.get("tickers"), dict):
             ticker_map = dict(cached["tickers"])
             ticker_map.update(STATIC_CIK_FALLBACKS)
@@ -239,11 +243,13 @@ def load_company_ticker_map(force_refresh: bool = False) -> dict:
     ticker_map = {}
 
     for item in data.values():
+        if not isinstance(item, dict):
+            continue
         ticker = clean_symbol(item.get("ticker"))
         cik = normalize_cik(item.get("cik_str"))
         title = clean_text(item.get("title"), 160)
 
-        if ticker and cik:
+        if ticker and cik.isascii() and cik.isdigit() and int(cik) and len(cik) == 10:
             ticker_map[ticker] = {
                 "ticker": ticker,
                 "cik": cik,
@@ -289,7 +295,12 @@ def get_recent_form4_filings(ticker: str, force_refresh: bool = False) -> list[d
     except Exception:
         return []
 
+    return form4_filings(payload, ticker, cik_info)
+
+
+def form4_filings(payload: dict, ticker: str, cik_info: dict) -> list[dict]:
     recent = payload.get("filings", {}).get("recent", {})
+    cik = cik_info["cik"]
 
     forms = recent.get("form") or []
     accession_numbers = recent.get("accessionNumber") or []
@@ -540,6 +551,11 @@ def parse_form4_xml(xml_text: str, filing: dict) -> list[dict]:
     except ET.ParseError:
         return []
 
+    return form4_transactions(root, filing)
+
+
+def form4_transactions(root: ET.Element, filing: dict) -> list[dict]:
+
     issuer_symbol = clean_symbol(
         xml_find_text(root, ".//issuerTradingSymbol", filing.get("ticker"))
     )
@@ -656,6 +672,10 @@ def load_cached_trades() -> list[dict] | None:
 
 
 def write_trade_cache(trades: list[dict]) -> None:
+    from src.intelligence.transaction_cache import publish
+
+    if not trades:
+        return
     tickers = sorted(
         {
             clean_symbol(trade.get("ticker"))
@@ -664,17 +684,17 @@ def write_trade_cache(trades: list[dict]) -> None:
         }
     )
 
-    write_json_file(
-        CACHE_FILE,
-        {
+    try:
+        publish(CACHE_FILE, {
             "cached_at": utc_now_ts(),
             "cached_at_iso": iso_now(),
             "source": "SEC Form 4",
             "tickers": tickers,
             "records": len(trades),
             "trades": trades,
-        },
-    )
+        })
+    except (OSError, ValueError, sqlite3.Error):
+        return
 
 
 def fetch_live_insider_trades(

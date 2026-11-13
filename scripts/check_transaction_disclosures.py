@@ -70,7 +70,7 @@ class DisclosureChecks(IsolatedChecks):
         self.assertIn("raised the reported direct holding by about 25%", report)
         self.assertIn("Nvidia (NVDA) purchase of $15,001 to $50,000 (spouse's holding), disclosed 29 days later on October 23", report)
         status = editor.build_editor_status()
-        self.assertIn("Transaction disclosure review: 1", status)
+        self.assertIn("Transaction disclosure review: 2", status)
         self.assertIn(form4()["url"], status)
         self.assertIn(ptr()["source_url"], status)
         profile = voice.checked(record, NOW)

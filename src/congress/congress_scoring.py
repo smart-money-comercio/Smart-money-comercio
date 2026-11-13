@@ -1,4 +1,4 @@
-from src.congress.congress_data import get_congress_trades
+from src.congress.congress_data import load_stale_cache
 
 
 MIN_SCORE = 0
@@ -67,7 +67,7 @@ SECTOR_RELEVANCE_WEIGHTS = {
 
 def get_congress_trades_safe():
     try:
-        return get_congress_trades()
+        return load_stale_cache()
     except Exception:
         return []
 
