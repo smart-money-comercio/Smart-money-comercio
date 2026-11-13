@@ -677,6 +677,24 @@ class PublisherEvidenceChecks(ResearchFixture):
             self.assertEqual(row["publication_url"], row["discovery_evidence"]["publication_url"])
         self.assertEqual(path.read_bytes(), before)
 
+    def test_approved_publication_clock_reaches_brief_and_voiceover(self):
+        from src.intelligence.news_editor_store import read_editions
+        from src.reports.daily_voiceover import checked
+
+        path = self.publication_cache()
+        self.run_desk(Client(leads=[]), fetch=lambda _: self.fail("Verified publisher cache must not fetch"))
+        path.unlink()
+        text = build_daily_news_brief(self.research())
+        self.assertTrue(validate_news_brief(text)["passes"])
+        record = read_editions(report=text)[0]
+        stories = record["analyst_review"]["evidence"]["stories"]
+        self.assertEqual({story["source"] for story in stories}, {"U.S. Treasury", "Palantir Investor Relations"})
+        for story in stories:
+            self.assertIn("discovery_evidence", story)
+            self.assertEqual(story["publication_url"], story["discovery_evidence"]["publication_url"])
+            desk.check_proof(story, NOW)
+        self.assertTrue(checked(record, NOW)["quality"]["passes"])
+
     def test_clock_provenance_cannot_be_swapped_after_an_independent_approval(self):
         self.publication_cache()
         with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": "PLTR"}):

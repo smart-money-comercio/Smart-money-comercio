@@ -148,7 +148,11 @@ def analyze_report(report: str, stories: list[dict] | None = None, *, presentati
         if story.get("discovery_evidence"):
             from src.intelligence.hourly_research import check_proof
             check_proof(story)
-            evidence["stories"][-1].update(discovery_evidence=deepcopy(story["discovery_evidence"]), source_checked_at=story["source_checked_at"])
+            proof_fields = ("discovery_evidence", "source_checked_at")
+            if business_version:
+                # Business analysis rechecks these references on the projected story.
+                proof_fields += ("publication_url", "document_url")
+            evidence["stories"][-1].update({key: deepcopy(story[key]) for key in proof_fields if key in story})
         if story["kind"] == "company" or story.get("event_evidence") is not None:
             from src.intelligence.story_analysis import checked_evidence
             checked_evidence(story)

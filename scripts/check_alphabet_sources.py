@@ -205,6 +205,20 @@ class AlphabetChecks(ResearchFixture):
         self.assertEqual(approved['discovery_evidence']['document_url'],PDF)
         self.assertEqual(len(build_evidence({**approved,'materiality':'earnings'},approved['source_excerpt'],approved['excerpt_scope'])['facts']),3)
 
+    def test_approved_results_document_reaches_brief_and_voiceover(self):
+        from src.reports.daily_voiceover import checked
+
+        self.run_desk(Client(leads=[{"title": TITLE, "url": URL, "topic": "company"}], quote=QUOTE), fetch=self.raw)
+        text = build_daily_news_brief(self.research())
+        self.assertIn("$12.5 billion (third quarter 2026)", text)
+        self.assertTrue(validate_news_brief(text)["passes"])
+        record = store.read_editions(report=text)[0]
+        story = record["analyst_review"]["evidence"]["stories"][0]
+        self.assertEqual(story["document_url"], PDF)
+        self.assertEqual(story["discovery_evidence"]["document_url"], PDF)
+        desk.check_proof(story, NOW)
+        self.assertTrue(checked(record, NOW)["quality"]["passes"])
+
     def test_direct_web_lead_resolves_to_original_feed_and_document_within_existing_budget(self):
         client=Client(leads=[{'title':TITLE,'url':URL,'topic':'company'}],quote=QUOTE);calls=[]
         def fetch(url):calls.append(url);return self.raw(url)
