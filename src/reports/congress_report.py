@@ -263,6 +263,7 @@ def build_congress_report(
     trades: list[dict],
     score_map: dict[str, int | float],
     symbol: str | None = None,
+    coverage: str = "",
 ) -> str:
     filtered_trades = filter_trades(trades, symbol)
     clean = clean_symbol(symbol) if symbol else None
@@ -271,13 +272,15 @@ def build_congress_report(
 
     if clean:
         title = f"🏛️ Smart Money AI Congress Report: {clean}"
+    if coverage:
+        title += "\n\nSource Coverage\n" + coverage
 
     if not filtered_trades:
         if clean:
             return f"""
 {title}
 
-No congressional trade records found for {clean}.
+No recent dated congressional trade records are available for {clean}.
 
 Congress Score
 {clean}: {score_map.get(clean, 50)}/100
@@ -296,7 +299,7 @@ This is informational only and is not financial advice.
         return f"""
 {title}
 
-No congressional trade records are currently available.
+No recent dated congressional trade records are available.
 
 Notes
 This is informational only and is not financial advice.
@@ -321,7 +324,7 @@ Next Commands
 /report
 
 Notes
-This report uses the current local Congress trade dataset.
+This report covers recently observed, dated congressional disclosures in the local cache.
 Congress trades can involve spouses, family accounts, delayed disclosures, ETFs, or diversified portfolios.
 This is informational only and is not financial advice.
 """.strip()

@@ -15,7 +15,7 @@ UNCONDITIONAL = object()
 
 
 def revision(stat):
-    return stat.st_ino, stat.st_mtime_ns, stat.st_size
+    return stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_size
 
 
 def read(path):
@@ -73,13 +73,13 @@ def publish(path, payload, expected=UNCONDITIONAL):
     return True
 
 
-def reserve(path, now):
+def reserve(path, now, force=False):
     with locked(path) as db:
         db.execute("CREATE TABLE IF NOT EXISTS refresh (id INTEGER PRIMARY KEY, attempt REAL, due REAL, cursor INTEGER, status TEXT, detail TEXT)")
-        row = db.execute("SELECT due, cursor, status, detail FROM refresh WHERE id = 1").fetchone()
-        if row and now < row[0]:
-            return None, row[2], row[3]
-        cursor = row[1] if row else 0
+        row = db.execute("SELECT attempt, due, cursor, status, detail FROM refresh WHERE id = 1").fetchone()
+        if row and now < row[1] and (not force or row[4] == "Refresh in progress" or (row[3] == "limited" and row[1] - row[0] > 900)):
+            return None, row[3], row[4]
+        cursor = row[2] if row else 0
         db.execute("INSERT OR REPLACE INTO refresh VALUES (1, ?, ?, ?, ?, ?)",
                    (now, now + 900, cursor, "limited", "Refresh in progress"))
     return cursor, "", ""

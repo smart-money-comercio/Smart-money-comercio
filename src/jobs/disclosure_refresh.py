@@ -223,18 +223,16 @@ def chamber_rows(chamber, configured, reader, today):
         rows, provider = stockwatcher_rows(chamber, reader), "Stock Watcher"
     else:
         return None, "FMP_API_KEY required" if configured == "fmp" else "Unknown congressional provider"
-    dated = []
-    for row in rows:
-        filed = congress.parse_date_value(row.get("disclosure_date")).date()
-        traded = congress.parse_date_value(row.get("transaction_date")).date()
-        if datetime.min.date() < traded <= filed <= today:
-            dated.append((filed, {**row, "chamber": chamber}))
-    if not any(filed >= today - timedelta(days=30) for filed, _ in dated):
-        return None, f"{provider} has no current dated disclosures"
-    return ([row for _, row in dated], provider), ""
+    dated = [{**row, "chamber": chamber} for row in rows if congress.recently_filed(row, today)]
+    if not dated:
+        reason = f"{provider} has no current dated disclosures"
+        if configured == "auto" and provider == "Stock Watcher":
+            reason += "; configure FMP_API_KEY for the current feed"
+        return None, reason
+    return (dated, provider), ""
 
 
-def refresh_congress(payload, now, cursor):
+def refresh_congress(payload, now, cursor, *, force=False):
     configured = congress.get_provider()
     if configured == "fmp" and not congress.get_fmp_api_key():
         return None, cursor, 0, "limited", "FMP_API_KEY required for the configured provider"
@@ -246,7 +244,7 @@ def refresh_congress(payload, now, cursor):
     wait = CHECK_SECONDS - 5
     for chamber in CHAMBERS:
         prior = observations.get(chamber, {})
-        if current - prior.get("at", 0) < congress.CACHE_TTL_SECONDS:
+        if not force and current - prior.get("at", 0) < congress.CACHE_TTL_SECONDS:
             continue
         reader = Reader(seconds=9, requests=2, user_agent="SmartMoneyAI/1.0")
         try:
@@ -261,7 +259,8 @@ def refresh_congress(payload, now, cursor):
                 break
             continue
         incoming, provider = result
-        earlier = [row for row in trades if scope("congress", row) == chamber and prior.get("provider") == provider]
+        earlier = [row for row in trades if scope("congress", row) == chamber and prior.get("provider") == provider
+                   and congress.recently_filed(row, today)]
         other = [row for row in trades if scope("congress", row) != chamber]
         ordered = congress.sort_trades(incoming + earlier)
         ordered.sort(key=lambda row: congress.parse_date_value(row.get("disclosure_date")), reverse=True)
@@ -283,9 +282,9 @@ def refresh_congress(payload, now, cursor):
             "trades": trades[:cache.MAX_ROWS]}, cursor, wait, status, detail
 
 
-def refresh_source(path, refresh, now):
+def refresh_source(path, refresh, now, *, force=False):
     started = now.timestamp()
-    cursor, status, detail = cache.reserve(path, started)
+    cursor, status, detail = cache.reserve(path, started, force=force)
     if cursor is None:
         return status, detail
     try:
@@ -298,6 +297,11 @@ def refresh_source(path, refresh, now):
         wait, status, detail = max(3600, retry_delay(error, now)), "limited", error_reason(error)
     cache.finish(path, started, started + wait, cursor, status, detail)
     return status, detail
+
+
+def refresh_congress_now():
+    return refresh_source(congress.CACHE_FILE, lambda payload, now, cursor: refresh_congress(payload, now, cursor, force=True),
+                          datetime.now(timezone.utc), force=True)
 
 
 def refresh_due(now=None):

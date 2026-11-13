@@ -9,16 +9,14 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from src.intelligence import transaction_cache
+from src.congress import congress_data as congress
 
 
 HEADER = "Insider and Congressional Disclosures"
 LANES = ("sec", "congress")
 LABELS = {"sec": "SEC Form 4", "congress": "Congressional disclosures"}
-CONGRESS_PROVIDERS = {
-    "FMP House/Senate congressional disclosure endpoints": "FMP",
-    "House/Senate Stock Watcher public JSON datasets": "Stock Watcher",
-}
-CACHE_AGE = timedelta(hours=36)
+CONGRESS_PROVIDERS = congress.CONGRESS_PROVIDERS
+CACHE_AGE = congress.CACHE_MAX_AGE
 MAX_ROWS = transaction_cache.MAX_ROWS
 NY = ZoneInfo("America/New_York")
 SYMBOL = re.compile(r"[A-Z][A-Z0-9.-]{0,9}")
@@ -101,8 +99,7 @@ def scope(lane, raw):
     if lane == "sec":
         cik = raw.get("cik")
         return cik.zfill(10) if isinstance(cik, str) and re.fullmatch(r"[0-9]{1,10}", cik) and int(cik) else None
-    return {"house of representatives": "House", "house": "House", "senate": "Senate"}.get(
-        label(raw.get("chamber"), 40).casefold())
+    return congress.congress_chamber(raw.get("chamber"))
 
 
 def congress_fields(raw):
@@ -151,7 +148,7 @@ def normalized(raw, lane, today, observed_day):
     else:
         trade = provider_day(raw.get("transaction_date"))
         fields = congress_fields(raw)
-        filed, max_trade_age = day(fields["disclosure_date"]), 60
+        filed, max_trade_age = day(fields["disclosure_date"]), congress.MAX_TRADE_AGE.days
     if not 0 <= (today - filed).days < 7 or not trade <= filed <= observed_day or (today - trade).days > max_trade_age:
         raise ValueError("Outside the transaction or filing window")
     return {"ticker": raw["ticker"], "transaction_date": trade.isoformat(),
@@ -225,6 +222,11 @@ def scope_observations(lane, payload, now):
             continue
         if clock <= now:
             result[key] = {"at": clock.timestamp(), "provider": value["provider"]}
+    if lane == "congress" and result:
+        record_days = {key: observed_at(value["at"]).astimezone(NY).date() for key, value in result.items()}
+        supported = {key for row in transaction_cache.rows(payload) if (key := scope(lane, row)) in record_days
+                     and congress.recently_filed(row, record_days[key])}
+        result = {key: value for key, value in result.items() if key in supported}
     return result
 
 

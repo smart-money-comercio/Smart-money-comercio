@@ -1,13 +1,13 @@
-import json
 import os
 import re
-import time
 import urllib.parse
-import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
+from zoneinfo import ZoneInfo
+
+from src.intelligence import transaction_cache
 
 
 FMP_BASE_URL = "https://financialmodelingprep.com/stable"
@@ -27,15 +27,20 @@ SENATE_STOCKWATCHER_URLS = [
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = PROJECT_ROOT / "data"
 CACHE_FILE = CACHE_DIR / "congress_trades_cache.json"
-DEBUG_FILE = CACHE_DIR / "congress_debug.json"
 
 CACHE_TTL_SECONDS = int(os.getenv("CONGRESS_CACHE_TTL_SECONDS", "43200"))
 MAX_PAGES = int(os.getenv("CONGRESS_MAX_PAGES", "3"))
 PAGE_LIMIT = int(os.getenv("CONGRESS_PAGE_LIMIT", "100"))
-REQUEST_TIMEOUT_SECONDS = int(os.getenv("CONGRESS_REQUEST_TIMEOUT_SECONDS", "15"))
 STOCKWATCHER_MAX_RECORDS = int(os.getenv("STOCKWATCHER_MAX_RECORDS", "250"))
 
-_MEMORY_CACHE = None
+FMP_SOURCE = "FMP House/Senate congressional disclosure endpoints"
+STOCKWATCHER_SOURCE = "House/Senate Stock Watcher public JSON datasets"
+CONGRESS_PROVIDERS = {FMP_SOURCE: "FMP", STOCKWATCHER_SOURCE: "Stock Watcher"}
+CHAMBERS = ("House", "Senate")
+MAX_FEED_AGE = timedelta(days=30)
+MAX_TRADE_AGE = timedelta(days=60)
+CACHE_MAX_AGE = timedelta(hours=36)
+NY = ZoneInfo("America/New_York")
 
 
 def get_provider() -> str:
@@ -60,6 +65,7 @@ INVALID_TICKER_TOKENS = {
     "",
     "--",
     "N/A",
+    "N.A",
     "NA",
     "NONE",
     "UNKNOWN",
@@ -99,60 +105,6 @@ def first_value(record: dict, keys: list[str]) -> str:
             return clean_text(value)
     return ""
 
-
-def write_debug(payload: dict) -> None:
-    try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        DEBUG_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def append_debug(provider: str, payload: dict) -> None:
-    existing = {}
-
-    try:
-        if DEBUG_FILE.exists():
-            existing = json.loads(DEBUG_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        existing = {}
-
-    existing[provider] = payload
-    write_debug(existing)
-
-
-def fetch_json(url: str):
-    request = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "SmartMoneyAI/1.0",
-            "Accept": "application/json,text/plain,*/*",
-        },
-    )
-
-    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-        payload = response.read().decode("utf-8", errors="replace")
-
-    return json.loads(payload)
-
-def fetch_first_json(urls: list[str], source_name: str):
-    errors = []
-
-    for url in urls:
-        try:
-            payload = fetch_json(url)
-            return payload, url, errors
-
-        except Exception as error:
-            errors.append(
-                {
-                    "url": url,
-                    "error_type": type(error).__name__,
-                    "error": str(error),
-                }
-            )
-
-    raise RuntimeError(f"All {source_name} URLs failed: {errors}")
 
 def build_fmp_url(endpoint: str, page: int) -> str:
     query = {
@@ -208,9 +160,14 @@ def parse_date_value(value: Any) -> datetime:
     if not text or text.upper() in {"UNKNOWN", "N/A", "--"}:
         return datetime.min
 
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text, re.ASCII):
+        try:
+            return datetime.fromisoformat(text)
+        except ValueError:
+            return datetime.min
+
     formats = [
         "%m/%d/%Y",
-        "%Y-%m-%d",
         "%m-%d-%Y",
         "%b %d, %Y",
         "%B %d, %Y",
@@ -223,6 +180,24 @@ def parse_date_value(value: Any) -> datetime:
             continue
 
     return datetime.min
+
+
+def congress_chamber(value: Any) -> str | None:
+    return {"house of representatives": "House", "house": "House", "senate": "Senate"}.get(clean_text(value).casefold())
+
+
+def transaction_dates(row: dict, as_of):
+    filed = parse_date_value(row.get("disclosure_date")).date()
+    traded = parse_date_value(row.get("transaction_date")).date()
+    if datetime.min.date() < traded <= filed <= as_of:
+        return traded, filed
+    return None
+
+
+def recently_filed(row: dict, as_of) -> bool:
+    dates = transaction_dates(row, as_of)
+    return bool(dates and as_of - dates[1] <= MAX_FEED_AGE)
+
 
 def trade_sort_datetime(trade: dict) -> datetime:
     transaction_date = parse_date_value(trade.get("transaction_date"))
@@ -408,82 +383,6 @@ def normalize_fmp_trade(record: dict, source: str) -> dict | None:
     }
 
 
-def fetch_fmp_endpoint(endpoint: str, source: str) -> tuple[list[dict], list[dict]]:
-    if not get_fmp_api_key():
-        return [], [{"source": source, "reason": "FMP_API_KEY is missing"}]
-
-    trades = []
-    debug_pages = []
-
-    for page in range(MAX_PAGES):
-        try:
-            payload = fetch_json(build_fmp_url(endpoint, page))
-
-        except HTTPError as error:
-            debug_pages.append(
-                {"page": page, "source": source, "http_error": error.code, "reason": str(error)}
-            )
-            break
-
-        except (URLError, TimeoutError, json.JSONDecodeError) as error:
-            debug_pages.append(
-                {"page": page, "source": source, "error_type": type(error).__name__, "reason": str(error)}
-            )
-            break
-
-        except Exception as error:
-            debug_pages.append(
-                {"page": page, "source": source, "error_type": type(error).__name__, "reason": str(error)}
-            )
-            break
-
-        records = extract_records(payload)
-
-        debug_pages.append(
-            {
-                "page": page,
-                "source": source,
-                "record_count": len(records) if isinstance(records, list) else 0,
-                "sample_keys": list(records[0].keys()) if records and isinstance(records[0], dict) else [],
-            }
-        )
-
-        if not records:
-            break
-
-        for record in records:
-            if not isinstance(record, dict):
-                continue
-
-            trade = normalize_fmp_trade(record, source)
-
-            if trade:
-                trades.append(trade)
-
-    return trades, debug_pages
-
-
-def fetch_fmp_congress_trades() -> list[dict]:
-    house_trades, house_debug = fetch_fmp_endpoint(HOUSE_LATEST_ENDPOINT, "House")
-    senate_trades, senate_debug = fetch_fmp_endpoint(SENATE_LATEST_ENDPOINT, "Senate")
-
-    trades = house_trades + senate_trades
-
-    append_debug(
-        "fmp",
-        {
-            "ok": bool(trades),
-            "provider": "fmp",
-            "fmp_key_loaded": bool(get_fmp_api_key()),
-            "normalized_trade_count": len(trades),
-            "house_pages": house_debug,
-            "senate_pages": senate_debug,
-        },
-    )
-
-    return sort_trades(trades)
-
-
 def build_person_name(record: dict) -> str:
     first_name = first_value(record, ["first_name", "firstName"])
     last_name = first_value(record, ["last_name", "lastName"])
@@ -596,179 +495,74 @@ def normalize_stockwatcher_payload(payload, chamber: str) -> list[dict]:
     return trades
 
 
-def fetch_stockwatcher_congress_trades() -> list[dict]:
-    debug = {
-        "provider": "stockwatcher",
-        "house_urls": HOUSE_STOCKWATCHER_URLS,
-        "senate_urls": SENATE_STOCKWATCHER_URLS,
-    }
-
-    trades = []
-
+def _snapshot():
     try:
-        house_payload, house_url_used, house_errors = fetch_first_json(
-            HOUSE_STOCKWATCHER_URLS,
-            "House Stock Watcher",
-        )
+        return transaction_cache.read(CACHE_FILE)
+    except OSError:
+        return {}, None
 
-        house_trades = normalize_stockwatcher_payload(house_payload, "House")
-        trades.extend(house_trades)
 
-        debug["house_ok"] = True
-        debug["house_url_used"] = house_url_used
-        debug["house_errors"] = house_errors
-        debug["house_count"] = len(house_trades)
-        debug["house_payload_type"] = type(house_payload).__name__
+def _current_rows(payload, now):
+    from src.intelligence.transaction_disclosures import scope_observations
 
-        if isinstance(house_payload, list) and house_payload:
-            debug["house_sample_keys"] = list(house_payload[0].keys())
+    observations = scope_observations("congress", payload, now)
+    today = now.astimezone(NY).date()
+    result = []
+    for row in transaction_cache.rows(payload):
+        observation = observations.get(congress_chamber(row.get("chamber")))
+        if not observation or now.timestamp() - observation["at"] > CACHE_MAX_AGE.total_seconds():
+            continue
+        seen = datetime.fromtimestamp(observation["at"], NY).date()
+        dates = transaction_dates(row, seen)
+        if dates and today - dates[1] <= MAX_FEED_AGE and today - dates[0] <= MAX_TRADE_AGE and clean_ticker(row.get("ticker")):
+            result.append(row)
+    return result, observations
 
-    except Exception as error:
-        debug["house_ok"] = False
-        debug["house_error_type"] = type(error).__name__
-        debug["house_error"] = str(error)
 
+@lru_cache(maxsize=2)
+def _scoring_payload(path, revision):
     try:
-        senate_payload, senate_url_used, senate_errors = fetch_first_json(
-            SENATE_STOCKWATCHER_URLS,
-            "Senate Stock Watcher",
-        )
-
-        senate_trades = normalize_stockwatcher_payload(senate_payload, "Senate")
-        trades.extend(senate_trades)
-
-        debug["senate_ok"] = True
-        debug["senate_url_used"] = senate_url_used
-        debug["senate_errors"] = senate_errors
-        debug["senate_count"] = len(senate_trades)
-        debug["senate_payload_type"] = type(senate_payload).__name__
-
-        if isinstance(senate_payload, list) and senate_payload:
-            debug["senate_sample_keys"] = list(senate_payload[0].keys())
-
-    except Exception as error:
-        debug["senate_ok"] = False
-        debug["senate_error_type"] = type(error).__name__
-        debug["senate_error"] = str(error)
-
-    trades = sort_trades(trades)
-
-    if STOCKWATCHER_MAX_RECORDS > 0:
-        trades = trades[:STOCKWATCHER_MAX_RECORDS]
-
-    debug["ok"] = bool(trades)
-    debug["normalized_trade_count"] = len(trades)
-    debug["sample_trades"] = trades[:3]
-
-    append_debug("stockwatcher", debug)
-
-    return trades
+        return transaction_cache.read(path)[0]
+    except OSError:
+        return {}
 
 
-def fetch_live_congress_trades() -> list[dict]:
-    provider = get_provider()
-
-    append_debug(
-        "provider",
-        {
-            "requested_provider": provider,
-            "timestamp": time.time(),
-            "order": "auto = fmp, then stockwatcher",
-        },
-    )
-
-    if provider in {"auto", "fmp"}:
-        fmp_trades = fetch_fmp_congress_trades()
-
-        if fmp_trades:
-            save_cache(fmp_trades, source="FMP House/Senate congressional disclosure endpoints")
-            return fmp_trades
-
-        if provider == "fmp":
-            return load_stale_cache()
-
-    if provider in {"auto", "stockwatcher", "stock_watcher"}:
-        stockwatcher_trades = fetch_stockwatcher_congress_trades()
-
-        if stockwatcher_trades:
-            save_cache(stockwatcher_trades, source="House/Senate Stock Watcher public JSON datasets")
-            return stockwatcher_trades
-
-        if provider in {"stockwatcher", "stock_watcher"}:
-            return load_stale_cache()
-
-    return load_stale_cache()
-
-
-def load_cache() -> list[dict] | None:
-    if not CACHE_FILE.exists():
-        return None
-
-    try:
-        payload = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-    try:
-        fetched_at = float(payload.get("fetched_at", 0) or 0)
-    except (AttributeError, TypeError, ValueError):
-        return None
-    trades = payload.get("trades", [])
-
-    if not isinstance(trades, list):
-        return None
-
-    age = time.time() - fetched_at
-
-    if 0 <= age <= CACHE_TTL_SECONDS:
-        return trades
-
-    return None
-
-
-def load_stale_cache() -> list[dict]:
-    if not CACHE_FILE.exists():
-        return []
-
-    try:
-        payload = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
-        trades = payload.get("trades", [])
-        return trades if isinstance(trades, list) else []
-    except Exception:
-        return []
-
-
-def save_cache(trades: list[dict], source: str) -> None:
-    from src.intelligence.transaction_cache import publish
-
-    try:
-        payload = {
-            "fetched_at": time.time(),
-            "source": source,
-            "provider": get_provider(),
-            "trades": trades,
-        }
-
-        publish(CACHE_FILE, payload)
-
-    except Exception:
-        pass
+def cached_coverage(now=None):
+    now = now or datetime.now(timezone.utc)
+    payload, _ = _snapshot()
+    current, observations = _current_rows(payload, now)
+    records = transaction_cache.rows(payload)
+    lines = []
+    for chamber in CHAMBERS:
+        observed = observations.get(chamber)
+        chamber_rows = [row for row in records if congress_chamber(row.get("chamber")) == chamber]
+        dated = max((parse_date_value(row.get("disclosure_date")) for row in chamber_rows), default=datetime.min)
+        status = ("Current" if now.timestamp() - observed["at"] <= CACHE_MAX_AGE.total_seconds() else "Stale") if observed else "Unavailable"
+        detail = f" | {observed['provider']}" if observed else ""
+        if dated != datetime.min:
+            detail += f" | Latest cached disclosure {dated.date().isoformat()}"
+        elif chamber_rows:
+            traded = max(parse_date_value(row.get("transaction_date")) for row in chamber_rows)
+            if traded != datetime.min:
+                detail += f" | Latest cached trade {traded.date().isoformat()} | Disclosure dates unavailable"
+        lines.append(f"{chamber} — {status}{detail}")
+    if not current:
+        lines.append("Congress input is neutral (50/100) while recent dated trade evidence is unavailable.")
+    return current, "\n".join(lines)
 
 
 def get_congress_trades(force_refresh: bool = False) -> list[dict]:
-    global _MEMORY_CACHE
+    if force_refresh:
+        from src.jobs.disclosure_refresh import refresh_congress_now
 
-    if not force_refresh:
-        cached = load_cache()
-
-        if cached is not None:
-            _MEMORY_CACHE = cached
-            return _MEMORY_CACHE
-        if _MEMORY_CACHE is not None:
-            return load_stale_cache() or _MEMORY_CACHE
-
-    _MEMORY_CACHE = fetch_live_congress_trades()
-    return _MEMORY_CACHE
+        refresh_congress_now()
+        return cached_coverage()[0]
+    try:
+        revision = transaction_cache.revision(CACHE_FILE.stat())
+    except OSError:
+        return []
+    payload = _scoring_payload(CACHE_FILE, revision)
+    return [dict(row) for row in _current_rows(payload, datetime.now(timezone.utc))[0]]
 
 
 CONGRESS_TRADES = []

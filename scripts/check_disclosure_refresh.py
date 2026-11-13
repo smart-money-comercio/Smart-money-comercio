@@ -3,7 +3,7 @@
 import argparse
 import asyncio
 from contextlib import ExitStack, redirect_stdout
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO, StringIO
 import json
 import os
@@ -25,7 +25,7 @@ from src.insiders import insider_data as sec
 from src.intelligence import transaction_cache as cache, transaction_disclosures as disclosures
 from src.intelligence import news_editor as editor, news_editor_store as store
 from src.jobs import disclosure_refresh as job
-from src.reports import daily_news_brief as news, daily_voiceover as voice
+from src.reports import congress_report, daily_news_brief as news, daily_voiceover as voice
 
 
 MSFT_CIK = "0000789019"
@@ -45,6 +45,12 @@ FORM4_XML = f"""<ownershipDocument><documentType>4</documentType>
   <postTransactionAmounts><sharesOwnedFollowingTransaction><value>5000</value></sharesOwnedFollowingTransaction></postTransactionAmounts>
   <ownershipNature><directOrIndirectOwnership><value>D</value></directOrIndirectOwnership></ownershipNature>
   </nonDerivativeTransaction></ownershipDocument>"""
+
+
+class FrozenCongressClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW.astimezone(tz) if tz is not None else NOW.replace(tzinfo=None)
 
 
 def submissions(cik, has_form):
@@ -72,6 +78,7 @@ class RefreshChecks(IsolatedChecks):
         self.stack.enter_context(patch.object(sec, "utc_now_ts", return_value=NOW.timestamp()))
         self.stack.enter_context(patch.object(sec, "get_watchlist_symbols", return_value=["MSFT", "NVDA", "QQQ"]))
         self.stack.enter_context(patch.object(congress, "CACHE_FILE", self.congress))
+        self.stack.enter_context(patch.object(congress, "datetime", FrozenCongressClock))
         self.requests = []
         self.unexpected = []
         self.addCleanup(lambda: self.assertEqual(self.unexpected, []))
@@ -234,6 +241,73 @@ class RefreshChecks(IsolatedChecks):
         job.refresh_due(NOW)
         rows = congress_scoring.get_congress_trades_safe()
         self.assertEqual({row["chamber"] for row in rows}, {"House", "Senate"})
+
+    def test_refetched_2020_archive_cannot_influence_any_current_output(self):
+        legacy = ptr(chamber="Senate", source_url=SENATE_LINK, amount_range="$1,000,001 - $5,000,000",
+                     transaction_date="11/20/2020", disclosure_date="Unknown")
+        snapshot = {"fetched_at": NOW.timestamp(), "source": job.STOCKWATCHER_SOURCE, "trades": [legacy]}
+        for row in (legacy, {**legacy, "disclosure_date": "12/02/2020"}):
+            cache.publish(self.congress, {**snapshot, "trades": [row]})
+            rows, coverage = congress.cached_coverage(NOW)
+            self.assertEqual(rows, [])
+            self.assertIn("Senate — Unavailable", coverage)
+            self.assertIn("2020-", coverage)
+            self.assertEqual(congress_scoring.get_congress_score("NVDA"), 50)
+            text = congress_report.build_congress_report(rows, {"NVDA": 50}, "NVDA", coverage)
+            self.assertIn("50/100", text)
+            self.assertNotIn("Strong positive", text)
+            self.assertNotIn("Example Filer", text)
+            brief, record = self.render()
+            self.assertIn("Congressional disclosures — Current source data are unavailable", brief)
+            self.assertEqual(record["transaction_disclosures"]["congress"]["reviewed"], 0)
+
+    def test_same_cache_filters_old_future_undated_and_stale_other_chamber_rows(self):
+        recent = ptr()
+        invalid = [ptr(transaction_date="2020-11-20", disclosure_date="2020-12-02"),
+                   ptr(disclosure_date="Unknown"), ptr(disclosure_date="2026-10-26"),
+                   ptr(transaction_date="2026-10-24"), ptr(transaction_date="2026-07-01"),
+                   ptr(ticker="N.A"), ptr(chamber="Senate", source_url=SENATE_LINK)]
+        stamps = {"House": {"at": NOW.timestamp(), "provider": "FMP"},
+                  "Senate": {"at": (NOW - timedelta(hours=40)).timestamp(), "provider": "FMP"}}
+        cache.publish(self.congress, {"source": job.FMP_SOURCE, "observations": stamps, "trades": [recent, *invalid]})
+        self.assertEqual(congress.get_congress_trades(), [recent])
+        self.assertEqual(congress_scoring.get_congress_score("NVDA"), congress_scoring.get_congress_score("NVDA", trades=[recent]))
+        self.assertGreater(congress_scoring.get_congress_score("NVDA"), 50)
+
+    def test_unconfigured_fmp_status_and_plain_congress_read_stay_offline(self):
+        with patch.dict(os.environ, {"CONGRESS_DATA_PROVIDER": "fmp", "FMP_API_KEY": ""}):
+            status, detail = job.refresh_congress_now()
+            self.assertEqual(status, "limited")
+            self.assertIn("FMP_API_KEY required", detail)
+            self.assertEqual(congress.get_congress_trades(), [])
+        self.assertEqual(self.requests, [])
+
+    def test_manual_congress_refresh_respects_active_provider_retry(self):
+        self.fail["senate-latest"] = HTTPError("https://host.test/", 429, "rate limit", {"Retry-After": "9000"}, None)
+        job.refresh_due(NOW)
+        self.requests.clear()
+        with patch.object(job, "datetime", FrozenCongressClock):
+            status, detail = job.refresh_congress_now()
+        self.assertEqual(status, "limited")
+        self.assertIn("Senate HTTP 429", detail)
+        self.assertEqual(self.requests, [])
+
+    def test_congress_command_reports_limited_instead_of_celebrating_archive(self):
+        from src.commands import intelligence_commands as commands
+
+        self.stack.enter_context(patch.object(commands, "is_admin_update", return_value=True))
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        update.message.reply_text.return_value = SimpleNamespace(edit_text=AsyncMock())
+        context = SimpleNamespace(args=["refresh"])
+        historical = {**fmp_row("Senate"), "transactionDate": "2020-11-20", "disclosureDate": "2020-12-02"}
+        with patch.dict(os.environ, {"FMP_API_KEY": ""}), patch.object(job, "datetime", FrozenCongressClock), patch.object(
+                job, "stockwatcher_rows", return_value=[congress.normalize_fmp_trade(historical, "Senate")]):
+            asyncio.run(commands.congress(update, context))
+        notice = update.message.reply_text.return_value.edit_text.await_args.args[0]
+        self.assertIn("Congress Coverage Limited", notice)
+        self.assertIn("Current Records: 0", notice)
+        self.assertIn("configure FMP_API_KEY", notice)
+        self.assertNotIn("Cache Refreshed", notice)
 
     def test_schedule_is_registered_and_runs_off_event_loop(self):
         queue = Mock()

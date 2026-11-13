@@ -1,4 +1,4 @@
-from src.congress.congress_data import load_stale_cache
+from src.congress.congress_data import get_congress_trades
 
 
 MIN_SCORE = 0
@@ -67,7 +67,7 @@ SECTOR_RELEVANCE_WEIGHTS = {
 
 def get_congress_trades_safe():
     try:
-        return load_stale_cache()
+        return get_congress_trades()
     except Exception:
         return []
 
@@ -158,8 +158,10 @@ def get_matching_trades(ticker):
     ]
 
 
-def get_congress_score(ticker):
-    matching_trades = get_matching_trades(ticker)
+def get_congress_score(ticker, trades=None):
+    matching_trades = get_matching_trades(ticker) if trades is None else [
+        row for row in trades if clean_ticker(row.get("ticker")) == clean_ticker(ticker)
+    ]
 
     if not matching_trades:
         return NEUTRAL_SCORE

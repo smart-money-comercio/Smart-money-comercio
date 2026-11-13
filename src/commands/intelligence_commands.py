@@ -5,7 +5,7 @@ import time
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.congress.congress_data import get_congress_trades as get_live_congress_trades
+from src.congress.congress_data import cached_coverage
 from src.reports.conviction_report import build_conviction_report
 from src.congress.congress_scoring import get_congress_score
 from src.reports.congress_report import build_congress_report
@@ -80,7 +80,7 @@ def is_admin_update(update: Update) -> bool:
     return str(update.effective_chat.id) in admin_chat_ids
 
 
-def summarize_congress_refresh(trades: list[dict], elapsed_seconds: float) -> str:
+def summarize_congress_refresh(trades: list[dict], elapsed_seconds: float, status: str, detail: str, coverage: str) -> str:
     tickers = sorted(
         {
             str(trade.get("ticker", "")).upper().replace("$", "")
@@ -112,10 +112,14 @@ def summarize_congress_refresh(trades: list[dict], elapsed_seconds: float) -> st
     if not sample_lines:
         sample_lines.append("No records loaded.")
 
+    heading = "✅ Congress Source Check Complete" if status == "pass" else "⚠️ Congress Coverage Limited"
     return f"""
-✅ Congress Cache Refreshed
+{heading}
 
-Records Loaded: {len(trades)}
+{detail}
+{coverage}
+
+Current Records: {len(trades)}
 Unique Tickers: {len(tickers)}
 Sources: {", ".join(sources) if sources else "Unknown"}
 Elapsed: {elapsed_seconds:.1f}s
@@ -156,18 +160,20 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         try:
-            started_at = time.time()
+            from src.jobs.disclosure_refresh import refresh_congress_now
 
-            trades = await asyncio.to_thread(
-                get_live_congress_trades,
-                True,
-            )
+            started_at = time.time()
+            status, detail = await asyncio.to_thread(refresh_congress_now)
+            trades, coverage = await asyncio.to_thread(cached_coverage)
 
             elapsed_seconds = time.time() - started_at
 
             message = summarize_congress_refresh(
                 trades=trades,
                 elapsed_seconds=elapsed_seconds,
+                status=status,
+                detail=detail,
+                coverage=coverage,
             )
 
             await send_split_message(update, message, loading_message)
@@ -187,7 +193,7 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        trades = await asyncio.to_thread(get_live_congress_trades)
+        trades, coverage = await asyncio.to_thread(cached_coverage)
 
         tickers = sorted(
             {
@@ -200,18 +206,13 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if symbol and symbol not in tickers:
             tickers.append(symbol)
 
-        score_map = {}
-
-        for ticker in tickers:
-            score_map[ticker] = await asyncio.to_thread(
-                get_congress_score,
-                ticker,
-            )
+        score_map = {ticker: get_congress_score(ticker, trades=trades) for ticker in tickers}
 
         message = build_congress_report(
             trades=trades,
             score_map=score_map,
             symbol=symbol,
+            coverage=coverage,
         )
 
         await send_split_message(update, message, loading_message)
