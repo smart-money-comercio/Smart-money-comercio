@@ -562,6 +562,8 @@ def form4_transactions(root: ET.Element, filing: dict) -> list[dict]:
     )
     issuer_name = xml_find_text(root, ".//issuerName", filing.get("company", ""))
     owner_info = parse_owner_relationship(root)
+    owners = root.findall("./reportingOwner")
+    owner_cik = xml_find_text(owners[0], "./reportingOwnerId/rptOwnerCik", "") if len(owners) == 1 else ""
     plan_box = xml_find_text(root, "./aff10b5One", "").casefold() in {"1", "true"}
 
     transactions = []
@@ -578,6 +580,10 @@ def form4_transactions(root: ET.Element, filing: dict) -> list[dict]:
 
         if trade:
             trade["rule_10b5_1"] = plan_box
+            if len(owners) > 1:
+                trade["joint_reporting"] = True
+            if re.fullmatch(r"[0-9]{1,10}", owner_cik) and int(owner_cik):
+                trade["reporting_owner_cik"] = owner_cik.zfill(10)
             transactions.append(trade)
 
     for node in root.findall(".//derivativeTransaction"):
@@ -675,7 +681,7 @@ def load_cached_trades() -> list[dict] | None:
 
 
 def write_trade_cache(trades: list[dict]) -> None:
-    from src.intelligence.transaction_cache import publish
+    from src.intelligence.transaction_cache import publish, read
 
     if not trades:
         return
@@ -688,6 +694,8 @@ def write_trade_cache(trades: list[dict]) -> None:
     )
 
     try:
+        previous, revision = read(CACHE_FILE)
+        ownership = {key: previous[key] for key in ("ownership_filings", "ownership_checks") if key in previous}
         publish(CACHE_FILE, {
             "cached_at": utc_now_ts(),
             "cached_at_iso": iso_now(),
@@ -695,7 +703,8 @@ def write_trade_cache(trades: list[dict]) -> None:
             "tickers": tickers,
             "records": len(trades),
             "trades": trades,
-        })
+            **ownership,
+        }, revision)
     except (OSError, ValueError, sqlite3.Error):
         return
 

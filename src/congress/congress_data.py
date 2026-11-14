@@ -35,6 +35,7 @@ STOCKWATCHER_MAX_RECORDS = int(os.getenv("STOCKWATCHER_MAX_RECORDS", "250"))
 
 FMP_SOURCE = "FMP House/Senate congressional disclosure endpoints"
 STOCKWATCHER_SOURCE = "House/Senate Stock Watcher public JSON datasets"
+HOUSE_CLERK_PROVIDER = "House Clerk pilot"
 CONGRESS_PROVIDERS = {FMP_SOURCE: "FMP", STOCKWATCHER_SOURCE: "Stock Watcher"}
 CHAMBERS = ("House", "Senate")
 MAX_FEED_AGE = timedelta(days=30)
@@ -519,6 +520,45 @@ def _current_rows(payload, now):
     return result, observations
 
 
+def house_clerk_path():
+    return CACHE_FILE.with_name("house_clerk_disclosures.json")
+
+
+def house_clerk_enabled():
+    return os.getenv("CONGRESS_HOUSE_CLERK_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def house_clerk_coverage(now, *, available_house):
+    if available_house or not house_clerk_enabled():
+        return [], ""
+    from src.intelligence.transaction_disclosures import congress_fields, observed_at
+
+    try:
+        payload, _ = transaction_cache.read(house_clerk_path())
+        if payload.get("source") != HOUSE_CLERK_PROVIDER:
+            return [], ""
+        observed = observed_at(payload.get("fetched_at"))
+    except (OSError, ValueError):
+        return [], ""
+    if not timedelta(0) <= now - observed <= CACHE_MAX_AGE:
+        return [], "House Clerk pilot — Cached sample is stale."
+    today = now.astimezone(NY).date()
+    rows = []
+    for row in transaction_cache.rows(payload):
+        dates = transaction_dates(row, observed.astimezone(NY).date())
+        if (not dates or today - dates[1] > MAX_FEED_AGE or today - dates[0] > MAX_TRADE_AGE
+                or row.get("source") != HOUSE_CLERK_PROVIDER or congress_chamber(row.get("chamber")) != "House"
+                or not clean_ticker(row.get("ticker"))):
+            continue
+        try:
+            congress_fields(row)
+        except (TypeError, ValueError):
+            continue
+        rows.append(row)
+    detail = f"House Clerk pilot — {len(rows)} recent stock rows from a bounded sample of original reports."
+    return rows, detail
+
+
 @lru_cache(maxsize=2)
 def _scoring_payload(path, revision):
     try:
@@ -532,6 +572,9 @@ def cached_coverage(now=None):
     payload, _ = _snapshot()
     current, observations = _current_rows(payload, now)
     records = transaction_cache.rows(payload)
+    house = observations.get("House")
+    house_available = house and now.timestamp() - house["at"] <= CACHE_MAX_AGE.total_seconds()
+    pilot, pilot_detail = house_clerk_coverage(now, available_house=house_available)
     lines = []
     for chamber in CHAMBERS:
         observed = observations.get(chamber)
@@ -539,6 +582,9 @@ def cached_coverage(now=None):
         dated = max((parse_date_value(row.get("disclosure_date")) for row in chamber_rows), default=datetime.min)
         status = ("Current" if now.timestamp() - observed["at"] <= CACHE_MAX_AGE.total_seconds() else "Stale") if observed else "Unavailable"
         detail = f" | {observed['provider']}" if observed else ""
+        if chamber == "House" and pilot:
+            status = "Limited"
+            detail = " | House Clerk pilot"
         if dated != datetime.min:
             detail += f" | Latest cached disclosure {dated.date().isoformat()}"
         elif chamber_rows:
@@ -549,9 +595,11 @@ def cached_coverage(now=None):
         if note:
             detail += " | " + note
         lines.append(f"{chamber} — {status}{detail}")
+    if pilot_detail:
+        lines.append(pilot_detail)
     if not current:
-        lines.append("Congress input is neutral (50/100) while recent dated trade evidence is unavailable.")
-    return current, "\n".join(lines)
+        lines.append("Congress input is neutral (50/100) while the scoring feed has no recent dated trade evidence.")
+    return current + pilot, "\n".join(lines)
 
 
 def get_congress_trades(force_refresh: bool = False) -> list[dict]:
@@ -559,7 +607,7 @@ def get_congress_trades(force_refresh: bool = False) -> list[dict]:
         from src.jobs.disclosure_refresh import refresh_congress_now
 
         refresh_congress_now()
-        return cached_coverage()[0]
+        return get_congress_trades()
     try:
         revision = transaction_cache.revision(CACHE_FILE.stat())
     except OSError:

@@ -9,7 +9,8 @@ import re
 import sqlite3
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 import xml.etree.ElementTree as ET
 
 from src.congress import congress_data as congress
@@ -33,6 +34,14 @@ class BudgetExhausted(ValueError):
     pass
 
 
+class PublisherRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        target = urlsplit(newurl)
+        if target.scheme != "https" or target.netloc != request.host:
+            raise ValueError("Disclosure request left the original publisher")
+        return super().redirect_request(request, fp, code, msg, headers, newurl)
+
+
 class Reader:
     def __init__(self, seconds, requests, user_agent, interval=0):
         self.deadline = time.monotonic() + seconds
@@ -42,6 +51,9 @@ class Reader:
         self.next_request = 0
 
     def text(self, url):
+        return self.bytes(url).decode("utf-8-sig")
+
+    def bytes(self, url, *, same_host=False, max_bytes=cache.MAX_BYTES):
         delay = max(0, self.next_request - time.monotonic())
         if not self.remaining or time.monotonic() + delay >= self.deadline:
             raise BudgetExhausted("Request budget reached")
@@ -50,14 +62,19 @@ class Reader:
         self.remaining -= 1
         self.next_request = time.monotonic() + self.interval
         request = Request(url, headers={"User-Agent": self.user_agent, "Accept": "application/json, application/xml, text/plain, */*"})
-        with urlopen(request, timeout=max(.1, min(4, self.deadline - time.monotonic()))) as response:
+        open_url = build_opener(PublisherRedirect()).open if same_host else urlopen
+        with open_url(request, timeout=max(.1, min(4, self.deadline - time.monotonic()))) as response:
+            if same_host:
+                final = urlsplit(response.geturl())
+                if final.scheme != "https" or final.netloc != request.host:
+                    raise ValueError("Disclosure response left the original publisher")
             body = bytearray()
-            while len(body) <= cache.MAX_BYTES:
+            while len(body) <= max_bytes:
                 if time.monotonic() >= self.deadline:
                     raise BudgetExhausted("Request budget reached")
-                chunk = response.read1(min(131072, cache.MAX_BYTES + 1 - len(body)))
+                chunk = response.read1(min(131072, max_bytes + 1 - len(body)))
                 if not chunk:
-                    return body.decode("utf-8-sig")
+                    return bytes(body)
                 body.extend(chunk)
         raise ValueError("Disclosure response exceeds its size limit")
 
@@ -91,7 +108,7 @@ def error_reason(error):
     return "Usable disclosure response unavailable"
 
 
-def recent_filings(ticker, issuer, today, reader):
+def issuer_submissions(issuer, reader):
     payload = reader.json(sec.SUBMISSIONS_URL.format(cik=issuer["cik"]))
     envelope = payload.get("filings") if isinstance(payload, dict) else None
     recent = envelope.get("recent") if isinstance(envelope, dict) else None
@@ -101,6 +118,12 @@ def recent_filings(ticker, issuer, today, reader):
         raise ValueError("Unrecognized SEC submissions response")
     if str(payload.get("cik", "")).zfill(10) != issuer["cik"]:
         raise ValueError("SEC submissions issuer does not match the request")
+    return payload
+
+
+def recent_filings(ticker, issuer, today, reader, payload=None):
+    if payload is None:
+        payload = issuer_submissions(issuer, reader)
     earliest = (today - timedelta(days=SEC_WINDOW_DAYS - 1)).isoformat()
     latest = today.isoformat()
     return [row for row in sec.form4_filings(payload, ticker, issuer) if earliest <= row["filing_date"] <= latest]
@@ -146,26 +169,44 @@ def refresh_sec(payload, now, cursor):
     if not issuers:
         return None, cursor, 3600, "limited", "No tracked SEC issuer identifiers available"
     observations = scope_observations("sec", payload, now)
+    from src.intelligence import ownership_signals
+    ownership = ownership_signals.ownership_rows(payload)
+    ownership_checks = ownership_signals.checked_issuers(payload, now)
     previous = [row for row in cache.rows(payload) if isinstance(row.get("ticker"), str) and scope("sec", row)]
     known = {(scope("sec", row), row.get("accession")) for row in previous if isinstance(row.get("accession"), str)}
     today = now.astimezone(NY).date()
     current = now.timestamp()
     keys = list(issuers)
     due = keys[cursor % len(keys):] + keys[:cursor % len(keys)]
-    due = [key for key in due if current - observations.get(key, {}).get("at", 0) >= sec.CACHE_TTL_SECONDS][:SEC_BATCH]
+    ownership_enabled = ownership_signals.enabled()
+    due = [key for key in due if current - observations.get(key, {}).get("at", 0) >= sec.CACHE_TTL_SECONDS
+           or ownership_enabled and current - ownership_checks.get(key, 0) >= sec.CACHE_TTL_SECONDS][:SEC_BATCH]
     added, checked = [], 0
     wait, reason = CHECK_SECONDS - 5, ""
+    ownership_limited = False
     for key in due:
         ticker, issuer = issuers[key]
         cursor = (keys.index(key) + 1) % len(keys)
         try:
-            filings = recent_filings(ticker, issuer, today, reader)
+            submissions = issuer_submissions(issuer, reader)
+            filings = recent_filings(ticker, issuer, today, reader, submissions)
             for filing in filings:
                 if (key, filing["accession"]) not in known:
                     added.extend(form4_rows(filing, reader))
                     known.add((key, filing["accession"]))
             observations[key] = {"at": current, "provider": SEC_SOURCE}
             checked += 1
+            if ownership_enabled:
+                try:
+                    ownership_signals.read_issuer(submissions, key, ticker, ownership, reader, now)
+                    ownership_checks[key] = current
+                except (OSError, ValueError, TypeError, KeyError) as error:
+                    ownership_checks.pop(key, None)
+                    ownership_limited = True
+                    delay = retry_delay(error, now)
+                    if delay or isinstance(error, BudgetExhausted):
+                        wait = delay or wait
+                        break
         except (OSError, ValueError, TypeError, AttributeError, KeyError) as error:
             reason = error_reason(error)
             delay = retry_delay(error, now)
@@ -178,7 +219,9 @@ def refresh_sec(payload, now, cursor):
         detail += f"; {checked} updated, {len(added)} new transaction rows"
     if reason:
         detail += f"; {reason}"
-    status = "pass" if covered == len(keys) and not reason else "limited"
+    if ownership_limited:
+        detail += "; Schedule 13D document coverage limited"
+    status = "pass" if covered == len(keys) and not reason and not ownership_limited else "limited"
     if not checked and not added:
         return None, cursor, wait, status, detail
     trades = sec.sort_trades(sec.dedupe_trades(added + previous))[:cache.MAX_ROWS]
@@ -187,6 +230,9 @@ def refresh_sec(payload, now, cursor):
     result = {"cached_at": last_success, "cached_at_iso": datetime.fromtimestamp(last_success, timezone.utc).isoformat(),
               "source": SEC_SOURCE, "records": len(trades), "tickers": sorted({row["ticker"] for row in trades}),
               "trades": trades, "observations": observations}
+    if ownership_enabled or "ownership_filings" in payload:
+        result["ownership_filings"] = ownership_signals.retain(ownership, today)
+        result["ownership_checks"] = {key: at for key, at in ownership_checks.items() if key in issuers}
     return result, cursor, wait, status, detail
 
 
@@ -309,8 +355,37 @@ def refresh_congress(now, *, force=False):
             problems.append(detail if detail.startswith(chamber + " ") else f"{chamber} {detail}")
     observations = scope_observations("congress", cache.read(path)[0], now)
     covered = sum(now.timestamp() - value["at"] <= congress.CACHE_MAX_AGE.total_seconds() for value in observations.values())
-    detail = "; ".join([f"{covered}/2 chambers with current dated coverage", *problems])
+    house = observations.get("House")
+    if congress.house_clerk_enabled() and (not house or now.timestamp() - house["at"] > congress.CACHE_MAX_AGE.total_seconds()):
+        try:
+            _, pilot = refresh_source(congress.house_clerk_path(), refresh_house_clerk, now)
+        except (OSError, ValueError, sqlite3.Error) as error:
+            pilot = f"Refresh state unavailable ({type(error).__name__})"
+        problems.append("House Clerk pilot — " + pilot)
+    detail = "; ".join([f"{covered}/2 chambers with current dated coverage in the scoring feed", *problems])
     return ("pass" if covered == len(CHAMBERS) and not problems else "limited"), detail
+
+
+def refresh_house_clerk(payload, now, cursor):
+    from src.congress import house_clerk
+
+    today = now.astimezone(NY).date()
+    saved = payload.get("reviewed", {})
+    saved = saved if isinstance(saved, dict) and len(saved) <= 400 else {}
+    cutoff = (today - congress.MAX_FEED_AGE).isoformat()
+    saved = {url: date for url, date in saved.items() if isinstance(date, str) and cutoff <= date <= today.isoformat()}
+    reader = Reader(seconds=24, requests=house_clerk.DOCUMENTS_PER_REFRESH + 2,
+                    user_agent="SmartMoneyAI/1.0", interval=.3)
+    rows, reviewed, failures, pending, cursor = house_clerk.read_recent(reader, today, saved.keys(), cursor)
+    earlier = [row for row in cache.rows(payload) if congress.recently_filed(row, today)]
+    trades = congress.sort_trades(rows + earlier)[:1200]
+    review = dict(sorted((saved | reviewed).items(), key=lambda item: item[1], reverse=True)[:400])
+    detail = f"{len(reviewed)} reports read, {pending} pending or unread; {len(trades)} dated stock rows"
+    if failures and not reviewed:
+        return None, cursor, 3600, "limited", detail
+    wait = 3600 if pending or failures else congress.CACHE_TTL_SECONDS
+    return {"source": congress.HOUSE_CLERK_PROVIDER, "fetched_at": now.timestamp(), "trades": trades,
+            "reviewed": review}, cursor, wait, "limited" if failures or pending else "pass", detail
 
 
 def refresh_congress_now():

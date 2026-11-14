@@ -60,11 +60,12 @@ def finish(destination, alert: dict, now: float, success: bool) -> None:
         db.execute("DELETE FROM leases WHERE destination=? AND event_key=?", key)
 
 
-def record_snapshot(alerts: list[dict], observations: dict, now: float) -> None:
+def record_snapshot(alerts: list[dict], observations: dict, now: float, *, replace_kinds=()) -> None:
     """Retain evidence and agent assessments even if Telegram delivery fails."""
     with connection() as db:
         if all(symbol in observations for symbol in ("^GSPC", "^IXIC")):
             db.execute("UPDATE events SET active=0 WHERE kind='market'")
+        db.executemany("UPDATE events SET active=0 WHERE kind=?", [(kind,) for kind in sorted(replace_kinds)])
         for alert in alerts:
             db.execute("INSERT OR REPLACE INTO events VALUES (?,?,?,?,?,1)",
                        (alert["key"], alert["kind"], json.dumps(alert), now, alert["expires"]))

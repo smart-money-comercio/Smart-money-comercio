@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 
@@ -48,19 +49,13 @@ def is_sale(transaction: Any) -> bool:
 
 def amount_rank(amount_range: Any) -> int:
     text = str(amount_range or "").upper()
+    low = re.match(r"\$([\d,]+)\s*[-–—]", text)
+    if low:
+        return int(low[1].replace(",", ""))
 
-    if "$5M" in text:
-        return 6
-    if "$1M" in text:
-        return 5
-    if "$500K" in text:
-        return 4
-    if "$250K" in text:
-        return 3
-    if "$100K" in text:
-        return 2
-    if "$50K" in text or "$15K" in text:
-        return 1
+    abbreviated = re.match(r"\$(\d+(?:\.\d+)?)([KM])\b", text)
+    if abbreviated:
+        return int(float(abbreviated[1]) * (1_000 if abbreviated[2] == "K" else 1_000_000))
 
     return 0
 
@@ -153,6 +148,7 @@ def build_trade_line(index: int, trade: dict, score_map: dict[str, int | float])
     sector = clean_text(trade.get("sector") or "N/A", 90)
     amount_range = clean_text(trade.get("amount_range") or "N/A", 40)
     disclosure_date = clean_text(trade.get("disclosure_date") or "Unknown", 40)
+    transaction_date = clean_text(trade.get("transaction_date") or "Unknown", 40)
     owner = clean_text(trade.get("owner") or "N/A", 60)
     relevance = clean_text(trade.get("committee_relevance") or "N/A", 30)
     signal = clean_text(trade.get("signal") or "N/A", 40)
@@ -161,16 +157,21 @@ def build_trade_line(index: int, trade: dict, score_map: dict[str, int | float])
     notes_line = ""
     if notes:
         notes_line = f"\n   Notes: {notes}"
+    source = trade.get("source_url")
+    link = ("\n   Original filing: " + source if isinstance(source, str) and re.fullmatch(
+        r"https://(?:disclosures-clerk\.house\.gov/public_disc/ptr-pdfs/20[0-9]{2}/[0-9]{5,12}\.pdf|"
+        r"efdsearch\.senate\.gov/search/view/ptr/[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/?)", source) else "")
 
     return (
         f"{index}. {symbol} — {transaction}\n"
         f"   Politician: {politician} | Chamber: {chamber}\n"
-        f"   Amount: {amount_range} | Disclosure: {disclosure_date}\n"
+        f"   Amount: {amount_range} | Trade: {transaction_date} | Filed: {disclosure_date}\n"
         f"   Sector: {sector}\n"
         f"   Committee Relevance: {relevance} | Signal: {signal}\n"
         f"   Owner: {owner}\n"
         f"   {format_score_line(symbol, score_map)}"
         f"{notes_line}"
+        f"{link}"
     )
 
 

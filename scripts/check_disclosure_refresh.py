@@ -72,7 +72,8 @@ class RefreshChecks(IsolatedChecks):
         self.congress = self.root / "congress.json"
         self.stack.enter_context(patch.dict(os.environ, {"OPENAI_API_KEY": "offline-import-check",
                                                         "SEC_USER_AGENT": "Smart Money test ops@research-lab.org",
-                                                        "FMP_API_KEY": "synthetic-private-key", "CONGRESS_DATA_PROVIDER": "auto"}))
+                                                        "FMP_API_KEY": "synthetic-private-key", "CONGRESS_DATA_PROVIDER": "auto",
+                                                        "CONGRESS_HOUSE_CLERK_ENABLED": "false", "SEC_OWNERSHIP_ALERTS_ENABLED": "false"}))
         self.stack.enter_context(patch.object(sec, "CACHE_FILE", self.sec))
         self.stack.enter_context(patch.object(sec, "CIK_CACHE_FILE", self.root / "ciks.json"))
         self.stack.enter_context(patch.object(sec, "utc_now_ts", return_value=NOW.timestamp()))

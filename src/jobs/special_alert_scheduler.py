@@ -8,6 +8,7 @@ import logging
 import os
 
 from src.config.special_alerts import settings
+from src.intelligence import ownership_signals
 from src.intelligence import special_alert_store as store
 from src.intelligence.special_alert_engine import evaluate
 from src.intelligence.special_alert_sources import collect_inputs
@@ -45,6 +46,13 @@ def collect_snapshot() -> dict:
                 alert.setdefault("agent_review", "Agent review unavailable; review the sourced facts and validation commands.")
                 if "Agent review\n" not in alert["text"]:
                     alert["text"] += "\n\n" + alert["agent_review"]
+    try:
+        ownership, source_status["SEC Ownership"] = ownership_signals.collect(now)
+        alerts = [alert for alert in alerts if alert["kind"] == "market"] + ownership + [
+            alert for alert in alerts if alert["kind"] != "market"]
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        source_status["SEC Ownership"] = "cache unavailable"
+        issues.append("SEC ownership evidence unavailable: " + type(exc).__name__)
     return {"asof": now.isoformat(), "alerts": alerts, "issues": issues,
             "observations": observations, "news_items": len(news), "source_status": source_status,
             "coverage": coverage}
@@ -61,12 +69,15 @@ async def special_alert_job(context) -> None:
         # Check again after networking in case an admin paused during the scan.
         if not settings()["enabled"] or not store.get_settings().get("enabled", True):
             return
-        store.record_snapshot(snapshot["alerts"], snapshot["observations"], datetime.now(timezone.utc).timestamp())
+        ownership_status = snapshot.get("source_status", {}).get("SEC Ownership")
+        replaced = ownership_signals.KINDS if ownership_status and ownership_status not in {"cache unavailable", "waiting for the disclosure refresh"} else ()
+        store.record_snapshot(snapshot["alerts"], snapshot["observations"], datetime.now(timezone.utc).timestamp(), replace_kinds=replaced)
         sent, failed = 0, 0
         company_sent = dict.fromkeys(chats, 0)
+        capped = {"company", "ipo"} | ownership_signals.KINDS
         for alert in snapshot["alerts"]:
             for chat_id in chats:
-                if alert["kind"] in {"company", "ipo"} and company_sent[chat_id] >= 3:
+                if alert["kind"] in capped and company_sent[chat_id] >= 3:
                     continue
                 now = datetime.now(timezone.utc).timestamp()
                 if alert["expires"] < now:
@@ -85,7 +96,7 @@ async def special_alert_job(context) -> None:
                 else:
                     store.finish(chat_id, alert, now, True)
                     sent += 1
-                    if alert["kind"] in {"company", "ipo"}:
+                    if alert["kind"] in capped:
                         company_sent[chat_id] += 1
         store.save_settings(last_scan=snapshot["asof"], last_issues=snapshot["issues"],
                             last_candidates=len(snapshot["alerts"]), last_sent=sent, last_failed=failed,

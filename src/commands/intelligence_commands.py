@@ -206,7 +206,10 @@ async def congress(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if symbol and symbol not in tickers:
             tickers.append(symbol)
 
-        score_map = {ticker: get_congress_score(ticker, trades=trades) for ticker in tickers}
+        from src.congress.congress_data import HOUSE_CLERK_PROVIDER
+
+        scoring_rows = [row for row in trades if row.get("source") != HOUSE_CLERK_PROVIDER]
+        score_map = {ticker: get_congress_score(ticker, trades=scoring_rows) for ticker in tickers}
 
         message = build_congress_report(
             trades=trades,

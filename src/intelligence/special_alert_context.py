@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from src.intelligence import ownership_signals
 from src.intelligence import special_alert_store as store
 from src.intelligence.special_alert_sources import clean, timestamp
 
@@ -11,6 +12,8 @@ from src.intelligence.special_alert_sources import clean, timestamp
 def current_evidence(events: list[dict]) -> list[dict]:
     from src.config.special_alerts import settings
     from src.intelligence.special_alert_engine import confirmed_company
+    if not ownership_signals.enabled():
+        events = [event for event in events if event.get("kind") not in ownership_signals.KINDS]
     if not settings()["confirmed_only"]:
         return events
     return [event for event in events if event.get("kind") != "company" or confirmed_company(event.get("evidence", {}))]
@@ -25,6 +28,8 @@ def active_events(symbol: str = "", now: datetime | None = None) -> list[dict]:
 
 
 def event_fact(event: dict) -> str:
+    if event["kind"] in ownership_signals.KINDS:
+        return ownership_signals.event_fact(event)
     if event["kind"] == "ipo":
         from src.intelligence.ipo_monitor import checked, STAGES
         evidence = event["evidence"]
@@ -113,4 +118,6 @@ def daily_agent_event_review() -> str:
     events = current_evidence(store.recent_events(datetime.now(timezone.utc).timestamp()))
     if not events:
         return "0 active events in the special-alert evidence cache. No network fetch or Telegram send."
+    if any(event["kind"] in ownership_signals.KINDS for event in events):
+        return f"{len(events)} active sourced events in the special-alert evidence cache. " + clean(build_event_review(), 800)
     return f"{len(events)} active sourced events reviewed by the analyst agent. " + clean(build_event_review(), 800)

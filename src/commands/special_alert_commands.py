@@ -49,6 +49,7 @@ def status_report() -> str:
              "AI IPO sources: " + state.get("last_source_status", {}).get("AI IPOs", "not scanned yet"),
              "Company confirmation: " + ("original source required" if config.get("confirmed_only", True) else "headline leads enabled"),
              "Hourly AI research: " + state.get("last_source_status", {}).get("Hourly Research", "not scanned yet"),
+             "SEC ownership signals: " + state.get("last_source_status", {}).get("SEC Ownership", "not scanned yet"),
              f"Selloff: S&P 500 -{config['sp_drop']:g}% / Nasdaq -{config['nasdaq_drop']:g}%",
              f"Severe: S&P 500 -{config['sp_severe']:g}% / Nasdaq -{config['nasdaq_severe']:g}%",
              f"Two negative sessions: S&P 500 -{config['sp_two_day']:g}% / Nasdaq -{config['nasdaq_two_day']:g}% compounded",
@@ -111,6 +112,8 @@ async def specialalerts_command(update, context) -> None:
             messages.append("No qualifying alerts in the available current data.")
         if snapshot["issues"]:
             messages.append("Unavailable inputs: " + "; ".join(snapshot["issues"]))
+        if "SEC Ownership" in snapshot.get("source_status", {}):
+            messages.append("SEC ownership signals: " + snapshot["source_status"]["SEC Ownership"])
         details = company_source_lines(snapshot.get("source_status", {}), coverage.get("symbols", settings()["symbols"]))
         if details:
             messages.append("\n".join(details))
