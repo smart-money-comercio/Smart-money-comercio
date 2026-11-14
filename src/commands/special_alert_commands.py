@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from src.commands.admin_commands import is_admin
 from src.config.special_alerts import settings
 from src.intelligence import special_alert_store as store
+from src.intelligence.special_alert_sources import INDEX_NAMES, MARKET_CHECK_CLOSED
 from src.intelligence.special_alert_universe import company_universe
 from src.jobs.special_alert_scheduler import collect_snapshot, destinations
 from src.utils.telegram_messages import reply_long_message
@@ -110,11 +111,15 @@ async def specialalerts_command(update, context) -> None:
         messages.extend(alert["text"] for alert in snapshot["alerts"])
         if not snapshot["alerts"]:
             messages.append("No qualifying alerts in the available current data.")
+        sources = snapshot.get("source_status", {})
+        if "SEC Ownership" in sources:
+            messages.append("SEC ownership signals: " + sources["SEC Ownership"])
+        outside_window = [INDEX_NAMES[symbol] for symbol in INDEX_NAMES if sources.get(symbol) == MARKET_CHECK_CLOSED]
+        if outside_window:
+            messages.append("Market checks outside the session window — " + ", ".join(outside_window))
         if snapshot["issues"]:
             messages.append("Unavailable inputs: " + "; ".join(snapshot["issues"]))
-        if "SEC Ownership" in snapshot.get("source_status", {}):
-            messages.append("SEC ownership signals: " + snapshot["source_status"]["SEC Ownership"])
-        details = company_source_lines(snapshot.get("source_status", {}), coverage.get("symbols", settings()["symbols"]))
+        details = company_source_lines(sources, coverage.get("symbols", settings()["symbols"]))
         if details:
             messages.append("\n".join(details))
         await loading.edit_text("Preview ready.", parse_mode=None)

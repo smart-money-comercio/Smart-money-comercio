@@ -83,14 +83,14 @@ class RefreshChecks(IsolatedChecks):
         self.requests = []
         self.unexpected = []
         self.addCleanup(lambda: self.assertEqual(self.unexpected, []))
-        self.fail = {}
+        self.source_failures = {}
         self.stack.enter_context(patch.object(job, "urlopen", side_effect=self.network))
 
     def network(self, request, timeout):
         self.assertLessEqual(timeout, 4)
         url = request.full_url
         self.requests.append(url)
-        for part, error in self.fail.items():
+        for part, error in self.source_failures.items():
             if part in url:
                 raise error
         if url == sec.COMPANY_TICKERS_URL:
@@ -150,7 +150,7 @@ class RefreshChecks(IsolatedChecks):
         old = (NOW - timedelta(hours=40)).timestamp()
         senate = ptr(chamber="Senate", source_url=SENATE_LINK, amount_range="$50,001 - $100,000")
         cache.publish(self.congress, {"source": job.FMP_SOURCE, "fetched_at": old, "trades": [senate]})
-        self.fail["senate-latest"] = HTTPError("https://host.test/?apikey=synthetic-private-key", 429, "request refused", {"Retry-After": "9000"}, None)
+        self.source_failures["senate-latest"] = HTTPError("https://host.test/?apikey=synthetic-private-key", 429, "request refused", {"Retry-After": "9000"}, None)
         result = job.refresh_due(NOW)
         payload, _ = cache.read(self.congress)
         self.assertIn("Senate HTTP 429", result["detail"])
@@ -172,7 +172,7 @@ class RefreshChecks(IsolatedChecks):
         old = (NOW - timedelta(hours=40)).timestamp()
         cache.publish(self.sec, {"source": job.SEC_SOURCE, "cached_at": old, "trades": [form4()]})
         before = self.sec.read_bytes()
-        self.fail["/submissions/"] = HTTPError("https://data.sec.gov/", 403, "denied", {}, None)
+        self.source_failures["/submissions/"] = HTTPError("https://data.sec.gov/", 403, "denied", {}, None)
         result = job.refresh_due(NOW)
         self.assertEqual(self.sec.read_bytes(), before)
         self.assertIn("HTTP 403", result["detail"])
@@ -284,7 +284,7 @@ class RefreshChecks(IsolatedChecks):
         self.assertEqual(self.requests, [])
 
     def test_manual_congress_refresh_respects_active_provider_retry(self):
-        self.fail["senate-latest"] = HTTPError("https://host.test/", 429, "rate limit", {"Retry-After": "9000"}, None)
+        self.source_failures["senate-latest"] = HTTPError("https://host.test/", 429, "rate limit", {"Retry-After": "9000"}, None)
         job.refresh_due(NOW)
         self.requests.clear()
         with patch.object(job, "datetime", FrozenCongressClock):
@@ -295,7 +295,7 @@ class RefreshChecks(IsolatedChecks):
         self.assertTrue(any("house-latest" in url for url in self.requests))
 
     def test_house_402_leaves_senate_usable_and_surfaces_the_access_problem(self):
-        self.fail["house-latest"] = HTTPError("https://host.test/", 402, "restricted", {}, None)
+        self.source_failures["house-latest"] = HTTPError("https://host.test/", 402, "restricted", {}, None)
         result = job.refresh_due(NOW)
         self.assertEqual(result["status"], "limited")
         self.assertIn("1/2 chambers with current dated coverage", result["detail"])
@@ -308,7 +308,7 @@ class RefreshChecks(IsolatedChecks):
         self.assertIn("Senate disclosure", brief)
 
     def test_first_congress_page_survives_an_access_error_on_the_second(self):
-        self.fail["page=1"] = HTTPError("https://host.test/", 402, "restricted", {}, None)
+        self.source_failures["page=1"] = HTTPError("https://host.test/", 402, "restricted", {}, None)
         with patch.object(congress, "PAGE_LIMIT", 1):
             result = job.refresh_due(NOW)
         self.assertEqual(result["status"], "limited")

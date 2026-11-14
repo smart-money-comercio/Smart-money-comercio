@@ -29,6 +29,10 @@ MIN_CHANGE = Decimal("1")
 COMMON_EQUITY = re.compile(r"\b(?:common (?:shares|stock)|ordinary (?:shares|stock))\b", re.I)
 
 
+class OwnershipDocumentError(ValueError):
+    pass
+
+
 def enabled():
     return os.getenv("SEC_OWNERSHIP_ALERTS_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
 
@@ -140,44 +144,49 @@ def parse_ownership(raw, cik, ticker, filing, url):
             "url": url, "sha256": sha256(raw).hexdigest()}
 
 
+def read_document(filing, cik, ticker, reader):
+    _, accession, _, document, _ = filing
+    if (not isinstance(document, str) or ".." in document
+            or not re.fullmatch(r"(?:xsl[A-Za-z0-9_]+/)?[A-Za-z0-9_.-]+\.xml", document)):
+        raise OwnershipDocumentError("Structured SEC filing link unavailable")
+    path = document.rsplit("/", 1)[-1]
+    urls = dict.fromkeys((filing_base(cik, accession) + path, filing_base(accession[:10], accession) + path))
+    for url in urls:
+        try:
+            raw = reader.bytes(url, same_host=True, max_bytes=1_000_000)
+        except HTTPError as error:
+            if error.code != 404:
+                raise
+            continue
+        try:
+            return parse_ownership(raw, cik, ticker, filing, url)
+        except ValueError as error:
+            raise OwnershipDocumentError("SEC filing XML could not be verified") from error
+    raise OwnershipDocumentError("SEC filing XML unavailable (HTTP 404)")
+
+
 def read_issuer(payload, cik, ticker, saved, reader, now):
     today = now.astimezone(NY).date()
     filings = source_filings(payload, today)
     known = {row["accession"]: row for row in saved if row.get("cik") == cik and safe_stake(row)}
-    active = [row for row in filings if (today - day(row[0])).days < FILING_DAYS]
-    wanted = {row[1] for row in active}
+    active = {row[1] for row in filings if (today - day(row[0])).days < FILING_DAYS}
+    wanted = set(active)
     for index, filing in enumerate(filings[:-1]):
-        if (today - day(filing[0])).days < FILING_DAYS and filing[2].endswith("/A"):
+        if filing[1] in active and filing[2].endswith("/A"):
             wanted.add(filings[index + 1][1])
     for index, filing in enumerate(filings):
-        filed, accession, _, document, _ = filing
+        accession = filing[1]
         if accession not in wanted:
             continue
         prior_accession = filings[index + 1][1] if index + 1 < len(filings) else ""
         if accession in known:
             known[accession]["prior_accession"] = prior_accession
             continue
-        if not isinstance(document, str) or not re.fullmatch(r"(?:xsl[A-Za-z0-9_]+/)?[A-Za-z0-9_.-]+\.xml", document) or ".." in document:
-            if (today - day(filed)).days < FILING_DAYS:
-                raise ValueError("Structured Schedule 13D document unavailable")
-            continue
-        base = filing_base(cik, accession)
-        path = document.rsplit("/", 1)[-1]
-        urls = list(dict.fromkeys((base + path, filing_base(accession[:10], accession) + path)))
-        problem = None
-        for url in urls:
-            try:
-                raw = reader.bytes(url, same_host=True, max_bytes=1_000_000)
-            except HTTPError as error:
-                if error.code != 404:
-                    raise
-                problem = error
-                continue
-            row = parse_ownership(raw, cik, ticker, filing, url)
-            break
-        else:
-            if problem is not None and (today - day(filed)).days < FILING_DAYS:
-                raise problem
+        try:
+            row = read_document(filing, cik, ticker, reader)
+        except OwnershipDocumentError:
+            if accession in active:
+                raise
             continue
         row["prior_accession"] = prior_accession
         saved.append(row)
@@ -370,12 +379,19 @@ def collect(now):
     if not enabled():
         return [], "disabled"
     payload, revision = cache.read(sec.CACHE_FILE)
+    note = cache.refresh_note(sec.CACHE_FILE, "", now)
+    suffix = f". Latest refresh — {note}" if note else ""
     if not payload or payload.get("source") != "SEC Form 4":
-        return [], "cache unavailable" if revision is not None else "waiting for the disclosure refresh"
+        status = "cache unavailable" if revision is not None else "waiting for the disclosure refresh"
+        return [], status + suffix
     alerts = purchase_clusters(payload, now) + stake_changes(payload, now)
     for alert in alerts:
         alert["text"] = alert_text(alert)
         alert["agent_review"] = analyst_review(alert)
     checks = sum(now.timestamp() - at <= CACHE_AGE.total_seconds() for at in checked_issuers(payload, now).values())
     form4 = sum(now.timestamp() - row["at"] <= CACHE_AGE.total_seconds() for row in scope_observations("sec", payload, now).values())
-    return sorted(alerts, key=lambda row: row["published"], reverse=True), f"Form 4: {form4} issuers · 13D: {checks} issuers with recent source checks"
+    hours = int(CACHE_AGE.total_seconds() // 3600)
+    status = f"Issuers checked in the last {hours} hours — Form 4: {form4} · Schedule 13D: {checks}"
+    if not checks and not note:
+        status += ". Awaiting the first recent Schedule 13D check."
+    return sorted(alerts, key=lambda row: row["published"], reverse=True), status + suffix

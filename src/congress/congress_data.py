@@ -529,19 +529,27 @@ def house_clerk_enabled():
 
 
 def house_clerk_coverage(now, *, available_house):
-    if available_house or not house_clerk_enabled():
+    if available_house:
         return [], ""
+    prefix = "House Clerk pilot — "
+    if not house_clerk_enabled():
+        return [], prefix + "Disabled."
     from src.intelligence.transaction_disclosures import congress_fields, observed_at
 
+    path = house_clerk_path()
+    note = transaction_cache.refresh_note(path, "", now, include_success=True)
+    last_check = f" Last check — {note}" if note else ""
     try:
-        payload, _ = transaction_cache.read(house_clerk_path())
+        payload, revision = transaction_cache.read(path)
+        if revision is None:
+            return [], prefix + (note or "Awaiting the first recorded check.")
         if payload.get("source") != HOUSE_CLERK_PROVIDER:
-            return [], ""
+            raise ValueError("Invalid House Clerk cache source")
         observed = observed_at(payload.get("fetched_at"))
     except (OSError, ValueError):
-        return [], ""
+        return [], prefix + "Cached sample unavailable." + last_check
     if not timedelta(0) <= now - observed <= CACHE_MAX_AGE:
-        return [], "House Clerk pilot — Cached sample is stale."
+        return [], prefix + "Cached sample is stale." + last_check
     today = now.astimezone(NY).date()
     rows = []
     for row in transaction_cache.rows(payload):
@@ -555,7 +563,7 @@ def house_clerk_coverage(now, *, available_house):
         except (TypeError, ValueError):
             continue
         rows.append(row)
-    detail = f"House Clerk pilot — {len(rows)} recent stock rows from a bounded sample of original reports."
+    detail = prefix + f"{len(rows)} recent stock rows from a bounded sample of original reports." + last_check
     return rows, detail
 
 

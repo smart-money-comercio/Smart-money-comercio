@@ -20,14 +20,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.check_alphabet_sources import pdf
-from scripts.check_disclosure_refresh import ACCESSION, FORM4_XML, MSFT_CIK, NOW, RefreshChecks, submissions
+from scripts.check_disclosure_refresh import ACCESSION, MSFT_CIK, NOW, NVDA_CIK, RefreshChecks, submissions
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
 from scripts.check_transaction_disclosures import form4
 from src.congress import congress_data as congress, house_clerk
 from src.insiders import insider_data as sec
 from src.intelligence import ownership_signals as ownership, special_alert_context, special_alert_store as alert_store
 from src.intelligence import transaction_cache as cache
-from src.jobs import disclosure_refresh, special_alert_scheduler
+from src.jobs import daily_agent_job, disclosure_refresh, special_alert_scheduler
 from src.reports import congress_report
 
 
@@ -66,6 +66,13 @@ def schedule_index(cik=MSFT_CIK):
                                    "filingDate": ["2026-10-23", "2026-10-20"], "reportDate": ["", ""],
                                    "primaryDocument": ["xslSCHEDULE_13D_X01/primary_doc.xml", "primary_doc.xml"]}
     return value
+
+
+def mixed_index():
+    original = submissions(MSFT_CIK, has_form=True)
+    for field, values in schedule_index()["filings"]["recent"].items():
+        original["filings"]["recent"][field].extend(values)
+    return original
 
 
 def house_archive(*entries, year=2026):
@@ -184,11 +191,8 @@ class WorkflowChecks(RefreshChecks):
         def respond(request, timeout):
             url = request.full_url
             if url.endswith(MSFT_CIK + ".json"):
-                original = submissions(MSFT_CIK, has_form=True)
-                for field, values in schedule_index()["filings"]["recent"].items():
-                    original["filings"]["recent"][field].extend(values)
                 self.requests.append(url)
-                return BytesIO(json.dumps(original).encode())
+                return BytesIO(json.dumps(mixed_index()).encode())
             if url.endswith("/primary_doc.xml"):
                 self.requests.append(url)
                 return public_response(url, schedule13d(amended=NEWER.replace("-", "") in url,
@@ -207,12 +211,76 @@ class WorkflowChecks(RefreshChecks):
                 snapshot = special_alert_scheduler.collect_snapshot()
             alert, = snapshot["alerts"]
             self.assertEqual(alert["kind"], "ownership_stake")
-            self.assertIn("13D: 2 issuers", snapshot["source_status"]["SEC Ownership"])
+            self.assertIn("Schedule 13D: 2", snapshot["source_status"]["SEC Ownership"])
             alert_store.record_snapshot([alert], {}, NOW.timestamp())
             self.assertIn("7.4% beneficial ownership", special_alert_context.event_fact(alert))
             self.assertTrue(alert_store.claim(1, alert, NOW.timestamp()))
             alert_store.finish(1, alert, NOW.timestamp(), True)
             self.assertFalse(alert_store.claim(1, alert, NOW.timestamp() + 60))
+
+    def test_schedule13d_coverage_is_saved_when_form4_is_unreadable(self):
+        with patch.dict(os.environ, {"SEC_OWNERSHIP_ALERTS_ENABLED": "true"}), \
+                patch.object(sec, "get_watchlist_symbols", return_value=["MSFT"]), \
+                patch.object(disclosure_refresh, "form4_rows", side_effect=disclosure_refresh.SECEvidenceError("SEC filing XML could not be matched")):
+            result = disclosure_refresh.refresh_due(NOW)
+            payload, _ = cache.read(self.sec)
+            self.assertEqual(result["status"], "limited")
+            self.assertEqual(payload["observations"], {})
+            self.assertEqual(payload["ownership_checks"], {MSFT_CIK: NOW.timestamp()})
+            self.assertIn("MSFT Form 4 document: SEC filing XML could not be matched", result["detail"])
+            alerts, status = ownership.collect(NOW)
+            self.assertFalse(alerts)
+            self.assertIn("Schedule 13D: 1", status)
+            self.assertIn("Latest refresh", status)
+
+    def test_form4_coverage_survives_a_bad_current_13d_document(self):
+        def respond(request, timeout):
+            url = request.full_url
+            if url.endswith(MSFT_CIK + ".json"):
+                return BytesIO(json.dumps(mixed_index()).encode())
+            if url.endswith("/primary_doc.xml"):
+                return public_response(url, b"Invalid XML")
+            return self.network(request, timeout)
+
+        with patch.dict(os.environ, {"SEC_OWNERSHIP_ALERTS_ENABLED": "true"}), \
+                patch.object(disclosure_refresh, "urlopen", side_effect=respond), \
+                patch.object(disclosure_refresh, "build_opener", return_value=SimpleNamespace(open=respond)):
+            result = disclosure_refresh.refresh_due(NOW)
+            payload, _ = cache.read(self.sec)
+            self.assertEqual(result["status"], "limited")
+            self.assertEqual(payload["observations"][MSFT_CIK]["at"], NOW.timestamp())
+            self.assertEqual(payload["ownership_checks"], {NVDA_CIK: NOW.timestamp()})
+            self.assertIn("MSFT Schedule 13D document: SEC filing XML could not be verified", result["detail"])
+            self.assertFalse(ownership.collect(NOW)[0])
+
+    def test_schedule13d_can_catch_up_without_rereading_fresh_form4(self):
+        old = NOW - timedelta(minutes=20)
+        snapshot = form4_payload()
+        snapshot["observations"][MSFT_CIK]["at"] = old.timestamp()
+        cache.publish(self.sec, snapshot)
+        with patch.dict(os.environ, {"SEC_OWNERSHIP_ALERTS_ENABLED": "true"}), \
+                patch.object(sec, "get_watchlist_symbols", return_value=["MSFT"]), \
+                patch.object(disclosure_refresh, "form4_rows") as form4_reader:
+            result = disclosure_refresh.refresh_due(NOW)
+            form4_reader.assert_not_called()
+            payload, _ = cache.read(self.sec)
+            self.assertEqual(result["status"], "pass")
+            self.assertEqual(payload["observations"], snapshot["observations"])
+            self.assertEqual(payload["ownership_checks"], {MSFT_CIK: NOW.timestamp()})
+            self.assertIn("Schedule 13D 1/1", result["detail"])
+
+    def test_missing_older_13d_baseline_keeps_the_new_filing_without_a_change_alert(self):
+        index = schedule_index()
+        index["filings"]["recent"]["filingDate"][1] = "2026-10-18"
+        reader = SimpleNamespace(bytes=lambda url, **_: schedule13d(amended=True) if NEWER.replace("-", "") in url else b"Invalid XML")
+        saved = []
+        ownership.read_issuer(index, MSFT_CIK, "MSFT", saved, reader, NOW)
+        self.assertEqual([row["accession"] for row in saved], [NEWER])
+        self.assertFalse(ownership.stake_changes({"ownership_filings": saved, "ownership_checks": {MSFT_CIK: NOW.timestamp()}}, NOW))
+
+    def deny_fmp(self):
+        for endpoint in ("house-latest", "senate-latest"):
+            self.source_failures[endpoint] = HTTPError("https://host.test/?apikey=synthetic-private-key", 402, "denied", {}, None)
 
     def test_fmp_denial_falls_back_to_the_house_clerk_without_changing_scores(self):
         def respond(request, timeout):
@@ -221,17 +289,16 @@ class WorkflowChecks(RefreshChecks):
                 return public_response(url, house_archive(("P", "10/24/2026", PTR_ID)))
             if url == PTR_URL:
                 return public_response(url, house_pdf(PURCHASE, "      Filing Status: New"))
-            if "financialmodelingprep.com" in url:
-                raise HTTPError(url, 402, "denied", {}, None)
             return self.network(request, timeout)
 
+        self.deny_fmp()
         with patch.dict(os.environ, {"CONGRESS_HOUSE_CLERK_ENABLED": "true"}), \
                 patch.object(disclosure_refresh, "urlopen", side_effect=respond), \
                 patch.object(disclosure_refresh, "build_opener", return_value=SimpleNamespace(open=respond)):
             result = disclosure_refresh.refresh_due(NOW)
             self.assertEqual(result["status"], "limited")
             self.assertIn("0/2 chambers with current dated coverage", result["detail"])
-            self.assertIn("House Clerk pilot — 1 reports read", result["detail"])
+            self.assertIn("House Clerk pilot — 1 report read", result["detail"])
             self.assertIn("Senate HTTP 402", result["detail"])
             rows, coverage = congress.cached_coverage(NOW)
             self.assertEqual(len(rows), 1)
@@ -246,6 +313,77 @@ class WorkflowChecks(RefreshChecks):
             self.assertIn("$100,001 - $250,000", output)
             self.assertIn("Congress Score: 50/100", output)
             self.assertIn(PTR_URL, output)
+            path = congress.house_clerk_path()
+            snapshot, _ = cache.read(path)
+            disclosure_refresh.refresh_congress(NOW + timedelta(hours=7))
+            self.assertEqual(cache.read(path)[0]["fetched_at"], snapshot["fetched_at"])
+
+    def test_house_index_denial_is_visible_without_a_cache(self):
+        def respond(request, timeout):
+            self.requests.append(request.full_url)
+            raise HTTPError(request.full_url, 403, "denied", {}, None)
+
+        self.deny_fmp()
+        with patch.dict(os.environ, {"CONGRESS_HOUSE_CLERK_ENABLED": "true", "SEC_OWNERSHIP_ALERTS_ENABLED": "true"}), \
+                patch.object(disclosure_refresh, "build_opener", return_value=SimpleNamespace(open=respond)):
+            self.assertIn("Awaiting the first recorded check", congress.cached_coverage(NOW)[1])
+            result = disclosure_refresh.refresh_due(NOW)
+            rendered = daily_agent_job.format_daily_agent_result({"success": True, "steps": [
+                {"name": "Disclosure Source Refresh", **result}]})
+            self.assertIn("Schedule 13D 2/2", rendered)
+            self.assertIn("Senate HTTP 402", rendered)
+            self.assertIn("House Clerk pilot — Annual index: HTTP 403", rendered)
+            self.assertNotIn("synthetic-private-key", rendered)
+            self.assertFalse(congress.house_clerk_path().exists())
+            rows, coverage = congress.cached_coverage(NOW)
+            self.assertFalse(rows)
+            self.assertIn("House Clerk pilot — Annual index: HTTP 403; next check after", coverage)
+            self.requests.clear()
+            disclosure_refresh.refresh_due(NOW + timedelta(hours=1))
+            self.assertFalse(self.requests)
+
+    def test_house_keeps_verified_reports_before_a_rate_limit(self):
+        denied_id = "20035998"
+        denied_url = house_clerk.document_url(2026, denied_id)
+
+        def respond(request, timeout):
+            url = request.full_url
+            if url == house_clerk.index_url(2026):
+                return public_response(url, house_archive(("P", "10/24/2026", PTR_ID), ("P", "10/24/2026", denied_id)))
+            if url == PTR_URL:
+                return public_response(url, house_pdf(PURCHASE, "      Filing Status: New"))
+            if url == denied_url:
+                raise HTTPError(url, 429, "rate limited", {"Retry-After": "9000"}, None)
+            raise AssertionError("Unexpected House Clerk request")
+
+        self.deny_fmp()
+        with patch.dict(os.environ, {"CONGRESS_HOUSE_CLERK_ENABLED": "true"}), \
+                patch.object(disclosure_refresh, "build_opener", return_value=SimpleNamespace(open=respond)) as opener:
+            disclosure_refresh.refresh_due(NOW)
+            rows, coverage = congress.cached_coverage(NOW)
+            self.assertEqual([row["source_url"] for row in rows], [PTR_URL])
+            self.assertIn("1 pending or unread", coverage)
+            self.assertIn("report access HTTP 429", coverage)
+            self.assertFalse(congress.get_congress_trades())
+            opener.reset_mock()
+            disclosure_refresh.refresh_due(NOW + timedelta(hours=2))
+            opener.assert_not_called()
+
+    def test_house_zero_pending_reports_is_distinct_from_unreadable_reports(self):
+        for raw, description in ((house_archive(), "0 pending or unread"),
+                                 (house_archive(("P", "10/24/2026", PTR_ID)), "1 report could not be verified")):
+            with self.subTest(description=description):
+                def respond(request, timeout):
+                    url = request.full_url
+                    return public_response(url, raw if url == house_clerk.index_url(2026) else b"Scanned image only")
+                with patch.dict(os.environ, {"CONGRESS_HOUSE_CLERK_ENABLED": "true"}), \
+                        patch.object(congress, "CACHE_FILE", self.root / ("empty" if "0 pending" in description else "unreadable") / "congress.json"), \
+                        patch.object(disclosure_refresh, "build_opener", return_value=SimpleNamespace(open=respond)):
+                    self.deny_fmp()
+                    disclosure_refresh.refresh_congress(NOW)
+                    rows, coverage = congress.cached_coverage(NOW)
+                    self.assertFalse(rows)
+                    self.assertIn(description, coverage)
 
     def test_refresh_does_not_overwrite_a_usable_13d_snapshot(self):
         saved = {"ownership_filings": [], "ownership_checks": {MSFT_CIK: NOW.timestamp()}}
@@ -277,7 +415,14 @@ def main():
         tests.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_type))
     tests.addTests(WorkflowChecks(name) for name in (
         "test_schedule13d_reuses_the_existing_issuer_submissions_response",
+        "test_schedule13d_coverage_is_saved_when_form4_is_unreadable",
+        "test_form4_coverage_survives_a_bad_current_13d_document",
+        "test_schedule13d_can_catch_up_without_rereading_fresh_form4",
+        "test_missing_older_13d_baseline_keeps_the_new_filing_without_a_change_alert",
         "test_fmp_denial_falls_back_to_the_house_clerk_without_changing_scores",
+        "test_house_index_denial_is_visible_without_a_cache",
+        "test_house_keeps_verified_reports_before_a_rate_limit",
+        "test_house_zero_pending_reports_is_distinct_from_unreadable_reports",
         "test_refresh_does_not_overwrite_a_usable_13d_snapshot",
     ))
     with ExitStack() as stack:

@@ -112,15 +112,15 @@ def finish(path, started, due, cursor, status, detail, *, scope=""):
                    (due, cursor, status, detail, REFRESH_KEYS[scope], started))
 
 
-def refresh_note(path, scope, now):
-    """Read the most recent chamber attempt without creating a database."""
+def refresh_note(path, scope, now, *, include_success=False):
+    """Read the most recent refresh attempt without creating a database."""
     status_file = status_path(path)
     try:
         with closing(sqlite3.connect(status_file.resolve().as_uri() + "?mode=ro", uri=True, timeout=.2)) as db:
             row = refresh_row(db, scope)
     except (sqlite3.Error, OSError):
         return ""
-    if not row or row[0] > now.timestamp() or row[3] != "limited":
+    if not row or row[0] > now.timestamp() or (row[3] != "limited" and not include_success):
         return ""
     detail = row[4]
     if row[1] <= now.timestamp() and detail == "Refresh in progress":

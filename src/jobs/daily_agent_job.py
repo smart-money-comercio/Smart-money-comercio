@@ -400,8 +400,9 @@ def format_daily_agent_result(status: dict[str, Any]) -> str:
         if step.get("name") == "Daily Report Build" and step.get("status") == "pass":
             detail = f"Daily report built ({status.get('report_characters', 0)} chars)."
         detail = " ".join(detail.split())
-        if len(detail) > 240:
-            detail = detail[:237].rstrip() + "..."
+        limit = 640 if step.get("name") == "Disclosure Source Refresh" else 240
+        if len(detail) > limit:
+            detail = detail[:limit - 3].rstrip() + "..."
         lines.append(f"- {marker}: {step.get('name')} - {detail}")
 
     lines.extend(

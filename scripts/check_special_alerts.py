@@ -239,6 +239,15 @@ class SourceChecks(unittest.TestCase):
             quotes, articles, issues = sources.collect_inputs(NOW, config())
         self.assertEqual(quotes, {}); self.assertEqual(articles, []); self.assertTrue(issues)
 
+    def test_closed_market_window_preserves_the_company_news_scan(self):
+        status = {}
+        with patch.object(sources, "request_bytes", side_effect=blocked_rss_response):
+            quotes, articles, issues = sources.collect_inputs(NOW + timedelta(hours=5), config() | {"symbols": ["TSLA"]}, status)
+        self.assertFalse(quotes)
+        self.assertFalse(issues)
+        self.assertTrue(articles)
+        self.assertTrue(all(status[symbol] == sources.MARKET_CHECK_CLOSED for symbol in sources.INDEX_NAMES))
+
     def test_empty_and_provider_error_charts_rejected(self):
         for value in ({}, {"chart": {"error": {"code": "Not Found"}, "result": None}}):
             with self.assertRaises(ValueError): sources.chart_observation("^GSPC", value, NOW, config())
@@ -695,7 +704,9 @@ class DeliveryChecks(unittest.IsolatedAsyncioTestCase):
     async def test_preview_shows_current_source_health_without_overwriting_scheduled_status(self):
         from src.commands import special_alert_commands as commands
         store.save_settings(last_source_status={"Tesla IR": "previous scan"})
-        self.snapshot["source_status"] = {"TSLA news": "headline feed read", "Tesla IR": "unavailable"}
+        self.snapshot["source_status"] = {"TSLA news": "headline feed read", "Tesla IR": "unavailable",
+                                          "SEC Ownership": "Issuers checked in the last 36 hours — Form 4: 69 · Schedule 13D: 0",
+                                          "^GSPC": sources.MARKET_CHECK_CLOSED, "^IXIC": sources.MARKET_CHECK_CLOSED}
         update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=SimpleNamespace(edit_text=AsyncMock()))))
         with patch.object(commands, "collect_snapshot", return_value=self.snapshot):
             await commands.specialalerts_command(update, SimpleNamespace(args=["preview"]))
@@ -703,6 +714,8 @@ class DeliveryChecks(unittest.IsolatedAsyncioTestCase):
         text = update.message.reply_text.await_args_list[-1].kwargs["text"]
         self.assertIn("TSLA headlines: headline feed read", text)
         self.assertIn("Tesla confirmation source: unavailable", text)
+        self.assertIn("Schedule 13D: 0", text)
+        self.assertIn("Market checks outside the session window — S&P 500, Nasdaq Composite", text)
 
     async def test_only_admin_in_private_chat_can_pause(self):
         from src.commands import special_alert_commands as commands

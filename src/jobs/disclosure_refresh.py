@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from http.client import HTTPException
 import json
 import logging
 import re
@@ -15,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 from src.congress import congress_data as congress
 from src.insiders import insider_data as sec
-from src.intelligence import sec_contact, transaction_cache as cache
+from src.intelligence import ownership_signals, sec_contact, transaction_cache as cache
 from src.intelligence.transaction_disclosures import NY, scope, scope_observations
 from src.scoring.watchlist import WATCHLIST
 
@@ -24,6 +25,7 @@ CHECK_SECONDS = 900
 SEC_BATCH = 8
 SEC_WINDOW_DAYS = 7
 SEC_SOURCE = "SEC Form 4"
+SOURCE_ERRORS = (OSError, HTTPException, ValueError, TypeError, AttributeError, KeyError)
 FMP_SOURCE = "FMP House/Senate congressional disclosure endpoints"
 STOCKWATCHER_SOURCE = "House/Senate Stock Watcher public JSON datasets"
 CHAMBERS = ("House", "Senate")
@@ -31,6 +33,10 @@ LOG = logging.getLogger(__name__)
 
 
 class BudgetExhausted(ValueError):
+    pass
+
+
+class SECEvidenceError(ValueError):
     pass
 
 
@@ -101,9 +107,9 @@ def retry_delay(error, now=None):
 def error_reason(error):
     if isinstance(error, HTTPError):
         return f"HTTP {error.code}"
-    if isinstance(error, BudgetExhausted):
-        return "Request budget reached"
-    if isinstance(error, (URLError, OSError)):
+    if isinstance(error, (BudgetExhausted, SECEvidenceError, ownership_signals.OwnershipDocumentError)):
+        return str(error)
+    if isinstance(error, (URLError, OSError, HTTPException)):
         return "Source connection unavailable"
     return "Usable disclosure response unavailable"
 
@@ -115,9 +121,9 @@ def issuer_submissions(issuer, reader):
     keys = ("form", "accessionNumber", "filingDate", "reportDate", "primaryDocument")
     if (not isinstance(recent, dict) or any(not isinstance(recent.get(key), list) for key in keys)
             or len({len(recent[key]) for key in keys}) != 1):
-        raise ValueError("Unrecognized SEC submissions response")
+        raise SECEvidenceError("Unrecognized SEC submissions response")
     if str(payload.get("cik", "")).zfill(10) != issuer["cik"]:
-        raise ValueError("SEC submissions issuer does not match the request")
+        raise SECEvidenceError("SEC submissions issuer does not match the request")
     return payload
 
 
@@ -133,7 +139,7 @@ def form4_rows(filing, reader):
     accession = filing["accession"]
     document = filing["primary_document"]
     if not re.fullmatch(r"[0-9]{10}-[0-9]{2}-[0-9]{6}", accession) or not re.fullmatch(r"(?:xslF345X[0-9]+/)?[A-Za-z0-9_.-]+", document) or ".." in document:
-        raise ValueError("Unrecognized SEC filing identifier")
+        raise SECEvidenceError("Unrecognized filing identifier")
     # The raw XML is beside the SEC stylesheet view. Some filings need the complete submission.
     primary = {**filing, "primary_document": document.rsplit("/", 1)[-1]}
     urls = (sec.build_filing_url(primary), sec.build_complete_submission_url(filing))
@@ -150,7 +156,7 @@ def form4_rows(filing, reader):
         if (root.tag == "ownershipDocument" and cik.zfill(10) == filing["cik"]
                 and sec.xml_find_text(root, "./documentType") == filing["form"]):
             return sec.form4_transactions(root, filing)
-    raise ValueError("SEC ownership document could not be matched")
+    raise SECEvidenceError("SEC filing XML could not be matched to the issuer and form")
 
 
 def refresh_sec(payload, now, cursor):
@@ -169,60 +175,76 @@ def refresh_sec(payload, now, cursor):
     if not issuers:
         return None, cursor, 3600, "limited", "No tracked SEC issuer identifiers available"
     observations = scope_observations("sec", payload, now)
-    from src.intelligence import ownership_signals
     ownership = ownership_signals.ownership_rows(payload)
+    prior_ownership_count = len(ownership)
     ownership_checks = ownership_signals.checked_issuers(payload, now)
+    prior_ownership_checks = dict(ownership_checks)
     previous = [row for row in cache.rows(payload) if isinstance(row.get("ticker"), str) and scope("sec", row)]
     known = {(scope("sec", row), row.get("accession")) for row in previous if isinstance(row.get("accession"), str)}
     today = now.astimezone(NY).date()
     current = now.timestamp()
     keys = list(issuers)
-    due = keys[cursor % len(keys):] + keys[:cursor % len(keys)]
     ownership_enabled = ownership_signals.enabled()
-    due = [key for key in due if current - observations.get(key, {}).get("at", 0) >= sec.CACHE_TTL_SECONDS
-           or ownership_enabled and current - ownership_checks.get(key, 0) >= sec.CACHE_TTL_SECONDS][:SEC_BATCH]
+    form4_due = {key for key in keys if current - observations.get(key, {}).get("at", 0) >= sec.CACHE_TTL_SECONDS}
+    ownership_due = {key for key in keys if ownership_enabled and current - ownership_checks.get(key, 0) >= sec.CACHE_TTL_SECONDS}
+    rotated = keys[cursor % len(keys):] + keys[:cursor % len(keys)]
+    due = [key for key in rotated if key in form4_due or key in ownership_due][:SEC_BATCH]
     added, checked = [], 0
-    wait, reason = CHECK_SECONDS - 5, ""
-    ownership_limited = False
+    problems = {}
+    wait = CHECK_SECONDS - 5
     for key in due:
         ticker, issuer = issuers[key]
         cursor = (keys.index(key) + 1) % len(keys)
         try:
             submissions = issuer_submissions(issuer, reader)
-            filings = recent_filings(ticker, issuer, today, reader, submissions)
-            for filing in filings:
-                if (key, filing["accession"]) not in known:
-                    added.extend(form4_rows(filing, reader))
-                    known.add((key, filing["accession"]))
-            observations[key] = {"at": current, "provider": SEC_SOURCE}
-            checked += 1
-            if ownership_enabled:
-                try:
-                    ownership_signals.read_issuer(submissions, key, ticker, ownership, reader, now)
-                    ownership_checks[key] = current
-                except (OSError, ValueError, TypeError, KeyError) as error:
-                    ownership_checks.pop(key, None)
-                    ownership_limited = True
-                    delay = retry_delay(error, now)
-                    if delay or isinstance(error, BudgetExhausted):
-                        wait = delay or wait
-                        break
-        except (OSError, ValueError, TypeError, AttributeError, KeyError) as error:
-            reason = error_reason(error)
+        except SOURCE_ERRORS as error:
             delay = retry_delay(error, now)
+            if delay or "submissions" not in problems:
+                problems["submissions"] = f"{ticker} SEC submissions: {error_reason(error)}"
             if delay or isinstance(error, BudgetExhausted):
                 wait = delay or wait
                 break
+            continue
+        # Both forms share the SEC listing and request limit. Their evidence and clocks are independent.
+        if key in ownership_due:
+            try:
+                ownership_signals.read_issuer(submissions, key, ticker, ownership, reader, now)
+                ownership_checks[key] = current
+            except SOURCE_ERRORS as error:
+                ownership_checks.pop(key, None)
+                delay = retry_delay(error, now)
+                if delay or "13D" not in problems:
+                    problems["13D"] = f"{ticker} Schedule 13D document: {error_reason(error)}"
+                if delay or isinstance(error, BudgetExhausted):
+                    wait = delay or wait
+                    break
+        if key in form4_due:
+            try:
+                for filing in recent_filings(ticker, issuer, today, reader, submissions):
+                    if (key, filing["accession"]) not in known:
+                        added.extend(form4_rows(filing, reader))
+                        known.add((key, filing["accession"]))
+                observations[key] = {"at": current, "provider": SEC_SOURCE}
+                checked += 1
+            except SOURCE_ERRORS as error:
+                delay = retry_delay(error, now)
+                if delay or "Form 4" not in problems:
+                    problems["Form 4"] = f"{ticker} Form 4 document: {error_reason(error)}"
+                if delay or isinstance(error, BudgetExhausted):
+                    wait = delay or wait
+                    break
     covered = sum(current - observations.get(key, {}).get("at", 0) < sec.CACHE_TTL_SECONDS for key in keys)
-    detail = f"{covered}/{len(keys)} issuers checked recently"
+    ownership_covered = sum(current - ownership_checks.get(key, 0) < sec.CACHE_TTL_SECONDS for key in keys)
+    details = [f"{covered}/{len(keys)} issuers checked in the {sec.CACHE_TTL_SECONDS / 3600:g}h refresh window"]
+    if ownership_enabled:
+        details.append(f"Schedule 13D {ownership_covered}/{len(keys)}")
     if checked:
-        detail += f"; {checked} updated, {len(added)} new transaction rows"
-    if reason:
-        detail += f"; {reason}"
-    if ownership_limited:
-        detail += "; Schedule 13D document coverage limited"
-    status = "pass" if covered == len(keys) and not reason and not ownership_limited else "limited"
-    if not checked and not added:
+        details.append(f"{checked} updated, {len(added)} new Form 4 rows")
+    detail = "; ".join([*details, *problems.values()])
+    complete = covered == len(keys) and (not ownership_enabled or ownership_covered == len(keys))
+    status = "pass" if complete and not problems else "limited"
+    ownership_changed = ownership_checks != prior_ownership_checks or len(ownership) != prior_ownership_count
+    if not checked and not added and not ownership_changed:
         return None, cursor, wait, status, detail
     trades = sec.sort_trades(sec.dedupe_trades(added + previous))[:cache.MAX_ROWS]
     # A partial filing read can be saved for the next batch without advancing that issuer's clock.
@@ -356,11 +378,13 @@ def refresh_congress(now, *, force=False):
     observations = scope_observations("congress", cache.read(path)[0], now)
     covered = sum(now.timestamp() - value["at"] <= congress.CACHE_MAX_AGE.total_seconds() for value in observations.values())
     house = observations.get("House")
-    if congress.house_clerk_enabled() and (not house or now.timestamp() - house["at"] > congress.CACHE_MAX_AGE.total_seconds()):
-        try:
-            _, pilot = refresh_source(congress.house_clerk_path(), refresh_house_clerk, now)
-        except (OSError, ValueError, sqlite3.Error) as error:
-            pilot = f"Refresh state unavailable ({type(error).__name__})"
+    if not house or now.timestamp() - house["at"] > congress.CACHE_MAX_AGE.total_seconds():
+        pilot = "Disabled"
+        if congress.house_clerk_enabled():
+            try:
+                _, pilot = refresh_source(congress.house_clerk_path(), refresh_house_clerk, now)
+            except (OSError, ValueError, sqlite3.Error) as error:
+                pilot = f"Refresh state unavailable ({type(error).__name__})"
         problems.append("House Clerk pilot — " + pilot)
     detail = "; ".join([f"{covered}/2 chambers with current dated coverage in the scoring feed", *problems])
     return ("pass" if covered == len(CHAMBERS) and not problems else "limited"), detail
@@ -376,16 +400,26 @@ def refresh_house_clerk(payload, now, cursor):
     saved = {url: date for url, date in saved.items() if isinstance(date, str) and cutoff <= date <= today.isoformat()}
     reader = Reader(seconds=24, requests=house_clerk.DOCUMENTS_PER_REFRESH + 2,
                     user_agent="SmartMoneyAI/1.0", interval=.3)
-    rows, reviewed, failures, pending, cursor = house_clerk.read_recent(reader, today, saved.keys(), cursor)
+    try:
+        rows, reviewed, failures, pending, cursor, blocked = house_clerk.read_recent(reader, today, saved.keys(), cursor)
+    except SOURCE_ERRORS as error:
+        return None, cursor, max(3600, retry_delay(error, now)), "limited", "Annual index: " + error_reason(error)
     earlier = [row for row in cache.rows(payload) if congress.recently_filed(row, today)]
     trades = congress.sort_trades(rows + earlier)[:1200]
     review = dict(sorted((saved | reviewed).items(), key=lambda item: item[1], reverse=True)[:400])
-    detail = f"{len(reviewed)} reports read, {pending} pending or unread; {len(trades)} dated stock rows"
-    if failures and not reviewed:
-        return None, cursor, 3600, "limited", detail
-    wait = 3600 if pending or failures else congress.CACHE_TTL_SECONDS
+    reports = "report" if len(reviewed) == 1 else "reports"
+    detail = f"{len(reviewed)} {reports} read this check, {pending} pending or unread; {len(trades)} cached stock rows"
+    wait = max(3600, retry_delay(blocked, now)) if pending else congress.CACHE_TTL_SECONDS
+    if blocked is not None:
+        detail += f"; report access {error_reason(blocked)}"
+    elif failures:
+        detail += f"; {failures} report{'s' if failures != 1 else ''} could not be verified"
+    status = "limited" if pending else "pass"
+    if not reviewed and (failures or saved):
+        # Index-only checks must not give previously read PDFs a new observation time.
+        return None, cursor, wait, status, detail
     return {"source": congress.HOUSE_CLERK_PROVIDER, "fetched_at": now.timestamp(), "trades": trades,
-            "reviewed": review}, cursor, wait, "limited" if failures or pending else "pass", detail
+            "reviewed": review}, cursor, wait, status, detail
 
 
 def refresh_congress_now():

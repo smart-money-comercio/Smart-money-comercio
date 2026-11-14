@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 UTC = timezone.utc
 NY = ZoneInfo("America/New_York")
 INDEX_NAMES = {"^GSPC": "S&P 500", "^IXIC": "Nasdaq Composite", "^VIX": "VIX"}
+MARKET_CHECK_CLOSED = "outside the regular session and closing check window"
 TESLA_IR_HOME = "https://ir.tesla.com/"
 TESLA_IR_RSS = "https://ir.tesla.com/rss/news-releases.xml"
 TESLA_RELEASE_LIMIT = 3
@@ -233,6 +234,10 @@ def tesla_ir_news(now: datetime, config: dict) -> tuple[list[dict], str, list[st
     return items, detail, issues
 
 
+class OutsideMarketCheckWindow(ValueError):
+    pass
+
+
 def chart_observation(symbol: str, payload: dict, now: datetime, config: dict) -> dict:
     """Calculate each return from the correct prior session, not range chartPreviousClose."""
     chart = payload.get("chart", {})
@@ -247,16 +252,16 @@ def chart_observation(symbol: str, payload: dict, now: datetime, config: dict) -
     price = finite(meta.get("regularMarketPrice"))
     if asof is None or price is None or price <= 0:
         raise ValueError("Quote missing price or timestamp")
-    age = (now - asof).total_seconds()
-    if age < -60 or age > config["max_quote_age"]:
-        raise ValueError("Quote stale or from the future")
     session = meta.get("currentTradingPeriod", {}).get("regular", {})
     start, end = timestamp(session.get("start")), timestamp(session.get("end"))
     if start is None or end is None or end <= start:
         raise ValueError("Session hours unavailable")
     # The provider's session dates handle holidays, early closes and US DST.
     if not (start <= now <= end + timedelta(minutes=20)):
-        raise ValueError("Outside the regular session and closing check window")
+        raise OutsideMarketCheckWindow(MARKET_CHECK_CLOSED)
+    age = (now - asof).total_seconds()
+    if age < -60 or age > config["max_quote_age"]:
+        raise ValueError("Quote stale or from the future")
     session_date = start.astimezone(NY).date()
     if asof.astimezone(NY).date() != session_date or not start <= asof <= end:
         raise ValueError("Quote does not belong to this session")
@@ -369,6 +374,8 @@ def collect_inputs(now: datetime, config: dict, source_status: dict | None = Non
                 return kind, name, row, [], "fresh session quote available"
             items = parse_feed(raw, config["symbols"], name)
             return kind, name, items, [], f"headline feed read; {len(items)} dated matching items"
+        except OutsideMarketCheckWindow:
+            return kind, name, None, [], MARKET_CHECK_CLOSED
         except Exception as exc:
             return kind, name, None, [f"{name}: {source_error(exc)} (unavailable or invalid/stale source)"], "unavailable"
 

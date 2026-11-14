@@ -2,6 +2,7 @@
 
 import csv
 from datetime import timedelta
+from http.client import HTTPException
 from io import BytesIO, StringIO
 import re
 from urllib.error import HTTPError
@@ -181,19 +182,19 @@ def read_recent(reader, today, seen, cursor):
             entries[document_url(year, entry["doc_id"])] = entry
     ordered = sorted((url for url in entries if url not in seen), key=lambda url: (entries[url]["filed"], entries[url]["doc_id"]), reverse=True)
     if not ordered:
-        return [], {}, 0, 0, 0
+        return [], {}, 0, 0, 0, None
     start = cursor % len(ordered)
     batch = (ordered[start:] + ordered[:start])[:DOCUMENTS_PER_REFRESH]
     rows, reviewed, failures = [], {}, 0
+    blocked = None
     for url in batch:
         try:
             entry = entries[url]
             rows.extend(document_rows(reader.bytes(url, same_host=True, max_bytes=MAX_PDF_BYTES), entry))
             reviewed[url] = entry["filed"]
-        except OSError as error:
-            if getattr(error, "code", None) in {401, 403, 429}:
-                raise
+        except (OSError, HTTPException, ValueError, TypeError) as error:
             failures += 1
-        except (ValueError, TypeError):
-            failures += 1
-    return rows, reviewed, failures, len(ordered) - len(reviewed), start + failures
+            if isinstance(error, HTTPError) and error.code in {401, 402, 403, 429}:
+                blocked = error
+                break
+    return rows, reviewed, failures, len(ordered) - len(reviewed), start + failures, blocked

@@ -70,7 +70,8 @@ async def special_alert_job(context) -> None:
         if not settings()["enabled"] or not store.get_settings().get("enabled", True):
             return
         ownership_status = snapshot.get("source_status", {}).get("SEC Ownership")
-        replaced = ownership_signals.KINDS if ownership_status and ownership_status not in {"cache unavailable", "waiting for the disclosure refresh"} else ()
+        replaced = ownership_signals.KINDS if ownership_status and not ownership_status.startswith(
+            ("cache unavailable", "waiting for the disclosure refresh")) else ()
         store.record_snapshot(snapshot["alerts"], snapshot["observations"], datetime.now(timezone.utc).timestamp(), replace_kinds=replaced)
         sent, failed = 0, 0
         company_sent = dict.fromkeys(chats, 0)
