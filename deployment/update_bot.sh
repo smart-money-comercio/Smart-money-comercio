@@ -45,12 +45,17 @@ echo "Installing/updating requirements..."
 
 echo "Running deployment preflight checks..."
 if [ -f "$PREFLIGHT_SCRIPT" ]; then
-    chmod +x "$PREFLIGHT_SCRIPT"
     bash "$PREFLIGHT_SCRIPT"
 else
     echo "ERROR: Preflight script not found at $PREFLIGHT_SCRIPT"
     echo "Deployment stopped before restart."
     exit 1
+fi
+
+WEEKEND_PREVIEW="/opt/smart-money-youtube/bin/weekend_preview.py"
+if [ -f "$WEEKEND_PREVIEW" ]; then
+    echo "Updating the installed Weekend Outlook preview runner..."
+    "$PYTHON_BIN" "$APP_DIR/deployment/weekend_preview.py" --install-runner
 fi
 
 echo "Restarting service..."

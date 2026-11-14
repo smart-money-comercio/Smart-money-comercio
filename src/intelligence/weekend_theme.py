@@ -4,6 +4,18 @@ import re
 from src.intelligence.story_analysis import checked_evidence, investor_read
 from src.intelligence.daily_brief_analysis import NAMES
 
+AI_ISSUERS = {"NVDA", "MSFT", "AMD", "TSM", "AMZN", "GOOG", "GOOGL", "AVGO", "INTC", "ETN", "ASML", "PLTR", "AAPL"}
+
+AI_FINANCING = {
+    "id": "ai_financing",
+    "title": "The cost of funding AI growth",
+    "question": "Can paying demand keep up with what AI companies need to spend?",
+    "case": "The offering terms tell us how much capital investors are prepared to commit. "
+            "The business test is how much customer demand that capital can support and what it costs to serve those customers.",
+    "stronger": "Look for sales growth that can support the cost of adding and running capacity.",
+    "weaker": "If spending rises faster than sales and margins weaken, growth is becoming more expensive to deliver.",
+}
+
 FRAMES={
  "business":{
   "title":"Business commitments and the route to profitable growth",
@@ -62,16 +74,20 @@ def group(story):
     if p["schema"]==13:return "counterparty"
     if p["schema"] in {10,12} or symbol in {"NOC","LMT","CACI","AVAV","KTOS","RTX","GD","HII"}:return "defense"
     if symbol=="CRWD":return "cyber"
-    if symbol in {"NVDA","MSFT","AMD","TSM","AMZN","GOOG","GOOGL","AVGO","INTC","ETN","ASML","PLTR","AAPL"} and re.search(
+    if symbol in AI_ISSUERS and re.search(
             r"\b(?:AI|artificial intelligence|data centers?|cloud|GPU|semiconductors?)\b",p["source_text"],re.I):return "ai"
     if p["schema"]==11 or story["source"]=="EIA":return "energy"
     if story["kind"]=="company":return "business"
     return "funding"
 
 
-def choose(stories):
+def choose(stories, ipo=None):
     groups={}
     for row in stories:groups.setdefault(group(row),[]).append(row)
+    if ipo:
+        related = min(groups.get("ai", []),
+                      key=lambda row: (-len(row["event_evidence"]["facts"]), row["published"], row["id"]), default=None)
+        return {**AI_FINANCING, "story_ids": [related["id"]] if related else []}
     if not groups:return None
     key=min(groups,key=lambda g:(-len({row.get("publisher_symbol") or row["source"] for row in groups[g]}),
                                  -sum(min(len(row["event_evidence"]["facts"]),4) for row in groups[g]),g))

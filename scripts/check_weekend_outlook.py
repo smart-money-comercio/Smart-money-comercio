@@ -26,7 +26,8 @@ from scripts.check_news_editor import candidate
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
 from scripts.check_daily_news_brief import assert_fixture_connections_closed
 from src.intelligence import weekend_inputs as inputs, weekend_store as store, weekend_theme as themes
-from src.intelligence import news_editor as editor, calendar_sources
+from src.intelligence import news_editor as editor, calendar_sources, ipo_monitor, weekend_ipo
+from src.intelligence import special_alert_sources
 from src.reports import weekend_outlook as report, daily_voiceover
 from src.commands import weekend_commands as commands
 from scripts import export_weekend_outlook as cli
@@ -309,27 +310,158 @@ class CalendarChecks(unittest.TestCase):
         row=self.packet(raw=[notice(10),{**notice(11),"url":notice()["url"]+"-other"}])
         self.assertFalse(row["company"]);self.assertFalse(row["later"])
 
+    def test_official_fed_cache_fills_a_day_outside_the_daily_snapshot(self):
+        snapshot = {"checked_at": NOW.isoformat(), "days": [], "economic": [], "issues": []}
+        observed = (NOW - timedelta(hours=1)).isoformat()
+        entry = {"category": "fomc_minutes", "name": "FOMC Minutes", "publisher": "Fed",
+                 "url": calendar_sources.FED_URL, "at": "2026-11-11T19:00:00+00:00", "fetched_at": observed}
+        cache = {"Fed": {"events": [entry, {**entry, "at": "2026-11-10T19:00:00+00:00",
+                                            "fetched_at": (NOW - timedelta(hours=7)).isoformat()}]}}
+        packet = inputs.calendar_packet([], inputs.window(NOW), NOW, snapshot, publisher_cache=cache)
+        fed, = packet["macro"]
+        self.assertEqual(fed["timing_observed"], observed)
+        self.assertEqual(fed["at"], "2026-11-11T19:00:00+00:00")
+        self.assertEqual(inputs.checked_calendar(packet, inputs.window(NOW), NOW), packet)
+
+
+class IPOChecks(unittest.TestCase):
+    def filing(self, *, form="S-1/A", published="2026-11-05T15:00:00+00:00", text=None):
+        issuer = ipo_monitor.DEFAULT_ISSUERS["anthropic"]
+        accession = "0001628280-26-099999"
+        text = text or ("This is an initial public offering of common stock. The estimated initial public offering "
+                        'price per share will be between $70.00 and $78.00. We have applied to list under the symbol “ANT.”')
+        return ipo_monitor.item("anthropic", issuer, f"Anthropic Form {form}",
+            "https://www.sec.gov/Archives/edgar/data/2130357/000162828026099999/prospectus.htm",
+            published, text, NOW.isoformat(), form=form, accession=accession)
+
+    def test_indicative_terms_can_anchor_the_week_and_keep_their_original_link(self):
+        source = self.filing()
+        with patch.object(ipo_monitor, "read_cache", return_value={"items": [source]}):
+            row = edition(raw=[notice(10)])
+        self.assertEqual(row["quality"]["status"], "PASS")
+        self.assertEqual(row["theme"]["id"], "ai_financing")
+        self.assertIn("indicative IPO price range of $70 to $78", row["report_text"])
+        self.assertIn("can support", row["report_text"])
+        self.assertIn("if the IPO proceeds", row["report_text"])
+        self.assertNotIn("Anthropic has scheduled", row["report_text"])
+        watch = next(part for part in row["voiceover"]["segments"] if part["heading"] == "What to watch next week")
+        self.assertEqual(len(watch["source_ids"]), 3)
+        self.assertTrue(watch["source_ids"][-1].startswith("ipo_"))
+        self.assertEqual(row["voiceover"]["sources"][watch["source_ids"][-1]][0]["url"], source["url"])
+        self.assertIn("Listen for its data center outlook", watch["narration"])
+        self.assertNotIn("excerpt", json.dumps(report.episode(row, NOW)))
+
+    def test_fresh_november_indicative_range_is_independent_of_daily_24_hour_gate(self):
+        source = self.filing()
+        with self.assertRaisesRegex(ValueError, "stale"):
+            ipo_monitor.checked(source, NOW)
+        self.assertIsNotNone(weekend_ipo.choose(inputs.window(NOW), NOW, [source]))
+        too_late = NOW + timedelta(hours=7)
+        self.assertIsNone(weekend_ipo.choose(inputs.window(too_late), too_late, [source]))
+
+    def test_final_or_newer_terms_supersede_an_old_range(self):
+        earlier = self.filing()
+        newer = "2026-11-06T19:00:00+00:00"
+        for later in (self.filing(form="424B4", published=newer),
+                      self.filing(published=newer, text="This is an initial public offering. The latest terms are pending.")):
+            self.assertIsNone(weekend_ipo.choose(inputs.window(NOW), NOW, [earlier, later]))
+
+    def test_bad_original_or_changed_ipo_fact_cannot_validate(self):
+        source = self.filing()
+        unverified = {**source, "url": "https://finance.example.com/ipo"}
+        self.assertIsNone(weekend_ipo.choose(inputs.window(NOW), NOW, [unverified]))
+        with patch.object(ipo_monitor, "read_cache", return_value={"items": [source]}):
+            row = edition()
+        row["inputs"]["ipo"]["summary"] = "Guaranteed first-day gains."
+        row["id"] = store.identity(row)
+        with self.assertRaisesRegex(ValueError, "IPO facts"):
+            report.checked(row)
+
+    def test_normal_weekend_rebuild_reads_the_latest_original_prospectus(self):
+        source = self.filing()
+        risk = ("The issuer has disclosed a committed spend of approximately $120.5 billion, substantially all of which "
+                "is related to compute and infrastructure. Approximately $15.2 billion of these commitments are due in the "
+                "12 months following September 30, 2026.")
+        payload = {"cik": 2130357, "filings": {"recent": {
+            "form": ["S-1/A", "S-1"], "acceptanceDateTime": [source["published"], "2026-11-03T15:00:00Z"],
+            "accessionNumber": [source["ipo"]["accession"], "0001628280-26-099998"],
+            "primaryDocument": ["prospectus.htm", "old.htm"]}}}
+        submissions = "https://data.sec.gov/submissions/CIK0002130357.json"
+
+        def fetch(url, *args, **kwargs):
+            if url == submissions:
+                return {"status": "ok", "final_url": url, "body": json.dumps(payload), "fetched_at_epoch": NOW.timestamp()}
+            return market_fetch(url)
+
+        with patch.object(weekend_ipo.sec_contact, "user_agent", return_value="Smart Money test ops@research-lab.org"), \
+                patch.object(ipo_monitor, "read_cache", return_value={}), \
+                patch.object(inputs, "raw_candidates", return_value=([notice(10)], [])), \
+                patch.object(inputs.feeds, "fetch_url", side_effect=fetch), \
+                patch.object(special_alert_sources, "request_bytes",
+                             return_value=(source["ipo"]["excerpt"] + " " + risk).encode()) as request:
+            row = report.build(NOW, force=True, calendar_snapshot=calendar(), persist=False)
+        request.assert_called_once_with(source["url"], prefix_bytes=1_000_000, authority_domain="sec.gov",
+                                        exact_url=True, user_agent="Smart Money test ops@research-lab.org")
+        self.assertEqual(row["theme"]["id"], "ai_financing")
+        self.assertEqual(row["inputs"]["ipo"]["source"]["published"], source["published"])
+        self.assertIn("$120.5 billion in purchase and lease commitments", row["report_text"])
+        self.assertIn("$15.2 billion was scheduled to come due in the twelve months following September 30, 2026", row["report_text"])
+        packet = report.episode(row, NOW)
+        self.assertNotIn("weekend_prospectus_excerpt", json.dumps(packet))
+        raw_proof = row["inputs"]["ipo"]["source"]["weekend_prospectus_excerpt"]
+        raw_proof["prefix_sha256"] = "0" * 64
+        row["id"] = store.identity(row)
+        with self.assertRaisesRegex(ValueError, "matched filing evidence"):
+            report.checked(row)
+
+    def test_sec_index_denial_leaves_other_themes_available(self):
+        submissions = "https://data.sec.gov/submissions/CIK0002130357.json"
+
+        def fetch(url, *args, **kwargs):
+            if url == submissions:
+                return {"status": "error", "error": "HTTPError 403"}
+            return market_fetch(url)
+
+        with patch.object(weekend_ipo.sec_contact, "user_agent", return_value="Smart Money test ops@research-lab.org"), \
+                patch.object(ipo_monitor, "read_cache", return_value={}), \
+                patch.object(inputs, "raw_candidates", return_value=([story()], [])), \
+                patch.object(inputs.feeds, "fetch_url", side_effect=fetch), \
+                patch.object(special_alert_sources, "request_bytes", side_effect=AssertionError("No prospectus request")):
+            row = report.build(NOW, force=True, calendar_snapshot=calendar(), persist=False)
+        self.assertEqual(row["quality"]["status"], "PASS")
+        self.assertEqual(row["theme"]["id"], "defense")
+        self.assertIn("Weekly IPO check for Anthropic unavailable (HTTPError 403)", row["inputs"]["source_issues"])
+
+    def test_filing_cooldown_prevents_a_repeat_request(self):
+        url = self.filing()["url"]
+        with patch.object(inputs.feeds, "get_cached_source", return_value={"status": "error", "error": "HTTP 429"}), \
+                patch.object(special_alert_sources, "request_bytes") as request:
+            with self.assertRaisesRegex(ValueError, "HTTP 429"):
+                weekend_ipo.read_prefix(url, prefix=True)
+        request.assert_not_called()
+
 
 class EditionChecks(unittest.TestCase):
     def test_complete_edition_has_checked_business_theme_and_conditions(self):
         row=edition();self.assertEqual(row["quality"]["status"],"PASS")
         self.assertEqual(row["theme"]["id"],"defense");text=row["report_text"]
-        for term in ("Business interpretation", "Conditions to watch", "For now", "would make", "would weaken"):
+        for term in ("Why it matters", "What would change the outlook", "funding", "delivery dates", "margins"):
             self.assertIn(term,text)
 
-    def test_weekly_recap_distinguishes_rebound_from_weekly_loss(self):
+    def test_market_snapshot_preserves_the_weekly_and_friday_returns(self):
         text=edition()["report_text"]
-        self.assertIn("Friday's rebound",text);self.assertIn("October 30, 2026 close",text)
+        self.assertIn("S&P 500 | -3.64% | +6.00%",text);self.assertIn("October 30 close",text)
 
     def test_business_analysis_is_stage_specific(self):
         text=edition()["report_text"]
-        self.assertIn("maintenance workload",text);self.assertIn("Sales depend on service orders",text)
+        self.assertIn("maintenance role",text);self.assertIn("Sales depend on service orders",text)
 
     def test_later_event_is_not_called_a_coming_week_catalyst(self):
-        row=edition();segment=next(s for s in row["voiceover"]["segments"] if s["heading"].startswith("Coming week"))
+        row=edition();segment=next(s for s in row["voiceover"]["segments"] if s["heading"] == "What to watch next week")
         self.assertNotIn("seventeenth",segment["narration"])
-        later=next(s for s in row["voiceover"]["segments"] if s["heading"]=="Beyond the coming week")
-        self.assertIn("seventeenth",later["narration"])
+        self.assertNotIn("seventeenth", row["voiceover"]["script"])
+        self.assertIn("Beyond the coming week\n", row["report_text"])
+        self.assertIn("Tuesday, November 17", row["report_text"])
 
     def test_narration_summarizes_original_instead_of_reading_headline(self):
         text=edition()["voiceover"]["script"]
@@ -383,7 +515,7 @@ class EditionChecks(unittest.TestCase):
 
     def test_all_missing_prices_do_not_invent_market_direction(self):
         row=edition(market_fetch=lambda url:{"status":"error","error":"Unavailable"})
-        self.assertNotIn("Friday's rebound",row["report_text"]);self.assertEqual(row["quality"]["status"],"CHECK")
+        self.assertIn("The weekly benchmark figures are unavailable",row["report_text"]);self.assertEqual(row["quality"]["status"],"CHECK")
 
     def test_changed_fact_with_recomputed_identity_still_fails(self):
         row=edition();row["inputs"]["stories"][0]["event_evidence"]["facts"][0]["value"]="new funded award"
@@ -419,8 +551,46 @@ class EditionChecks(unittest.TestCase):
 
     def test_status_includes_basis_facts_and_horizons(self):
         text=report.status(edition(),NOW)
-        for value in ("Editorial rules: 31","2026-10-30 close","Concrete fact fields: 4","later-horizon notices","ready for review-only export"):
+        for value in ("Editorial rules: 32","2026-10-30 close","Concrete fact fields: 4","later-horizon notices","ready for review-only export","Featured outlook checks"):
             self.assertIn(value,text)
+
+    def test_opening_uses_one_benchmark_and_one_business_question(self):
+        row = edition()
+        opener = row["voiceover"]["segments"][0]
+        self.assertEqual(opener["heading"], "The week in brief")
+        self.assertIn("fell three point six four percent despite a gain of six percent on Friday", opener["narration"])
+        self.assertIn("Which defense milestones could turn into funded work?", opener["narration"])
+        self.assertNotIn("Russell", opener["narration"])
+        self.assertEqual([key for key in opener["source_ids"] if key.startswith("market_")], ["market_^GSPC"])
+        self.assertEqual(row["report_text"].count("Which defense milestones"), 1)
+
+    def test_written_calendar_keeps_events_outside_the_spoken_shortlist(self):
+        schedule = calendar()
+        for name, publisher, day in (("FOMC Minutes", "Fed", 10), ("Consumer price index", "BLS", 11),
+                                      ("Producer price index", "BLS", 12)):
+            schedule["economic"].append({"eventName": name, "publisher": publisher, "time_status": "verified",
+                "source_date": f"2026-11-{day}", "timing_url": calendar_sources.SOURCE_URLS[publisher],
+                "event_at": f"2026-11-{day}T14:00:00-05:00"})
+        row = edition(raw=[story(), notice(11)], calendar_snapshot=schedule)
+        featured = next(part for part in row["voiceover"]["segments"] if part["heading"] == "What to watch next week")
+        self.assertEqual(len(featured["source_ids"]), 3)
+        self.assertIn("Fed minutes come out Tuesday", featured["narration"])
+        self.assertIn("how policymakers weighed inflation", featured["narration"])
+        self.assertIn("Weekly jobless claims", row["report_text"])
+        self.assertIn("Nvidia has scheduled its earnings conference call", row["report_text"])
+        self.assertNotIn("Weekly jobless claims", row["voiceover"]["script"])
+        self.assertNotIn("No publisher-verified entry", row["voiceover"]["script"])
+        self.assertFalse(any(part["heading"].startswith("Calendar for") for part in row["voiceover"]["segments"]))
+
+    def test_rules31_record_revalidates_with_its_original_hashes(self):
+        packet = edition()["inputs"]
+        packet.pop("weekend_rules")
+        old = report.assemble(packet)
+        self.assertEqual(old["id"], "e4bf4da2910aaf716d50")
+        self.assertEqual(old["report_sha256"], "8e3c1624f4ecd985fcfda0d607ec89320e93cc4f988b2c7f3d61eda5553d4b06")
+        self.assertEqual(old["voiceover"]["script_sha256"], "1990bfbc0933b6d597157cb77df02480a0cc821665b91f685fc04f0f328e0adb")
+        self.assertEqual(report.checked(old), old)
+        self.assertNotIn("weekend_rules", report.episode(old, NOW))
 
     def test_frozen_rules29_daily_hashes_and_schema2_export_remain_exact(self):
         row=json.loads((ROOT/'scripts/fixtures/weekend_rules29_edition.json').read_text())
@@ -645,8 +815,10 @@ def main():
     with ExitStack() as stack:
         if args.windows_socketpair:stack.enter_context(patch.object(socket,"socketpair",portable_tcp_socketpair))
         traffic=stack.enter_context(offline_network_guard())
+        stack.enter_context(patch.dict(os.environ, {"AI_IPO_ALERTS_ENABLED": "true"}))
+        stack.enter_context(patch.object(ipo_monitor, "read_cache", return_value={}))
         suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case) for case in
-            (WindowChecks,PriceChecks,StoryChecks,CalendarChecks,EditionChecks,StorageCommandChecks,WeeklyDiscoveryChecks,SQLiteCleanupChecks))
+            (WindowChecks,PriceChecks,StoryChecks,CalendarChecks,EditionChecks,IPOChecks,StorageCommandChecks,WeeklyDiscoveryChecks,SQLiteCleanupChecks))
         result=unittest.TextTestRunner(verbosity=1).run(suite)
     good=result.wasSuccessful() and not traffic["blocked"]
     print(f"Weekend Outlook Check: {'PASS' if good else 'FAIL'} ({result.testsRun} tests)")

@@ -106,12 +106,16 @@ def safe_url(value: str) -> str:
     return ""
 
 
-def request_bytes(url: str, *, prefix_bytes: int | None = None, authority_domain: str = "") -> bytes:
+def request_bytes(url: str, *, prefix_bytes: int | None = None, authority_domain: str = "",
+                  exact_url: bool = False, user_agent: str | None = None) -> bytes:
     if prefix_bytes is not None and (type(prefix_bytes) is not int or not 1 <= prefix_bytes <= 1_000_000):
         raise ValueError("Invalid bounded excerpt size")
-    user_agent = os.getenv("SEC_USER_AGENT", "SmartMoneyAI/1.5 public IPO monitor") if authority_domain == "sec.gov" else "Mozilla/5.0 SmartMoneyAI/1.4"
+    if user_agent is None:
+        user_agent = os.getenv("SEC_USER_AGENT", "SmartMoneyAI/1.5 public IPO monitor") if authority_domain == "sec.gov" else "Mozilla/5.0 SmartMoneyAI/1.4"
     request = Request(url, headers={"User-Agent": user_agent, "Accept": "application/json,application/rss+xml,application/atom+xml,text/xml,text/html"})
     with urlopen(request, timeout=10) as response:
+        if exact_url and response.geturl() != url:
+            raise ValueError("The original filing URL redirected")
         if authority_domain:
             final = urlsplit(response.geturl())
             host = final.hostname or ""

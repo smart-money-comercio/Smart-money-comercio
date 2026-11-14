@@ -163,7 +163,8 @@ def checked(value: dict, now: datetime | None = None, hours: float = 24) -> dict
     return row
 
 
-def sec_items(issuer_id: str, row: dict, raw: bytes, request, now: datetime, hours: float) -> list[dict]:
+def sec_items(issuer_id: str, row: dict, raw: bytes, request, now: datetime, hours: float, *,
+              latest_only: bool = False, observed: datetime | None = None) -> list[dict]:
     payload = json.loads(raw)
     if int(payload["cik"]) != int(row["cik"]):
         raise ValueError("SEC issuer identity mismatch")
@@ -174,6 +175,8 @@ def sec_items(issuer_id: str, row: dict, raw: bytes, request, now: datetime, hou
         published = timestamp(accepted)
         if form not in FORMS or published is None or not 0 <= (now - published).total_seconds() <= hours * 3600:
             continue
+        if observed is not None and published > observed:
+            raise ValueError("SEC filing acceptance is after its observation")
         if not re.fullmatch(r"\d{10}-\d{2}-\d{6}", accession) or not re.fullmatch(r"[A-Za-z0-9._-]+\.html?", document):
             raise ValueError("Invalid SEC filing location")
         if reads >= 2:
@@ -183,15 +186,16 @@ def sec_items(issuer_id: str, row: dict, raw: bytes, request, now: datetime, hou
         body = visible(raw_document)
         reads += 1
         match = re.search(r"\bthis is (?:an|the) initial public offering\b", body[:20_000], re.I)
-        if match is None:
-            continue
-        excerpt = body[max(0, match.start() - 500):match.start() + 4500]
-        title = f"{row['name']}: Form {form} filed for a proposed initial public offering"
-        from src.intelligence.ipo_filing_analysis import evidence
-        record = item(issuer_id, row, title, url, published.isoformat(), excerpt, now.isoformat(), form=form, accession=accession,
-                      filing_source=evidence(raw_document))
-        if record:
-            result.append(record)
+        if match is not None:
+            excerpt = body[max(0, match.start() - 500):match.start() + 4500]
+            title = f"{row['name']}: Form {form} filed for a proposed initial public offering"
+            from src.intelligence.ipo_filing_analysis import evidence
+            record = item(issuer_id, row, title, url, published.isoformat(), excerpt, (observed or now).isoformat(),
+                          form=form, accession=accession, filing_source=evidence(raw_document))
+            if record:
+                result.append(record)
+        if latest_only:
+            break
     return result
 
 

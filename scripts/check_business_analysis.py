@@ -151,19 +151,20 @@ class DailyChecks(RebuildDetailChecks):
 
 
 class WeekendChecks(unittest.TestCase):
-    def test_new_weekend_is_rules31_with_checked_business_analysis(self):
+    def test_new_weekend_is_rules32_with_checked_business_analysis(self):
         value = weekend()
-        self.assertEqual(value["rules_version"], 31)
+        self.assertEqual(value["rules_version"], 32)
         self.assertEqual(value["inputs"]["business_version"], 1)
         self.assertEqual(value["quality"]["status"], "PASS")
         self.assertEqual(len(value["inputs"]["business_analysis"]["reviews"]), 3)
         self.assertEqual(weekend_outlook.checked(value, NOW, require_publishable=True), value)
 
-    def test_weekend_keeps_the_seven_scene_media_contract(self):
+    def test_weekend_preserves_the_native_media_contract_with_six_spoken_segments(self):
         value = weekend()
         packet = weekend_outlook.episode(value, NOW)
         script = value["voiceover"]["script"]
-        self.assertEqual(len(packet["segments"]), 7)
+        self.assertEqual(len(packet["segments"]), 6)
+        self.assertEqual(packet["weekend_rules"], 32)
         self.assertEqual(packet["weekend_narration_revision"], 2)
         self.assertEqual("\n\n".join(row["narration"] for row in packet["segments"]), script)
         self.assertEqual(weekend_media_contract.validate_packet(packet, script)["status"], "PASS")
@@ -173,12 +174,13 @@ class WeekendChecks(unittest.TestCase):
         value = weekend()
         self.assertEqual({row["id"]: row["event_evidence"] for row in value["inputs"]["stories"]}, old)
 
-    def test_weekly_narration_keeps_exact_price_basis_and_smooth_dates(self):
+    def test_written_price_basis_and_smooth_spoken_dates(self):
         value = weekend()
         script = value["voiceover"]["script"]
-        self.assertIn("October thirtieth", script)
+        self.assertIn("October 30 close", value["report_text"])
+        self.assertNotIn("October thirtieth", script)
         self.assertIn("November sixth", script)
-        self.assertIn("On Friday", script)
+        self.assertIn("on Friday", script)
         self.assertNotIn("Original disclosures:", script)
         self.assertNotIn("Analyst interpretation:", script)
         self.assertNotIn("The disclosure was published", script)
@@ -217,7 +219,7 @@ class WeekendChecks(unittest.TestCase):
                 patch.object(evidence, "calendar_packet", return_value=old["inputs"]["calendar"]):
             value = weekend_outlook.build(now=NOW, persist=False)
         leads.assert_called_once()
-        self.assertEqual(value["rules_version"], 31)
+        self.assertEqual(value["rules_version"], 32)
 
 
 class LegacyChecks(unittest.TestCase):

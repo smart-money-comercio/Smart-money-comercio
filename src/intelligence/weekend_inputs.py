@@ -284,7 +284,7 @@ def raw_candidates(now):
     return (archived+rows)[:1000],issues[:5]
 
 
-def calendar_packet(raw, periods, now, snapshot=None):
+def calendar_packet(raw, periods, now, snapshot=None, *, publisher_cache=None):
     snapshot = calendar_context.read_snapshot(now) if snapshot is None else deepcopy(snapshot)
     result={"schema":1,"observed":"","macro":[],"company":[],"later":[],"issues":[]}
     start,end=date.fromisoformat(periods["next_start"]),date.fromisoformat(periods["next_end"])
@@ -299,17 +299,50 @@ def calendar_packet(raw, periods, now, snapshot=None):
                     if not start<=at.astimezone(NY).date()<=end:continue
                     if calendar_sources.SOURCE_URLS.get(row["publisher"])!=row.get("timing_url"):continue
                     if at.astimezone(NY).date().isoformat()!=row.get("source_date"):continue
-                    if row["time_status"]=="cached":fresh(row["timing_checked_at"],now)
+                    timing_observed = fresh(row.get("timing_checked_at") or checked.isoformat(), now).isoformat()
                     label=("Weekly jobless claims" if row["publisher"]=="DOL" and calendar_sources.category(row["eventName"],"DOL")=="claims" else row["eventName"])
                     result["macro"].append({"event":label,"at":at.isoformat(),"publisher":row["publisher"],
                         "url":row["timing_url"],"time_status":row["time_status"],"observed":checked.isoformat(),
-                        "timing_observed":row.get("timing_checked_at") or checked.isoformat()})
+                        "timing_observed":timing_observed})
                 except (ValueError,KeyError,TypeError,AttributeError):continue
             if len({day["date"] for day in snapshot.get("days",[]) if start.isoformat()<=day["date"]<=end.isoformat()})<5:
                 result["issues"].append("Snapshot does not cover all five days of the coming week")
         except (ValueError,TypeError,KeyError):
             result["issues"].append("Current publisher calendar snapshot unavailable")
     else:result["issues"].append("Current publisher calendar snapshot unavailable")
+    if publisher_cache is not None:
+        # The latest daily snapshot may not cover next week. Reuse actual
+        # publisher observations without renewing their dates or making a request.
+        from src.intelligence import calendar_source_cache
+
+        for publisher, url in calendar_sources.SOURCE_URLS.items():
+            rows = calendar_source_cache.usable_rows(publisher, publisher_cache.get(publisher), url, now)
+            schedule = {}
+            for row in rows:
+                try:
+                    observed = fresh(row["fetched_at"], now).isoformat()
+                    at = clock(row["at"])
+                except (ValueError, TypeError, OverflowError):
+                    continue
+                if not start <= at.astimezone(NY).date() <= end:
+                    continue
+                key = (row["category"], at.astimezone(NY).date())
+                schedule.setdefault(key, {})[at] = (row, observed)
+            for (family, day), values in schedule.items():
+                if len(values) != 1:
+                    continue
+                at, (row, observed) = next(iter(values.items()))
+                label = "Weekly jobless claims" if family == "claims" else row["name"]
+                def matches(current):
+                    return (current["publisher"] == publisher
+                            and clock(current["at"]).astimezone(NY).date() == day
+                            and (current["event"] == label or calendar_sources.category(current["event"]) == family))
+                current = [item for item in result["macro"] if matches(item)]
+                if current and max(clock(item["timing_observed"]) for item in current) >= clock(observed):
+                    continue
+                result["macro"] = [item for item in result["macro"] if not matches(item)]
+                result["macro"].append({"event": label, "at": at.isoformat(), "publisher": publisher, "url": url,
+                    "time_status": "cached", "observed": observed, "timing_observed": observed})
     result["macro"]=list({(row["event"],row["at"]):row for row in result["macro"]}.values())[:12]
     notices=company_schedule.notices(raw,now)
     for notice in notices[:20]:

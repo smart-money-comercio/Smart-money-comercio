@@ -1,4 +1,10 @@
-# Weekend Outlook — editorial rules 30
+# Weekend Outlook — editorial rules 32
+
+The lead puts the weekly return and Friday's move next to one question grounded in the selected business disclosures. The narration features up to three upcoming checks and explains what each could tell readers. The written edition includes the dated five-day calendar, later issuer notices, weekly benchmark comparisons and source links.
+
+An original prospectus or issuer announcement can supply an indicative AI IPO range and proposed symbol for the week's lead. The weekly check uses the existing SEC contact and submits no orders or alerts. It reads the latest applicable registration document for the configured default issuers with an SEC CIK. It can also show compute and infrastructure commitments when the same original passage states the total and the portion due over twelve months. Proposed offering terms are conditional. Only confirmed dates and times appear in the calendar. When SEC access or the original evidence is limited, the outlook can use other qualified disclosures.
+
+Rules-30 and rules-31 records can still be checked against their original wording and hashes. Current exports carry a `weekend_rules` field. JSON schema 2 and narration revision 2 still define the media pairing. The Ubuntu updater upgrades the previously installed weekend preview runner by its known source hash.
 
 New builds use narration revision 2: publication wording is grammatical, technical names have explicit spoken forms, and calendar gaps are summarized once while the written five-day grid stays complete. All spoken words, including the edition title, are inside the JSON scenes. Existing editions retain revision 1 and their exact hashes. See `README_WEEKEND_NARRATION.md` for paired-export, native media preflight and reviewed-renderer sibling instructions. `/weekendstatus` displays the narration revision.
 
@@ -27,7 +33,7 @@ Run `/rundailyagent` first when publisher leads or the calendar snapshot are sta
 
 ## Quality, storage and export
 
-PASS requires at least two verified weekly benchmark series, a qualified original-source theme, a bounded complete report and narration of 300–1,200 spoken words. Narration duration uses 160 words/minute. Incomplete evidence produces a visible CHECK review copy; it cannot be exported as a current PASS episode. Calendar coverage remains explicitly limited.
+PASS requires at least two verified weekly benchmark series, a qualified original-source theme, a bounded complete report and narration of 160–1,200 spoken words for rules 32. Older records use their original 300-word minimum. Narration duration uses 160 words/minute. Incomplete evidence produces a CHECK review copy and the current PASS export requires verified evidence. Calendar coverage remains explicitly limited.
 
 The separate `WEEKEND_STATE_FILE` defaults to `data/weekend_outlook.sqlite3`, retaining at most 40 editions within 90 days. Reads are read-only. Report, input, source and script hashes bind the edition. Validation re-derives prices, facts, theme, report and narration from the admitted proof; hashes alone are insufficient. Archived editions remain readable, while current exports require the same New York weekend, an edition no older than eight hours and observations no older than six hours. Daily edition history is not rewritten.
 

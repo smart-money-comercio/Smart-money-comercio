@@ -37,7 +37,7 @@ def clock(value):
 
 def forbidden(value):
     if isinstance(value,dict):
-        return any(key in {"source_text","source_excerpt","event_evidence"} or forbidden(item) for key,item in value.items())
+        return any(key in {"source_text","source_excerpt","event_evidence","weekend_prospectus_excerpt"} or forbidden(item) for key,item in value.items())
     return isinstance(value,list) and any(forbidden(item) for item in value)
 
 
@@ -71,7 +71,11 @@ def validate_packet(packet,script=None):
     if digest(text)!=packet.get("voiceover_sha256"):raise ValueError("Scene narration does not match the approved script checksum")
     if script is not None and script.removesuffix("\n")!=text:raise ValueError("TXT and JSON narration differ")
     words=len(re.findall(r"\b[\w]+(?:['-][\w]+)*\b",text));quality=packet.get("voiceover_quality",{})
-    if (not 300<=words<=1200 or quality.get("status")!="PASS" or quality.get("words")!=words
+    rules=packet.get("weekend_rules")
+    if "weekend_rules" in packet and (type(rules) is not int or rules!=32 or revision!=2):
+        raise ValueError("Unknown Weekend Outlook editorial profile")
+    minimum=160 if rules==32 else 300
+    if (not minimum<=words<=1200 or quality.get("status")!="PASS" or quality.get("words")!=words
             or quality.get("words_per_minute")!=160 or quality.get("estimated_seconds")!=round(words*60/160,1)):
         raise ValueError("Narration metrics do not match the script")
     for name,rows in sources.items():
@@ -83,8 +87,10 @@ def validate_packet(packet,script=None):
             if source.get("published_at") and clock(source["published_at"])>at+timedelta(seconds=60):raise ValueError("Future source publication")
             if name.startswith("market_") and (source.get("baseline_date")!=(start-timedelta(days=3)).isoformat() or source.get("session_date")!=end.isoformat()):
                 raise ValueError("Weekly source dates changed")
-            if name.startswith("story_") and not start<=clock(source["published_at"]).astimezone(NY).date()<=local.date():raise ValueError("Story is outside the weekly evidence window")
+            if name.startswith(("story_", "ipo_")) and not start<=clock(source["published_at"]).astimezone(NY).date()<=local.date():raise ValueError("Story is outside the weekly evidence window")
             if name.startswith("calendar_") and not next_start<=clock(source["event_at"]).astimezone(NY).date()<=next_end:raise ValueError("Calendar is outside the coming week")
+            if rules==32 and name.startswith("company_") and not next_start<=date.fromisoformat(source["event_date"])<=next_end:
+                raise ValueError("Company event is outside the coming week")
             if name.startswith("later_") and not next_end<date.fromisoformat(source["event_date"])<=next_end+timedelta(days=14):raise ValueError("Later event is in the wrong horizon")
     return {"status":"PASS","validation_scope":"export_structure_and_pairing","edition_id":packet["bot_edition_id"],
         "narration_revision":revision,"all_spoken_text_in_scenes":revision==2,"segments":len(segments),"source_entries":len(sources),

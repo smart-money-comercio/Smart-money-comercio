@@ -16,6 +16,7 @@ from src.reports import weekend_narration
 
 LOCK = RLock()
 MAX_CHARACTERS = 10000
+WEEKEND_RULES = 32
 
 
 def text_hash(value):
@@ -31,8 +32,16 @@ def change(value):
     return ("rose " if value > 0 else "fell " if value < 0 else "was unchanged at ")+f"{abs(value):.2f} percent"
 
 
-def weekly_read(prices, periods):
+def weekly_read(prices, periods, *, snapshot=False):
     available = [row["proof"] for row in prices if row["status"] == "available"]
+    if snapshot:
+        first, last = (date.fromisoformat(periods[key]) for key in ("baseline_date", "week_end"))
+        lines = [f"Weekly price returns compare the {first:%B} {first.day} close with the {last:%B} {last.day} close.",
+                 "Benchmark | Week | Friday"]
+        lines.extend(f"{BENCHMARKS[row['symbol']]} | {row['weekly_percent']:+.2f}% | {row['friday_percent']:+.2f}%" for row in available)
+        if len(available) < 3:
+            lines.append(f"Weekly benchmark coverage is incomplete. {len(available)} of three verified.")
+        return "\n".join([*lines, "Price returns exclude dividends."])
     text = (f"The completed week ran from {day_label(periods['week_start'])} through {day_label(periods['week_end'])}. "
             f"Weekly price returns compare the {day_label(periods['baseline_date'])} close with the {day_label(periods['week_end'])} close. ")
     if available:
@@ -62,7 +71,7 @@ def calendar_read(packet, periods):
     return "\n".join(lines)
 
 
-def source_map(inputs, selected):
+def source_map(inputs, selected, ipo=None):
     sources={}
     for row in inputs["prices"]:
         if row["status"] != "available":continue
@@ -73,6 +82,11 @@ def source_map(inputs, selected):
     for row in selected:
         sources["story_"+row["id"]]=[{"url":row["url"],"publisher":row["source"],"published_at":row["published"],
             "verified_at":row["evidence_checked_at"],"source_sha256":row["event_evidence"]["source_sha256"]}]
+    if ipo:
+        source = ipo["source"]
+        sources["ipo_" + ipo["id"]] = [{"url": source["url"], "publisher": source["source"],
+            "published_at": source["published"], "verified_at": source["source_checked_at"],
+            "source_sha256": source.get("weekend_prospectus_excerpt", {}).get("prefix_sha256", source["ipo"]["sha256"])}]
     for index,row in enumerate(inputs["calendar"]["macro"]):
         sources["calendar_"+str(index)]=[{"url":row["url"],"publisher":row["publisher"],"event_at":row["at"],
             "verified_at":row["timing_observed"],"kind":"publisher calendar"}]
@@ -88,13 +102,29 @@ def content(inputs, theme):
     from src.intelligence import weekend_business
     business_version = weekend_business.revision(inputs)
     narration_revision=weekend_narration.revision(inputs)
+    story_first = inputs.get("weekend_rules") == WEEKEND_RULES
     periods=inputs["window"]
     selected=[row for row in inputs["stories"] if theme and row["id"] in theme["story_ids"]]
-    sources=source_map(inputs,selected)
+    ipo = inputs.get("ipo") if story_first and theme and theme["id"] == "ai_financing" else None
+    sources=source_map(inputs,selected,ipo)
+    story_ids = ["story_" + row["id"] for row in selected]
+    theme_sources = story_ids + (["ipo_" + ipo["id"]] if ipo else [])
+    if ipo and any(row["symbol"] == "NVDA" for row in inputs["calendar"]["company"]):
+        theme_sources.extend("company_" + str(index) for index, row in enumerate(inputs["calendar"]["company"])
+                             if row["symbol"] == "NVDA")
+    featured = weekend_narration.featured_events(inputs["calendar"], theme, selected, ipo) if story_first else []
+    question = (theme["question"] if ipo else weekend_narration.QUESTIONS[theme["id"]]) if story_first and theme else ""
     sections=[]
+    speech = {}
+
     def add(heading,narration,source_ids=(),bullets=()):
         sections.append({"heading":heading,"narration":narration,"bullets":list(bullets)[:3],"source_ids":list(source_ids)})
-    add("Week in perspective",weekly_read(inputs["prices"],periods),[key for key in sources if key.startswith("market_")])
+
+    if story_first:
+        opener, market_ids = weekend_narration.opening(inputs["prices"], question)
+        add("The week in brief", opener, market_ids + theme_sources, [question] if question else [])
+    else:
+        add("Week in perspective",weekly_read(inputs["prices"],periods),[key for key in sources if key.startswith("market_")])
     if theme:
         facts=[]
         for row in selected:
@@ -102,22 +132,47 @@ def content(inputs, theme):
             label=("This weekend update" if row["publication_label"]=="weekend update" else "The disclosure") if narration_revision>=2 else "This "+row["publication_label"]
             facts.append(weekend_business.dated_summary(row, stamp) if business_version else
                          themes.summary(row)+f" {label} was published {stamp:%B} {stamp.day}.")
-        add(theme["title"],theme["question"]+("\n\n" if business_version else "\n\nOriginal disclosures:\n")+"\n\n".join(facts),
-            ["story_"+row["id"] for row in selected],[theme["question"]])
-        argument = (weekend_business.discussion(selected, theme, inputs["business_analysis"]) if business_version else
-                    "Analyst interpretation: "+theme["case"]+"\n\n"+
-                    "\n\n".join(view["name"]+": "+view["why"]+" "+view["watch"] for view in map(themes.business,selected)))
-        add("Business interpretation", argument,
-            ["story_"+row["id"] for row in selected])
+        if ipo:
+            facts.insert(0, ipo["summary"])
+        if story_first:
+            add(theme["title"], "\n\n".join(facts), theme_sources)
+            discussion = weekend_business.discussion(selected, theme, inputs["business_analysis"]) if selected else ""
+            if ipo:
+                argument = theme["case"]
+                if any(row["symbol"] == "NVDA" for row in inputs["calendar"]["company"]):
+                    argument += " Nvidia's upcoming earnings give us a second view of AI spending through a chip supplier's sales and outlook."
+                if discussion:
+                    argument += "\n\n" + discussion
+            else:
+                argument = discussion
+            add("Why it matters", argument, theme_sources)
+        else:
+            add(theme["title"],theme["question"]+("\n\n" if business_version else "\n\nOriginal disclosures:\n")+"\n\n".join(facts),
+                story_ids,[theme["question"]])
+            argument = (weekend_business.discussion(selected, theme, inputs["business_analysis"]) if business_version else
+                        "Analyst interpretation: "+theme["case"]+"\n\n"+
+                        "\n\n".join(view["name"]+": "+view["why"]+" "+view["watch"] for view in map(themes.business,selected)))
+            add("Business interpretation", argument, story_ids)
     else:
         add("Theme under review","No weekly investment theme qualified from verified original bodies with at least two concrete fact fields. This edition remains a review copy; the missing evidence does not establish that business conditions were unchanged.")
-    add("Coming week: "+day_label(periods["next_start"])+" to "+day_label(periods["next_end"]),
-        calendar_read(inputs["calendar"],periods),[key for key in sources if key.startswith(("calendar_","company_"))])
+    if story_first:
+        if featured:
+            text = "\n\n".join(item["copy"] for item in featured)
+            add("What to watch next week", text, [item["source_id"] for item in featured], [item["label"] for item in featured])
+        else:
+            add("What to watch next week", "The verified calendar has limited coverage for the week ahead. The written outlook lists the events we could confirm.")
+        if theme:
+            watch = theme["stronger"] + " " + theme["weaker"] if ipo else weekend_narration.driver_watch(theme)
+            add("What would change the outlook", watch, theme_sources)
+
+    dates = day_label(periods["next_start"]) + " to " + day_label(periods["next_end"])
+    calendar_heading = ("Calendar for " if story_first else "Coming week: ") + dates
+    add(calendar_heading, calendar_read(inputs["calendar"],periods),[key for key in sources if key.startswith(("calendar_","company_"))])
     if inputs["calendar"]["later"]:
         add("Beyond the coming week","Later horizon, outside the coming Monday-to-Friday window: "+
             " ".join(company_schedule.narration(row,evidence.NY,NAMES) for row in inputs["calendar"]["later"]),
             [key for key in sources if key.startswith("later_")])
-    if theme:
+    if theme and not story_first:
         scenarios = (weekend_business.conditions(selected, theme, inputs["business_analysis"]) if business_version else
                      "Conditional scenarios, not forecasts or assigned probabilities.\n\n"+
                      "\n\n".join(theme[key] for key in ("base","stronger","weaker")))
@@ -125,6 +180,10 @@ def content(inputs, theme):
     context = ("The written outlook includes the sources and observation times. Check new disclosures as the week develops. Research only. Not financial advice."
                if business_version else "This outlook separates dated disclosures, analyst interpretation and conditional scenarios. It does not attribute stock moves to those disclosures. Check new original evidence before changing the investment case. Research only. Not financial advice.")
     add("Research context", context)
+    if story_first:
+        add("Market snapshot", weekly_read(inputs["prices"], periods, snapshot=True), [key for key in sources if key.startswith("market_")])
+        speech.update({calendar_heading: None, "Beyond the coming week": None, "Market snapshot": None})
+        speech["Research context"] = "The written outlook has the full calendar, weekly index returns and source links. Research only. Not financial advice."
     header=("Smart Money Weekend Outlook\n"+f"Completed week: {periods['week_start']} to {periods['week_end']}\n"+
             f"Ahead: {periods['next_start']} to {periods['next_end']}\n"+f"Generated: {inputs['generated_at']}\n")
     references=[]
@@ -136,7 +195,9 @@ def content(inputs, theme):
     report+="\n\nSources and observation clocks\n"+("\n\n".join(references) or "No qualified evidence references.")
     narrated=[]
     for row in sections:
-        text=row["narration"]
+        text=speech.get(row["heading"], row["narration"])
+        if text is None:
+            continue
         if business_version and row["heading"] == "Week in perspective":
             text = weekend_business.spoken_week(text, periods)
         if narration_revision>=2:
@@ -147,7 +208,8 @@ def content(inputs, theme):
     if narration_revision>=2:narrated[0]["narration"]="Smart Money Weekend Outlook.\n\n"+narrated[0]["narration"]
     script=("" if narration_revision>=2 else "Smart Money Weekend Outlook.\n\n")+"\n\n".join(row["narration"] for row in narrated)
     words=len(re.findall(r"\b[\w]+(?:['-][\w]+)*\b",script))
-    quality={"status":"PASS" if 300<=words<=1200 else "CHECK","words":words,"estimated_seconds":round(words*60/160,1),"words_per_minute":160}
+    minimum = 160 if story_first else 300
+    quality={"status":"PASS" if minimum<=words<=1200 else "CHECK","words":words,"estimated_seconds":round(words*60/160,1),"words_per_minute":160}
     voice={"schema":2,"input_sha256":evidence.digest(inputs),"script":script,"script_sha256":text_hash(script),
         "segments":narrated,"sources":sources,"quality":quality}
     if narration_revision>=2:voice["narration_revision"]=narration_revision
@@ -166,13 +228,25 @@ def assess(inputs,theme,report,voice):
 
 def assemble(inputs):
     from src.intelligence import weekend_business
-    theme=themes.choose(inputs["stories"])
+    rules = inputs.get("weekend_rules")
+    if "weekend_rules" in inputs and (type(rules) is not int or rules != WEEKEND_RULES):
+        raise ValueError("Unknown Weekend Outlook editorial rules")
+    if rules == WEEKEND_RULES and (inputs.get("business_version") != 1 or weekend_narration.revision(inputs) != 2):
+        raise ValueError("Weekend editorial profile requires native scene narration and business evidence")
+    ipo = inputs.get("ipo")
+    if ipo is not None:
+        if rules != WEEKEND_RULES:
+            raise ValueError("IPO context requires the current Weekend Outlook editorial profile")
+        from src.intelligence import weekend_ipo
+
+        weekend_ipo.checked(ipo, inputs["window"], evidence.clock(inputs["generated_at"]))
+    theme=themes.choose(inputs["stories"], ipo)
     business_version = weekend_business.revision(inputs)
     if business_version:
         selected = [row for row in inputs["stories"] if theme and row["id"] in theme["story_ids"]]
         weekend_business.checked(selected, inputs["business_analysis"])
     report,voice=content(inputs,theme)
-    record={"schema":1,"edition_type":"weekend_outlook","rules_version":31 if business_version else 30,"generated_at":inputs["generated_at"],
+    record={"schema":1,"edition_type":"weekend_outlook","rules_version":rules or (31 if business_version else 30),"generated_at":inputs["generated_at"],
         "inputs":deepcopy(inputs),"input_sha256":evidence.digest(inputs),"theme":theme,"report_text":report,
         "report_sha256":text_hash(report),"voiceover":voice,"quality":assess(inputs,theme,report,voice)}
     record["id"]=store.identity(record)
@@ -181,7 +255,7 @@ def assemble(inputs):
 
 def checked(record,now=None,*,require_publishable=False):
     try:
-        if (record.get("schema")!=1 or record.get("edition_type")!="weekend_outlook" or record.get("rules_version") not in {30, 31}
+        if (record.get("schema")!=1 or record.get("edition_type")!="weekend_outlook" or record.get("rules_version") not in {30, 31, WEEKEND_RULES}
                 or record.get("id")!=store.identity(record)):
             raise ValueError("Weekend edition identity or schema changed")
         at=evidence.clock(record["generated_at"]);inputs=record["inputs"]
@@ -206,6 +280,8 @@ def checked(record,now=None,*,require_publishable=False):
             for row in inputs["prices"]:
                 if row["status"]=="available":evidence.fresh(row["proof"]["observed"],now)
             for row in inputs["stories"]:evidence.fresh(row["evidence_checked_at"],now)
+            if inputs.get("ipo"):
+                evidence.fresh(inputs["ipo"]["source"]["source_checked_at"], now)
             evidence.checked_calendar(inputs["calendar"],periods,now)
             if record["quality"]["status"]!="PASS":raise ValueError("Weekend edition is CHECK; review /weekendstatus before export")
         return record
@@ -220,21 +296,28 @@ def build(now=None,*,force=False,raw=None,market_fetch=None,body_fetch=None,cale
     with LOCK:
         if not force and raw is None and market_fetch is None and body_fetch is None:
             prior=store.latest()
-            if (prior and prior.get("inputs",{}).get("narration_revision")==weekend_narration.REVISION
+            if (prior and prior.get("rules_version") == WEEKEND_RULES
+                    and prior.get("inputs",{}).get("narration_revision")==weekend_narration.REVISION
                     and prior["inputs"].get("business_version") == 1):
                 try:
                     checked(prior,now,require_publishable=True)
                     if (now-evidence.clock(prior["generated_at"])).total_seconds()<=1800:return prior
                 except ValueError:pass
         rows,issues=evidence.raw_candidates(now) if raw is None else (deepcopy(raw),[])
-        with ThreadPoolExecutor(max_workers=2) as pool:
+        from src.intelligence import calendar_source_cache, weekend_business, weekend_ipo
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
             prices=pool.submit(evidence.collect_prices,periods,now,market_fetch,force=force)
             stories=pool.submit(evidence.collect_stories,rows,periods,now,body_fetch,force=force)
+            ipo_result = pool.submit(weekend_ipo.refresh, periods, now, allow_network=raw is None and market_fetch is None and body_fetch is None)
             found,ledger=stories.result()
-            inputs={"generated_at":now.isoformat(),"narration_revision":weekend_narration.REVISION,"window":periods,"prices":prices.result(),"stories":found,
-                "ledger":ledger,"calendar":evidence.calendar_packet(rows,periods,now,calendar_snapshot),"source_issues":issues}
-        from src.intelligence import weekend_business
-        theme = themes.choose(inputs["stories"])
+            ipo, ipo_issues = ipo_result.result()
+            inputs={"generated_at":now.isoformat(),"weekend_rules":WEEKEND_RULES,"narration_revision":weekend_narration.REVISION,"window":periods,"prices":prices.result(),"stories":found,
+                "ledger":ledger,"calendar":evidence.calendar_packet(rows,periods,now,calendar_snapshot,
+                    publisher_cache=calendar_source_cache.load() if calendar_snapshot is None else None),"source_issues":issues + ipo_issues}
+        if ipo:
+            inputs["ipo"] = ipo
+        theme = themes.choose(found, ipo)
         selected = [row for row in inputs["stories"] if theme and row["id"] in theme["story_ids"]]
         inputs.update(business_version=1, business_analysis=weekend_business.analyze(selected))
         record=assemble(inputs);checked(record)
@@ -257,9 +340,12 @@ def status(record,now=None):
                 if row["status"]=="available" else row["reason"])
         lines.append(BENCHMARKS[row["symbol"]]+": "+row["status"]+" — "+detail)
     selected=theme["story_ids"] if theme else []
+    ipo = inputs.get("ipo")
     lines += ["Theme: "+(theme["title"] if theme else "No qualified original theme"),
         f"Original bodies: {len(inputs['stories'])} admitted / {len(inputs['ledger'])} reviewed; {len(selected)} selected",
         "Concrete fact fields: "+str(sum(len(row["event_evidence"]["facts"]) for row in inputs["stories"] if row["id"] in selected))]
+    if ipo:
+        lines.append(f"Original IPO terms: {ipo['name']} · {ipo['source']['url']}")
     for row in inputs["ledger"]:lines.append(row["status"].upper()+" — "+row["title"]+": "+row["reason"])
     lines += [f"Calendar: {len(inputs['calendar']['macro'])} verified macro / {len(inputs['calendar']['company'])} issuer notices; {len(inputs['calendar']['later'])} later-horizon notices. Coverage limited.",
         "Voiceover: "+str(record["voiceover"]["quality"]["words"])+" words; about "+str(record["voiceover"]["quality"]["estimated_seconds"])+" seconds at 160 words/minute",
@@ -269,6 +355,10 @@ def status(record,now=None):
         analysis = inputs["business_analysis"]
         lines.append("Business interpretation: " + str(len(analysis["reviews"])) + " source-bound reviews; cross-company comparison "
                      + ("available" if analysis["comparison"] else "requires distinct business stages"))
+    if record["rules_version"] == WEEKEND_RULES:
+        stories = [row for row in inputs["stories"] if row["id"] in selected]
+        events = weekend_narration.featured_events(inputs["calendar"], theme, stories, inputs.get("ipo"))
+        lines.append("Featured outlook checks: " + (", ".join(item["label"] for item in events) or "none verified"))
     lines += ["Coverage: "+str(value) for value in inputs["source_issues"]+inputs["calendar"]["issues"]]
     return "\n".join(lines)
 
@@ -285,4 +375,6 @@ def episode(record,now=None):
         "bot_report_sha256":record["report_sha256"],"bot_generated_at":record["generated_at"],
         "voiceover_sha256":voice["script_sha256"],"voiceover_schema":2,"voiceover_quality":deepcopy(voice["quality"])}
     if voice.get("narration_revision"):packet["weekend_narration_revision"]=voice["narration_revision"]
+    if record["rules_version"] == WEEKEND_RULES:
+        packet["weekend_rules"] = WEEKEND_RULES
     return packet

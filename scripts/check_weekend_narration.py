@@ -4,6 +4,7 @@ import argparse
 from contextlib import ExitStack,redirect_stdout,redirect_stderr
 from copy import deepcopy
 from hashlib import sha256
+import importlib.util
 import json
 from io import StringIO
 import os
@@ -68,10 +69,11 @@ class NarrationChecks(PrivateState):
         self.assertEqual(narration.spoken("According to DOL."),"According to the U S Department of Labor.")
         self.assertEqual(narration.spoken("The DOL confirmed the time."),"The U S Department of Labor confirmed the time.")
 
-    def test_written_calendar_keeps_five_days_while_speech_summarizes_gaps_once(self):
-        value,packet=self.native();spoken=next(s["narration"] for s in packet["segments"] if s["heading"].startswith("Coming week"))
+    def test_written_calendar_keeps_five_days_while_speech_focuses_on_the_release(self):
+        value,packet=self.native();spoken=next(s["narration"] for s in packet["segments"] if s["heading"]=="What to watch next week")
         self.assertEqual(value["report_text"].count("No publisher-verified entry"),4)
-        self.assertNotIn("No publisher-verified entry",spoken);self.assertEqual(spoken.count("calendar is incomplete"),1)
+        self.assertIn("Calendar coverage is limited",value["report_text"])
+        self.assertNotIn("No publisher-verified entry",spoken);self.assertIn("early read on layoffs",spoken)
         self.assertIn("Thursday, November twelfth",spoken);self.assertIn("eight thirty in the morning",spoken)
 
     def test_empty_calendar_still_describes_missing_evidence(self):
@@ -80,9 +82,10 @@ class NarrationChecks(PrivateState):
         self.assertIn("no publisher-verified",text);self.assertIn("Coverage is incomplete",text)
 
     def test_later_issuer_event_stays_outside_the_spoken_coming_week(self):
-        _,packet=self.native();coming=next(s["narration"] for s in packet["segments"] if s["heading"].startswith("Coming week"))
-        later=next(s["narration"] for s in packet["segments"] if s["heading"]=="Beyond the coming week")
-        self.assertNotIn("seventeenth",coming);self.assertIn("seventeenth",later)
+        value,packet=self.native()
+        self.assertFalse(any("seventeenth" in part["narration"] for part in packet["segments"]))
+        self.assertIn("Beyond the coming week", value["report_text"])
+        self.assertIn("Tuesday, November 17", value["report_text"])
 
     def test_old_cache_does_not_prevent_a_new_revision_build(self):
         old=self.legacy()["record"];store.save(old)
@@ -151,6 +154,16 @@ class ContractChecks(PrivateState):
     def test_native_preflight_matches_the_exact_record_without_network(self):
         value,packet=self.native();summary=cli.preflight(packet,value["voiceover"]["script"],NOW)
         self.assertEqual(summary["native_record"],"PASS");self.assertFalse(summary["paid_production_ready"])
+
+    def test_shorter_narration_needs_the_current_outlook_profile(self):
+        value,packet=self.native()
+        self.assertLess(value["voiceover"]["quality"]["words"], 300)
+        for bad in (None, True, 31):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):
+                contract.validate_packet({**packet, "weekend_rules": bad})
+        packet.pop("weekend_rules")
+        with self.assertRaisesRegex(ValueError, "Narration metrics"):
+            contract.validate_packet(packet)
 
     def test_forged_but_self_consistent_packet_still_fails_native_record_binding(self):
         value,packet=self.native();packet["description"]="Different approved description"
@@ -383,12 +396,97 @@ class RendererChecks(PrivateState):
         self.assertFalse((self.root/'output').exists())
 
 
+class PreviewRunnerChecks(PrivateState):
+    def runner(self):
+        path = ROOT / "deployment/weekend_preview.py"
+        spec = importlib.util.spec_from_file_location("weekend_preview_fixture", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_deployed_runner_accepts_the_new_native_contract(self):
+        value, packet = self.native()
+        runner = self.runner()
+        from src import reports
+
+        with patch.dict(sys.modules), patch.object(reports, "weekend_media_contract", contract), redirect_stdout(StringIO()):
+            runner.BOT = ROOT
+            runner.load_preview_contract(self.root)
+            updated = reports.weekend_media_contract
+            self.assertEqual(updated.validate_packet(packet, value["voiceover"]["script"])["status"], "PASS")
+        self.assertEqual(contract.REFINED_WEEKEND_RENDERER_SHA256, runner.SIBLING_SHA256)
+
+    def test_runner_update_replaces_only_its_known_older_file(self):
+        runner = self.runner()
+        target = self.root / "weekend_preview.py"
+        old = b"reviewed older runner\n"
+        target.write_bytes(old)
+        runner.LEGACY_RUNNER_SHA256 = sha256(old).hexdigest()
+        with patch.object(runner.os, "chown", create=True):
+            runner.install_runner(target)
+            self.assertEqual(target.read_bytes(), runner.canonical_source(Path(runner.__file__).read_bytes()))
+            before = target.stat().st_mtime_ns
+            runner.install_runner(target)
+            self.assertEqual(target.stat().st_mtime_ns, before)
+            target.write_bytes(b"local changes\n")
+            with self.assertRaisesRegex(ValueError, "local changes"):
+                runner.install_runner(target)
+        self.assertEqual(target.read_bytes(), b"local changes\n")
+
+    def test_scheduled_preview_produces_the_current_edition_timing_review(self):
+        value, packet = self.native()
+        runner = self.runner()
+        runner.BOT = ROOT
+        runner.VIDEO = self.root / "video"
+        pair = runner.VIDEO / "output/weekend_exports/sample"
+        pair.mkdir(parents=True)
+        (pair / "weekend_outlook.json").write_text(json.dumps(packet), encoding="utf-8")
+        (pair / "weekend_outlook.txt").write_text(value["voiceover"]["script"] + "\n", encoding="utf-8")
+        release = runner.VIDEO / "releases/v2"
+        (release / "assets").mkdir(parents=True)
+        (release / "video_refinements.py").touch()
+        original = (ROOT / "scripts/fixtures/weekend_refined_v2_renderer_reference.txt").read_bytes()
+        (release / "render_episode.py").write_bytes(original)
+        from src import reports
+
+        def preview(command, **kwargs):
+            self.assertEqual(command[-1], "--preview-only")
+            out = Path(command[command.index("--out") + 1])
+            out.mkdir()
+            for index in range(len(packet["segments"])):
+                (out / f"preview_{index:02}.jpg").write_bytes(b"synthetic still")
+            audit = {"edition_type": "weekend_outlook", "bot_edition_id": value["id"],
+                     "weekend_narration_revision": 2, "voiceover_sha256": packet["voiceover_sha256"],
+                     "scene_count": len(packet["segments"]), "review_required": True,
+                     "mode": "visual_preview_only", "audio_generated": False,
+                     "uploaded": False, "paid_production_ready": False}
+            (out / "preview.json").write_text(json.dumps(audit), encoding="utf-8")
+
+        cwd = Path.cwd()
+        self.addCleanup(os.chdir, cwd)
+        with patch.dict(sys.modules), patch.object(sys, "path", list(sys.path)), \
+                patch.object(reports, "weekend_media_contract", contract), patch.object(Path, "symlink_to") as links, \
+                patch.object(runner.subprocess, "run", side_effect=preview) as process, \
+                patch.object(cli, "datetime") as clock, redirect_stdout(StringIO()):
+            clock.now.return_value = NOW
+            self.assertEqual(runner.main(["--export-dir", str(pair), "--edition", value["id"]]), 0)
+        process.assert_called_once()
+        self.assertEqual(links.call_count, 2)
+        review, = pair.glob("visual_review.*/narration_review.json")
+        result = json.loads(review.read_text(encoding="utf-8"))
+        self.assertEqual(result["bot_edition_id"], value["id"])
+        self.assertEqual(result["estimated_seconds"], packet["voiceover_quality"]["estimated_seconds"])
+        self.assertEqual("\n\n".join(scene["narration"] for scene in result["scenes"]), value["voiceover"]["script"])
+        self.assertEqual((release / "render_episode.py").read_bytes(), original)
+
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument("--windows-socketpair",action="store_true");args=parser.parse_args()
     with ExitStack() as stack:
         if args.windows_socketpair:stack.enter_context(patch.object(socket,"socketpair",portable_tcp_socketpair))
         traffic=stack.enter_context(offline_network_guard())
-        suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case) for case in (NarrationChecks,ContractChecks,RendererChecks))
+        suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case) for case in
+            (NarrationChecks,ContractChecks,RendererChecks,PreviewRunnerChecks))
         result=unittest.TextTestRunner(verbosity=1).run(suite)
     good=result.wasSuccessful() and not traffic["blocked"]
     print(f"Weekend Narration Check: {'PASS' if good else 'FAIL'} ({result.testsRun} tests)")
