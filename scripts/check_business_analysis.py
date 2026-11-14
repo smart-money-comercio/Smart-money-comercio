@@ -122,7 +122,7 @@ class DailyChecks(RebuildDetailChecks):
     def test_new_daily_retains_both_stories_and_all_research_scores(self):
         text, record = self.render([maintenance(), sanctions()])
         self.assertEqual(record["rules_version"], 32)
-        self.assertEqual(record["business_version"], 7)
+        self.assertEqual(record["business_version"], 8)
         self.assertEqual(len(news_editor.selected_stories(record)), 2)
         self.assertTrue(validate_news_brief(text)["passes"])
         self.assertLessEqual(len(text), 3800)

@@ -169,10 +169,14 @@ class VideoBriefChecks(IsolatedChecks):
         self.assertIn("Treasury announces bond auction terms",old["script"])
 
     def test_a_macro_source_used_by_the_market_lens_keeps_its_reference(self):
-        _,record=self.render([agency("U.S. Treasury","Treasury announces export restrictions on AI chips")])
+        story = agency("U.S. Treasury", "Treasury announces export restrictions on AI chips",
+                       source_excerpt="Treasury announced new export restrictions on advanced AI chips shipped to Example Market. "
+                                      "The announcement identifies the covered products.",
+                       excerpt_scope="original release excerpt")
+        _, record = self.render([story])
         profile=record["voiceover"]
         market=next(row for row in profile["segments"] if row["heading"]=="Market Update")
-        self.assertIn("chip-market access",market["narration"])
+        self.assertIn("whether export restrictions change shipments or revenue guidance", market["narration"])
         self.assertTrue(market["source_ids"])
         self.assertTrue(set(market["source_ids"])<=set(profile["sources"]))
 

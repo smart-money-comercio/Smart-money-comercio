@@ -8,6 +8,17 @@ MIN_MARKET_WORDS = 45
 MAX_MARKET_WORDS = 90
 PREFERRED_MARKET_WORDS = 75
 DEFENSE_SYMBOLS = {"PLTR", "AVAV", "KTOS", "CRWD", "NOC", "LMT", "RTX", "GD", "HII", "CACI", "ITA"}
+MARKET_CONTEXT_TOPICS = {"trade", "export restrictions", "import tariffs", "geopolitics", "policy", "energy", "IPO", "AI financing"}
+
+EXPORT_MEASURE = r"export (?:bans?|restrictions?|controls?)"
+TARIFF_MEASURE = r"(?:tariffs?|import duties)"
+TRADE_OR_SANCTIONS = re.compile(r"\b(?:" + EXPORT_MEASURE + "|" + TARIFF_MEASURE + r"|trade restrictions?|sanction(?:s|ed|ing)?|OFAC)\b", re.I)
+TRADE_ACTION = (r"\b(?:announc(?:ed|es)|impos(?:ed|es)|introduc(?:ed|es)|issu(?:ed|es)|adopt(?:ed|s)|"
+                r"enact(?:ed|s)|expand(?:ed|s)|rais(?:ed|es)|lower(?:ed|s)|implement(?:ed|s)|sets?) "
+                r"(?:a |an |the |its )?(?:(?:new|additional|revised|higher|lower|\d+(?:\.\d+)?(?:%| percent)) ){0,3}")
+TRADE_GOODS = (r"(?:(?:advanced|AI|high[- ]performance|imported|finished|electric|passenger|primary) ){0,3}"
+               r"(?:chips?|semiconductors?|AI accelerators?|steel|alumin(?:um|ium)|vehicles?|batteries|solar (?:panels?|cells?)|"
+               r"crude oil|petroleum products?|critical minerals?|copper|lithium)\b")
 
 
 def word_count(text: str) -> int:
@@ -44,6 +55,35 @@ def story_topics(story: dict) -> set[str]:
     return topics
 
 
+def market_story_topics(story: dict, *, business_version: int) -> set[str]:
+    """Use a release's actual trade measure and covered goods for the market read."""
+    topics = story_topics(story)
+    if business_version < 8:
+        return topics
+    title = story["title"]
+    if not TRADE_OR_SANCTIONS.search(title) and "financial sanctions" not in topics:
+        return topics - {"chips"}
+    # Words such as oil or shipping can describe who was sanctioned, without
+    # establishing a new restriction on the product or industry.
+    topics -= {"trade", "chips", "financial sanctions", "geopolitics", "policy", "energy"}
+    profile = story.get("event_evidence", {})
+    if profile.get("scope") != "original release excerpt":
+        return topics
+    from src.intelligence.original_disclosures import UNCONFIRMED, sentences
+    qualified = UNCONFIRMED + r'|\b(?:if|unless|never|earlier|last year|propos\w*|consider\w*|plans?|recommend\w*|pending)\b|["“”]'
+    rows = [row for row in sentences(profile.get("source_text", "")) if not re.search(qualified, row, re.I)]
+    for topic, measure in (("export restrictions", EXPORT_MEASURE), ("import tariffs", TARIFF_MEASURE)):
+        action = TRADE_ACTION + measure + r" (?:on|covering) " + TRADE_GOODS
+        if re.search(r"\b" + measure + r"\b", title, re.I) and any(re.search(action, row, re.I) for row in rows):
+            topics.add(topic)
+    return topics
+
+
+def market_topics(evidence: dict) -> set[str]:
+    version = evidence.get("business_version", 0)
+    return set().union(*(market_story_topics(story, business_version=version) for story in evidence.get("stories", [])))
+
+
 def sentiment(moves: dict, *, pressure_first=False) -> str:
     if pressure_first:
         from src.intelligence.market_priority import sharp_loss
@@ -64,6 +104,10 @@ def portfolio_lens(moves: dict, topics: set[str], mood: str, *, pressure_first=F
         from src.intelligence.market_priority import sharp_loss
         if sharp_loss(moves):
             return "Review concentrated growth exposure and upcoming company results; watch whether selling eases and participation improves before increasing conviction."
+    if "export restrictions" in topics:
+        return "Watch whether export restrictions change shipments or revenue guidance for suppliers of the covered goods."
+    if "import tariffs" in topics:
+        return "For importers of the covered goods, watch whether the tariff change shows up in costs, prices or margins."
     if "trade" in topics:
         return ("Verified trade-policy news puts chip-market access and supply chains on watch; check company guidance before changing exposure." if "chips" in topics else
                 "Verified trade-policy news warrants checking cross-border costs and supply chains against company guidance before changing exposure.")
@@ -93,8 +137,7 @@ def rally_leadership(evidence: dict) -> str:
     moves = evidence["moves"]
     if sentiment(moves) != "constructive" or abs(moves.get("Oil", 0)) >= 1.5 or abs(moves.get("TLT", 0)) >= 0.5:
         return ""
-    topics = set().union(*(story_topics(story) for story in evidence.get("stories", [])))
-    if topics & {"trade", "geopolitics", "policy", "energy", "financial sanctions", "IPO", "AI financing"}:
+    if market_topics(evidence) & (MARKET_CONTEXT_TOPICS | {"financial sanctions"}):
         return ""
     leader, middle, laggard = sorted(("S&P", "Nasdaq", "Russell"), key=moves.__getitem__, reverse=True)
     if round(moves[leader] - moves[laggard], 2) < 0.50:
@@ -122,7 +165,7 @@ def market_segment(evidence: dict) -> str:
     if not moves or not evidence["session"]:
         return ("A dated broad-market snapshot is unavailable, so an overall sentiment call would be premature. "
                 "Portfolio lens: keep the research ranking separate from entry timing. Confirm the major indexes, volatility and current company prices before increasing conviction, and review upcoming policy and earnings releases for a clearer risk picture.")
-    topics = set().union(*(story_topics(story) for story in evidence.get("stories", [])))
+    topics = market_topics(evidence)
     pressure_first = evidence.get("reader_version") == 4
     mood = sentiment(moves, pressure_first=pressure_first)
     from src.intelligence.market_priority import selloff

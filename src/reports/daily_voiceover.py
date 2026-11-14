@@ -38,7 +38,7 @@ def sections(report):
 
 
 def market_copy(evidence):
-    from src.intelligence.market_brief import sentiment, portfolio_lens, story_topics
+    from src.intelligence.market_brief import market_topics, portfolio_lens, sentiment
     moves = evidence["moves"]
     if not evidence.get("session") or not any(key in moves for key in ("S&P", "Nasdaq", "Russell")):
         return ("The broad market picture is incomplete in this edition. Before making a market-wide judgment, we still need dated index and volatility readings. "
@@ -56,8 +56,7 @@ def market_copy(evidence):
     from src.intelligence.market_priority import selloff
     pressure = pressure_first and selloff(evidence)
     mood = sentiment(moves, pressure_first=pressure_first)
-    topics = set().union(*(story_topics(story) for story in evidence.get("stories", [])))
-    lens = portfolio_lens(moves, topics, mood, pressure_first=pressure_first)
+    lens = portfolio_lens(moves, market_topics(evidence), mood, pressure_first=pressure_first)
     lens = lens.replace("research case", "case").replace("entry conditions for individual companies", "outlook for individual companies")
     lens = lens.replace("upcoming catalysts", "upcoming company and policy events")
     volatility = (" Volatility " + ("rose." if moves["VIX"] > 0 else "fell." if moves["VIX"] < 0 else "was unchanged.")) if "VIX" in moves else ""
@@ -271,7 +270,7 @@ def build(record, report, research, *, schema=2):
     """Derive a spoken companion only after the original edition passes review."""
     from src.intelligence import news_editor as editor
     from src.intelligence.daily_brief_analysis import NAMES, validate_review
-    from src.intelligence.market_brief import rally_leadership, story_topics
+    from src.intelligence.market_brief import MARKET_CONTEXT_TOPICS, market_story_topics, rally_leadership, story_topics
     from src.reports.daily_news_brief import validate_news_brief
     if type(schema) is not int or schema not in {1, 2}:
         raise ValueError("Unknown voiceover presentation schema")
@@ -352,7 +351,9 @@ def build(record, report, research, *, schema=2):
     leadership = rally_leadership(evidence)
     market = leadership or "First, the market. " + market_copy(evidence)
     market_keys = ("S&P", "Nasdaq", "Russell") if leadership else ("S&P", "Nasdaq", "VIX")
-    market_sources = [story["id"] for story in selected if story_topics(story) & {"trade", "geopolitics", "policy", "energy", "IPO", "AI financing"}] if modern else ()
+    version = evidence.get("business_version", 0)
+    market_sources = [story["id"] for story in selected
+                      if market_story_topics(story, business_version=version) & MARKET_CONTEXT_TOPICS] if modern else ()
     if review.get("reader_version") == 4:
         from src.intelligence.market_priority import selloff
         if selloff(evidence):

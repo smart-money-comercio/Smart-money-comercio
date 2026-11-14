@@ -31,7 +31,7 @@ def _company_read_v1(story: dict) -> dict:
 
 
 def company_read(story: dict, *, business_version=0) -> dict:
-    if type(business_version) is not int or not 0 <= business_version <= 7:
+    if type(business_version) is not int or not 0 <= business_version <= 8:
         raise ValueError("Unknown business narration version")
     review = _company_read_v1(story)
     if business_version:
@@ -129,7 +129,7 @@ def _render_story_v1(story: dict, zone, names: dict) -> str:
 
 
 def render_story(story: dict, zone, names: dict, *, business_version=0) -> str:
-    if type(business_version) is not int or not 0 <= business_version <= 7:
+    if type(business_version) is not int or not 0 <= business_version <= 8:
         raise ValueError("Unknown business narration version")
     text = _render_story_v1(story, zone, names)
     if business_version:

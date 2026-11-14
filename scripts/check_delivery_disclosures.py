@@ -317,7 +317,7 @@ class DailyChecks(RebuildDetailChecks):
         self.assertEqual({story["publisher_symbol"] for story in selected}, {"AMD", "LMT"})
         self.assertEqual(len(selected), 2)
         self.assertTrue(all(checked_evidence(story)["schema"] == 14 for story in selected))
-        self.assertEqual(record["business_version"], 7)
+        self.assertEqual(record["business_version"], 8)
         self.assertEqual(len(record["analyst_review"]["evidence"]["business_reviews"]), 2)
         copies = [story for story in record["candidates"] if story["url"] == production["url"]]
         self.assertEqual(len(copies), 2)

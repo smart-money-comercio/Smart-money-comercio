@@ -951,12 +951,93 @@ class MarketDefenseChecks(IsolatedChecks):
             self.assertIn(expected, text)
             self.assertTrue(45 <= word_count(text) <= 90, text)
 
-    def test_verified_trade_headline_changes_the_conditional_portfolio_read(self):
-        story = self.story("U.S. Treasury", "Treasury announces export restrictions on AI chips")
+    def test_verified_export_scope_changes_the_conditional_portfolio_read(self):
+        from src.intelligence import news_editor, news_editor_store
+
+        story = self.story("U.S. Treasury", "Treasury announces export restrictions on AI chips",
+                           source_excerpt="Treasury announced new export restrictions on advanced AI chips shipped to Example Market. "
+                                          "The announcement identifies the covered products.",
+                           excerpt_scope="original release excerpt")
         text = self.render([story])
         self.assertIn(story["title"], text)
-        self.assertIn("Verified trade-policy news puts chip-market access", self.market_body(text))
+        self.assertIn("whether export restrictions change shipments or revenue guidance", self.market_body(text))
+        record = news_editor_store.read_editions(report=text)[0]
+        selected, = news_editor.selected_stories(record)
+        market = next(scene for scene in record["voiceover"]["segments"] if scene["heading"] == "Market Update")
+        self.assertIn("whether export restrictions change shipments or revenue guidance", market["narration"])
+        self.assertEqual(market["source_ids"], [selected["id"]])
         self.assertNotIn("caused", text.lower())
+
+    def test_targeted_treasury_sanctions_do_not_supply_the_market_implication(self):
+        from scripts.check_news_editor import candidate
+        from src.intelligence import news_editor, news_editor_store
+        from src.reports.daily_voiceover import checked
+
+        close = datetime(2026, 11, 14, 0, 5, 15, tzinfo=timezone.utc)
+        clocks = {"published": (close - timedelta(hours=5)).isoformat(), "source_checked_at": close.isoformat()}
+        story = self.story("U.S. Treasury", "Treasury Sanctions Guatemalan Drug Trafficking Organizations Supporting Mexican Narco-Terrorist Cartels",
+                           source_excerpt="Treasury announced targeted designations under an existing sanctions program. "
+                                          "The notice identifies the designated groups.",
+                           excerpt_scope="original release excerpt", **clocks)
+        company = candidate(title="Microsoft announces an expanded strategic cloud partnership for enterprise customers", **clocks)
+        research = self.research(now=close, replacements={
+            "Executive Summary": "- Main theme: Growth pressure.\n- Market moves: S&P -0.40%, Nasdaq -0.91%, Russell -0.31%, VIX +3.21%, Oil -0.34%, TLT -0.43%.",
+            "Market Snapshot": "Market Session: Closed.\nQuote session: 2026-11-13\nBreadth: 4 up / 14 down / 18 quoted"})
+        text = self.render([story, company], research)
+        record = news_editor_store.read_editions(report=text)[0]
+        selected = next(row for row in news_editor.selected_stories(record) if row["source"] == "U.S. Treasury")
+        self.assertEqual(selected["title"], story["title"])
+        self.assertIn(story["title"], text.split("\nPolicy & Economy\n", 1)[1])
+        self.assertFalse(selected["event_evidence"]["facts"])
+        self.assertIn("Nasdaq Composite fell 0.91 percent", self.market_body(text))
+        self.assertNotIn("supply chains", self.market_body(text))
+        voice = checked(record, close)
+        market = next(scene for scene in voice["segments"] if scene["heading"] == "Market Update")
+        self.assertNotIn("supply chains", market["narration"])
+        self.assertNotIn(selected["id"], market["source_ids"])
+        self.assertTrue(validate_news_brief(text)["passes"])
+
+    def test_trade_headline_without_current_operating_scope_keeps_the_market_lens_unchanged(self):
+        title = "Treasury announces export restrictions on AI chips"
+        baseline = self.market_body(self.render([]))
+        for excerpt, scope in (
+            ("", "headline only"),
+            ("Treasury announced new export restrictions on advanced AI chips shipped to Example Market.", "publisher feed excerpt"),
+            ("Treasury may impose new export restrictions on advanced AI chips shipped to Example Market. "
+             "Officials previously imposed export restrictions on other advanced products.", "original release excerpt"),
+            ("Treasury will announce export restrictions on advanced AI chips shipped to Example Market. "
+             "The measure is still under discussion.", "original release excerpt"),
+            ("Treasury announced new export restrictions on firms that finance shipments of advanced AI chips. "
+             "The notice names the affected counterparties.", "original release excerpt"),
+            ("Treasury announced new export restrictions. The release discussed international technology policy.", "original release excerpt"),
+        ):
+            with self.subTest(excerpt=excerpt, scope=scope):
+                story = self.story("U.S. Treasury", title, source_excerpt=excerpt, excerpt_scope=scope)
+                text = self.render([story])
+                self.assertIn(title, text)
+                self.assertEqual(self.market_body(text), baseline)
+
+    def test_tariff_lens_uses_covered_imports_without_borrowing_another_storys_chip_topic(self):
+        from scripts.check_news_editor import candidate
+
+        story = self.story("U.S. Treasury", "Treasury announces tariffs on imported steel",
+                           source_excerpt="Treasury announced a new 10 percent tariff on imported steel. "
+                                          "The measure covers the goods listed in the official notice.",
+                           excerpt_scope="original release excerpt")
+        chip_story = candidate("NVDA", title="Nvidia introduces chips for enterprise AI")
+        body = self.market_body(self.render([story, chip_story]))
+        self.assertIn("For importers of the covered goods", body)
+        self.assertIn("costs, prices or margins", body)
+        self.assertNotIn("chip-market access", body)
+
+    def test_sanctions_body_does_not_borrow_a_background_trade_measure_or_headline_topics(self):
+        from src.intelligence.market_brief import market_story_topics
+
+        story = {"title": "Treasury sanctions shipping firms accused of moving oil",
+                 "event_evidence": {"scope": "original release excerpt", "source_text":
+                                    "Treasury imposed targeted sanctions on the named companies. "
+                                    "Treasury imposed new tariffs on imported steel in 2024."}}
+        self.assertFalse(market_story_topics(story, business_version=8))
 
     def test_geopolitical_news_has_two_sided_portfolio_implications(self):
         story = self.story("Federal Reserve", "Federal Reserve policy review examines shipping conflict and energy risk")
