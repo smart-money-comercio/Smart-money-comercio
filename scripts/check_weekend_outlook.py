@@ -374,7 +374,7 @@ class CalendarChecks(unittest.TestCase):
                     for i in range(6)]
         packet, fetch = self.recheck(notices=archived + archived, fetch=Mock(return_value={"status": "error"}))
         self.assertFalse(packet["company"])
-        self.assertEqual(fetch.call_count, inputs.MAX_NOTICE_RECHECKS)
+        self.assertEqual(fetch.call_count, company_schedule.MAX_NOTICE_RECHECKS)
         self.assertEqual(len({call.args[0] for call in fetch.call_args_list}), 3)
 
     def test_official_fed_cache_fills_a_day_outside_the_daily_snapshot(self):

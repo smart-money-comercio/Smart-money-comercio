@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from src.intelligence.calendar_context import checked_time, publishers
 from src.intelligence.company_catalyst_context import build_company_catalyst_brief
 from src.intelligence import news_editor as editor
+from src.intelligence import earnings_watch
 from src.intelligence.daily_brief_analysis import analyze_report, retained_review
 from src.intelligence.market_brief import MIN_MARKET_WORDS, MAX_MARKET_WORDS, story_topics, word_count
 from src.intelligence.market_priority import order_in_takeaway, selloff
@@ -244,14 +245,14 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                      + (" Recheck the publisher because live coverage is limited." if row["time_status"] == "cached" else ""))
     from src.intelligence.company_schedule import earnings_focus, narration as schedule_narration
     company_schedules = plan.get("company_schedules", [])[:1]
+    preview = earnings_watch.preview(company_schedules[0], now) if company_schedules else None
+    followup = plan.get("earnings_followup_candidate")
     macro_limit = 1 if company_schedules else 2
     ahead.extend(macro[:macro_limit])
     ahead.extend(schedule_narration(row, zone, NAMES) for row in company_schedules)
     implication = calendar_implication(set(macro_families[:macro_limit]), concise=concise)
     if implication:
         ahead.append(implication)
-    if company_schedules and plan.get("business_version", 0) >= 7:
-        ahead.append(earnings_focus(company_schedules[0]))
     if not ahead:
         ahead.append("The available company announcements and calendars did not establish a dated catalyst. Check company sources before planning around an event.")
     if plan["issues"]:
@@ -280,7 +281,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         # verified results context this attempt is meant to include.
         for indexes, (context_values, intel_baseline), focus_limit, reader_limit in product(combinations(range(len(initial_stories)), count), context_choices, (3, 2, 1), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
-            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit, earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0), intel_results_baseline=intel_baseline)
+            watch = followup if followup and any(story["id"] == followup["story_id"] for story in retained) else preview
+            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit, earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0), intel_results_baseline=intel_baseline, earnings_watch=watch)
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")
@@ -314,6 +316,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                     market_body.append(alert)
             global_body += [row["text"] for row in insights if row["section"] == "global"]
             ahead_body = list(ahead)
+            schedule_focus = None
+            if company_schedules and plan.get("business_version", 0) >= 7:
+                schedule_focus = (earnings_watch.preview_question(watch) if watch and watch["phase"] == "preview"
+                                  else earnings_focus(company_schedules[0]))
+                ahead_body.insert(len(ahead_body) - bool(plan["issues"]), schedule_focus)
             if not any(story["kind"] == "company" for story in retained) and not analysis["evidence"]["companies"]:
                 company_body.append(no_company_story)
             watching = [row["text"] for row in insights if row["section"] == "watch"]
@@ -322,6 +329,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             notes_body = list(notes)
             if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:
                 notes_body.insert(-1, no_company_story)
+            if watch:
+                notes_body.insert(-1, earnings_watch.source_line(watch, retained))
             groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
             groups.insert(3, (transactions.HEADER, disclosure_body))
             if ipo_body:
@@ -353,8 +362,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             protected = set(narrations.values()) | {no_company_story} | {
                 row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
             protected.update(schedule_narration(row, zone, NAMES) for row in company_schedules)
-            if plan.get("business_version", 0) >= 7:
-                protected.update(earnings_focus(row) for row in company_schedules)
+            if schedule_focus:
+                protected.add(schedule_focus)
             if brief.get("market_events"):
                 protected.update(paragraph for paragraph in market_body if paragraph.startswith("An active market-alert record reports "))
             if plan["issues"]:

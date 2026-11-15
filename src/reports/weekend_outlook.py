@@ -308,7 +308,7 @@ def build(now=None,*,force=False,raw=None,market_fetch=None,body_fetch=None,cale
         from src.intelligence import calendar_source_cache, weekend_business, weekend_ipo
 
         allow_network = raw is None and market_fetch is None and body_fetch is None
-        history = evidence.archived_schedules(daily_archive[0], store.recent()) if allow_network else ()
+        history = company_schedule.archived_schedules(daily_archive[0], store.recent()) if allow_network else ()
         with ThreadPoolExecutor(max_workers=4) as pool:
             prices=pool.submit(evidence.collect_prices,periods,now,market_fetch,force=force)
             stories=pool.submit(evidence.collect_stories,rows,periods,now,body_fetch,force=force)

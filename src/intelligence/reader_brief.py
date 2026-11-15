@@ -255,12 +255,17 @@ def watching(evidence):
 
 def insights(evidence):
     sources = ["Executive Summary", "Market Snapshot"]
+    has_earnings_lead = False
     if evidence.get("reader_version") in {3,4}:
         if evidence["reader_version"] == 4:
-            from src.intelligence.market_priority import opening_source
+            from src.intelligence.market_priority import earnings_lead, opening_source
+            if earnings_lead(evidence):
+                from src.intelligence.earnings_watch import SOURCE_SECTION
+                sources.append(SOURCE_SECTION)
+                has_earnings_lead = True
         else:
             from src.intelligence.evidence_opening import opening_source
-        if opening_source(evidence):
+        if not has_earnings_lead and opening_source(evidence):
             sources.append("Verified story decisions")
     if evidence.get("market_event_context", {}).get("events"):
         sources.append("Market event checks")
@@ -268,4 +273,12 @@ def insights(evidence):
     from src.intelligence.market_priority import selloff
     if first and matching(evidence.get("earnings_context", []), first["symbol"]) and not (evidence.get("reader_version") == 4 and selloff(evidence)):
         sources.append("Recent earnings context")
-    return [{"id": "opening_takeaway", "section": "intro", "text": opening(evidence), "sources": sources}, *watching(evidence)]
+    rows = [{"id": "opening_takeaway", "section": "intro", "text": opening(evidence), "sources": sources}, *watching(evidence)]
+    watch = evidence.get("earnings_watch")
+    if watch and watch["phase"] == "results" and not has_earnings_lead:
+        from src.intelligence import earnings_watch
+
+        rows.append({"id": "watch_earnings_result", "section": "watch",
+                     "text": "Earnings follow-up — " + earnings_watch.opening(watch, NAMES),
+                     "story_id": watch["story_id"], "sources": [earnings_watch.SOURCE_SECTION]})
+    return rows

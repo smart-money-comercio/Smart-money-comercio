@@ -282,6 +282,11 @@ def build(record, report, research, *, schema=2):
     validate_review(review, research, report, selected)
     if not validate_news_brief(report)["passes"]: raise ValueError("Voiceover needs a passing original news brief")
     evidence = review["evidence"]; groups = sections(report); scenes = []; sources = {}
+    watch = evidence.get("earnings_watch")
+    if watch:
+        from src.intelligence import earnings_watch
+        if report.count(earnings_watch.source_line(watch, selected)) != 1:
+            raise ValueError("Earnings watch lost its original source link")
     generated = datetime.fromisoformat(record["generated_at"])
     from src.intelligence import transaction_disclosures as transactions
     disclosure_review = record.get("transaction_disclosures")
@@ -328,7 +333,7 @@ def build(record, report, research, *, schema=2):
     edition_intro = " This is Smart Money for " + local.strftime("%B %d").replace(" 0", " ") + ". "
     if review.get("reader_version") in {3,4}:
         if review["reader_version"] == 4:
-            from src.intelligence.market_priority import opening_source, selloff
+            from src.intelligence.market_priority import earnings_lead, opening_source, selloff
             if selloff(evidence):
                 opening_sources = []
         else:
@@ -341,6 +346,8 @@ def build(record, report, research, *, schema=2):
                               and story.get("event_evidence", {}).get("schema") == 15), None)
                 if order and editor.dated(order["published"]).astimezone(local.tzinfo).date() == local.date():
                     edition_intro = " This is Smart Money. "
+        if review["reader_version"] == 4 and earnings_lead(evidence):
+            opening_sources = ["calendar_" + watch["notice"]["symbol"]] if watch["phase"] == "preview" else [watch["story_id"]]
     if modern and review.get("reader_version") in {2, 3, 4} and first_checked:
         label = NAMES.get(first_checked["symbol"], first_checked["symbol"])
         company_line = next((line for line in re.split(r"(?<=[.!?])\s+", hook) if label in line), "")
@@ -456,7 +463,9 @@ def build(record, report, research, *, schema=2):
                 text += " " + implication
         if evidence.get("business_version", 0) >= 7 and record.get("narrated_company_schedules"):
             from src.intelligence.company_schedule import earnings_focus
-            text += " " + earnings_focus(record["narrated_company_schedules"][0])
+            notice = record["narrated_company_schedules"][0]
+            focus = earnings_watch.preview_question(watch) if watch and watch.get("notice") == notice else earnings_focus(notice)
+            text += " " + focus
         add("What's Ahead", text, [agenda_bullet(row) for row in agenda[:2]] if modern else agenda[:2], calendar_ids)
     watch_rows = [row for row in review["insights"] if row["section"] == "watch"]
     if evidence.get("business_version", 0) >= 3:

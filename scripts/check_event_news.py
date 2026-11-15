@@ -21,7 +21,7 @@ from scripts.check_news_editor import candidate
 from scripts.check_hourly_research import ResearchFixture, Client
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
 from src.intelligence import market_event_desk as events, company_schedule as schedules, news_editor as editor, news_editor_store as store
-from src.intelligence import company_catalyst_context as catalysts, daily_brief_analysis as analysis
+from src.intelligence import company_catalyst_context as catalysts, daily_brief_analysis as analysis, weekend_store
 from src.reports.daily_news_brief import build_daily_news_brief, validate_news_brief
 from src.utils.yahoo_quote import parse_regular_quote
 
@@ -206,6 +206,127 @@ class EventPriorityChecks(IsolatedChecks):
         record = store.read_editions(report=text)[0]; reviewed = deepcopy(record["analyst_review"])
         reviewed["event_context"]["events"][0]["reported_move"] = -20
         with self.assertRaises(ValueError): analysis.validate_review(reviewed, report, text, editor.selected_stories(record))
+
+
+class EarningsWatchChecks(IsolatedChecks):
+    preview_at = datetime(2026, 11, 14, 23, 18, tzinfo=timezone.utc)
+    results_at = datetime(2026, 11, 17, 22, 30, tzinfo=timezone.utc)
+    title = "Nvidia Announces CEO Transition"
+    release = (
+        "Nvidia's board announced today that Jordan Reed has resigned as President, Chief Executive Officer, and a member of the board.",
+        "Taylor Ortiz, current chief financial officer of Nvidia, has agreed to serve as Interim Chief Executive Officer.",
+        "Nvidia will report its third-quarter fiscal 2027 financial results on Tuesday, November 17, at approximately 1:20 p.m. PT, "
+        "as previously scheduled, followed by its earnings call at 2 p.m. PT.",
+    )
+
+    def setUp(self):
+        super().setUp()
+        self.stack.enter_context(patch.dict(os.environ, {"WEEKEND_STATE_FILE": str(self.root / "weekend.sqlite3")}))
+
+    def scheduled_release(self, observed):
+        return candidate("NVDA", title=self.title, source="Nvidia Newsroom",
+                         url="https://nvidianews.nvidia.com/news/test-ceo-transition",
+                         published="2026-11-12T13:48:00+00:00", source_checked_at=observed.isoformat(),
+                         source_excerpt="\n".join(self.release), excerpt_scope="original release excerpt")
+
+    def save_weekend(self, observed):
+        source = self.scheduled_release(observed)
+        notice = schedules.parse_notice(source, observed)
+        data = {"generated_at": observed.isoformat(), "inputs": {"calendar": {"company": [notice]}}}
+        weekend_store.save({**data, "id": weekend_store.identity(data)})
+        return source
+
+    def result_release(self, published="2026-11-17T21:20:00+00:00"):
+        return candidate("NVDA", title="Nvidia Announces Financial Results for Third Quarter Fiscal 2027",
+                         source="Nvidia Newsroom", url="https://nvidianews.nvidia.com/news/test-quarterly-results",
+                         published=published, source_checked_at=self.results_at.isoformat(),
+                         source_excerpt="NVIDIA (NASDAQ: NVDA) today reported revenue for the third quarter ended October 25, 2026, "
+                         "of $42.0 billion. For the quarter, GAAP and non-GAAP gross margins were 72.1% and 72.3%, respectively.",
+                         excerpt_scope="original release excerpt")
+
+    def preview_report(self, candidates=()):
+        with patch.object(editor, "cache_candidates", return_value=(list(candidates), [])):
+            return build_daily_news_brief(self.research(now=self.preview_at))
+
+    def test_lost_weekend_notice_supplies_daily_lead_source_and_specific_next_check(self):
+        observed = self.preview_at - timedelta(hours=2)
+        source = self.save_weekend(observed)
+        with patch.object(editor.feeds, "fetch_url", side_effect=AssertionError("Fresh proof needs no fetch")) as fetch:
+            text = self.preview_report()
+        fetch.assert_not_called()
+        record = store.read_editions(report=text)[0]
+        watch = record["analyst_review"]["earnings_watch"]
+        self.assertEqual(watch["phase"], "preview")
+        self.assertEqual(watch["notice"]["source"]["source_checked_at"], observed.isoformat())
+        self.assertIn("The takeaway: Nvidia's next earnings report follows a CEO change.", text)
+        self.assertIn("On November 12, the company said Jordan Reed resigned and Taylor Ortiz would serve as interim CEO.", text)
+        self.assertIn("Tuesday, November 17 at 05:00 PM EST", text)
+        self.assertIn("Compare reported revenue and gross margin", text)
+        self.assertIn("Original earnings source — " + source["url"], text)
+        self.assertIn("calendar_NVDA", record["voiceover"]["segments"][0]["source_ids"])
+        self.assertEqual(record["candidates"], [])
+
+    def test_stale_calendar_observation_uses_original_article_with_new_observation(self):
+        source = self.save_weekend(self.preview_at - timedelta(days=1))
+        body = (f'<h1>{self.title}</h1><div class="article-date">November 12, 2026</div>'
+                '<div class="article-body">' + "".join(f"<p>{p}</p>" for p in self.release) + "</div>")
+        response = {"status": "ok", "url": source["url"], "body": body, "fetched_at_epoch": self.preview_at.timestamp()}
+        with patch.object(editor.feeds, "fetch_url", return_value=response) as fetch:
+            text = self.preview_report()
+        fetch.assert_called_once_with(source["url"], cache_result=False)
+        notice = store.read_editions(report=text)[0]["narrated_company_schedules"][0]
+        self.assertEqual(notice["source"]["published"], source["published"])
+        self.assertEqual(notice["source"]["source_checked_at"], self.preview_at.isoformat())
+
+    def test_result_follows_the_previous_question_with_reported_figures_and_original_link(self):
+        self.preview_report([self.scheduled_release(self.preview_at)])
+        release = self.result_release()
+        with patch.object(editor, "cache_candidates", return_value=([release], [])):
+            research = self.research(now=self.results_at)
+            text = build_daily_news_brief(research)
+        record = store.read_editions(report=text)[0]
+        watch = record["analyst_review"]["earnings_watch"]
+        self.assertEqual(watch["phase"], "results")
+        self.assertEqual(watch["preview"]["notice"]["event_date"], "2026-11-17")
+        self.assertIn("We were watching Nvidia's revenue and margins.", text)
+        self.assertIn("revenue of $42.0 billion for the third quarter and a GAAP gross margin of 72.1 percent.", text)
+        self.assertIn("Original earnings source — " + release["url"], text)
+        self.assertIn(watch["story_id"], record["voiceover"]["segments"][0]["source_ids"])
+        self.assertTrue(record["voiceover"]["quality"]["passes"])
+        altered = deepcopy(record["analyst_review"])
+        altered["earnings_watch"]["revenue"] = "$49.0 billion"
+        with self.assertRaisesRegex(ValueError, "Earnings watch does not match"):
+            analysis.validate_review(altered, research, text, editor.selected_stories(record))
+
+    def test_other_release_date_cannot_close_the_earlier_earnings_preview(self):
+        self.preview_report([self.scheduled_release(self.preview_at)])
+        release = self.result_release(published="2026-11-16T23:30:00+00:00")
+        with patch.object(editor, "cache_candidates", return_value=([release], [])):
+            text = build_daily_news_brief(self.research(now=self.results_at))
+        self.assertNotIn("We were watching Nvidia's revenue and margins.", text)
+
+    def test_current_cancellation_suppresses_an_archived_daily_preview(self):
+        source = self.save_weekend(self.preview_at - timedelta(hours=1))
+        canceled = {**source, "title": "Nvidia Cancels Quarterly Earnings Call",
+                    "url": source["url"] + "-canceled", "published": self.preview_at.isoformat(),
+                    "source_checked_at": self.preview_at.isoformat()}
+        text = self.preview_report([canceled])
+        self.assertNotIn("Nvidia has scheduled its earnings conference call", text)
+        self.assertNotIn("Original earnings source", text)
+
+    def test_broad_selloff_still_leads_and_verified_report_closes_the_watch(self):
+        self.preview_report([self.scheduled_release(self.preview_at)])
+        release = self.result_release()
+        with patch.object(editor, "cache_candidates", return_value=([release], [])):
+            research = self.research(now=self.results_at, replacements={
+                "Executive Summary": "- Main theme: Defensive market.\n- Market moves: S&P -2.50%, Nasdaq -3.12%, Russell -2.40%, VIX +21.21%, Oil +1.32%, TLT -0.49%.",
+            })
+            text = build_daily_news_brief(research)
+        self.assertIn("The takeaway: The Nasdaq fell 3.12 percent", text)
+        self.assertIn("Earnings follow-up — We were watching Nvidia's revenue and margins.", text)
+        record = store.read_editions(report=text)[0]
+        scene = next(row for row in record["voiceover"]["segments"] if row["heading"] == "What We're Watching")
+        self.assertIn(record["analyst_review"]["earnings_watch"]["story_id"], scene["source_ids"])
 
 
 class CompanyScheduleChecks(IsolatedChecks):

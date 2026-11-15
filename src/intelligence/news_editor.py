@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 import hashlib
 import json
@@ -568,8 +568,24 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
             "rules_version": 16, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
     if event_context is not None:
-        from src.intelligence.company_schedule import notices
-        result.update(rules_version=17, market_event_context=deepcopy(event_context), company_schedules=notices(candidates, now))
+        from src.intelligence import company_schedule, earnings_watch, weekend_store
+        editions = []
+        if extra_candidates is None:
+            try:
+                editions = store.read_editions(limit=24)
+            except (OSError, ValueError, sqlite3.Error):
+                result["issues"].append("Prior daily editions unavailable for issuer calendar recovery")
+            today = now.astimezone(company_schedule.NY).date()
+            history = company_schedule.archived_schedules(editions, weekend_store.recent())
+            schedules, schedule_issues = company_schedule.recover(
+                candidates, today, today + timedelta(days=7), now, history,
+                lambda url: feeds.fetch_url(url, cache_result=False), reuse_recent=True)
+            result["issues"].extend(schedule_issues)
+        else:
+            schedules = company_schedule.notices(candidates, now)
+        result.update(market_event_context=deepcopy(event_context), company_schedules=schedules)
+        if followup := earnings_watch.recent_followup(editions, selected_stories(result), now):
+            result["earnings_followup_candidate"] = followup
         from src.intelligence.company_earnings import cached_baseline, cached_context, matching
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
         if matching(contexts, "INTC") is None:
@@ -715,12 +731,22 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Broadcast evidence needs the research edition's timezone")
         zone = ZoneInfo(generated[1])
         from src.intelligence.company_schedule import checked_notice, earnings_focus, narration
+        from src.intelligence import earnings_watch
+        watch = (analyst_review or {}).get("earnings_watch")
         for notice in plan.get("narrated_company_schedules", []):
             checked_notice(notice, dated(plan["generated_at"]))
             if notice not in plan.get("company_schedules", []) or report.count(narration(notice, zone, NAMES)) != 1:
                 raise ValueError("Company schedule narration lost its original evidence")
-            if plan.get("business_version", 0) >= 7 and report.count(earnings_focus(notice)) != 1:
+            focus = earnings_watch.preview_question(watch) if watch and watch.get("notice") == notice else earnings_focus(notice)
+            if plan.get("business_version", 0) >= 7 and report.count(focus) != 1:
                 raise ValueError("Company schedule narration lost its earnings follow-through")
+        if watch:
+            if watch["phase"] == "preview" and watch["notice"] not in plan.get("narrated_company_schedules", []):
+                raise ValueError("Earnings preview needs the original schedule in the brief")
+            if watch["phase"] == "results" and watch != plan.get("earnings_followup_candidate"):
+                raise ValueError("Earnings follow-up lost its earlier preview")
+            if report.count(earnings_watch.source_line(watch, selected)) != 1:
+                raise ValueError("Earnings watch lost its original source link")
     for story in selected:
         if story.get("title_truncated"):
             raise ValueError("Selected story headline is incomplete")
@@ -918,6 +944,12 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
+                if watch := analysis.get("earnings_watch"):
+                    from src.intelligence.earnings_watch import source
+
+                    notice = watch["notice"] if watch["phase"] == "preview" else watch["preview"]["notice"]
+                    link = source(watch, selected_stories(record))["url"]
+                    lines.append(f"Earnings watch: {notice['symbol']} — {watch['phase']} | event {notice['event_date']} | {link}")
                 for context in analysis["evidence"].get("earnings_context", []):
                     lines.append("Dated earnings context: " + context["symbol"] + " — " + context["source"] + "; release " + context["release_date"]
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")

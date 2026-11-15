@@ -66,6 +66,8 @@ def opening_source(evidence):
 def order_in_takeaway(evidence):
     if evidence.get("business_version", 0) < 6 or evidence.get("reader_version") != 4:
         return None
+    if earnings_lead(evidence):
+        return None
     point = opening_source(evidence)
     if point and any(story["id"] in point["story_ids"] and story.get("event_evidence", {}).get("schema") == 15
                      for story in evidence["stories"]):
@@ -73,7 +75,18 @@ def order_in_takeaway(evidence):
     return None
 
 
+def earnings_lead(evidence):
+    watch = evidence.get("earnings_watch")
+    if not watch or selloff(evidence) or (watch["phase"] == "preview" and opening_source(evidence)):
+        return None
+    return watch
+
+
 def opening(evidence):
+    if watch := earnings_lead(evidence):
+        from src.intelligence.daily_brief_analysis import NAMES
+        from src.intelligence.earnings_watch import opening as earnings_opening
+        return "The takeaway: " + earnings_opening(watch, NAMES)
     if not selloff(evidence):
         from src.intelligence.evidence_opening import opening as older_opening
         text = older_opening({**evidence,"reader_version":3})

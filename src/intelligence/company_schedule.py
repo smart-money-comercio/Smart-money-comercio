@@ -1,7 +1,7 @@
 """Issuer-confirmed earnings schedules, independent of news materiality filters."""
 
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import hashlib
 import re
 from zoneinfo import ZoneInfo
@@ -20,6 +20,7 @@ REAFFIRMED = re.compile(
     r"followed by (?:its|the) earnings call at (?P<call>.{1,72})$", re.I)
 SOURCE_FIELDS = ("title", "url", "source", "kind", "symbols", "official", "publisher_symbol",
                  "published", "source_checked_at", "source_excerpt", "excerpt_scope")
+MAX_NOTICE_RECHECKS = 3
 
 
 def event_date(match, published, window):
@@ -181,6 +182,79 @@ def cached_notices(now, symbols):
     from src.intelligence.news_editor import cache_candidates
     rows, _ = cache_candidates(now, symbols)
     return notices(rows, now)
+
+
+def archived_schedules(daily_editions, weekend_editions):
+    for row in daily_editions:
+        yield row.get("generated_at"), row.get("company_schedules", [])
+    for row in weekend_editions:
+        inputs = row.get("inputs")
+        calendar = inputs.get("calendar") if isinstance(inputs, dict) else None
+        if isinstance(calendar, dict):
+            for key in ("company", "later"):
+                yield row.get("generated_at"), calendar.get(key, [])
+
+
+def recover(raw, start, end, now, history, fetch, *, later_days=0, reuse_recent=False):
+    from src.intelligence.news_editor import canonical_url
+    from src.intelligence.news_original_sources import article_excerpt
+
+    current = notices(raw, now)
+    covered = {(row["symbol"], row["event"]) for row in current}
+    leads = []
+    for generated, rows in history:
+        at = timestamp(generated)
+        if at is None or not now - timedelta(days=30) <= at < now or not isinstance(rows, list):
+            continue
+        for notice in rows[:20]:
+            try:
+                day = date.fromisoformat(notice["event_date"])
+                if not start <= day <= end + timedelta(days=later_days) or (notice["symbol"], notice["event"]) in covered:
+                    continue
+                checked_notice(notice, at)
+                if notice["event_at"] and timestamp(notice["event_at"]) < now:
+                    continue
+                source = notice["source"]
+                url = canonical_url(source["url"])
+                leads.append((day > end, -timestamp(source["published"]).timestamp(), day, url, notice))
+            except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
+                continue
+
+    unique = {}
+    for _, _, _, url, notice in sorted(leads, key=lambda row: row[:4]):
+        unique.setdefault(url, notice)
+    recovered, issues = [], []
+    for notice in list(unique.values())[:MAX_NOTICE_RECHECKS]:
+        source = notice["source"]
+        url = source["url"]
+        try:
+            # Reuse the actual observation clock. A stale archive supplies only the URL.
+            if reuse_recent and parse_notice(source, now) == notice:
+                recovered.append(source)
+                continue
+            response = fetch(url)
+            if response.get("status") != "ok":
+                raise ValueError(response.get("error") or "Original notice unavailable")
+            if response.get("final_url", response.get("url")) != url:
+                raise ValueError("Original notice redirected to another URL")
+            body = response.get("body")
+            if not isinstance(body, str) or len(body.encode()) > 2_000_000:
+                raise ValueError("Original notice response exceeds its bound")
+            observed = timestamp(response["fetched_at_epoch"])
+            if observed is None or not -60 <= (now - observed).total_seconds() <= 21600:
+                raise ValueError("Source observation is stale or future-dated")
+            excerpt = article_excerpt(body, source["title"], source["published"], publisher=source["source"], url=url)
+            updated = {**source, "source_checked_at": observed.isoformat(), "evidence_checked_at": observed.isoformat(),
+                       "source_excerpt": excerpt, "excerpt_scope": "original release excerpt"}
+            verified = parse_notice(updated, now)
+            if (not verified or verified["event"] != notice["event"] or verified["event_date"] != notice["event_date"]
+                    or (notice["event_at"] and verified["event_at"] != notice["event_at"])):
+                raise ValueError("Original notice no longer verifies the archived schedule")
+            recovered.append(updated)
+        except (ValueError, KeyError, TypeError, AttributeError, OSError, OverflowError) as error:
+            issues.append(f"{notice['symbol']} issuer calendar recheck: {str(error)[:140]}")
+    # Current notices still govern scheduling conflicts and cancellations.
+    return (notices([*raw, *recovered], now) if recovered else current), issues
 
 
 def narration(row, zone, names):

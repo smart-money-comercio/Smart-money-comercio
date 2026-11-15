@@ -17,7 +17,6 @@ from src.utils.market_quote_source import source_evidence, BENCHMARKS
 
 NY = ZoneInfo("America/New_York")
 MAX_BODY_READS = 6
-MAX_NOTICE_RECHECKS = 3
 
 
 def digest(value):
@@ -294,71 +293,6 @@ def raw_candidates(now, *, daily_archive=None):
     return (archived + rows)[:1000], issues[:5]
 
 
-def archived_schedules(daily_editions, weekend_editions):
-    history = [(row.get("generated_at"), row.get("company_schedules", [])) for row in daily_editions]
-    for row in weekend_editions:
-        inputs = row.get("inputs")
-        calendar = inputs.get("calendar") if isinstance(inputs, dict) else None
-        if isinstance(calendar, dict):
-            history.extend((row.get("generated_at"), calendar.get(key, [])) for key in ("company", "later"))
-    return history
-
-
-def issuer_notices(raw, start, end, now, history, fetch):
-    current = company_schedule.notices(raw, now)
-    covered = {(row["symbol"], row["event"]) for row in current}
-    leads = []
-    for generated, notices in history:
-        try:
-            at = clock(generated)
-        except (ValueError, TypeError, OverflowError):
-            continue
-        if not now - timedelta(days=30) <= at < now or not isinstance(notices, list):
-            continue
-        for notice in notices[:20]:
-            try:
-                day = date.fromisoformat(notice["event_date"])
-                if not start <= day <= end + timedelta(days=14) or (notice["symbol"], notice["event"]) in covered:
-                    continue
-                company_schedule.checked_notice(notice, at)
-                source = notice["source"]
-                url = editor.canonical_url(source["url"])
-                leads.append((day > end, -clock(source["published"]).timestamp(), url, notice))
-            except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
-                continue
-
-    # The archive identifies original URLs. Only a current original read can
-    # supply a missing schedule, and current notices still govern conflicts.
-    unique = {}
-    for _, _, url, notice in sorted(leads, key=lambda row: row[:3]):
-        unique.setdefault(url, notice)
-    recovered, issues = [], []
-    for notice in list(unique.values())[:MAX_NOTICE_RECHECKS]:
-        source = notice["source"]
-        url = source["url"]
-        try:
-            response = fetch(url)
-            if response.get("status") != "ok":
-                raise ValueError(response.get("error") or "Original notice unavailable")
-            if response.get("final_url", response.get("url")) != url:
-                raise ValueError("Original notice redirected to another URL")
-            body = response.get("body")
-            if not isinstance(body, str) or len(body.encode()) > 2_000_000:
-                raise ValueError("Original notice response exceeds its bound")
-            observed = fresh(response["fetched_at_epoch"], now)
-            excerpt = originals.article_excerpt(body, source["title"], source["published"], publisher=source["source"], url=url)
-            updated = {**source, "source_checked_at": observed.isoformat(), "evidence_checked_at": observed.isoformat(),
-                       "source_excerpt": excerpt, "excerpt_scope": "original release excerpt"}
-            verified = company_schedule.parse_notice(updated, now)
-            if (not verified or verified["event"] != notice["event"] or verified["event_date"] != notice["event_date"]
-                    or (notice["event_at"] and verified["event_at"] != notice["event_at"])):
-                raise ValueError("Original notice no longer verifies the archived schedule")
-            recovered.append(updated)
-        except (ValueError, KeyError, TypeError, AttributeError, OSError, OverflowError) as error:
-            issues.append(f"{notice['symbol']} issuer calendar recheck: {str(error)[:140]}")
-    return (company_schedule.notices([*raw, *recovered], now) if recovered else current), issues
-
-
 def calendar_packet(raw, periods, now, snapshot=None, *, publisher_cache=None, notice_history=(), notice_fetch=None):
     snapshot = calendar_context.read_snapshot(now) if snapshot is None else deepcopy(snapshot)
     result={"schema":1,"observed":"","macro":[],"company":[],"later":[],"issues":[]}
@@ -419,7 +353,7 @@ def calendar_packet(raw, periods, now, snapshot=None, *, publisher_cache=None, n
                 result["macro"].append({"event": label, "at": at.isoformat(), "publisher": publisher, "url": url,
                     "time_status": "cached", "observed": observed, "timing_observed": observed})
     result["macro"]=list({(row["event"],row["at"]):row for row in result["macro"]}.values())[:12]
-    notices, issues = issuer_notices(raw, start, end, now, notice_history, notice_fetch)
+    notices, issues = company_schedule.recover(raw, start, end, now, notice_history, notice_fetch, later_days=14)
     result["issues"].extend(issues)
     for notice in notices[:20]:
         day=date.fromisoformat(notice["event_date"])
