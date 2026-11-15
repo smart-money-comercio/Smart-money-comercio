@@ -927,6 +927,7 @@ class TelegramEditionChecks(unittest.TestCase):
         for source in (URL, amd["url"]):
             self.assertIn(source, text)
         self.assertNotIn(notice(10)["url"], text)
+        self.assertNotIn("The takeaway", text)
         self.assertNotIn("Calendar and catalyst checks", text)
 
     def test_saturday_omits_disclosures_published_after_the_completed_week(self):
@@ -938,7 +939,7 @@ class TelegramEditionChecks(unittest.TestCase):
         self.assertIn("weekend update", {story["publication_label"] for story in row["inputs"]["stories"]})
         self.assertNotIn(late["url"], weekend_telegram.render(row, at))
 
-    def test_sunday_leads_with_dated_events_and_conditional_financing(self):
+    def test_sunday_takeaway_interprets_the_lead_catalyst_before_the_calendar(self):
         snapshot = calendar()
         snapshot["economic"].append({"eventName": "FOMC Meeting Minutes", "event_at": "2026-11-11T14:00:00-05:00",
                                      "time_status": "verified", "source_date": "2026-11-11", "publisher": "Fed",
@@ -949,6 +950,11 @@ class TelegramEditionChecks(unittest.TestCase):
         original = deepcopy(row)
         text = weekend_telegram.render(row, NOW)
         self.assertTrue(text.startswith("Smart Money Sunday Outlook\nNovember 9, 2026 to November 13, 2026"))
+        takeaway = text.split("\n\n")[1]
+        self.assertTrue(takeaway.startswith("The takeaway\nNvidia's earnings"))
+        self.assertIn("Strong data center sales and steady gross margins would support that case.", takeaway)
+        self.assertIn("If sales rise and margins narrow", takeaway)
+        self.assertNotIn("5:00 PM", takeaway)
         self.assertLess(text.index("5:00 PM EST · Nvidia earnings call"), text.index("2:00 PM EST · FOMC Meeting Minutes"))
         self.assertIn("Listen for its data center outlook", text)
         self.assertIn("8:30 AM EST · Weekly jobless claims", text)
@@ -962,6 +968,27 @@ class TelegramEditionChecks(unittest.TestCase):
         self.assertNotIn("Market scorecard", text)
         self.assertNotIn(URL, text)
         self.assertEqual(report.checked(row), original)
+
+    def test_sunday_takeaway_uses_the_verified_macro_release_when_earnings_are_later(self):
+        text = weekend_telegram.render(edition(), NOW)
+        takeaway = text.split("\n\n")[1]
+        self.assertTrue(takeaway.startswith("The takeaway\nWeekly jobless claims"))
+        self.assertIn("A sustained rise across several releases", takeaway)
+        self.assertNotIn("Nvidia", takeaway)
+
+    def test_sunday_takeaway_has_conditional_copy_when_financing_is_the_only_watch(self):
+        source = IPOChecks().filing()
+        empty = {**calendar(), "economic": []}
+        with patch.object(ipo_monitor, "read_cache", return_value={"items": [source]}):
+            row = telegram_edition(raw=[story()], schedule=empty)
+        takeaway = weekend_telegram.render(row, NOW).split("\n\n")[1]
+        self.assertIn("Anthropic's indicative IPO terms", takeaway)
+        self.assertIn("If the offering goes ahead", takeaway)
+
+    def test_sunday_takeaway_acknowledges_a_thin_calendar(self):
+        row = telegram_edition(raw=[story()], schedule={**calendar(), "economic": []})
+        takeaway = weekend_telegram.render(row, NOW).split("\n\n")[1]
+        self.assertIn("Publisher coverage is too limited", takeaway)
 
     def test_sunday_keeps_date_only_notices_and_later_events_qualified(self):
         dated = notice(10)

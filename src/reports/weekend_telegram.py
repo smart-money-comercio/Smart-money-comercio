@@ -13,6 +13,73 @@ from src.utils.market_quote_source import BENCHMARKS
 SATURDAY = "Saturday Review"
 SUNDAY = "Sunday Outlook"
 
+EARNINGS_TAKEAWAYS = {
+    "NVDA": (
+        "Nvidia's earnings offer a test of whether AI demand is translating into profitable growth. "
+        "Strong data center sales and steady gross margins would support that case. "
+        "If sales rise and margins narrow, look for what management says about the cost of delivering that growth."
+    ),
+    "AMD": (
+        "AMD's earnings give us a test of how its data center expansion is contributing to profits. "
+        "Higher server and AI chip sales alongside steady margins would strengthen the case that the expansion is paying off."
+    ),
+    "INTC": (
+        "Intel's earnings can show whether its server business is improving while it invests in manufacturing. "
+        "Higher server sales alongside an improving foundry margin outlook would strengthen the case."
+    ),
+    "MSFT": (
+        "Microsoft's earnings offer a test of whether cloud demand can support the cost of building data center capacity. "
+        "Cloud growth alongside a steady margin outlook would strengthen the case for the investment."
+    ),
+    "AMZN": (
+        "Amazon's earnings can show how AWS demand is translating into profits while Amazon expands capacity. "
+        "Higher AWS sales and steady operating margins would support the case that demand is absorbing the added costs."
+    ),
+}
+
+MACRO_TAKEAWAYS = {
+    "fomc_decision": (
+        "The Fed's decision could change the outlook for borrowing costs. "
+        "Listen for which inflation or employment readings would move policymakers toward their next rate change."
+    ),
+    "fomc_minutes": (
+        "The Fed minutes can show how much agreement there was about the next policy step. "
+        "Pay attention to which data policymakers wanted to see before changing rates and how widely that view was shared."
+    ),
+    "cpi": (
+        "The next inflation reading tests whether price pressures are cooling across the economy. "
+        "Broad easing could give the Fed more flexibility. Persistent core services inflation would keep the timing of any rate change uncertain."
+    ),
+    "pce": (
+        "This week's price and spending data test whether inflation can ease while demand holds up. "
+        "Cooling inflation alongside steady real spending would support that view. Weak real spending would put the growth outlook in focus."
+    ),
+    "ppi": (
+        "Producer prices offer an early check on costs that could reach company margins. "
+        "Broad increases would make it important to see whether businesses can pass those costs on to customers."
+    ),
+    "jobs": (
+        "The jobs report tests whether hiring is cooling gradually. "
+        "Moderate hiring and slower wage growth would fit that picture. Weak hiring alongside rising unemployment would raise the risk of softer demand."
+    ),
+    "gdp": (
+        "The GDP release can show how much growth came from household spending and business investment. "
+        "Strength in both would support a more durable growth outlook. A large inventory contribution would make the next demand readings more important."
+    ),
+    "claims": (
+        "Weekly jobless claims offer an early check on whether layoffs are spreading. "
+        "A sustained rise across several releases would give us stronger evidence that labor demand is weakening."
+    ),
+    "jolts": (
+        "The job openings report tests whether employers are pulling back on hiring. "
+        "Fewer openings alongside fewer hires would point to weaker labor demand."
+    ),
+    "michigan_sentiment": (
+        "Michigan's survey can show whether consumers are getting more comfortable with their finances and the inflation outlook. "
+        "Improvement on both measures would give us a reason to look for stronger spending in the next hard data."
+    ),
+}
+
 
 def edition_name(now: datetime) -> str:
     weekday = now.astimezone(weekend_inputs.NY).weekday()
@@ -30,7 +97,7 @@ def render(record: dict, now: datetime) -> str:
     if edition == SATURDAY:
         sections, sources = saturday_review(inputs)
     else:
-        sections, sources = sunday_outlook(inputs)
+        sections, sources = sunday_outlook(inputs, record["theme"])
     links = {}
     for label, url in sources:
         links.setdefault(url, label)
@@ -107,7 +174,40 @@ def company_entry(row: dict) -> tuple[time, str]:
     return time.max, f"• {name} {event} · Time unverified"
 
 
-def sunday_outlook(inputs: dict) -> tuple[list[str], list[tuple[str, str]]]:
+def sunday_takeaway(inputs: dict, theme: dict | None) -> str:
+    packet = inputs["calendar"]
+    story_ids = set(theme["story_ids"]) if theme else set()
+    stories = [story for story in inputs["stories"] if story["id"] in story_ids]
+    featured = weekend_narration.featured_events(packet, theme, stories)
+    lead = min(featured, key=lambda item: (item["rank"], item["day"], item["time"]), default=None)
+    if lead:
+        kind, key, _ = lead["group"]
+        if kind == "company":
+            if key in EARNINGS_TAKEAWAYS:
+                return EARNINGS_TAKEAWAYS[key]
+            issuer = NAMES.get(key, key)
+            return (
+                f"{issuer}'s earnings will test whether demand is improving its profit outlook. "
+                "Stronger sales and steady margins would support that case. If sales rise and margins narrow, "
+                "look for what drove the added costs and whether management expects them to persist."
+            )
+        return MACRO_TAKEAWAYS.get(
+            key, f"{lead['label']} gives us a check on the economic outlook. "
+            "Look at the size and breadth of the change for signs that the previous trend is shifting."
+        )
+    if packet["macro"]:
+        first = min(packet["macro"], key=lambda row: weekend_inputs.clock(row["at"]))
+        event = " ".join(first["event"].split()).rstrip(".")
+        return f"The first verified release is {event}. Compare the result with the previous reading for signs that the trend is changing."
+    if ipo := inputs.get("ipo"):
+        return (
+            f"{ipo['name']}'s indicative IPO terms put access to capital in focus. "
+            "If the offering goes ahead, the final terms will help show how much cash it could add and when that funding might become available."
+        )
+    return "Publisher coverage is too limited to single out a catalyst for the coming week. Watch for original issuer notices and official release times."
+
+
+def sunday_outlook(inputs: dict, theme: dict | None) -> tuple[list[str], list[tuple[str, str]]]:
     window, packet = inputs["window"], inputs["calendar"]
     agenda = defaultdict(list)
     sources = []
@@ -151,6 +251,7 @@ def sunday_outlook(inputs: dict) -> tuple[list[str], list[tuple[str, str]]]:
         coverage += "\nDays without verified entries · " + ", ".join(missing)
     sections = [
         f"{day_label(window['next_start'])} to {day_label(window['next_end'])}",
+        "The takeaway\n" + sunday_takeaway(inputs, theme),
         "Calendar and catalyst checks\n\n" + "\n\n".join([*days, coverage]),
     ]
 

@@ -13,7 +13,7 @@ The SQLite cleanup correction explicitly closes the corruption-test connection b
 The Telegram edition uses the date in New York.
 
 - **Saturday Review** opens with weekly and Friday benchmark returns. It follows with up to two original disclosures from the completed week and the next evidence to check for each. Different business topics get preference when the available disclosures support them.
-- **Sunday Outlook** leads with the coming Monday–Friday calendar. Timed releases show their New York time. Date-only notices and publisher gaps are labeled. The outlook puts an earnings or economic question next to the relevant event. Conditional financing and later issuer dates have their own sections when they qualify.
+- **Sunday Outlook** opens with a short takeaway on the most relevant verified catalyst and the evidence that could change the outlook. The Monday–Friday calendar follows, with New York times and questions for key releases. Date-only notices and publisher gaps are labeled. Conditional financing and later issuer dates have their own sections when they qualify.
 
 The scheduled Telegram post uses its configured time and recipients. It draws on the checked Weekend Outlook evidence for each weekend edition and sends the Daily Brief on weekdays. The job can reuse a current PASS record or refresh the publisher calendar and leads before building a new one. It announces when an edition is unavailable. `/weekend` previews the day's edition, and the admin command `/senddaily` posts it to the configured destinations.
 
