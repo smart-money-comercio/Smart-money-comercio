@@ -1,8 +1,17 @@
+import asyncio
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.commands.admin_commands import get_current_chat_id, is_admin
-from src.jobs.daily_report_scheduler import get_daily_report_chat_ids
+from src.jobs.daily_report_scheduler import (
+    TELEGRAM_MESSAGE_LIMIT,
+    build_weekend_delivery_report,
+    get_daily_report_chat_ids,
+    utc_now,
+    weekend_outlook_due,
+)
+from src.reports.daily_news_brief import MAX_NEWS_CHARS
 from src.reports.daily_report import build_daily_report
 from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
 from src.utils.telegram_messages import (
@@ -39,17 +48,27 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return
 
+    now = utc_now()
+    weekend = weekend_outlook_due(now)
+    edition = "Weekend Outlook" if weekend else "Daily report"
+    loading_text = ("🗞 Preparing and sending the Weekend Outlook..." if weekend else
+                    "🗞 Refreshing market data and sending daily report...")
     loading_message = await update.message.reply_text(
-        "🗞 Refreshing market data and sending daily report...\n\n"
+        f"{loading_text}\n\n"
         f"Destination count: {len(destinations)}",
         parse_mode=None,
     )
 
     try:
-        # Force a fresh Morning Brief before sending to the channel.
-        ensure_morning_brief_cache_is_fresh(force_refresh=True)
-
-        report = build_daily_report()
+        if weekend:
+            report = await asyncio.to_thread(build_weekend_delivery_report, now)
+            title = "Smart Money Weekend Outlook"
+            limit = TELEGRAM_MESSAGE_LIMIT
+        else:
+            ensure_morning_brief_cache_is_fresh(force_refresh=True)
+            report = build_daily_report()
+            title = "📊 Smart Money AI Daily Report"
+            limit = MAX_NEWS_CHARS
         success_count = 0
         failed_destinations = []
 
@@ -59,8 +78,9 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     bot=context.bot,
                     chat_id=destination,
                     text=report,
-                    title="📊 Smart Money AI Daily Report",
+                    title=title,
                     parse_mode=None,
+                    limit=limit,
                 )
                 success_count += 1
             except Exception as exc:
@@ -74,7 +94,7 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             )
 
         await loading_message.edit_text(
-            "Daily report send complete.\n\n"
+            f"{edition} send complete.\n\n"
             f"Successful destinations: {success_count}/{len(destinations)}"
             f"{failure_text}",
             parse_mode=None,
@@ -82,7 +102,7 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     except Exception as error:
         await loading_message.edit_text(
-            "Unable to send daily report right now.\n\n"
+            f"Unable to send the {edition} right now.\n\n"
             f"Error:\n{type(error).__name__}",
             parse_mode=None,
         )
@@ -119,6 +139,7 @@ async def testdaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             text=report,
             title="🧪 Test Daily Report",
             parse_mode=None,
+            limit=MAX_NEWS_CHARS,
         )
 
     except Exception as error:
@@ -163,7 +184,7 @@ async def dailycheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         destinations = get_daily_report_chat_ids()
         report = build_daily_report()
-        chunks = split_long_message(report)
+        chunks = split_long_message(report, limit=MAX_NEWS_CHARS)
 
         missing_sections = [
             section

@@ -64,7 +64,7 @@ DAILY_REPORT_COMMANDS = [
     ("/reportcheck", "Report quality check legacy alias"),
     ("/testdaily", "Test daily report"),
     ("/dailycheck", "Daily report delivery check"),
-    ("/senddaily", "Send daily report now"),
+    ("/senddaily", "Send today's scheduled edition to the configured channel"),
 ]
 
 

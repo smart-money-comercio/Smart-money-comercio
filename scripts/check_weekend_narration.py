@@ -36,7 +36,7 @@ class PrivateState(unittest.TestCase):
         return value,report.episode(value,NOW)
 
     def legacy(self):
-        return json.loads((ROOT/'scripts/fixtures/weekend_narration_v1_edition.json').read_text())
+        return json.loads((ROOT/'scripts/fixtures/weekend_narration_v1_edition.json').read_text(encoding="utf-8"))
 
 
 class NarrationChecks(PrivateState):
@@ -306,7 +306,7 @@ class RendererChecks(PrivateState):
             self.assertEqual(adapter.main(["--renderer", str(path)]), 0)
         sibling = path.with_name("weekend_render_episode.py")
         generated = sibling.read_bytes()
-        self.assertEqual(contract.digest(sibling.read_text()), contract.REFINED_WEEKEND_RENDERER_SHA256)
+        self.assertEqual(sha256(generated).hexdigest(), contract.REFINED_WEEKEND_RENDERER_SHA256)
         with redirect_stdout(StringIO()):
             self.assertEqual(adapter.main(["--renderer", str(path)]), 0)
         self.assertEqual(path.read_bytes(), before)

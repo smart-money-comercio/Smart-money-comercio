@@ -1126,6 +1126,75 @@ class MarketDefenseChecks(IsolatedChecks):
 
 
 class CommandChecks(unittest.IsolatedAsyncioTestCase):
+    def daily_brief_at_length(self, length):
+        header = TITLE + "\n\n"
+        footer = "\n\nOriginal earnings source — https://example.com/original\n\nResearch only. Not financial advice."
+        paragraphs = "An original issuer release confirms the next earnings call.\n\n" * 80
+        return header + paragraphs[:length - len(header) - len(footer)] + footer
+
+    async def test_report_edits_the_loading_message_with_the_complete_brief(self):
+        from src.commands import basic_commands
+
+        for size in (3222, MAX_NEWS_CHARS):
+            with self.subTest(size=size):
+                text = self.daily_brief_at_length(size)
+                loading = SimpleNamespace(edit_text=AsyncMock())
+                update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=loading)))
+                with patch.object(basic_commands, "ensure_morning_brief_cache_is_fresh"), \
+                        patch.object(basic_commands, "build_daily_report", return_value=text):
+                    await basic_commands.report(update, SimpleNamespace(args=[]))
+                update.message.reply_text.assert_awaited_once()
+                loading.edit_text.assert_awaited_once_with(text=text, parse_mode=None, disable_web_page_preview=True)
+
+    async def test_report_sends_one_complete_reply_if_the_edit_fails(self):
+        from telegram.error import BadRequest
+        from src.commands import basic_commands
+
+        text = self.daily_brief_at_length(3222)
+        loading = SimpleNamespace(edit_text=AsyncMock(side_effect=BadRequest("Message cannot be edited")))
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=loading)))
+        with patch.object(basic_commands, "ensure_morning_brief_cache_is_fresh"), \
+                patch.object(basic_commands, "build_daily_report", return_value=text):
+            await basic_commands.report(update, SimpleNamespace(args=[]))
+        self.assertEqual(update.message.reply_text.await_count, 2)
+        self.assertEqual(update.message.reply_text.await_args.kwargs["text"], text)
+
+    async def test_manual_channel_send_keeps_the_source_link_and_footer_with_the_brief(self):
+        from src.commands import daily_report_send_commands as commands
+
+        text = self.daily_brief_at_length(MAX_NEWS_CHARS)
+        loading = SimpleNamespace(edit_text=AsyncMock())
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=loading)))
+        bot = SimpleNamespace(send_message=AsyncMock())
+        with patch.object(commands, "get_current_chat_id", return_value=123), \
+                patch.object(commands, "is_admin", return_value=True), \
+                patch.object(commands, "get_daily_report_chat_ids", return_value=["@testchannel"]), \
+                patch.object(commands, "utc_now", return_value=NOW + timedelta(days=1)), \
+                patch.object(commands, "ensure_morning_brief_cache_is_fresh"), \
+                patch.object(commands, "build_daily_report", return_value=text):
+            await commands.senddaily_command(update, SimpleNamespace(bot=bot))
+        bot.send_message.assert_awaited_once_with(chat_id="@testchannel", text=text, parse_mode=None,
+                                                 disable_web_page_preview=True)
+
+    async def test_manual_weekend_channel_send_uses_the_verified_outlook(self):
+        from src.commands import daily_report_send_commands as commands
+
+        text = "Smart Money Weekend Outlook\n\nNext week's calendar and original sources."
+        loading = SimpleNamespace(edit_text=AsyncMock())
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=loading)))
+        bot = SimpleNamespace(send_message=AsyncMock())
+        with patch.object(commands, "get_current_chat_id", return_value=123), \
+                patch.object(commands, "is_admin", return_value=True), \
+                patch.object(commands, "get_daily_report_chat_ids", return_value=["@testchannel"]), \
+                patch.object(commands, "utc_now", return_value=NOW), \
+                patch.object(commands, "build_weekend_delivery_report", return_value=text) as build, \
+                patch.object(commands, "build_daily_report", side_effect=AssertionError("Weekday builder")):
+            await commands.senddaily_command(update, SimpleNamespace(bot=bot))
+        build.assert_called_once_with(NOW)
+        bot.send_message.assert_awaited_once_with(chat_id="@testchannel", text=text, parse_mode=None,
+                                                 disable_web_page_preview=True)
+        self.assertIn("Weekend Outlook send complete", loading.edit_text.await_args.args[0])
+
     async def test_catalysts_command_normalizes_symbol_and_replies_without_a_channel_send(self):
         from src.commands import company_catalyst_commands as commands
         update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))

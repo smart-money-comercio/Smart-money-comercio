@@ -1,17 +1,21 @@
 import os
 import asyncio
+import logging
 import traceback
-from datetime import time
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from telegram.error import TelegramError
 
 from src.reports.daily_report import build_daily_report
+from src.utils.telegram_messages import send_long_message_to_chat
 
 
 TELEGRAM_MESSAGE_LIMIT = 3900
 DEFAULT_DAILY_REPORT_TIME = "08:30"
 DEFAULT_TIMEZONE = "America/Lima"
+MARKET_TIMEZONE = ZoneInfo("America/New_York")
+LOG = logging.getLogger(__name__)
 
 
 def split_long_message(message: str) -> list[str]:
@@ -123,6 +127,41 @@ async def build_daily_report_safe() -> str:
     return await asyncio.to_thread(build_daily_report)
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def weekend_outlook_due(now: datetime) -> bool:
+    return now.astimezone(MARKET_TIMEZONE).weekday() >= 5
+
+
+def build_weekend_delivery_report(now: datetime) -> str:
+    from src.intelligence import calendar_sources, news_live_sources, weekend_inputs, weekend_store
+    from src.reports import weekend_outlook
+
+    window = weekend_inputs.window(now)
+    previous = weekend_store.latest()
+    if previous is not None:
+        try:
+            return weekend_outlook.checked(previous, now, require_publishable=True)["report_text"]
+        except ValueError:
+            pass
+
+    monday = date.fromisoformat(window["next_start"])
+    dates = [monday + timedelta(days=index) for index in range(5)]
+    try:
+        calendar_sources.collect_schedules(dates)
+    except (OSError, ValueError, RuntimeError) as error:
+        LOG.warning("Weekend publisher calendar refresh failed: %s", error)
+    try:
+        news_live_sources.fetch_news_live_context()
+    except (OSError, ValueError, RuntimeError) as error:
+        LOG.warning("Weekend publisher lead refresh failed: %s", error)
+
+    record = weekend_outlook.build(now=utc_now())
+    return weekend_outlook.checked(record, utc_now(), require_publishable=True)["report_text"]
+
+
 async def send_daily_report_to_chat(bot, chat_id: int | str) -> bool:
     try:
         await bot.send_message(
@@ -176,8 +215,26 @@ async def daily_report_job(context) -> None:
         )
         return
 
+    now = utc_now()
+    if not weekend_outlook_due(now):
+        for chat_id in chat_ids:
+            await send_daily_report_to_chat(context.bot, chat_id)
+        return
+
+    try:
+        report = await asyncio.to_thread(build_weekend_delivery_report, now)
+    except Exception:
+        LOG.exception("Scheduled Weekend Outlook build failed")
+        report = "The Weekend Outlook is unavailable for this scheduled run."
+
     for chat_id in chat_ids:
-        await send_daily_report_to_chat(context.bot, chat_id)
+        try:
+            await send_long_message_to_chat(
+                context.bot, chat_id, report,
+                title="Smart Money Weekend Outlook", limit=TELEGRAM_MESSAGE_LIMIT,
+            )
+        except TelegramError as error:
+            LOG.warning("Telegram error sending Weekend Outlook to %s: %s", chat_id, error)
 
 
 def schedule_daily_report(app) -> None:

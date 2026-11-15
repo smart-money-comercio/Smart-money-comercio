@@ -3,6 +3,7 @@ import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from src.reports.daily_news_brief import MAX_NEWS_CHARS
 from src.reports.daily_report import build_daily_report
 from src.reports.defense_intelligence_report import build_defense_intelligence_report
 from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
@@ -117,6 +118,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=report_text,
             title="Smart Money Daily News Brief",
             parse_mode=None,
+            limit=MAX_NEWS_CHARS,
         )
 
     except Exception as error:

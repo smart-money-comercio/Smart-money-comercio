@@ -28,6 +28,7 @@ from scripts.check_daily_news_brief import assert_fixture_connections_closed
 from src.intelligence import weekend_inputs as inputs, weekend_store as store, weekend_theme as themes
 from src.intelligence import news_editor as editor, calendar_sources, company_schedule, ipo_monitor, weekend_ipo
 from src.intelligence import special_alert_sources
+from src.jobs import daily_report_scheduler as scheduler
 from src.reports import weekend_outlook as report, daily_voiceover
 from src.commands import weekend_commands as commands
 from scripts import export_weekend_outlook as cli
@@ -886,6 +887,97 @@ class WeeklyDiscoveryChecks(unittest.TestCase):
         self.assertIn("Continuing Jobless Claims",old["report_text"])
 
 
+class ScheduledDeliveryChecks(unittest.TestCase):
+    def test_saturday_and_sunday_send_the_outlook_once_per_destination(self):
+        text = "Smart Money Weekend Outlook\n" + "\n".join(["Coming week and verified sources."] * 160)
+        sunday = datetime(2026, 11, 15, 13, 30, tzinfo=timezone.utc)
+        for at in (sunday - timedelta(days=1), sunday):
+            with self.subTest(at=at):
+                bot = SimpleNamespace(send_message=AsyncMock())
+                with patch.object(scheduler, "utc_now", return_value=at), \
+                        patch.object(scheduler, "get_daily_report_chat_ids", return_value=["@one", -10020]), \
+                        patch.object(scheduler, "build_weekend_delivery_report", return_value=text) as build, \
+                        patch.object(scheduler, "build_daily_report_safe", side_effect=AssertionError("Weekday builder")):
+                    asyncio.run(scheduler.daily_report_job(SimpleNamespace(bot=bot)))
+                build.assert_called_once_with(at)
+                for chat_id in ("@one", -10020):
+                    messages = [call.kwargs["text"] for call in bot.send_message.await_args_list
+                                if call.kwargs["chat_id"] == chat_id]
+                    self.assertGreater(len(messages), 1)
+                    self.assertTrue(all(len(message) <= 4096 for message in messages))
+                    self.assertEqual("\n".join(chunk.split("\n\n", 1)[1] for chunk in messages), text)
+
+    def test_weekday_schedule_uses_the_daily_builder_in_new_york(self):
+        for at in (NOW + timedelta(days=1), datetime(2026, 11, 7, 2, tzinfo=timezone.utc)):
+            with self.subTest(at=at):
+                bot = SimpleNamespace(send_message=AsyncMock())
+                with patch.object(scheduler, "utc_now", return_value=at), \
+                        patch.object(scheduler, "get_daily_report_chat_ids", return_value=["@testchannel"]), \
+                        patch.object(scheduler, "build_daily_report_safe", AsyncMock(return_value="Smart Money Daily News Brief")), \
+                        patch.object(scheduler, "build_weekend_delivery_report", side_effect=AssertionError("Weekend builder")):
+                    asyncio.run(scheduler.daily_report_job(SimpleNamespace(bot=bot)))
+                self.assertEqual(bot.send_message.await_args.kwargs["text"], "Smart Money Daily News Brief")
+
+    def test_unavailable_outlook_sends_a_short_status(self):
+        bot = SimpleNamespace(send_message=AsyncMock())
+        with patch.object(scheduler, "utc_now", return_value=NOW), \
+                patch.object(scheduler, "get_daily_report_chat_ids", return_value=["@testchannel"]), \
+                patch.object(scheduler, "build_weekend_delivery_report", side_effect=ValueError("Weekend edition is CHECK")), \
+                patch.object(scheduler, "build_daily_report_safe", side_effect=AssertionError("Weekday builder")), \
+                self.assertLogs(scheduler.LOG, "ERROR"):
+            asyncio.run(scheduler.daily_report_job(SimpleNamespace(bot=bot)))
+        bot.send_message.assert_awaited_once_with(chat_id="@testchannel",
+                                                 text="The Weekend Outlook is unavailable for this scheduled run.",
+                                                 parse_mode=None, disable_web_page_preview=True)
+
+    def test_current_verified_outlook_is_reused(self):
+        row = edition()
+        with patch.object(store, "latest", return_value=row), \
+                patch.object(calendar_sources, "collect_schedules", side_effect=AssertionError("Fresh edition")), \
+                patch.object(inputs.feeds, "fetch_news_live_context", side_effect=AssertionError("Fresh edition")), \
+                patch.object(report, "build", side_effect=AssertionError("Fresh edition")):
+            self.assertEqual(scheduler.build_weekend_delivery_report(NOW + timedelta(hours=1)), row["report_text"])
+
+    def test_stale_outlook_refreshes_sources_before_build(self):
+        at = NOW + timedelta(hours=7)
+        with patch.object(store, "latest", return_value=edition()), \
+                patch.object(calendar_sources, "collect_schedules") as schedule, \
+                patch.object(inputs.feeds, "fetch_news_live_context") as news, \
+                patch.object(scheduler, "utc_now", return_value=at), \
+                patch.object(report, "build", side_effect=ValueError("Weekly evidence unavailable")) as build:
+            with self.assertRaisesRegex(ValueError, "Weekly evidence unavailable"):
+                scheduler.build_weekend_delivery_report(at)
+        dates = schedule.call_args.args[0]
+        self.assertEqual([date.isoformat() for date in dates], [f"2026-11-{day:02d}" for day in range(9, 14)])
+        news.assert_called_once_with()
+        build.assert_called_once_with(now=at)
+
+    def test_built_outlook_requires_a_current_pass_for_delivery(self):
+        incomplete = edition(raw=[notice()])
+        self.assertEqual(incomplete["quality"]["status"], "CHECK")
+        with patch.object(store, "latest", return_value=None), \
+                patch.object(calendar_sources, "collect_schedules"), \
+                patch.object(inputs.feeds, "fetch_news_live_context"), \
+                patch.object(report, "build", return_value=incomplete), \
+                patch.object(scheduler, "utc_now", return_value=NOW):
+            with self.assertRaisesRegex(ValueError, "Weekend edition is CHECK"):
+                scheduler.build_weekend_delivery_report(NOW)
+
+    def test_delivers_a_new_verified_outlook_when_no_previous_edition_exists(self):
+        bot = SimpleNamespace(send_message=AsyncMock())
+        row = edition()
+        with patch.object(scheduler, "utc_now", return_value=NOW), \
+                patch.object(scheduler, "get_daily_report_chat_ids", return_value=["@testchannel"]), \
+                patch.object(store, "latest", return_value=None), \
+                patch.object(calendar_sources, "collect_schedules"), \
+                patch.object(inputs.feeds, "fetch_news_live_context"), \
+                patch.object(report, "build", return_value=row) as build:
+            asyncio.run(scheduler.daily_report_job(SimpleNamespace(bot=bot)))
+        build.assert_called_once_with(now=NOW)
+        bot.send_message.assert_awaited_once_with(chat_id="@testchannel", text=row["report_text"],
+                                                 parse_mode=None, disable_web_page_preview=True)
+
+
 class SQLiteCleanupChecks(unittest.TestCase):
     def test_weekend_database_handles_close_before_fixture_cleanup(self):
         # Retain every connection so garbage collection cannot hide a leak on Linux.
@@ -904,7 +996,7 @@ def main():
         stack.enter_context(patch.dict(os.environ, {"AI_IPO_ALERTS_ENABLED": "true"}))
         stack.enter_context(patch.object(ipo_monitor, "read_cache", return_value={}))
         suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case) for case in
-            (WindowChecks,PriceChecks,StoryChecks,CalendarChecks,EditionChecks,IPOChecks,StorageCommandChecks,WeeklyDiscoveryChecks,SQLiteCleanupChecks))
+            (WindowChecks,PriceChecks,StoryChecks,CalendarChecks,EditionChecks,IPOChecks,StorageCommandChecks,WeeklyDiscoveryChecks,ScheduledDeliveryChecks,SQLiteCleanupChecks))
         result=unittest.TextTestRunner(verbosity=1).run(suite)
     good=result.wasSuccessful() and not traffic["blocked"]
     print(f"Weekend Outlook Check: {'PASS' if good else 'FAIL'} ({result.testsRun} tests)")

@@ -10,7 +10,9 @@ New builds use narration revision 2: publication wording is grammatical, technic
 
 The SQLite cleanup correction explicitly closes the corruption-test connection before temporary-file cleanup. A regression retains connection references across the save, read, corruption and reuse fixtures, so garbage collection cannot conceal an open handle. This corrects the Windows installer check; the production store already closes its connections explicitly.
 
-`/weekend` builds a separate Saturday/Sunday research edition using New York dates. It combines true weekly benchmark price returns, one business theme from concrete original disclosures, company follow-up questions, the coming Monday–Friday calendar and conditional scenarios. It is available on demand; no new public delivery job is installed.
+`/weekend` builds a Saturday or Sunday research edition using New York dates. It combines true weekly benchmark price returns, one business theme from concrete original disclosures, company follow-up questions, the coming Monday–Friday calendar and conditional scenarios.
+
+The existing scheduled Telegram report sends the Weekend Outlook on Saturdays and Sundays in New York and the Daily Brief on weekdays. The job uses its configured send time and recipients. It can reuse a current, verified Weekend Outlook or refresh the publisher calendar and leads before building a new one. The job announces when an edition is unavailable. The admin command `/senddaily` sends the same edition for the current day.
 
 ## Commands
 
@@ -21,7 +23,7 @@ The SQLite cleanup correction explicitly closes the corruption-test connection b
 | `/weekendvoiceover` or `/weekend voiceover` | Downloads a source-reviewed plain narration file from a current PASS edition. |
 | `/weekendexport` or `/weekend export` | Downloads schema-2 segments and source metadata, marked `edition_type: weekend_outlook` and `mode: draft_review_required`. |
 
-Run `/rundailyagent` first when publisher leads or the calendar snapshot are stale, then `/weekend refresh`. The outlook reads the current shared publisher cache rather than starting another publisher-wide scan. Weekly discovery also reads up to 50 prior daily editions for selected, source-checked disclosures published during this week. These records supply discovery leads; stale observations require a new original article read. Cached bodies with concrete verified facts and reviewed disclosures take priority over headline-only leads, so a prolific or low-yield feed does not consume the six-review budget first. Up to six original disclosure bodies are reviewed, with at most six additional article reads and three weekly benchmark chart reads. Existing timeouts, size bounds and source cooldowns apply. A fresh cached original body keeps its original observation clock; a stale body requires a new original read.
+The `/weekend` command reads the shared publisher cache. When using this command with stale publisher leads or calendar data, run `/rundailyagent` first, then `/weekend refresh`. Weekly discovery also reads up to 50 prior daily editions for selected, source-checked disclosures published during this week. These records supply discovery leads for rechecking. Cached bodies with concrete verified facts and reviewed disclosures take priority over headline-only leads, so a prolific or low-yield feed does not consume the six-review budget first. Up to six original disclosure bodies are reviewed, with at most six additional article reads and three weekly benchmark chart reads. Existing timeouts, size bounds and source cooldowns apply. A fresh cached original body keeps its original observation clock. A stale body requires a new original read.
 
 ## Evidence and horizons
 

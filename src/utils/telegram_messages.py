@@ -62,11 +62,13 @@ async def reply_long_message(
     text: str,
     title: str | None = None,
     parse_mode: str | None = None,
+    *,
+    limit: int = TELEGRAM_SAFE_LIMIT,
 ) -> None:
     if not update.message:
         return
 
-    chunks = split_long_message(text)
+    chunks = split_long_message(text, limit=limit)
 
     for index, chunk in enumerate(chunks, start=1):
         if title and len(chunks) > 1:
@@ -87,8 +89,10 @@ async def edit_or_reply_long_message(
     text: str,
     title: str | None = None,
     parse_mode: str | None = None,
+    *,
+    limit: int = TELEGRAM_SAFE_LIMIT,
 ) -> None:
-    chunks = split_long_message(text)
+    chunks = split_long_message(text, limit=limit)
 
     if len(chunks) == 1:
         edited = await edit_message_safely(
@@ -103,6 +107,7 @@ async def edit_or_reply_long_message(
                 text=chunks[0],
                 title=title,
                 parse_mode=parse_mode,
+                limit=limit,
             )
 
         return
@@ -118,6 +123,7 @@ async def edit_or_reply_long_message(
         text=text,
         title=title,
         parse_mode=parse_mode,
+        limit=limit,
     )
 
 
@@ -127,8 +133,10 @@ async def send_long_message_to_chat(
     text: str,
     title: str | None = None,
     parse_mode: str | None = None,
+    *,
+    limit: int = TELEGRAM_SAFE_LIMIT,
 ) -> None:
-    chunks = split_long_message(text)
+    chunks = split_long_message(text, limit=limit)
 
     for index, chunk in enumerate(chunks, start=1):
         if title and len(chunks) > 1:
