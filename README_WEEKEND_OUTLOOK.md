@@ -10,15 +10,18 @@ New builds use narration revision 2: publication wording is grammatical, technic
 
 The SQLite cleanup correction explicitly closes the corruption-test connection before temporary-file cleanup. A regression retains connection references across the save, read, corruption and reuse fixtures, so garbage collection cannot conceal an open handle. This corrects the Windows installer check; the production store already closes its connections explicitly.
 
-`/weekend` builds a Saturday or Sunday research edition using New York dates. It combines true weekly benchmark price returns, one business theme from concrete original disclosures, company follow-up questions, the coming Monday–Friday calendar and conditional scenarios.
+The Telegram edition uses the date in New York.
 
-The existing scheduled Telegram report sends the Weekend Outlook on Saturdays and Sundays in New York and the Daily Brief on weekdays. The job uses its configured send time and recipients. It can reuse a current, verified Weekend Outlook or refresh the publisher calendar and leads before building a new one. The job announces when an edition is unavailable. The admin command `/senddaily` sends the same edition for the current day.
+- **Saturday Review** opens with weekly and Friday benchmark returns. It follows with up to two original disclosures from the completed week and the next evidence to check for each. Different business topics get preference when the available disclosures support them.
+- **Sunday Outlook** leads with the coming Monday–Friday calendar. Timed releases show their New York time. Date-only notices and publisher gaps are labeled. The outlook puts an earnings or economic question next to the relevant event. Conditional financing and later issuer dates have their own sections when they qualify.
+
+The scheduled Telegram post uses its configured time and recipients. It draws on the checked Weekend Outlook evidence for each weekend edition and sends the Daily Brief on weekdays. The job can reuse a current PASS record or refresh the publisher calendar and leads before building a new one. It announces when an edition is unavailable. `/weekend` previews the day's edition, and the admin command `/senddaily` posts it to the configured destinations.
 
 ## Commands
 
 | Command | Behavior |
 | --- | --- |
-| `/weekend [refresh]` | Builds an edition, or reuses a current PASS edition for up to 30 minutes. `refresh` re-runs the bounded checks while preserving HTTP cooldowns. |
+| `/weekend [refresh]` | Previews the Saturday Review or Sunday Outlook. It can reuse a current PASS record for up to 30 minutes. `refresh` re-runs the bounded checks while preserving HTTP cooldowns. |
 | `/weekendstatus` or `/weekend status` | Reads the latest recorded edition and displays evidence, dates, held reviews, quality and current export readiness. |
 | `/weekendvoiceover` or `/weekend voiceover` | Downloads a source-reviewed plain narration file from a current PASS edition. |
 | `/weekendexport` or `/weekend export` | Downloads schema-2 segments and source metadata, marked `edition_type: weekend_outlook` and `mode: draft_review_required`. |

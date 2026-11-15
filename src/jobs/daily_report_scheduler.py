@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from telegram.error import TelegramError
 
+from src.reports import weekend_telegram
 from src.reports.daily_report import build_daily_report
 from src.utils.telegram_messages import send_long_message_to_chat
 
@@ -143,9 +144,11 @@ def build_weekend_delivery_report(now: datetime) -> str:
     previous = weekend_store.latest()
     if previous is not None:
         try:
-            return weekend_outlook.checked(previous, now, require_publishable=True)["report_text"]
+            weekend_outlook.checked(previous, now, require_publishable=True)
         except ValueError:
             pass
+        else:
+            return weekend_telegram.render(previous, now)
 
     monday = date.fromisoformat(window["next_start"])
     dates = [monday + timedelta(days=index) for index in range(5)]
@@ -159,7 +162,8 @@ def build_weekend_delivery_report(now: datetime) -> str:
         LOG.warning("Weekend publisher lead refresh failed: %s", error)
 
     record = weekend_outlook.build(now=utc_now())
-    return weekend_outlook.checked(record, utc_now(), require_publishable=True)["report_text"]
+    weekend_outlook.checked(record, utc_now(), require_publishable=True)
+    return weekend_telegram.render(record, now)
 
 
 async def send_daily_report_to_chat(bot, chat_id: int | str) -> bool:
@@ -221,20 +225,21 @@ async def daily_report_job(context) -> None:
             await send_daily_report_to_chat(context.bot, chat_id)
         return
 
+    edition = weekend_telegram.edition_name(now)
     try:
         report = await asyncio.to_thread(build_weekend_delivery_report, now)
     except Exception:
-        LOG.exception("Scheduled Weekend Outlook build failed")
-        report = "The Weekend Outlook is unavailable for this scheduled run."
+        LOG.exception("Scheduled %s build failed", edition)
+        report = f"The {edition} is unavailable for this scheduled run."
 
     for chat_id in chat_ids:
         try:
             await send_long_message_to_chat(
                 context.bot, chat_id, report,
-                title="Smart Money Weekend Outlook", limit=TELEGRAM_MESSAGE_LIMIT,
+                title=f"Smart Money {edition}", limit=TELEGRAM_MESSAGE_LIMIT,
             )
         except TelegramError as error:
-            LOG.warning("Telegram error sending Weekend Outlook to %s: %s", chat_id, error)
+            LOG.warning("Telegram error sending %s to %s: %s", edition, chat_id, error)
 
 
 def schedule_daily_report(app) -> None:

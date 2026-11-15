@@ -1176,24 +1176,26 @@ class CommandChecks(unittest.IsolatedAsyncioTestCase):
         bot.send_message.assert_awaited_once_with(chat_id="@testchannel", text=text, parse_mode=None,
                                                  disable_web_page_preview=True)
 
-    async def test_manual_weekend_channel_send_uses_the_verified_outlook(self):
+    async def test_manual_weekend_channel_send_uses_the_current_days_edition(self):
         from src.commands import daily_report_send_commands as commands
 
-        text = "Smart Money Weekend Outlook\n\nNext week's calendar and original sources."
-        loading = SimpleNamespace(edit_text=AsyncMock())
-        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=loading)))
-        bot = SimpleNamespace(send_message=AsyncMock())
-        with patch.object(commands, "get_current_chat_id", return_value=123), \
-                patch.object(commands, "is_admin", return_value=True), \
-                patch.object(commands, "get_daily_report_chat_ids", return_value=["@testchannel"]), \
-                patch.object(commands, "utc_now", return_value=NOW), \
-                patch.object(commands, "build_weekend_delivery_report", return_value=text) as build, \
-                patch.object(commands, "build_daily_report", side_effect=AssertionError("Weekday builder")):
-            await commands.senddaily_command(update, SimpleNamespace(bot=bot))
-        build.assert_called_once_with(NOW)
-        bot.send_message.assert_awaited_once_with(chat_id="@testchannel", text=text, parse_mode=None,
-                                                 disable_web_page_preview=True)
-        self.assertIn("Weekend Outlook send complete", loading.edit_text.await_args.args[0])
+        for at, name in ((NOW - timedelta(days=1), "Saturday Review"), (NOW, "Sunday Outlook")):
+            with self.subTest(edition=name):
+                text = f"Smart Money {name}\n\nVerified publisher evidence."
+                loading = SimpleNamespace(edit_text=AsyncMock())
+                update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock(return_value=loading)))
+                bot = SimpleNamespace(send_message=AsyncMock())
+                with patch.object(commands, "get_current_chat_id", return_value=123), \
+                        patch.object(commands, "is_admin", return_value=True), \
+                        patch.object(commands, "get_daily_report_chat_ids", return_value=["@testchannel"]), \
+                        patch.object(commands, "utc_now", return_value=at), \
+                        patch.object(commands, "build_weekend_delivery_report", return_value=text) as build, \
+                        patch.object(commands, "build_daily_report", side_effect=AssertionError("Weekday builder")):
+                    await commands.senddaily_command(update, SimpleNamespace(bot=bot))
+                build.assert_called_once_with(at)
+                bot.send_message.assert_awaited_once_with(chat_id="@testchannel", text=text, parse_mode=None,
+                                                         disable_web_page_preview=True)
+                self.assertIn(f"{name} send complete", loading.edit_text.await_args.args[0])
 
     async def test_catalysts_command_normalizes_symbol_and_replies_without_a_channel_send(self):
         from src.commands import company_catalyst_commands as commands

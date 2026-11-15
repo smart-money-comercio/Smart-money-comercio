@@ -10,7 +10,7 @@ For a same-provider rechecked Alphabet move of at least five percent, Companies 
 
 The normal news refresh also checks Alphabet's SEC submissions and at most one results 8-K and its uniquely linked Exhibit 99.1, for a maximum of three original-source requests. It uses the existing `SEC_USER_AGENT` administrative contact, with `SEC_API_USER_AGENT` as an alternate; example contact values are not sent. No additional model or search requests are made. Rendering remains cache-only. `/editorstatus` shows backup health, while `/storylog GOOG` and `/storylog GOOGL` retain the release, filing, observation clock and period-specific facts. Failed refreshes may retain explicitly labeled, previously verified context for at most six hours from its original observation; retrying does not reset that clock.
 
-`/report`, `/brief` and `/newsbrief` return a concise news edition suitable for reading aloud and later adapting for YouTube or a podcast. The weekday Telegram schedule and `/rundailyagent` use that same edition. On Saturdays and Sundays in New York, the Telegram schedule uses the Weekend Outlook.
+`/report`, `/brief` and `/newsbrief` return a concise news edition suitable for reading aloud and later adapting for YouTube or a podcast. The weekday Telegram schedule and `/rundailyagent` use that same edition. The scheduled Telegram post uses the Saturday Review and Sunday Outlook on their New York dates.
 
 The interactive and manual send commands use the brief's 3,800-character cap for Telegram delivery. A complete brief fits in one message with its original source link and research footer.
 

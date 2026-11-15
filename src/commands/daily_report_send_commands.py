@@ -11,6 +11,7 @@ from src.jobs.daily_report_scheduler import (
     utc_now,
     weekend_outlook_due,
 )
+from src.reports import weekend_telegram
 from src.reports.daily_news_brief import MAX_NEWS_CHARS
 from src.reports.daily_report import build_daily_report
 from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
@@ -50,8 +51,8 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     now = utc_now()
     weekend = weekend_outlook_due(now)
-    edition = "Weekend Outlook" if weekend else "Daily report"
-    loading_text = ("🗞 Preparing and sending the Weekend Outlook..." if weekend else
+    edition = weekend_telegram.edition_name(now) if weekend else "Daily report"
+    loading_text = (f"🗞 Preparing and sending the {edition}..." if weekend else
                     "🗞 Refreshing market data and sending daily report...")
     loading_message = await update.message.reply_text(
         f"{loading_text}\n\n"
@@ -62,7 +63,7 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         if weekend:
             report = await asyncio.to_thread(build_weekend_delivery_report, now)
-            title = "Smart Money Weekend Outlook"
+            title = f"Smart Money {edition}"
             limit = TELEGRAM_MESSAGE_LIMIT
         else:
             ensure_morning_brief_cache_is_fresh(force_refresh=True)

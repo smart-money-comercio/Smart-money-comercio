@@ -10,7 +10,7 @@ START_COMMANDS = [
 
 
 CORE_COMMANDS = [
-    ("/weekend [refresh]", "Weekly evidence, one business theme and coming-week catalysts"),
+    ("/weekend [refresh]", "Preview the Saturday Review or Sunday Outlook"),
     ("/weekendstatus", "Recorded Weekend Outlook evidence and quality review"),
     ("/weekendvoiceover", "Current PASS weekend narration for review"),
     ("/weekendexport", "Current PASS weekend JSON draft for adapter review"),

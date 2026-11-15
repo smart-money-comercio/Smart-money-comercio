@@ -6,7 +6,7 @@ from io import BytesIO
 import json
 
 from src.intelligence import weekend_store
-from src.reports import weekend_outlook
+from src.reports import weekend_outlook, weekend_telegram
 from src.utils.telegram_messages import split_long_message
 
 
@@ -28,12 +28,22 @@ async def weekend_command(update,context):
     if args not in ([],["refresh"]):
         await update.message.reply_text("Use /weekend [refresh] on Saturday or Sunday, New York time. For the latest edition, use /weekend status, /weekend voiceover or /weekend export.",parse_mode=None)
         return
-    await update.message.reply_text("Building the Weekend Outlook from weekly prices, publisher leads and original earnings notices. Source cooldowns remain in effect.",parse_mode=None)
     try:
-        record=await asyncio.to_thread(weekend_outlook.build,force=bool(args))
-        text=f"Weekend Outlook: {record['quality']['status']} · edition {record['id']}\n\n"+record["report_text"]
-        for chunk in split_long_message(text):await update.message.reply_text(chunk,parse_mode=None)
-        await update.message.reply_text("/weekendstatus · /weekendvoiceover · /weekendexport\nIf original leads are stale or missing, run /rundailyagent, then /weekend refresh.",parse_mode=None)
+        now = datetime.now(timezone.utc)
+        edition = weekend_telegram.edition_name(now)
+        await update.message.reply_text(f"Building the {edition} from verified publisher evidence.", parse_mode=None)
+        record = await asyncio.to_thread(weekend_outlook.build, now=now, force=bool(args))
+        text = weekend_telegram.render(record, now)
+        quality = record["quality"]["status"]
+        if quality != "PASS":
+            text = "CHECK · Review copy\n\n" + text
+        for chunk in split_long_message(text):
+            await update.message.reply_text(chunk, parse_mode=None, disable_web_page_preview=True)
+        await update.message.reply_text(
+            f"{quality} · Evidence edition {record['id']}\n"
+            "/weekendstatus · /weekendvoiceover · /weekendexport",
+            parse_mode=None,
+        )
     except (ValueError,OSError,RuntimeError) as error:
         await update.message.reply_text("Weekend Outlook unavailable: "+str(error),parse_mode=None)
 

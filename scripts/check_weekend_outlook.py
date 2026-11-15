@@ -29,7 +29,7 @@ from src.intelligence import weekend_inputs as inputs, weekend_store as store, w
 from src.intelligence import news_editor as editor, calendar_sources, company_schedule, ipo_monitor, weekend_ipo
 from src.intelligence import special_alert_sources
 from src.jobs import daily_report_scheduler as scheduler
-from src.reports import weekend_outlook as report, daily_voiceover
+from src.reports import weekend_outlook as report, daily_voiceover, weekend_telegram
 from src.commands import weekend_commands as commands
 from scripts import export_weekend_outlook as cli
 
@@ -75,6 +75,18 @@ def calendar():
 def edition(**changes):
     return report.build(**{"now":NOW,"raw":[story(),notice()],"market_fetch":market_fetch,
         "calendar_snapshot":calendar(),"persist":False,**changes})
+
+
+def telegram_edition(now=NOW, *, raw=None, schedule=None):
+    stamp = now.isoformat()
+    rows = [story(), notice(10)] if raw is None else raw
+    snapshot = calendar() if schedule is None else schedule
+    return edition(
+        now=now,
+        raw=[{**row, "source_checked_at": stamp, "evidence_checked_at": stamp} for row in rows],
+        market_fetch=lambda url: {**market_fetch(url), "fetched_at_epoch": now.timestamp()},
+        calendar_snapshot={**snapshot, "checked_at": stamp},
+    )
 
 
 def original_page(text=MAINTENANCE,*,title=TITLE,url=URL,published=PUBLISHED):
@@ -702,12 +714,22 @@ class StorageCommandChecks(unittest.TestCase):
 
     def message(self):return SimpleNamespace(reply_text=AsyncMock(),reply_document=AsyncMock())
 
-    def test_weekend_command_sends_only_requested_review_with_safe_chunks(self):
-        message=self.message();row=edition()
-        with patch.object(report,"build",return_value=row) as build:
-            asyncio.run(commands.weekend_command(SimpleNamespace(message=message),SimpleNamespace(args=["refresh"])))
-        self.assertTrue(build.call_args.kwargs["force"]);self.assertTrue(all(len(call.args[0])<=3200 for call in message.reply_text.call_args_list))
-        message.reply_document.assert_not_called()
+    def test_weekend_preview_shows_the_same_text_as_that_days_delivery(self):
+        for at, name in ((NOW - timedelta(days=1), "Saturday Review"), (NOW, "Sunday Outlook")):
+            with self.subTest(edition=name):
+                row, message = telegram_edition(at), self.message()
+                with patch.object(commands, "datetime") as clock, patch.object(report, "build", return_value=row) as build:
+                    clock.now.return_value = at
+                    asyncio.run(commands.weekend_command(SimpleNamespace(message=message), SimpleNamespace(args=["refresh"])))
+                build.assert_called_once_with(now=at, force=True)
+                calls = message.reply_text.call_args_list
+                self.assertIn(f"Building the {name}", calls[0].args[0])
+                self.assertEqual(calls[1].args[0], weekend_telegram.render(row, at))
+                self.assertTrue(calls[1].args[0].startswith(f"Smart Money {name}\n"))
+                self.assertTrue(calls[1].kwargs["disable_web_page_preview"])
+                self.assertIn(row["id"], calls[-1].args[0])
+                self.assertTrue(all(len(call.args[0]) <= 3200 for call in calls))
+                message.reply_document.assert_not_called()
 
     def test_command_rejects_unknown_arguments_before_build(self):
         message=self.message()
@@ -887,12 +909,78 @@ class WeeklyDiscoveryChecks(unittest.TestCase):
         self.assertIn("Continuing Jobless Claims",old["report_text"])
 
 
+class TelegramEditionChecks(unittest.TestCase):
+    def test_saturday_leads_with_closes_and_distinct_verified_business_topics(self):
+        from scripts.check_delivery_disclosures import release
+
+        at = NOW - timedelta(days=1)
+        amd = release("AMD", published=PUBLISHED)
+        row = telegram_edition(at, raw=[story(), amd, notice(10)])
+        self.assertEqual(row["quality"]["status"], "PASS")
+        text = weekend_telegram.render(row, at)
+        self.assertTrue(text.startswith("Smart Money Saturday Review\nWeek ended November 6, 2026"))
+        self.assertIn("S&P 500 -3.64% week · +6.00% Friday", text)
+        self.assertIn("Oct 30 close to Nov 6 close", text)
+        self.assertIn("Northrop Grumman said", text)
+        self.assertIn("AMD said", text)
+        self.assertIn("Follow-up ·", text)
+        for source in (URL, amd["url"]):
+            self.assertIn(source, text)
+        self.assertNotIn(notice(10)["url"], text)
+        self.assertNotIn("Calendar and catalyst checks", text)
+
+    def test_saturday_omits_disclosures_published_after_the_completed_week(self):
+        from scripts.check_delivery_disclosures import release
+
+        at = NOW - timedelta(days=1)
+        late = release("AMD", published=(at - timedelta(hours=1)).isoformat())
+        row = telegram_edition(at, raw=[story(), late])
+        self.assertIn("weekend update", {story["publication_label"] for story in row["inputs"]["stories"]})
+        self.assertNotIn(late["url"], weekend_telegram.render(row, at))
+
+    def test_sunday_leads_with_dated_events_and_conditional_financing(self):
+        snapshot = calendar()
+        snapshot["economic"].append({"eventName": "FOMC Meeting Minutes", "event_at": "2026-11-11T14:00:00-05:00",
+                                     "time_status": "verified", "source_date": "2026-11-11", "publisher": "Fed",
+                                     "timing_url": calendar_sources.FED_URL})
+        source = IPOChecks().filing()
+        with patch.object(ipo_monitor, "read_cache", return_value={"items": [source]}):
+            row = telegram_edition(schedule=snapshot)
+        original = deepcopy(row)
+        text = weekend_telegram.render(row, NOW)
+        self.assertTrue(text.startswith("Smart Money Sunday Outlook\nNovember 9, 2026 to November 13, 2026"))
+        self.assertLess(text.index("5:00 PM EST · Nvidia earnings call"), text.index("2:00 PM EST · FOMC Meeting Minutes"))
+        self.assertIn("Listen for its data center outlook", text)
+        self.assertIn("8:30 AM EST · Weekly jobless claims", text)
+        self.assertIn("Days without verified entries · Monday, Friday", text)
+        self.assertIn("Financing watch · Anthropic", text)
+        self.assertIn("expected net proceeds if the offering goes ahead", text)
+        self.assertIn(source["url"], text)
+        self.assertIn(notice(10)["url"], text)
+        self.assertNotIn("investors are prepared to commit", text)
+        self.assertNotIn("announcement..", text)
+        self.assertNotIn("Market scorecard", text)
+        self.assertNotIn(URL, text)
+        self.assertEqual(report.checked(row), original)
+
+    def test_sunday_keeps_date_only_notices_and_later_events_qualified(self):
+        dated = notice(10)
+        dated["source_excerpt"] = ("NVIDIA will host a conference call on November 10, 2026 "
+                                   "to discuss its third-quarter financial results.")
+        row = telegram_edition(raw=[story(), dated])
+        text = weekend_telegram.render(row, NOW)
+        self.assertIn("Tuesday, November 10\n• Nvidia earnings call · Time unverified", text)
+        self.assertNotIn("5:00 PM", text)
+        later = weekend_telegram.render(edition(), NOW)
+        self.assertIn("Beyond this week\nNovember 17, 2026\n• 5:00 PM EST · Nvidia earnings call", later)
+
+
 class ScheduledDeliveryChecks(unittest.TestCase):
     def test_saturday_and_sunday_send_the_outlook_once_per_destination(self):
-        text = "Smart Money Weekend Outlook\n" + "\n".join(["Coming week and verified sources."] * 160)
         sunday = datetime(2026, 11, 15, 13, 30, tzinfo=timezone.utc)
-        for at in (sunday - timedelta(days=1), sunday):
-            with self.subTest(at=at):
+        for at, name in ((sunday - timedelta(days=1), "Saturday Review"), (sunday, "Sunday Outlook")):
+            with self.subTest(edition=name):
+                text = f"Smart Money {name}\n" + "\n".join(["Week and verified sources."] * 160)
                 bot = SimpleNamespace(send_message=AsyncMock())
                 with patch.object(scheduler, "utc_now", return_value=at), \
                         patch.object(scheduler, "get_daily_report_chat_ids", return_value=["@one", -10020]), \
@@ -905,6 +993,7 @@ class ScheduledDeliveryChecks(unittest.TestCase):
                                 if call.kwargs["chat_id"] == chat_id]
                     self.assertGreater(len(messages), 1)
                     self.assertTrue(all(len(message) <= 4096 for message in messages))
+                    self.assertTrue(all(message.startswith(f"Smart Money {name} Part ") for message in messages))
                     self.assertEqual("\n".join(chunk.split("\n\n", 1)[1] for chunk in messages), text)
 
     def test_weekday_schedule_uses_the_daily_builder_in_new_york(self):
@@ -927,16 +1016,19 @@ class ScheduledDeliveryChecks(unittest.TestCase):
                 self.assertLogs(scheduler.LOG, "ERROR"):
             asyncio.run(scheduler.daily_report_job(SimpleNamespace(bot=bot)))
         bot.send_message.assert_awaited_once_with(chat_id="@testchannel",
-                                                 text="The Weekend Outlook is unavailable for this scheduled run.",
+                                                 text="The Sunday Outlook is unavailable for this scheduled run.",
                                                  parse_mode=None, disable_web_page_preview=True)
 
-    def test_current_verified_outlook_is_reused(self):
-        row = edition()
+    def test_current_verified_evidence_switches_presentations_at_new_york_midnight(self):
+        saturday = datetime(2026, 11, 8, 4, 50, tzinfo=timezone.utc)
+        sunday = saturday + timedelta(minutes=20)
+        row = telegram_edition(saturday)
         with patch.object(store, "latest", return_value=row), \
                 patch.object(calendar_sources, "collect_schedules", side_effect=AssertionError("Fresh edition")), \
                 patch.object(inputs.feeds, "fetch_news_live_context", side_effect=AssertionError("Fresh edition")), \
                 patch.object(report, "build", side_effect=AssertionError("Fresh edition")):
-            self.assertEqual(scheduler.build_weekend_delivery_report(NOW + timedelta(hours=1)), row["report_text"])
+            self.assertTrue(scheduler.build_weekend_delivery_report(saturday).startswith("Smart Money Saturday Review\n"))
+            self.assertTrue(scheduler.build_weekend_delivery_report(sunday).startswith("Smart Money Sunday Outlook\n"))
 
     def test_stale_outlook_refreshes_sources_before_build(self):
         at = NOW + timedelta(hours=7)
@@ -974,7 +1066,7 @@ class ScheduledDeliveryChecks(unittest.TestCase):
                 patch.object(report, "build", return_value=row) as build:
             asyncio.run(scheduler.daily_report_job(SimpleNamespace(bot=bot)))
         build.assert_called_once_with(now=NOW)
-        bot.send_message.assert_awaited_once_with(chat_id="@testchannel", text=row["report_text"],
+        bot.send_message.assert_awaited_once_with(chat_id="@testchannel", text=weekend_telegram.render(row, NOW),
                                                  parse_mode=None, disable_web_page_preview=True)
 
 
@@ -996,7 +1088,8 @@ def main():
         stack.enter_context(patch.dict(os.environ, {"AI_IPO_ALERTS_ENABLED": "true"}))
         stack.enter_context(patch.object(ipo_monitor, "read_cache", return_value={}))
         suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case) for case in
-            (WindowChecks,PriceChecks,StoryChecks,CalendarChecks,EditionChecks,IPOChecks,StorageCommandChecks,WeeklyDiscoveryChecks,ScheduledDeliveryChecks,SQLiteCleanupChecks))
+            (WindowChecks,PriceChecks,StoryChecks,CalendarChecks,EditionChecks,IPOChecks,StorageCommandChecks,WeeklyDiscoveryChecks,
+             TelegramEditionChecks,ScheduledDeliveryChecks,SQLiteCleanupChecks))
         result=unittest.TextTestRunner(verbosity=1).run(suite)
     good=result.wasSuccessful() and not traffic["blocked"]
     print(f"Weekend Outlook Check: {'PASS' if good else 'FAIL'} ({result.testsRun} tests)")
