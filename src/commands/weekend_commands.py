@@ -19,9 +19,16 @@ def latest(*,publishable=False):
 async def weekend_command(update,context):
     if not update.message:return
     args=getattr(context,"args",[]) or []
+    if args == ["status"]:
+        await reply_status(update.message)
+        return
+    if args in (["voiceover"], ["export"]):
+        await reply_document(update.message, export=args == ["export"])
+        return
     if args not in ([],["refresh"]):
-        await update.message.reply_text("Use /weekend [refresh] on Saturday or Sunday, New York time.",parse_mode=None);return
-    await update.message.reply_text("Building the Weekend Outlook from weekly prices and current cached publisher leads. Original article reads are bounded; source cooldowns remain in effect.",parse_mode=None)
+        await update.message.reply_text("Use /weekend [refresh] on Saturday or Sunday, New York time. For the latest edition, use /weekend status, /weekend voiceover or /weekend export.",parse_mode=None)
+        return
+    await update.message.reply_text("Building the Weekend Outlook from weekly prices, publisher leads and original earnings notices. Source cooldowns remain in effect.",parse_mode=None)
     try:
         record=await asyncio.to_thread(weekend_outlook.build,force=bool(args))
         text=f"Weekend Outlook: {record['quality']['status']} · edition {record['id']}\n\n"+record["report_text"]
@@ -31,23 +38,24 @@ async def weekend_command(update,context):
         await update.message.reply_text("Weekend Outlook unavailable: "+str(error),parse_mode=None)
 
 
-async def weekendstatus_command(update,context):
-    if not update.message:return
-    if getattr(context,"args",None):
-        await update.message.reply_text("Use /weekendstatus for the latest recorded review.",parse_mode=None);return
+async def reply_status(message):
     try:
         record=await asyncio.to_thread(latest)
         text=await asyncio.to_thread(weekend_outlook.status,record)
-        for chunk in split_long_message(text):await update.message.reply_text(chunk,parse_mode=None)
+        for chunk in split_long_message(text):await message.reply_text(chunk,parse_mode=None)
     except (ValueError,OSError,RuntimeError) as error:
-        await update.message.reply_text("Weekend review unavailable: "+str(error),parse_mode=None)
+        await message.reply_text("Weekend review unavailable: "+str(error),parse_mode=None)
 
 
-async def document(update,context,*,export):
+async def weekendstatus_command(update,context):
     if not update.message:return
-    command="/weekendexport" if export else "/weekendvoiceover"
     if getattr(context,"args",None):
-        await update.message.reply_text("Use "+command+" for the latest current PASS edition.",parse_mode=None);return
+        await update.message.reply_text("Use /weekendstatus for the latest recorded review.",parse_mode=None)
+        return
+    await reply_status(update.message)
+
+
+async def reply_document(message, *, export):
     try:
         record=await asyncio.to_thread(latest,publishable=True)
         if export:
@@ -59,9 +67,18 @@ async def document(update,context,*,export):
             payload=record["voiceover"]["script"]+"\n";filename="weekend_voiceover.txt"
             quality=record["voiceover"]["quality"]
             caption=f"Weekend Outlook · edition {record['id']}\n{quality['words']} words · about {quality['estimated_seconds']:.0f} seconds at 160 words/minute. Plain narration for review."
-        await update.message.reply_document(document=BytesIO(payload.encode()),filename=filename,caption=caption,parse_mode=None)
+        await message.reply_document(document=BytesIO(payload.encode()),filename=filename,caption=caption,parse_mode=None)
     except (ValueError,OSError,RuntimeError) as error:
-        await update.message.reply_text("Weekend document unavailable: "+str(error),parse_mode=None)
+        await message.reply_text("Weekend document unavailable: "+str(error),parse_mode=None)
+
+
+async def document(update,context,*,export):
+    if not update.message:return
+    command="/weekendexport" if export else "/weekendvoiceover"
+    if getattr(context,"args",None):
+        await update.message.reply_text("Use "+command+" for the latest current PASS edition.",parse_mode=None)
+        return
+    await reply_document(update.message, export=export)
 
 
 async def weekendvoiceover_command(update,context):

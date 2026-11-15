@@ -17,6 +17,7 @@ from src.utils.market_quote_source import source_evidence, BENCHMARKS
 
 NY = ZoneInfo("America/New_York")
 MAX_BODY_READS = 6
+MAX_NOTICE_RECHECKS = 3
 
 
 def digest(value):
@@ -260,31 +261,105 @@ def collect_stories(raw, periods, now, fetch=None, *, force=False):
     return [proof for proof,_ in results if proof is not None],[log for _,log in results]
 
 
-def raw_candidates(now):
-    rows,issues=editor.cache_candidates(now,editor.editorial_symbols([]))
+def read_daily_archive():
     from src.intelligence.news_editor_store import read_editions
-    archived=[];seen=set();periods=window(now)
+
     try:
-        for record in read_editions(limit=50):
-            for raw in record.get("candidates",[])[:180]:
-                try:
-                    if raw.get("decision")!="selected" or not editor.primary_source(raw) or raw.get("official") is not True:continue
-                    at=clock(raw["published"])
-                    if not clock(periods["evidence_start"])<=at<=now or raw["url"] in seen:continue
-                    profile=analysis.checked_evidence(raw)
-                    if profile["scope"]!="original release excerpt" or len(profile["facts"])<2:continue
-                    lead=deepcopy(raw)
-                    lead.update(source_excerpt=profile["source_text"],excerpt_scope=profile["scope"],
-                        evidence_checked_at=profile["observed_at"],weekend_archive_lead=True)
-                    archived.append(lead);seen.add(raw["url"])
-                except (ValueError,KeyError,TypeError,AttributeError):continue
+        return read_editions(limit=50), []
     except (OSError,ValueError,TypeError,sqlite3.Error) as error:
-        issues=[*issues,"Prior-edition weekly discovery unavailable ("+type(error).__name__+")"]
-    issues=[f"Weekly discovery: {len(archived)} reviewed original disclosures from prior editions; stale observations require a new article read",*issues]
-    return (archived+rows)[:1000],issues[:5]
+        return [], ["Prior-edition weekly discovery unavailable (" + type(error).__name__ + ")"]
 
 
-def calendar_packet(raw, periods, now, snapshot=None, *, publisher_cache=None):
+def raw_candidates(now, *, daily_archive=None):
+    rows, issues = editor.cache_candidates(now, editor.editorial_symbols([]))
+    editions, archive_issues = read_daily_archive() if daily_archive is None else daily_archive
+    archived = []
+    seen = set()
+    start = clock(window(now)["evidence_start"])
+    for record in editions:
+        for raw in record.get("candidates",[])[:180]:
+            try:
+                if raw.get("decision")!="selected" or not editor.primary_source(raw) or raw.get("official") is not True:continue
+                at=clock(raw["published"])
+                if not start<=at<=now or raw["url"] in seen:continue
+                profile=analysis.checked_evidence(raw)
+                if profile["scope"]!="original release excerpt" or len(profile["facts"])<2:continue
+                lead=deepcopy(raw)
+                lead.update(source_excerpt=profile["source_text"],excerpt_scope=profile["scope"],
+                    evidence_checked_at=profile["observed_at"],weekend_archive_lead=True)
+                archived.append(lead);seen.add(raw["url"])
+            except (ValueError,KeyError,TypeError,AttributeError):continue
+    issues = [f"Weekly discovery: {len(archived)} reviewed original disclosures from prior editions; stale observations require a new article read",
+              *issues, *archive_issues]
+    return (archived + rows)[:1000], issues[:5]
+
+
+def archived_schedules(daily_editions, weekend_editions):
+    history = [(row.get("generated_at"), row.get("company_schedules", [])) for row in daily_editions]
+    for row in weekend_editions:
+        inputs = row.get("inputs")
+        calendar = inputs.get("calendar") if isinstance(inputs, dict) else None
+        if isinstance(calendar, dict):
+            history.extend((row.get("generated_at"), calendar.get(key, [])) for key in ("company", "later"))
+    return history
+
+
+def issuer_notices(raw, start, end, now, history, fetch):
+    current = company_schedule.notices(raw, now)
+    covered = {(row["symbol"], row["event"]) for row in current}
+    leads = []
+    for generated, notices in history:
+        try:
+            at = clock(generated)
+        except (ValueError, TypeError, OverflowError):
+            continue
+        if not now - timedelta(days=30) <= at < now or not isinstance(notices, list):
+            continue
+        for notice in notices[:20]:
+            try:
+                day = date.fromisoformat(notice["event_date"])
+                if not start <= day <= end + timedelta(days=14) or (notice["symbol"], notice["event"]) in covered:
+                    continue
+                company_schedule.checked_notice(notice, at)
+                source = notice["source"]
+                url = editor.canonical_url(source["url"])
+                leads.append((day > end, -clock(source["published"]).timestamp(), url, notice))
+            except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
+                continue
+
+    # The archive identifies original URLs. Only a current original read can
+    # supply a missing schedule, and current notices still govern conflicts.
+    unique = {}
+    for _, _, url, notice in sorted(leads, key=lambda row: row[:3]):
+        unique.setdefault(url, notice)
+    recovered, issues = [], []
+    for notice in list(unique.values())[:MAX_NOTICE_RECHECKS]:
+        source = notice["source"]
+        url = source["url"]
+        try:
+            response = fetch(url)
+            if response.get("status") != "ok":
+                raise ValueError(response.get("error") or "Original notice unavailable")
+            if response.get("final_url", response.get("url")) != url:
+                raise ValueError("Original notice redirected to another URL")
+            body = response.get("body")
+            if not isinstance(body, str) or len(body.encode()) > 2_000_000:
+                raise ValueError("Original notice response exceeds its bound")
+            observed = fresh(response["fetched_at_epoch"], now)
+            excerpt = originals.article_excerpt(body, source["title"], source["published"], publisher=source["source"], url=url)
+            updated = {**source, "source_checked_at": observed.isoformat(), "evidence_checked_at": observed.isoformat(),
+                       "source_excerpt": excerpt, "excerpt_scope": "original release excerpt"}
+            verified = company_schedule.parse_notice(updated, now)
+            if (not verified or verified["event"] != notice["event"] or verified["event_date"] != notice["event_date"]
+                    or (notice["event_at"] and verified["event_at"] != notice["event_at"])):
+                raise ValueError("Original notice no longer verifies the archived schedule")
+            recovered.append(updated)
+        except (ValueError, KeyError, TypeError, AttributeError, OSError, OverflowError) as error:
+            issues.append(f"{notice['symbol']} issuer calendar recheck: {str(error)[:140]}")
+    return (company_schedule.notices([*raw, *recovered], now) if recovered else current), issues
+
+
+def calendar_packet(raw, periods, now, snapshot=None, *, publisher_cache=None, notice_history=(), notice_fetch=None):
     snapshot = calendar_context.read_snapshot(now) if snapshot is None else deepcopy(snapshot)
     result={"schema":1,"observed":"","macro":[],"company":[],"later":[],"issues":[]}
     start,end=date.fromisoformat(periods["next_start"]),date.fromisoformat(periods["next_end"])
@@ -344,7 +419,8 @@ def calendar_packet(raw, periods, now, snapshot=None, *, publisher_cache=None):
                 result["macro"].append({"event": label, "at": at.isoformat(), "publisher": publisher, "url": url,
                     "time_status": "cached", "observed": observed, "timing_observed": observed})
     result["macro"]=list({(row["event"],row["at"]):row for row in result["macro"]}.values())[:12]
-    notices=company_schedule.notices(raw,now)
+    notices, issues = issuer_notices(raw, start, end, now, notice_history, notice_fetch)
+    result["issues"].extend(issues)
     for notice in notices[:20]:
         day=date.fromisoformat(notice["event_date"])
         if start<=day<=end:result["company"].append(notice)

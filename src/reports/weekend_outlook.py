@@ -303,18 +303,23 @@ def build(now=None,*,force=False,raw=None,market_fetch=None,body_fetch=None,cale
                     checked(prior,now,require_publishable=True)
                     if (now-evidence.clock(prior["generated_at"])).total_seconds()<=1800:return prior
                 except ValueError:pass
-        rows,issues=evidence.raw_candidates(now) if raw is None else (deepcopy(raw),[])
+        daily_archive = evidence.read_daily_archive() if raw is None else ([], [])
+        rows, issues = evidence.raw_candidates(now, daily_archive=daily_archive) if raw is None else (deepcopy(raw), [])
         from src.intelligence import calendar_source_cache, weekend_business, weekend_ipo
 
-        with ThreadPoolExecutor(max_workers=3) as pool:
+        allow_network = raw is None and market_fetch is None and body_fetch is None
+        history = evidence.archived_schedules(daily_archive[0], store.recent()) if allow_network else ()
+        with ThreadPoolExecutor(max_workers=4) as pool:
             prices=pool.submit(evidence.collect_prices,periods,now,market_fetch,force=force)
             stories=pool.submit(evidence.collect_stories,rows,periods,now,body_fetch,force=force)
-            ipo_result = pool.submit(weekend_ipo.refresh, periods, now, allow_network=raw is None and market_fetch is None and body_fetch is None)
+            ipo_result = pool.submit(weekend_ipo.refresh, periods, now, allow_network=allow_network)
+            calendar = pool.submit(evidence.calendar_packet, rows, periods, now, calendar_snapshot,
+                publisher_cache=calendar_source_cache.load() if calendar_snapshot is None else None,
+                notice_history=history, notice_fetch=lambda url: evidence.feeds.fetch_url(url, force, cache_result=False))
             found,ledger=stories.result()
             ipo, ipo_issues = ipo_result.result()
             inputs={"generated_at":now.isoformat(),"weekend_rules":WEEKEND_RULES,"narration_revision":weekend_narration.REVISION,"window":periods,"prices":prices.result(),"stories":found,
-                "ledger":ledger,"calendar":evidence.calendar_packet(rows,periods,now,calendar_snapshot,
-                    publisher_cache=calendar_source_cache.load() if calendar_snapshot is None else None),"source_issues":issues + ipo_issues}
+                "ledger":ledger,"calendar":calendar.result(),"source_issues":issues + ipo_issues}
         if ipo:
             inputs["ipo"] = ipo
         theme = themes.choose(found, ipo)

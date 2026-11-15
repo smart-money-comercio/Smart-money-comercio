@@ -37,19 +37,37 @@ def save(record):
 
 
 def read_record(edition_id=None):
+    records = _read_records(edition_id)
+    return records[0] if records else None
+
+
+def recent():
+    return _read_records(limit=40)
+
+
+def _read_records(edition_id=None, *, limit=1):
     if edition_id is not None and (not isinstance(edition_id,str) or not re.fullmatch(r"[0-9a-f]{20}",edition_id)):
-        return None
+        return []
     path=state_path()
-    if not path.is_file():return None
+    if not path.is_file():return []
     try:
         with closing(sqlite3.connect(path.resolve().as_uri()+"?mode=ro",uri=True,timeout=2)) as db:
-            row=(db.execute("SELECT id,record FROM weekend_editions WHERE id=?",(edition_id,)).fetchone() if edition_id is not None else
-                 db.execute("SELECT id,record FROM weekend_editions ORDER BY generated DESC,rowid DESC LIMIT 1").fetchone())
-        if row is None or not isinstance(row[1],str) or len(row[1].encode())>MAX_BYTES:return None
-        record=json.loads(row[1])
-        if not isinstance(record,dict) or record.get("id")!=row[0] or row[0]!=identity(record):return None
-        return record
-    except (OSError,sqlite3.Error,ValueError,TypeError):return None
+            rows = (db.execute("SELECT id,record FROM weekend_editions WHERE id=?", (edition_id,)).fetchall()
+                    if edition_id is not None else
+                    db.execute("SELECT id,record FROM weekend_editions ORDER BY generated DESC,rowid DESC LIMIT ?", (limit,)).fetchall())
+    except (OSError, sqlite3.Error):
+        return []
+    records = []
+    for saved_id, raw in rows:
+        if not isinstance(raw, str) or len(raw.encode()) > MAX_BYTES:
+            continue
+        try:
+            record = json.loads(raw)
+            if isinstance(record, dict) and record.get("id") == saved_id == identity(record):
+                records.append(record)
+        except (ValueError, TypeError):
+            continue
+    return records
 
 
 def latest():

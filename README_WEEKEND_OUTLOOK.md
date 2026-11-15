@@ -17,9 +17,9 @@ The SQLite cleanup correction explicitly closes the corruption-test connection b
 | Command | Behavior |
 | --- | --- |
 | `/weekend [refresh]` | Builds an edition, or reuses a current PASS edition for up to 30 minutes. `refresh` re-runs the bounded checks while preserving HTTP cooldowns. |
-| `/weekendstatus` | Reads the latest recorded edition and displays evidence, dates, held reviews, quality and current export readiness. No network refresh. |
-| `/weekendvoiceover` | Downloads a source-reviewed plain narration file from a current PASS edition. |
-| `/weekendexport` | Downloads schema-2 segments and source metadata, marked `edition_type: weekend_outlook` and `mode: draft_review_required`. |
+| `/weekendstatus` or `/weekend status` | Reads the latest recorded edition and displays evidence, dates, held reviews, quality and current export readiness. |
+| `/weekendvoiceover` or `/weekend voiceover` | Downloads a source-reviewed plain narration file from a current PASS edition. |
+| `/weekendexport` or `/weekend export` | Downloads schema-2 segments and source metadata, marked `edition_type: weekend_outlook` and `mode: draft_review_required`. |
 
 Run `/rundailyagent` first when publisher leads or the calendar snapshot are stale, then `/weekend refresh`. The outlook reads the current shared publisher cache rather than starting another publisher-wide scan. Weekly discovery also reads up to 50 prior daily editions for selected, source-checked disclosures published during this week. These records supply discovery leads; stale observations require a new original article read. Cached bodies with concrete verified facts and reviewed disclosures take priority over headline-only leads, so a prolific or low-yield feed does not consume the six-review budget first. Up to six original disclosure bodies are reviewed, with at most six additional article reads and three weekly benchmark chart reads. Existing timeouts, size bounds and source cooldowns apply. A fresh cached original body keeps its original observation clock; a stale body requires a new original read.
 
@@ -30,6 +30,7 @@ Run `/rundailyagent` first when publisher leads or the calendar snapshot are sta
 - Each admitted original body must match its publisher, complete title and original publication evidence, have a source observation within six hours, and yield at least two concrete fact fields. The selected theme uses up to three distinct publishers. Program stages, existing contract values, planned work and confirmed orders keep their source qualifications.
 - A theme is analyst interpretation of the selected disclosures. Base, stronger and weaker cases are conditions to check, without probabilities, target prices or stock-move causation.
 - Calendar entries must have publisher-verified macro times or issuer-confirmed notice evidence. Only the coming Monday–Friday appears in the main calendar. A later issuer event may appear in a separate horizon up to 14 days after that Friday. For a November 8 build, November 17 falls beyond November 9–13. Estimated earnings dates are excluded. Initial claims, continuing claims and the four-week average at the same verified DOL time are grouped as one weekly claims release. Missing days mean missing verified coverage.
+- When a previously verified issuer notice drops out of the current feed, the outlook can recheck up to three original issuer pages from recent Daily Briefs and Weekend Outlooks. It keeps the original publication date and records the observation time from the recheck. The date and any previously verified time must match, and current publisher conflicts and cancellations still apply. Recheck failures appear in `/weekend status`.
 
 ## Quality, storage and export
 

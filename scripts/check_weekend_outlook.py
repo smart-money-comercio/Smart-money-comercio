@@ -26,7 +26,7 @@ from scripts.check_news_editor import candidate
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
 from scripts.check_daily_news_brief import assert_fixture_connections_closed
 from src.intelligence import weekend_inputs as inputs, weekend_store as store, weekend_theme as themes
-from src.intelligence import news_editor as editor, calendar_sources, ipo_monitor, weekend_ipo
+from src.intelligence import news_editor as editor, calendar_sources, company_schedule, ipo_monitor, weekend_ipo
 from src.intelligence import special_alert_sources
 from src.reports import weekend_outlook as report, daily_voiceover
 from src.commands import weekend_commands as commands
@@ -58,6 +58,11 @@ def notice(day=17):
         url="https://nvidianews.nvidia.com/news/synthetic-quarterly-conference-call",
         published="2026-11-03T16:00:00+00:00",source="NVIDIA Newsroom",source_checked_at=NOW.isoformat(),
         excerpt_scope="publisher feed excerpt",source_excerpt=f"NVIDIA will host its earnings conference call on November {day}, 2026 at 5:00 p.m. Eastern Time.")
+
+
+def original_notice_page(row, text=None):
+    return (f'<h1>{escape(row["title"])}</h1><div class="article-date">November 3, 2026</div>'
+            f'<div class="article-body"><p>{escape(text or row["source_excerpt"])}</p></div>')
 
 
 def calendar():
@@ -309,6 +314,68 @@ class CalendarChecks(unittest.TestCase):
     def test_conflicting_issuer_notices_are_held(self):
         row=self.packet(raw=[notice(10),{**notice(11),"url":notice()["url"]+"-other"}])
         self.assertFalse(row["company"]);self.assertFalse(row["later"])
+
+    def recheck(self, raw=(), fetch=None, notices=None):
+        at = NOW + timedelta(days=6)
+        row = notice()
+        previous = company_schedule.notices([row], NOW) if notices is None else notices
+        if fetch is None:
+            fetch = Mock(side_effect=lambda url: {"status": "ok", "url": url, "body": original_notice_page(row),
+                                                  "fetched_at_epoch": at.timestamp()})
+        snapshot = {"checked_at": at.isoformat(), "days": [], "economic": [], "issues": []}
+        packet = inputs.calendar_packet(list(raw), inputs.window(at), at, snapshot,
+                                       notice_history=[(NOW.isoformat(), previous)], notice_fetch=fetch)
+        self.assertEqual(inputs.checked_calendar(packet, inputs.window(at), at), packet)
+        return packet, fetch
+
+    def test_missing_issuer_notice_moves_from_prior_horizon_into_current_week(self):
+        packet, fetch = self.recheck()
+        recovered, = packet["company"]
+        fetch.assert_called_once_with(notice()["url"])
+        self.assertEqual(recovered["event_at"], "2026-11-17T17:00:00-05:00")
+        self.assertEqual(recovered["source"]["published"], notice()["published"])
+        self.assertEqual(recovered["source"]["source_checked_at"], (NOW + timedelta(days=6)).isoformat())
+        self.assertEqual(recovered["source"]["excerpt_scope"], "original release excerpt")
+        self.assertFalse(packet["later"])
+
+    def test_current_issuer_notice_avoids_an_archive_read(self):
+        row = {**notice(), "source_checked_at": (NOW + timedelta(days=6)).isoformat()}
+        packet, fetch = self.recheck(raw=[row])
+        self.assertEqual(len(packet["company"]), 1)
+        fetch.assert_not_called()
+
+    def test_current_cancellation_blocks_recovered_notice(self):
+        at = NOW + timedelta(days=6, hours=-1)
+        row = {**notice(), "published": at.isoformat(), "source_checked_at": at.isoformat(),
+               "title": "NVIDIA postpones earnings call", "url": notice()["url"] + "-update"}
+        packet, _ = self.recheck(raw=[row])
+        self.assertFalse(packet["company"])
+
+    def test_changed_or_unavailable_original_stays_out_of_the_calendar(self):
+        at = NOW + timedelta(days=6)
+        row = notice()
+        good = {"status": "ok", "url": row["url"], "body": original_notice_page(row),
+                "fetched_at_epoch": at.timestamp()}
+        failures = (
+            ({"status": "error", "error": "HTTPError 403"}, "HTTPError 403"),
+            ({**good, "final_url": row["url"] + "-different"}, "redirected"),
+            ({**good, "fetched_at_epoch": NOW.timestamp()}, "stale"),
+            ({**good, "body": original_notice_page(row, row["source_excerpt"].replace("5:00", "6:00"))},
+             "no longer verifies"),
+        )
+        for response, issue in failures:
+            with self.subTest(issue=issue):
+                packet, _ = self.recheck(fetch=Mock(return_value=response))
+                self.assertFalse(packet["company"])
+                self.assertTrue(any(issue in note for note in packet["issues"]))
+
+    def test_archived_issuer_reads_are_bounded_and_duplicate_urls_are_collapsed(self):
+        archived = [company_schedule.parse_notice({**notice(), "url": notice()["url"] + str(i)}, NOW)
+                    for i in range(6)]
+        packet, fetch = self.recheck(notices=archived + archived, fetch=Mock(return_value={"status": "error"}))
+        self.assertFalse(packet["company"])
+        self.assertEqual(fetch.call_count, inputs.MAX_NOTICE_RECHECKS)
+        self.assertEqual(len({call.args[0] for call in fetch.call_args_list}), 3)
 
     def test_official_fed_cache_fills_a_day_outside_the_daily_snapshot(self):
         snapshot = {"checked_at": NOW.isoformat(), "days": [], "economic": [], "issues": []}
@@ -667,6 +734,25 @@ class StorageCommandChecks(unittest.TestCase):
             asyncio.run(commands.weekendexport_command(SimpleNamespace(message=message),SimpleNamespace(args=[])))
         packet=json.loads(message.reply_document.call_args.kwargs["document"].getvalue())
         self.assertEqual(packet["edition_type"],"weekend_outlook");self.assertTrue(packet["review_required"])
+
+    def test_spaced_commands_access_the_same_edition_without_rebuilding(self):
+        row = edition()
+        for argument, filename in (("status", None), ("voiceover", "weekend_voiceover.txt"),
+                                   ("export", "weekend_outlook_2026-11-08.json")):
+            with self.subTest(argument=argument):
+                message = self.message()
+                with patch.object(commands, "latest", return_value=row) as latest, \
+                        patch.object(report, "build", side_effect=AssertionError("Read only")), \
+                        patch.object(commands, "datetime") as clock:
+                    clock.now.return_value = NOW
+                    asyncio.run(commands.weekend_command(SimpleNamespace(message=message), SimpleNamespace(args=[argument])))
+                if filename:
+                    latest.assert_called_once_with(publishable=True)
+                    self.assertEqual(message.reply_document.call_args.kwargs["filename"], filename)
+                else:
+                    latest.assert_called_once_with()
+                    self.assertIn("Weekend Outlook Quality", message.reply_text.call_args_list[0].args[0])
+                    message.reply_document.assert_not_called()
 
     def test_unavailable_export_sends_no_document(self):
         message=self.message()
