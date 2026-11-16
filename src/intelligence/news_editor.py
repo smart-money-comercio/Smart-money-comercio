@@ -789,6 +789,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Earnings context lost its admitted source record")
         if analyst_review.get("intel_results_baseline") is not None and analyst_review["intel_results_baseline"] != plan.get("intel_results_baseline"):
             raise ValueError("Intel results benchmark lost its admitted source record")
+        if analyst_review.get("watchlist_baseline") != plan.get("watchlist_baseline"):
+            raise ValueError("Watchlist follow-through lost its admitted prior edition")
         validate_review(analyst_review, research_report, report, selected)
         if analyst_review.get("business_version", 0) != plan.get("business_version", 0):
             raise ValueError("Business review version does not match the editorial plan")
@@ -964,6 +966,15 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     notice = watch["notice"] if watch["phase"] == "preview" else watch["preview"]["notice"]
                     link = source(watch, selected_stories(record))["url"]
                     lines.append(f"Earnings watch: {notice['symbol']} — {watch['phase']} | event {notice['event_date']} | {link}")
+                comparison = analysis["evidence"].get("watchlist_follow_through")
+                if comparison:
+                    from src.intelligence.watchlist_breadth import SOURCE_SECTION
+
+                    if any(SOURCE_SECTION in row["sources"] for row in analysis["insights"]):
+                        lines.append(
+                            f"Watchlist follow-through: {comparison['previous_session']} to {comparison['session']}"
+                            f" | {len(comparison['symbols'])} matched names | prior edition {comparison['edition_id']}"
+                        )
                 for context in analysis["evidence"].get("earnings_context", []):
                     lines.append("Dated earnings context: " + context["symbol"] + " — " + context["source"] + "; release " + context["release_date"]
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")

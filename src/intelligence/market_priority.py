@@ -163,6 +163,13 @@ def watching(evidence):
         rows = concise_checks(evidence, rows, lead_event)
     if evidence.get("business_version", 0) >= 3:
         rows = named_checks(evidence, rows, lead_event)
+    if comparison := evidence.get("watchlist_follow_through"):
+        from src.intelligence import watchlist_breadth
+
+        for row in rows:
+            if row["id"] == "watch_participation":
+                row.update(text=watchlist_breadth.watch_copy(comparison),
+                           sources=["Market Snapshot", watchlist_breadth.SOURCE_SECTION])
     return rows[:evidence.get("reader_limit",3)]
 
 

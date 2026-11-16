@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from itertools import combinations, product
 import re
+from sqlite3 import Error as SQLiteError
 from zoneinfo import ZoneInfo
 
 from src.intelligence.calendar_context import checked_time, publishers
 from src.intelligence.company_catalyst_context import build_company_catalyst_brief
 from src.intelligence import news_editor as editor
-from src.intelligence import earnings_watch
+from src.intelligence import earnings_watch, news_editor_store, watchlist_breadth
 from src.intelligence.daily_brief_analysis import analyze_report, retained_review
 from src.intelligence.market_brief import MIN_MARKET_WORDS, MAX_MARKET_WORDS, story_topics, word_count
 from src.intelligence.market_priority import order_in_takeaway, selloff
@@ -263,7 +264,14 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         notes[0] = "See company rankings, trade-plan conditions and risk checks in /fullreport · /tradeplans"
     initial_stories = sorted(editor.selected_stories(plan), key=editor.news_order)
     from src.intelligence.company_focus import history_context
-    focus_history = history_context(now)
+    try:
+        past_editions = news_editor_store.read_editions(limit=news_editor_store.MAX_EDITIONS)
+    except (OSError, ValueError, TypeError, SQLiteError):
+        past_editions = []
+    focus_history = history_context(now, past_editions)
+    watchlist_baseline = watchlist_breadth.prior_edition(research_report, past_editions, now)
+    if watchlist_baseline:
+        plan["watchlist_baseline"] = watchlist_baseline
     chosen = None
     last_result = None
     recent = plan.get("earnings_context_candidates") or None
@@ -283,7 +291,12 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             retained = [initial_stories[index] for index in indexes]
             watch = followup if followup and any(story["id"] == followup["story_id"] for story in retained) else preview
             comparison = earnings_watch.comparison_text(watch) if watch and watch.get("guidance_comparison") else ""
-            analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit, earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0), intel_results_baseline=intel_baseline, earnings_watch=watch)
+            analysis = analyze_report(
+                research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit},
+                narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit,
+                earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0),
+                intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
+            )
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")

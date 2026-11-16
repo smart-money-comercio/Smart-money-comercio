@@ -758,6 +758,7 @@ def collect_watchlist_movers(symbols: list[str], quotes: dict) -> list[dict]:
                 "asof": quote.get("asof"),
                 "session_date": quote.get("session_date"),
                 "previous_session_date": quote.get("previous_session_date"),
+                "quote_timing": quote.get("quote_timing"),
             }
         )
 
@@ -2184,8 +2185,10 @@ Research only. Not financial advice.
     )
     from src.reports.report_quality import MAX_DAILY_REPORT_CHARS
     from src.intelligence.special_alert_context import attach_daily_special_alerts
+    from src.intelligence.watchlist_breadth import attach_completed_closes
     report = attach_daily_special_alerts(final_report.strip(), MAX_DAILY_REPORT_CHARS, now)
-    return attach_daily_research(report, research, MAX_DAILY_REPORT_CHARS)
+    report = attach_daily_research(report, research, MAX_DAILY_REPORT_CHARS)
+    return attach_completed_closes(report, movers, MAX_DAILY_REPORT_CHARS)
 
 
 def build_daily_report() -> str:

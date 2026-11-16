@@ -41,15 +41,16 @@ def company(symbol) -> bool:
     return isinstance(symbol, str) and bool(re.fullmatch(r"[A-Z][A-Z0-9]{0,5}", symbol)) and symbol not in FUNDS
 
 
-def history_context(now: datetime) -> dict:
+def history_context(now: datetime, records=None) -> dict:
     """Read recent built editions once; repeated builds today do not cause churn."""
-    from src.intelligence.news_editor_store import read_editions
     today = now.astimezone(NY).date()
     days = {}
-    try:
-        records = read_editions(200)
-    except Exception:
-        records = []
+    if records is None:
+        from src.intelligence.news_editor_store import read_editions
+        try:
+            records = read_editions(200)
+        except Exception:
+            records = []
     for record in records:
         at = timestamp(record.get("generated_at"))
         if at is None or not 1 <= (today-at.astimezone(NY).date()).days <= 7:

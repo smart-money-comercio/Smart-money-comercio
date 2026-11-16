@@ -3,10 +3,12 @@
 from contextlib import ExitStack
 from copy import deepcopy
 import argparse
+from datetime import datetime, timezone
 import socket
 import sys
 from pathlib import Path
 import json
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -15,9 +17,10 @@ sys.path.insert(0, str(ROOT))
 from scripts.check_daily_news_brief import IsolatedChecks, NOW
 from scripts.check_event_news import quote
 from scripts.check_news_editor import candidate
+from scripts.check_report_consistency import BuilderConsistencyChecks, enriched_ranked_stocks
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
-from src.intelligence import daily_brief_analysis as analysis, market_event_desk as events, news_editor as editor, news_editor_store as store
-from src.reports import daily_news_brief as news
+from src.intelligence import daily_brief_analysis as analysis, market_event_desk as events, news_editor as editor, news_editor_store as store, watchlist_breadth
+from src.reports import daily_news_brief as news, daily_report, daily_voiceover
 
 
 def section(text, header):
@@ -37,6 +40,68 @@ class ReaderChecks(IsolatedChecks):
         if status:
             events.review_quotes({"GOOGL": quote()}, lambda _: quote(), NOW)
         return self.research(replacements={"Watchlist Movers": "Largest regular-session movers:\n• GOOGL: $88.00 (-12.00%)"})
+
+    def close_report(self, at, session, previous, moves, *, timing="completed_session"):
+        quotes = {
+            symbol: {"ok": True, "price": 100 + move, "change_percent": move, "session_date": session,
+                     "previous_session_date": previous, "quote_timing": timing, "asof": session + "T20:00:00+00:00"}
+            for symbol, move in moves.items()
+        }
+        report = BuilderConsistencyChecks.build_daily_fixture(
+            SimpleNamespace(daily=daily_report), at, ranked=enriched_ranked_stocks(), quotes=quotes,
+        )
+        return report.replace(
+            "• Focus: NVDA; confirm before acting.",
+            "- Main theme: Oil / inflation risk.\n"
+            "- Market moves: S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.",
+        )
+
+    def test_watchlist_follow_through_uses_only_names_quoted_at_both_closes(self):
+        friday = datetime(2026, 10, 23, 21, tzinfo=timezone.utc)
+        monday = datetime(2026, 10, 26, 21, tzinfo=timezone.utc)
+        before = self.close_report(friday, "2026-10-23", "2026-10-22",
+                                   {"NVDA": -1, "MSFT": -1, "GOOGL": -1, "CIBR": 2, "META": -1})
+        first_edition = self.record(self.render(report=before))
+        self.assertNotIn("Watchlist follow-through", first_edition["report_text"])
+        after = self.close_report(monday, "2026-10-26", "2026-10-23",
+                                  {"NVDA": 1, "MSFT": 1, "GOOGL": -1, "CIBR": 0, "AMD": -1})
+        self.assertIn("Watchlist closes vs 2026-10-23 — AMD down, CIBR flat", after)
+        text = self.render(report=after)
+        watch = section(text, "What We're Watching")
+        result = "Of 4 watchlist names quoted at both closes, 3 finished lower on October 23 and 1 on October 26."
+        self.assertIn("Watchlist follow-through — " + result, watch)
+        self.assertIn("at least 3 advances at the next close", watch)
+        self.assertNotIn("Watchlist breadth —", watch)
+        record = self.record(text)
+        follow_through = record["analyst_review"]["evidence"]["watchlist_follow_through"]
+        self.assertEqual(follow_through["symbols"], ["CIBR", "GOOGL", "MSFT", "NVDA"])
+        self.assertEqual(follow_through["edition_id"], first_edition["id"])
+        self.assertIn("2026-10-23 to 2026-10-26 | 4 matched names | prior edition " + first_edition["id"],
+                      editor.build_editor_status())
+        self.assertIn("Of four watchlist names quoted at both closes, three finished lower on October twenty third "
+                      "and one on October twenty sixth.", daily_voiceover.checked(record)["script"])
+        altered = deepcopy(record["analyst_review"])
+        altered["evidence"]["watchlist_follow_through"]["previous_down"] = 1
+        with self.assertRaisesRegex(ValueError, "evidence does not match"):
+            analysis.validate_review(altered, after, text, editor.selected_stories(record))
+
+        rerun = self.render(report=after.replace("17:00:00 America/New_York", "17:10:00 America/New_York"))
+        self.assertIn(result, rerun)
+        self.assertEqual(self.record(rerun)["analyst_review"]["watchlist_baseline"]["edition_id"], first_edition["id"])
+
+    def test_watchlist_waits_for_a_comparable_completed_close(self):
+        friday = datetime(2026, 10, 23, 21, tzinfo=timezone.utc)
+        monday = datetime(2026, 10, 26, 21, tzinfo=timezone.utc)
+        self.render(report=self.close_report(friday, "2026-10-23", "2026-10-22", {"NVDA": -1, "MSFT": 1}))
+        intraday = self.close_report(monday.replace(hour=18), "2026-10-26", "2026-10-23",
+                                     {"NVDA": 1, "MSFT": -1}, timing="regular_session")
+        later = self.close_report(monday.replace(day=27), "2026-10-27", "2026-10-26", {"NVDA": 1, "MSFT": -1})
+        disjoint = self.close_report(monday, "2026-10-26", "2026-10-23", {"NVDA": 1, "AMD": -1})
+        for report in (intraday, later, disjoint):
+            with self.subTest(report=watchlist_breadth.market_snapshot(report)):
+                self.assertNotIn("Watchlist follow-through", self.render(report=report))
+        bad_counts = later.replace("Breadth: 1 up / 1 down / 2 quoted", "Breadth: 2 up / 0 down / 2 quoted")
+        self.assertIsNone(watchlist_breadth.closing_snapshot(watchlist_breadth.market_snapshot(bad_counts)))
 
     def test_takeaway_follows_greeting_and_precedes_every_news_section(self):
         text = self.render()

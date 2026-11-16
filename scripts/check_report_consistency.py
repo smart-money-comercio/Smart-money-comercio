@@ -400,19 +400,20 @@ class BuilderConsistencyChecks(unittest.TestCase):
         self.assertIn("Setup Risk: Unavailable", report)
         self.assertNotIn("Risk Profile:", report)
 
-    def build_daily_fixture(self, when, calendar_report=None, ranked=None):
+    def build_daily_fixture(self, when, calendar_report=None, ranked=None, *, quotes=None):
         class FixedDatetime(datetime):
             @classmethod
             def now(cls, tz=None):
                 return when.astimezone(tz) if tz else when.replace(tzinfo=None)
 
+        watchlist = (list(quotes), quotes) if quotes is not None else ([stock["ticker"] for stock in STOCKS], {})
         replacements = {
             "datetime": FixedDatetime,
             "REPORT_TIMEZONE": "America/New_York",
             "MARKET_TIMEZONE": "America/New_York",
             "get_stock_scores": lambda: deepcopy(STOCKS),
             "load_global_context": lambda: dict.fromkeys(("vix", "oil", "tlt", "russell", "nasdaq", "sp500", "gold"), 0),
-            "fetch_watchlist_quotes": lambda context: ([stock["ticker"] for stock in STOCKS], {}),
+            "fetch_watchlist_quotes": lambda context: watchlist,
             "record_watchlist_evolution_day": lambda *args, **kwargs: None,
             "rank_daily_opportunities": lambda **kwargs: deepcopy(ranked) if ranked is not None else ranked_stocks(),
             "build_allocation_snapshot_section": lambda **kwargs: "Portfolio Allocation Snapshot\nPosture: Watchlist.",
