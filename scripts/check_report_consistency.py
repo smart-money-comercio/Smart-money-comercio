@@ -413,7 +413,7 @@ class BuilderConsistencyChecks(unittest.TestCase):
             "MARKET_TIMEZONE": "America/New_York",
             "get_stock_scores": lambda: deepcopy(STOCKS),
             "load_global_context": lambda: dict.fromkeys(("vix", "oil", "tlt", "russell", "nasdaq", "sp500", "gold"), 0),
-            "fetch_watchlist_quotes": lambda context: watchlist,
+            "fetch_watchlist_quotes": lambda context, **kwargs: watchlist,
             "record_watchlist_evolution_day": lambda *args, **kwargs: None,
             "rank_daily_opportunities": lambda **kwargs: deepcopy(ranked) if ranked is not None else ranked_stocks(),
             "build_allocation_snapshot_section": lambda **kwargs: "Portfolio Allocation Snapshot\nPosture: Watchlist.",

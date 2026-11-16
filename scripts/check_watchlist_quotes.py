@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -12,18 +13,21 @@ import tempfile
 from pathlib import Path
 import socket
 import sys
+from types import SimpleNamespace
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
+from scripts.check_news_editor import candidate
 from src.commands import watchlist_commands as watchlist
 from src.reports import daily_report
 from src.reports import morning_brief_intro
-from src.intelligence import research_context
+from src.intelligence import research_context, watchlist_evolution
 from src.utils import yahoo_quote
+from src.utils.watchlist_store import DEFAULT_WATCHLIST
 from src.utils.yahoo_quote import QuoteDataError, parse_regular_quote
 
 
@@ -61,6 +65,78 @@ def market_row(symbol, move, clock=NOW):
                 "timestamp": [previous_stamp.timestamp(), start.timestamp()],
                 "indicators": {"quote": [{"close": [100, None]}]}}
     return {"symbol": symbol, "move": move, "quote_evidence": evidence}
+
+
+class ResearchWatchlistChecks(unittest.TestCase):
+    def test_daily_report_quotes_pins_core_and_ranked_names_and_focus_explains_them(self):
+        manual = [*DEFAULT_WATCHLIST, "SPCX", "SONY"]
+        scores = [{"ticker": "TSM", "final_score": 86.2}, {"ticker": "PEP", "score": 81.5},
+                  {"ticker": "GOOG", "final_score": 99}, {"ticker": "BAD", "final_score": float("inf")}]
+        context = {"scores": scores, "headline_themes": ["AI / Chips"]}
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "WATCHLIST_EVOLUTION_MEMORY_FILE": str(Path(temporary) / "watchlist-evolution.json"),
+            "MARKET_EVENT_STATE_FILE": str(Path(temporary) / "market-events.json"),
+            "SPECIAL_ALERT_SYMBOLS": "TSLA,NVDA,MSFT,AVGO,PLTR,AVAV,KTOS,CRWD",
+        }), patch("src.intelligence.company_schedule.cached_notices", return_value=[]):
+            path = watchlist_evolution.memory_path()
+            # The old writer used the host date, which can already be Tuesday
+            # in UTC when a new Monday evening edition is built in New York.
+            path.write_text(json.dumps({"days": [
+                {"date": "2026-10-18", "selected_symbols": ["GOOG"]},
+                {"date": "2026-10-20", "selected_symbols": ["TSLA"]},
+            ]}))
+            with patch.object(daily_report, "load_watchlist", return_value=manual), \
+                    patch.object(daily_report, "DAILY_REPORT_LIVE_QUOTES", True), \
+                    patch.object(daily_report, "fetch_quotes_for_symbols", return_value={}) as quotes:
+                symbols, _ = daily_report.fetch_watchlist_quotes(context, now=NOW)
+            self.assertEqual(symbols[:len(manual)], manual)
+            self.assertEqual(len(symbols), 20)
+            self.assertTrue({"AVAV", "KTOS", "PLTR", "CRWD", "LMT", "TSM", "PEP"}.issubset(symbols))
+            self.assertTrue({"GOOG", "BAD"}.isdisjoint(symbols))
+            quotes.assert_called_once_with(symbols)
+
+            watchlist_evolution.record_watchlist_evolution_day(symbols, context, now=NOW)
+            watchlist_evolution.record_watchlist_evolution_day(["AMD"], {}, now=NOW - timedelta(minutes=5))
+            saved = path.read_bytes()
+            self.assertEqual(watchlist_evolution.load_watchlist_evolution_memory()["days"][0]["selected_symbols"], ["GOOG"])
+            update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+            with patch.object(watchlist, "is_admin", return_value=True), \
+                    patch.object(watchlist, "get_current_chat_id", return_value=1), \
+                    patch.object(watchlist, "fetch_quotes_for_symbols") as fetch:
+                asyncio.run(watchlist.watchlist_command(update, SimpleNamespace(args=["focus"])))
+            text = update.message.reply_text.await_args.args[0]
+            self.assertIn("• CRWD — Core cybersecurity research", text)
+            self.assertIn("• PEP — Model score 81.5/100", text)
+            self.assertEqual([line.split(" — ", 1)[0][2:] for line in text.splitlines() if line.startswith("• ")], symbols)
+            self.assertEqual(path.read_bytes(), saved)
+            fetch.assert_not_called()
+
+    def test_only_confirmed_near_term_issuer_earnings_get_a_rotation_slot(self):
+        def notice(symbol, date, official=True):
+            return candidate(symbol, title=f"{symbol} Sets Date for Quarterly Financial Results",
+                             source_excerpt=f"{symbol} will report its financial results on {date} at 4:30 p.m. ET. "
+                             "The release will be available from the investor relations site.",
+                             published=(NOW - timedelta(days=1)).isoformat(), source_checked_at=NOW.isoformat(),
+                             official=official, excerpt_scope="original release excerpt")
+
+        near = notice("AMD", "Tuesday, October 20, 2026")
+        distant = notice("MSFT", "Wednesday, October 28, 2026")
+        unconfirmed = notice("INTC", "Wednesday, October 21, 2026", official=False)
+        scores = [{"ticker": "PEP", "final_score": 80}, {"ticker": "INTC", "final_score": 60}]
+        with patch.dict(os.environ, {"SPECIAL_ALERT_SYMBOLS": ""}), \
+                patch("src.intelligence.news_editor.cache_candidates", return_value=([unconfirmed, distant, near], [])):
+            rows = watchlist_evolution.build_watchlist_selection(["SPY", "QQQ"], {}, scores, 9, now=NOW)
+        self.assertEqual([row["symbol"] for row in rows[-2:]], ["AMD", "PEP"])
+        self.assertEqual(rows[-2]["reason"], "Upcoming issuer-confirmed earnings")
+        self.assertEqual(rows[-2]["earnings"]["date"], "2026-10-20")
+        self.assertEqual(rows[-2]["earnings"]["url"], near["url"])
+
+    def test_explicit_share_classes_keep_their_places_at_the_cap(self):
+        with patch("src.intelligence.company_schedule.cached_notices", return_value=[]):
+            symbols = watchlist_evolution.build_evolved_watchlist_universe(
+                ["GOOG", "$googl", "spy", "SPY", "QQQ"], max_symbols=3,
+            )
+        self.assertEqual(symbols, ["GOOG", "GOOGL", "SPY"])
 
 
 class QuoteChecks(unittest.TestCase):

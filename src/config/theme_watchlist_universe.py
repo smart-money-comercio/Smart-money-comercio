@@ -11,6 +11,15 @@ CORE_PORTFOLIO_TICKERS = [
     "PLTR",
 ]
 
+# Tier 1 in Docs/Defense_watchlist.md.
+CORE_DEFENSE_RESEARCH = {
+    "AVAV": "Core defense research",
+    "KTOS": "Core defense research",
+    "PLTR": "Core defense software research",
+    "CRWD": "Core cybersecurity research",
+    "LMT": "Core defense prime research",
+}
+
 THEME_TICKERS = {
     "AI / Chips": [
         "NVDA",

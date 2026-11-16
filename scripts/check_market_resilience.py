@@ -436,7 +436,8 @@ class EditionChecks(IsolatedChecks):
                 patch.object(events, "datetime", wraps=datetime) as event_clock, \
                 patch("src.commands.watchlist_commands.urllib.request.urlopen", side_effect=read), \
                 patch.object(daily_report, "load_watchlist", return_value=[]), \
-                patch.object(daily_report, "build_evolved_watchlist_universe", return_value=list(prices)), \
+                patch.object(daily_report, "build_watchlist_selection",
+                             return_value=[{"symbol": symbol, "reason": "Fixture"} for symbol in prices]), \
                 patch.object(daily_report, "DAILY_REPORT_LIVE_QUOTES", True):
             chart_clock.now.return_value = event_clock.now.return_value = NOW
             symbols, quotes = daily_report.fetch_watchlist_quotes()

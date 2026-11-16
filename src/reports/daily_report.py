@@ -12,47 +12,8 @@ from src.reports.daily_intelligence_sources import (
     build_daily_intelligence_stack_line,
 )
 from src.commands.watchlist_commands import fetch_quotes_for_symbols
-
-try:
-    from src.config.theme_watchlist_universe import build_relevant_watchlist
-except Exception:
-    def build_relevant_watchlist(
-        manual_symbols=None,
-        context=None,
-        scores=None,
-        max_symbols=20,
-    ):
-        symbols = manual_symbols or []
-        return symbols[:max_symbols]
-
-try:
-    from src.intelligence.watchlist_evolution import (
-        build_evolved_watchlist_universe,
-        record_watchlist_evolution_day,
-    )
-except Exception:
-    def build_evolved_watchlist_universe(
-        manual_symbols=None,
-        context=None,
-        scores=None,
-        max_symbols=20,
-    ):
-        try:
-            return build_relevant_watchlist(
-                manual_symbols=manual_symbols,
-                context=context,
-                scores=scores,
-                max_symbols=max_symbols,
-            )
-        except Exception:
-            symbols = manual_symbols or []
-            return symbols[:max_symbols]
-
-    def record_watchlist_evolution_day(
-        watchlist_symbols=None,
-        context=None,
-    ):
-        return None
+from src.config.theme_watchlist_universe import build_relevant_watchlist
+from src.intelligence.watchlist_evolution import build_watchlist_selection, record_watchlist_evolution_day
 
 from src.intelligence.ai_summary_engine import build_evolving_ai_summary
 from src.reports.top10_report import (
@@ -669,32 +630,29 @@ def get_quote_change_percent(quote: dict | None):
     )
 
 
-def fetch_watchlist_quotes(context: dict | None = None) -> tuple[list[str], dict]:
+def fetch_watchlist_quotes(context: dict | None = None, *, now: datetime | None = None) -> tuple[list[str], dict]:
     try:
         manual_symbols = load_watchlist()
     except Exception:
         manual_symbols = []
 
-    context = context or {}
-    scores = context.get("scores", []) if isinstance(context, dict) else []
+    context = context if isinstance(context, dict) else {}
+    context.pop("_watchlist_selection", None)
 
     try:
-        symbols = build_evolved_watchlist_universe(
+        selection = build_watchlist_selection(
             manual_symbols=manual_symbols,
             context=context,
-            scores=scores,
+            scores=context.get("scores"),
             max_symbols=MAX_RELEVANT_WATCHLIST,
+            now=now,
         )
-    except Exception:
-        try:
-            symbols = build_relevant_watchlist(
-                manual_symbols=manual_symbols,
-                context=context,
-                scores=scores,
-                max_symbols=MAX_RELEVANT_WATCHLIST,
-            )
-        except Exception:
-            symbols = manual_symbols[:MAX_RELEVANT_WATCHLIST]
+        symbols = [row["symbol"] for row in selection]
+        context["_watchlist_selection"] = selection
+    except (OSError, TypeError, ValueError, KeyError, AttributeError):
+        symbols = build_relevant_watchlist(
+            current_symbols=manual_symbols, context=context, max_symbols=MAX_RELEVANT_WATCHLIST,
+        )
 
     symbols = [
         str(symbol).strip().upper()
@@ -1787,8 +1745,8 @@ def build_research_report() -> str:
     global_context = load_global_context()
     global_context["scores"] = scores
 
-    watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes(global_context)
-    record_watchlist_evolution_day(watchlist_symbols, global_context)
+    watchlist_symbols, watchlist_quotes = fetch_watchlist_quotes(global_context, now=now)
+    record_watchlist_evolution_day(watchlist_symbols, global_context, now=now)
 
     movers = collect_watchlist_movers(watchlist_symbols, watchlist_quotes)
     from src.intelligence.research_context import align_report_sessions

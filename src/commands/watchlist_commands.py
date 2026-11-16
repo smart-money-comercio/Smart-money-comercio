@@ -702,6 +702,7 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "📋 Smart Money AI Watchlist\n\n"
             f"{format_watchlist(symbols)}\n\n"
             "Commands:\n"
+            "/watchlist focus\n"
             "/watchlist report\n"
             "/watchlist movers\n"
             "/watchlist alerts\n"
@@ -724,6 +725,12 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "📋 Smart Money AI Watchlist\n\n"
             f"{format_watchlist(symbols)}"
         )
+        return
+
+    if action == "focus":
+        from src.intelligence.watchlist_evolution import build_watchlist_focus_report
+
+        await send_split_message(update, await asyncio.to_thread(build_watchlist_focus_report))
         return
 
     if action in ["report", "summary", "prices"]:
@@ -852,6 +859,7 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "Available commands:\n"
         "/watchlist\n"
         "/watchlist list\n"
+        "/watchlist focus\n"
         "/watchlist report\n"
         "/watchlist movers\n"
         "/watchlist alerts\n"
