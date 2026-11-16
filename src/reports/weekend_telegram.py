@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 
 from src.intelligence import business_analysis, calendar_sources, weekend_business, weekend_inputs, weekend_theme
 from src.intelligence.daily_brief_analysis import NAMES
-from src.reports import weekend_narration
+from src.reports import weekend_narration, weekend_watch
 from src.reports.weekend_outlook import day_label
 from src.utils.market_quote_source import BENCHMARKS
 
@@ -210,13 +210,15 @@ def sunday_takeaway(inputs: dict, theme: dict | None) -> str:
 def sunday_outlook(inputs: dict, theme: dict | None) -> tuple[list[str], list[tuple[str, str]]]:
     window, packet = inputs["window"], inputs["calendar"]
     agenda = defaultdict(list)
-    sources = []
+    premarket, sources = weekend_watch.premarket_watch(inputs)
+    families = set()
     for row in packet["macro"]:
         at = weekend_inputs.clock(row["at"]).astimezone(weekend_inputs.NY)
         event = " ".join(row["event"].split()).rstrip(".")
         line = f"• {time_label(at)} · {event}"
         family = ("claims" if event == "Weekly jobless claims" and row["publisher"] == "DOL"
                   else calendar_sources.category(event, row["publisher"]))
+        families.add(family)
         focus = weekend_narration.MACRO_FOCUS.get(family)
         if focus:
             line += f"\n  {focus[1]}"
@@ -252,8 +254,16 @@ def sunday_outlook(inputs: dict, theme: dict | None) -> tuple[list[str], list[tu
     sections = [
         f"{day_label(window['next_start'])} to {day_label(window['next_end'])}",
         "The takeaway\n" + sunday_takeaway(inputs, theme),
+        premarket,
         "Calendar and catalyst checks\n\n" + "\n\n".join([*days, coverage]),
     ]
+
+    read = weekend_watch.week_intelligence(families, bool(packet["company"]))
+    if read:
+        sections.append("Week-ahead intelligence\n" + read)
+    defense, defense_sources = weekend_watch.defense_watch(inputs["stories"])
+    sections.append(defense)
+    sources.extend(defense_sources)
 
     ipo = inputs.get("ipo")
     if ipo:

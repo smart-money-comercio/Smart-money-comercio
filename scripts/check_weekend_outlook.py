@@ -929,6 +929,8 @@ class TelegramEditionChecks(unittest.TestCase):
         self.assertNotIn(notice(10)["url"], text)
         self.assertNotIn("The takeaway", text)
         self.assertNotIn("Calendar and catalyst checks", text)
+        self.assertNotIn("Premarket watch", text)
+        self.assertNotIn("Military innovation", text)
 
     def test_saturday_omits_disclosures_published_after_the_completed_week(self):
         from scripts.check_delivery_disclosures import release
@@ -955,9 +957,16 @@ class TelegramEditionChecks(unittest.TestCase):
         self.assertIn("Strong data center sales and steady gross margins would support that case.", takeaway)
         self.assertIn("If sales rise and margins narrow", takeaway)
         self.assertNotIn("5:00 PM", takeaway)
+        self.assertLess(text.index("The takeaway"), text.index("Premarket watch"))
+        self.assertIn("Friday, Nov 6 cash close · S&P 500 +6.00%", text)
+        self.assertIn("as fresh readings become available", text)
+        self.assertIn("Dated futures and ETF checks · /premarket history", text)
+        self.assertIn(row["inputs"]["prices"][0]["proof"]["url"], text)
         self.assertLess(text.index("5:00 PM EST · Nvidia earnings call"), text.index("2:00 PM EST · FOMC Meeting Minutes"))
         self.assertIn("Listen for its data center outlook", text)
         self.assertIn("8:30 AM EST · Weekly jobless claims", text)
+        self.assertIn("Week-ahead intelligence\nThe Fed minutes explain the discussion at the prior meeting.", text)
+        self.assertIn("Softer labor readings alongside weaker company sales guidance", text)
         self.assertIn("Days without verified entries · Monday, Friday", text)
         self.assertIn("Financing watch · Anthropic", text)
         self.assertIn("expected net proceeds if the offering goes ahead", text)
@@ -968,6 +977,47 @@ class TelegramEditionChecks(unittest.TestCase):
         self.assertNotIn("Market scorecard", text)
         self.assertNotIn(URL, text)
         self.assertEqual(report.checked(row), original)
+
+    def test_military_innovation_reports_qualified_stages_and_cites_originals(self):
+        from scripts.check_disclosure_intelligence import source
+
+        ai = source(
+            "CACI", title="CACI announces contract award for military AI software", published=PUBLISHED,
+            text="CACI International Inc. announced it has been awarded a three-year, $64 million contract by the U.S. Air Force. "
+                 "The contract covers artificial intelligence software services for the agency.",
+        )
+        drones = candidate(
+            "AVAV", title="AeroVironment announces military drone procurement contract", published=PUBLISHED,
+            source="AeroVironment Newsroom", url="https://www.avinc.com/illustrative-contract/",
+            excerpt_scope="original release excerpt",
+            source_excerpt="AeroVironment announced it has been awarded a three-year, $16 million contract by the U.S. Army. "
+                           "The contract covers drones and maintenance services.",
+        )
+        cyber = candidate(
+            "CRWD", title="CrowdStrike announces cybersecurity contract award", published=PUBLISHED,
+            source="CrowdStrike Newsroom", url="https://www.crowdstrike.com/en-us/press-releases/illustrative-contract/",
+            excerpt_scope="original release excerpt",
+            source_excerpt="CrowdStrike announced it has been awarded a three-year, $12 million cybersecurity contract. "
+                           "The company provides defensive endpoint security software under the award.",
+        )
+        commercial = source("NVDA", published=PUBLISHED)
+        text = weekend_telegram.render(telegram_edition(raw=[ai, drones, cyber, commercial]), NOW)
+        self.assertIn("Military AI · CACI International announced a contract award valued at $64 million", text)
+        self.assertIn("Drones and counter-drone · AeroVironment announced a contract award valued at $16 million", text)
+        self.assertIn("Cybersecurity · CrowdStrike announced a contract award valued at $12 million", text)
+        for story in (ai, drones, cyber):
+            self.assertIn(story["url"], text)
+        self.assertNotIn(commercial["url"], text)
+
+    def test_defense_business_milestone_remains_qualified_when_topic_coverage_is_thin(self):
+        from scripts.check_delivery_disclosures import release
+
+        lead = release("LMT", published=PUBLISHED)
+        text = weekend_telegram.render(telegram_edition(raw=[lead]), NOW)
+        self.assertIn("Military AI · Watch for funded agency work", text)
+        self.assertIn("Publisher coverage is limited for these technology areas.", text)
+        self.assertIn("Defense industry · Lockheed Martin reported production progress", text)
+        self.assertIn(lead["url"], text)
 
     def test_sunday_takeaway_uses_the_verified_macro_release_when_earnings_are_later(self):
         text = weekend_telegram.render(edition(), NOW)
