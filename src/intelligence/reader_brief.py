@@ -275,7 +275,17 @@ def insights(evidence):
         sources.append("Recent earnings context")
     rows = [{"id": "opening_takeaway", "section": "intro", "text": opening(evidence), "sources": sources}, *watching(evidence)]
     watch = evidence.get("earnings_watch")
-    if watch and watch["phase"] == "results" and not has_earnings_lead:
+    if watch and watch.get("guidance_comparison"):
+        from src.intelligence import earnings_watch
+
+        remainder = [row for row in rows[1:]
+                     if row.get("story_id") != watch["story_id"] and row.get("symbol") != "NVDA"]
+        rows[1:] = [{
+            "id": "watch_nvidia_guidance", "section": "watch", "symbol": "NVDA",
+            "text": "Nvidia (NVDA) — " + earnings_watch.next_guidance_check(watch),
+            "story_id": watch["story_id"], "sources": [earnings_watch.SOURCE_SECTION],
+        }, *remainder[:evidence.get("reader_limit", 3) - 1]]
+    elif watch and watch["phase"] == "results" and not has_earnings_lead:
         from src.intelligence import earnings_watch
 
         rows.append({"id": "watch_earnings_result", "section": "watch",

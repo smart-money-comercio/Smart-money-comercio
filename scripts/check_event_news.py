@@ -248,6 +248,21 @@ class EarningsWatchChecks(IsolatedChecks):
         with patch.object(editor, "cache_candidates", return_value=(list(candidates), [])):
             return build_daily_news_brief(self.research(now=self.preview_at))
 
+    def guidance_response(self, quarter="third", published="August 26, 2026"):
+        from src.intelligence.nvidia_guidance import preceding_release
+
+        title, url = preceding_release(("third", 2027))
+        body = (
+            f'<h1>{title}</h1><div class="article-date">{published}</div>'
+            '<div class="article-body"><p>' + ("Illustrative table cell. " * 310) + "</p>"
+            f"<h2>Outlook</h2><p>NVIDIA’s outlook for the {quarter} quarter of fiscal 2027 is as follows:</p>"
+            "<ul><li>Revenue is expected to be $40.0 billion, plus or minus 2%. Figures are company-wide.</li>"
+            "<li>GAAP and non-GAAP gross margins are expected to be 73.5% and 76.0%, respectively, "
+            "plus or minus 50 basis points.</li></ul></div>"
+        )
+        return {"status": "ok", "url": url, "final_url": url + "/", "body": body,
+                "fetched_at_epoch": self.results_at.timestamp()}
+
     def test_lost_weekend_notice_supplies_daily_lead_source_and_specific_next_check(self):
         observed = self.preview_at - timedelta(hours=2)
         source = self.save_weekend(observed)
@@ -281,7 +296,8 @@ class EarningsWatchChecks(IsolatedChecks):
     def test_result_follows_the_previous_question_with_reported_figures_and_original_link(self):
         self.preview_report([self.scheduled_release(self.preview_at)])
         release = self.result_release()
-        with patch.object(editor, "cache_candidates", return_value=([release], [])):
+        with patch.object(editor, "cache_candidates", return_value=([release], [])), \
+                patch.object(editor.feeds, "fetch_url", return_value={"status": "error"}):
             research = self.research(now=self.results_at)
             text = build_daily_news_brief(research)
         record = store.read_editions(report=text)[0]
@@ -298,6 +314,65 @@ class EarningsWatchChecks(IsolatedChecks):
         with self.assertRaisesRegex(ValueError, "Earnings watch does not match"):
             analysis.validate_review(altered, research, text, editor.selected_stories(record))
 
+    def test_prior_guidance_answers_the_preview_and_carries_both_sources_into_narration(self):
+        from src.intelligence import earnings_watch
+
+        before = self.preview_report([self.scheduled_release(self.preview_at)])
+        self.assertIn("Compare reported revenue and gross margin", before)
+        original = self.guidance_response()
+        release = self.result_release()
+        release["source_excerpt"] += (
+            "\nOutlook\nNVIDIA’s outlook for the fourth quarter of fiscal 2027 is as follows:\n"
+            "GAAP and non-GAAP gross margins are expected to be 75.0%, plus or minus 50 basis points."
+        )
+        with patch.object(editor, "cache_candidates", return_value=([release], [])), \
+                patch.object(editor.feeds, "fetch_url", return_value=original) as fetch:
+            research = self.research(now=self.results_at)
+            text = build_daily_news_brief(research)
+        fetch.assert_called_once_with(original["url"])
+        record = store.read_editions(report=text)[0]
+        watch = record["analyst_review"]["earnings_watch"]
+        self.assertEqual(watch["fiscal_year"], 2027)
+        self.assertEqual(watch["guidance_comparison"]["revenue"]["position"], "above")
+        self.assertEqual(watch["guidance_comparison"]["gaap_margin"]["position"], "below")
+        self.assertLess(text.index(earnings_watch.COMPARISON_HEADER), text.index("Market Update"))
+        self.assertIn("above its original $39.2 billion to $40.8 billion range", text)
+        self.assertIn("GAAP gross margin was 72.1 percent, below the original 73 to 74 percent range.", text)
+        self.assertIn("Management's next-quarter GAAP gross margin guidance is 74.5 to 75.5 percent.", text)
+        self.assertIn("Original guidance source — " + original["url"], text)
+        self.assertIn("Original earnings source — " + release["url"], text)
+        scene = next(row for row in record["voiceover"]["segments"] if row["heading"] == "Earnings Follow-up")
+        self.assertEqual(scene["source_ids"], [watch["story_id"], earnings_watch.GUIDANCE_SOURCE_ID])
+        self.assertTrue(record["voiceover"]["quality"]["passes"])
+        altered = deepcopy(record["analyst_review"])
+        altered["earnings_watch"]["guidance_comparison"]["gaap_margin"]["position"] = "above"
+        with self.assertRaisesRegex(ValueError, "Earnings watch does not match"):
+            analysis.validate_review(altered, research, text, editor.selected_stories(record))
+
+    def test_guidance_capture_withholds_wrong_quarters_late_releases_and_redirects(self):
+        from src.intelligence import nvidia_guidance
+
+        release = self.result_release()
+        for response in (self.guidance_response(quarter="second"),
+                         self.guidance_response(published="November 15, 2026"),
+                         {**self.guidance_response(), "final_url": "https://example.com/copied-release"}):
+            with self.subTest(response=response["final_url"]), self.assertRaises(ValueError):
+                nvidia_guidance.capture(release, self.preview_at, self.results_at, lambda url: response)
+        _, first_quarter_source = nvidia_guidance.preceding_release(("first", 2027))
+        self.assertTrue(first_quarter_source.endswith("fourth-quarter-and-fiscal-2026"))
+
+    def test_guidance_compares_millions_on_the_same_basis_and_includes_the_bounds(self):
+        from src.intelligence import nvidia_guidance
+
+        example = self.guidance_response()
+        example["body"] = example["body"].replace("73.5% and 76.0%, respectively", "74.0%")
+        proof = nvidia_guidance.capture(self.result_release(), self.preview_at, self.results_at, lambda url: example)
+        comparisons = nvidia_guidance.comparisons(
+            proof, {"revenue": "$40,800 million", "gaap_margin": "73.5"}, ("third", 2027),
+        )
+        self.assertEqual(comparisons["revenue"]["position"], "within")
+        self.assertEqual(comparisons["gaap_margin"]["position"], "within")
+        self.assertEqual(nvidia_guidance.next_range(proof["outlook"], ("third", 2027), "gaap_margin"), "")
     def test_other_release_date_cannot_close_the_earlier_earnings_preview(self):
         self.preview_report([self.scheduled_release(self.preview_at)])
         release = self.result_release(published="2026-11-16T23:30:00+00:00")
@@ -317,7 +392,8 @@ class EarningsWatchChecks(IsolatedChecks):
     def test_broad_selloff_still_leads_and_verified_report_closes_the_watch(self):
         self.preview_report([self.scheduled_release(self.preview_at)])
         release = self.result_release()
-        with patch.object(editor, "cache_candidates", return_value=([release], [])):
+        with patch.object(editor, "cache_candidates", return_value=([release], [])), \
+                patch.object(editor.feeds, "fetch_url", return_value={"status": "error"}):
             research = self.research(now=self.results_at, replacements={
                 "Executive Summary": "- Main theme: Defensive market.\n- Market moves: S&P -2.50%, Nasdaq -3.12%, Russell -2.40%, VIX +21.21%, Oil +1.32%, TLT -0.49%.",
             })

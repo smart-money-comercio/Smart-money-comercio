@@ -283,10 +283,21 @@ def build(record, report, research, *, schema=2):
     if not validate_news_brief(report)["passes"]: raise ValueError("Voiceover needs a passing original news brief")
     evidence = review["evidence"]; groups = sections(report); scenes = []; sources = {}
     watch = evidence.get("earnings_watch")
+    comparison = ""
     if watch:
         from src.intelligence import earnings_watch
         if report.count(earnings_watch.source_line(watch, selected)) != 1:
             raise ValueError("Earnings watch lost its original source link")
+        if watch.get("guidance_comparison"):
+            comparison = earnings_watch.comparison_text(watch)
+            if (groups.get(earnings_watch.COMPARISON_HEADER) != comparison
+                    or report.count(earnings_watch.guidance_source_line(watch)) != 1):
+                raise ValueError("Earnings follow-up narration needs its original guidance and written comparison")
+            guide = watch["guidance"]
+            sources[earnings_watch.GUIDANCE_SOURCE_ID] = [{
+                "url": guide["url"], "publisher": "Nvidia Newsroom",
+                "published_at": guide["published_date"], "verified_at": guide["observed"],
+            }]
     generated = datetime.fromisoformat(record["generated_at"])
     from src.intelligence import transaction_disclosures as transactions
     disclosure_review = record.get("transaction_disclosures")
@@ -348,6 +359,8 @@ def build(record, report, research, *, schema=2):
                     edition_intro = " This is Smart Money. "
         if review["reader_version"] == 4 and earnings_lead(evidence):
             opening_sources = ["calendar_" + watch["notice"]["symbol"]] if watch["phase"] == "preview" else [watch["story_id"]]
+            if comparison:
+                opening_sources.append(earnings_watch.GUIDANCE_SOURCE_ID)
     if modern and review.get("reader_version") in {2, 3, 4} and first_checked:
         label = NAMES.get(first_checked["symbol"], first_checked["symbol"])
         company_line = next((line for line in re.split(r"(?<=[.!?])\s+", hook) if label in line), "")
@@ -371,6 +384,11 @@ def build(record, report, research, *, schema=2):
     from src.intelligence.company_focus import issuer, grouped_price_watch
     introduced = set()
     for story in sorted(selected, key=editor.news_order):
+        if comparison and story["id"] == watch["story_id"]:
+            add("Earnings Follow-up", comparison, (),
+                (story["id"], earnings_watch.GUIDANCE_SOURCE_ID))
+            covered.update(issuer(symbol) for symbol in story.get("symbols", []))
+            continue
         introduced_in_takeaway = story["id"] in opening_sources
         copy = story_copy(story, evidence, modern=modern, refined=refined, concise=concise, introduced_in_takeaway=introduced_in_takeaway)
         if not copy:

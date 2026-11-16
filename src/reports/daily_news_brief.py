@@ -26,7 +26,7 @@ MIN_NARRATION_WORDS = 180
 HEADERS = ["Market Update", "Companies in Focus", "Global and Defense Watch", "What's Ahead", "What We're Watching", "Research Notes"]
 IPO_HEADER = "IPO & Capital Markets"
 POLICY_HEADER = "Policy & Economy"
-ALL_HEADERS = [IPO_HEADER, POLICY_HEADER] + HEADERS[:3] + [transactions.HEADER] + HEADERS[3:]
+ALL_HEADERS = [earnings_watch.COMPARISON_HEADER, IPO_HEADER, POLICY_HEADER] + HEADERS[:3] + [transactions.HEADER] + HEADERS[3:]
 NAMES = {"MSFT": "Microsoft", "NVDA": "Nvidia", "PLTR": "Palantir", "TSLA": "Tesla",
          "TSM": "Taiwan Semiconductor", "AVGO": "Broadcom", "AVAV": "AeroVironment", "CRWD": "CrowdStrike",
          "AAPL": "Apple", "AMZN": "Amazon", "GOOG": "Alphabet", "GOOGL": "Alphabet", "META": "Meta Platforms",
@@ -282,6 +282,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         for indexes, (context_values, intel_baseline), focus_limit, reader_limit in product(combinations(range(len(initial_stories)), count), context_choices, (3, 2, 1), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
             watch = followup if followup and any(story["id"] == followup["story_id"] for story in retained) else preview
+            comparison = earnings_watch.comparison_text(watch) if watch and watch.get("guidance_comparison") else ""
             analysis = analyze_report(research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit}, narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit, earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0), intel_results_baseline=intel_baseline, earnings_watch=watch)
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
@@ -295,6 +296,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             opening_order = order_in_takeaway(analysis["evidence"])
             opening_order_id = opening_order["story_ids"][0] if opening_order else None
             for story in sorted(retained, key=editor.news_order):
+                if comparison and story["id"] == watch["story_id"]:
+                    narrations[story["id"]] = comparison
+                    continue
                 if story["id"] == opening_order_id:
                     narrations[opening_order_id] = opening_order["text"]
                     continue
@@ -331,6 +335,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 notes_body.insert(-1, no_company_story)
             if watch:
                 notes_body.insert(-1, earnings_watch.source_line(watch, retained))
+                if comparison:
+                    notes_body.insert(-1, earnings_watch.guidance_source_line(watch))
             groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
             groups.insert(3, (transactions.HEADER, disclosure_body))
             if ipo_body:
@@ -343,8 +349,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                                "Global and Defense Watch" if "defense" in story_topics(lead) else
                                POLICY_HEADER if lead["kind"] == "macro" else "Companies in Focus")
                 groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, ALL_HEADERS.index(group[0])))
-            if selloff(analysis["evidence"]):
+            broad_selloff = selloff(analysis["evidence"])
+            if broad_selloff:
                 groups.sort(key=lambda group: (0 if group[0] == "Market Update" else 1 if group[0] == "Companies in Focus" else 2, ALL_HEADERS.index(group[0])))
+            if comparison:
+                groups.insert(int(broad_selloff), (earnings_watch.COMPARISON_HEADER, [comparison]))
 
             def render():
                 introduction = "\n\n".join(row["text"] for row in insights if row["section"] == "intro")

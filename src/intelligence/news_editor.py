@@ -584,8 +584,12 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         else:
             schedules = company_schedule.notices(candidates, now)
         result.update(market_event_context=deepcopy(event_context), company_schedules=schedules)
-        if followup := earnings_watch.recent_followup(editions, selected_stories(result), now):
-            result["earnings_followup_candidate"] = followup
+        selected_results = selected_stories(result)
+        if followup := earnings_watch.recent_followup(editions, selected_results, now):
+            release = next(row for row in selected_results if row["id"] == followup["story_id"])
+            result["earnings_followup_candidate"] = earnings_watch.with_original_guidance(
+                followup, release, now, feeds.fetch_url
+            )
         from src.intelligence.company_earnings import cached_baseline, cached_context, matching
         contexts, backup_health, context_health = cached_context(cached, now, event_context["events"])
         if matching(contexts, "INTC") is None:
@@ -705,6 +709,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
     from src.intelligence.market_priority import order_in_takeaway
     selected = selected_stories(plan)
     opening_order = order_in_takeaway((analyst_review or {}).get("evidence", {}))
+    comparison_text = ""
     if "market_event_context" in plan:
         from src.intelligence.market_event_desk import checked_context, story_priority
         when = dated(plan["generated_at"])
@@ -747,6 +752,11 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
                 raise ValueError("Earnings follow-up lost its earlier preview")
             if report.count(earnings_watch.source_line(watch, selected)) != 1:
                 raise ValueError("Earnings watch lost its original source link")
+            if watch.get("guidance_comparison"):
+                comparison_text = earnings_watch.comparison_text(watch)
+                if (report.count(earnings_watch.COMPARISON_HEADER + "\n" + comparison_text) != 1
+                        or report.count(earnings_watch.guidance_source_line(watch)) != 1):
+                    raise ValueError("Earnings comparison lost its original guidance or written section")
     for story in selected:
         if story.get("title_truncated"):
             raise ValueError("Selected story headline is incomplete")
@@ -757,8 +767,12 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         if report.count(paragraphs[story["id"]]) != 1:
             raise ValueError("Selected story evidence or qualification changed during narration")
         if broadcast:
-            expected = (opening_order["text"] if opening_order and story["id"] in opening_order["story_ids"]
-                        else render_story(story, zone, NAMES, style="broadcast", business_version=plan.get("business_version", 0)))
+            if comparison_text and story["id"] == watch["story_id"]:
+                expected = comparison_text
+            elif opening_order and story["id"] in opening_order["story_ids"]:
+                expected = opening_order["text"]
+            else:
+                expected = render_story(story, zone, NAMES, style="broadcast", business_version=plan.get("business_version", 0))
             if paragraphs[story["id"]] != expected:
                 raise ValueError("Broadcast wording does not match the admitted source facts")
     if len(selected) > MAX_STORIES:

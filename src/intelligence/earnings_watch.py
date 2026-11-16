@@ -1,6 +1,6 @@
 """Bind earnings previews and follow-ups to the issuer's original disclosures."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 import re
 
 from src.intelligence.company_schedule import NY, checked_notice
@@ -8,6 +8,8 @@ from src.intelligence.special_alert_sources import timestamp
 
 
 SOURCE_SECTION = "Issuer earnings watch"
+COMPARISON_HEADER = "What Changed Since Our Last Brief"
+GUIDANCE_SOURCE_ID = "earnings_guidance_NVDA"
 NAME = r"[A-Z][A-Za-z'’.-]+(?: [A-Z][A-Za-z'’.-]+){1,3}"
 DEPARTURE = re.compile(r"\bannounced(?: today)? that (" + NAME + r") has resigned as (?:President, )?(?:Chief Executive Officer|CEO)\b")
 SUCCESSOR = re.compile(r"^(" + NAME + r"),[^\n]{0,220}? has agreed to serve as [Ii]nterim [Cc]hief [Ee]xecutive [Oo]fficer\b", re.M)
@@ -58,7 +60,7 @@ def reported_revenue(story, profile):
     return values[0] if len(set(values)) == 1 else None
 
 
-def followup(previous, previewed_at, story, now):
+def followup(previous, previewed_at, story, now, *, guidance=None):
     from src.intelligence.news_editor import primary_source
     from src.intelligence.story_analysis import checked_evidence
 
@@ -95,6 +97,20 @@ def followup(previous, previewed_at, story, now):
             figure = next(number for number in margin.groups() if number is not None)
             if -1000 <= float(figure) <= 100:
                 value["gaap_margin"] = figure
+    if guidance is not None:
+        from src.intelligence import nvidia_guidance
+
+        period = nvidia_guidance.results_period(story["title"]) if story["publisher_symbol"] == "NVDA" else None
+        if period is None or period[0] + " quarter" != revenue[1]:
+            raise ValueError("Nvidia guidance comparison needs the reported fiscal quarter")
+        proof = nvidia_guidance.checked(guidance, period, at, now)
+        comparison = nvidia_guidance.comparisons(proof, value, period)
+        if not comparison:
+            raise ValueError("No reported metric matches the original guidance")
+        value.update(guidance=proof, guidance_comparison=comparison, fiscal_year=period[1])
+        metric = "gaap_margin" if "gaap_margin" in comparison else "revenue"
+        if next_range := nvidia_guidance.next_range(profile["source_text"], period, metric):
+            value["next_guidance_range"] = next_range
     return value
 
 
@@ -116,6 +132,19 @@ def recent_followup(editions, stories, now):
     return None
 
 
+def with_original_guidance(value, story, now, fetch):
+    """Read one historical issuer release after a results follow-up qualifies."""
+    from src.intelligence import nvidia_guidance
+
+    try:
+        proof = nvidia_guidance.capture(story, timestamp(value["previewed_at"]), now, fetch)
+        if proof:
+            return followup(value["preview"], value["previewed_at"], story, now, guidance=proof)
+    except (ValueError, KeyError, TypeError, AttributeError, OSError, OverflowError):
+        pass
+    return value
+
+
 def checked(value, now, stories):
     if not isinstance(value, dict) or value.get("phase") not in {"preview", "results"}:
         raise ValueError("Unknown issuer earnings watch")
@@ -123,7 +152,7 @@ def checked(value, now, stories):
         expected = preview(value["notice"], now)
     else:
         story = next((row for row in stories if row["id"] == value.get("story_id")), None)
-        expected = followup(value["preview"], value["previewed_at"], story, now) if story else None
+        expected = followup(value["preview"], value["previewed_at"], story, now, guidance=value.get("guidance")) if story else None
     if expected != value:
         raise ValueError("Earnings watch does not match the issuer disclosure and edition clock")
     return value
@@ -132,6 +161,18 @@ def checked(value, now, stories):
 def opening(value, names):
     if value["phase"] == "results":
         symbol = value["preview"]["notice"]["symbol"]
+        if comparison := value.get("guidance_comparison"):
+            revenue = comparison.get("revenue", {}).get("position")
+            margin = comparison.get("gaap_margin", {}).get("position")
+            if revenue == "above" and margin == "below":
+                return "Nvidia's results put the cost of delivering its sales in focus."
+            if revenue == "above" and margin:
+                return "Nvidia's results support the case that stronger sales can come with gross margins at or above management's target."
+            if revenue == "below":
+                return "Nvidia's revenue shortfall makes its next sales outlook more important."
+            if margin == "below":
+                return "Nvidia's gross margin miss puts the costs of delivering its sales in focus."
+            return "Nvidia's results give us a benchmark for judging management's next outlook."
         figures = f"The company reported revenue of {value['revenue']} for the {value['period']}"
         if margin := value.get("gaap_margin"):
             figures += f" and a GAAP gross margin of {margin} percent"
@@ -163,3 +204,42 @@ def source_line(value, stories):
     from src.intelligence.news_editor import canonical_url
 
     return "Original earnings source — " + canonical_url(source(value, stories)["url"])
+
+
+def comparison_text(value):
+    comparison = value["guidance_comparison"]
+    published = date.fromisoformat(value["guidance"]["published_date"])
+    sentences = []
+    if revenue := comparison.get("revenue"):
+        sentences.append(
+            f"Nvidia reported {revenue['actual']} in revenue for the {value['period']} of fiscal {value['fiscal_year']}. "
+            f"That was {revenue['position']} its original {revenue['range']} range."
+        )
+    if margin := comparison.get("gaap_margin"):
+        subject = ("GAAP gross margin" if revenue else
+                   f"Nvidia's GAAP gross margin for the {value['period']} of fiscal {value['fiscal_year']}")
+        sentences.append(
+            f"{subject} was {margin['actual']}, {margin['position']} the original "
+            f"{margin['range']} range."
+        )
+    sentences.append(f"Nvidia issued that guidance on {published:%B} {published.day}.")
+    return " ".join(sentences)
+
+
+def next_guidance_check(value):
+    if bounds := value.get("next_guidance_range"):
+        metric = "GAAP gross margin" if "gaap_margin" in value["guidance_comparison"] else "revenue"
+        return f"Management's next-quarter {metric} guidance is {bounds}. Use it as the benchmark when the company next reports or updates its outlook."
+    if "gaap_margin" in value["guidance_comparison"]:
+        return (
+            f"Check the next quarter's GAAP gross-margin guidance against the {value['gaap_margin']} percent just reported. "
+            "That will show whether management expects to keep the same margin as sales change."
+        )
+    return (
+        f"Check the next quarter's revenue guidance against the {value['revenue']} just reported. "
+        "That will show how much follow-through management expects."
+    )
+
+
+def guidance_source_line(value):
+    return "Original guidance source — " + value["guidance"]["url"]
