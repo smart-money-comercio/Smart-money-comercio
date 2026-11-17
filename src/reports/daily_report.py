@@ -2150,5 +2150,7 @@ Research only. Not financial advice.
 
 
 def build_daily_report() -> str:
+    from src.intelligence import early_futures
     from src.reports.daily_news_brief import build_daily_news_brief
-    return build_daily_news_brief(build_research_report())
+    return build_daily_news_brief(build_research_report(),
+                                  futures_provider=early_futures.capture if DAILY_REPORT_LIVE_QUOTES else None)

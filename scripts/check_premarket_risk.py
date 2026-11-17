@@ -15,10 +15,12 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from scripts.check_special_alerts import offline_network_guard,portable_tcp_socketpair
 from src.config.premarket import settings,SYMBOLS,CHIPS
+from src.intelligence import early_futures
 from src.intelligence import premarket_sources as sources,premarket_risk as risk,premarket_disclosures as docs
 from src.reports import daily_voiceover as voice
 
 NOW=datetime(2026,11,5,13,45,tzinfo=timezone.utc)
+EARLY = datetime(2026, 11, 16, 10, 50, tzinfo=timezone.utc)
 
 
 def chart(symbol="SPY",move=0,now=NOW,previous=None,end_hour=16):
@@ -35,6 +37,11 @@ def chart(symbol="SPY",move=0,now=NOW,previous=None,end_hour=16):
     if future:meta["currentTradingPeriod"]["regular"]=period(local.replace(hour=0,minute=0),local.replace(hour=23,minute=59))
     return {"meta":meta,"timestamp":[int((b-timedelta(minutes=5)).timestamp()),int((now-timedelta(minutes=10)).timestamp()),int((now-timedelta(minutes=5)).timestamp())],
             "indicators":{"quote":[{"close":[100,100+move,100+move],"volume":[1000,0,0]}]}}
+
+
+def early_charts(now=EARLY, end_hour=16):
+    moves = {"SPY": 0, "NQ=F": -.97, "ES=F": -.36}
+    return {symbol: chart(symbol, change, now, end_hour=end_hour) for symbol, change in moves.items()}
 
 
 def quotes(moves=None,now=NOW):
@@ -168,6 +175,76 @@ class SourceChecks(unittest.TestCase):
             if symbol=="SPY":raise ValueError("Missing")
             return chart(symbol)
         rows,issues=sources.collect(NOW,settings(),read);self.assertFalse(rows);self.assertTrue(issues)
+
+
+class EarlyFuturesChecks(unittest.TestCase):
+    def setUp(self):
+        cache = patch.object(early_futures, "_last_capture", None)
+        config = patch.dict(os.environ, {"PREMARKET_ENABLED": "true", "PREMARKET_MAX_QUOTE_AGE_SECONDS": "900"})
+        for item in (cache, config):
+            item.start()
+            self.addCleanup(item.stop)
+
+    def test_early_pair_uses_three_requests_and_the_prior_cash_close(self):
+        raw = early_charts()
+        raw["SPY"].pop("timestamp")
+        now = EARLY + timedelta(minutes=1)
+        with patch.object(sources, "fetch", side_effect=raw.__getitem__) as fetch:
+            value, issue = early_futures.capture(now)
+            self.assertEqual(early_futures.capture(now + timedelta(seconds=30)), (value, issue))
+        self.assertCountEqual([call.args[0] for call in fetch.call_args_list], raw)
+        self.assertEqual(issue, "")
+        self.assertEqual(early_futures.checked(value, now, "2026-11-13"), value)
+        self.assertEqual(early_futures.clock(value), "5:50 AM EST")
+        self.assertEqual([row["change"] for row in value["quotes"]], [-.97, -.36])
+        self.assertFalse(sources.window(now))
+
+    def test_both_legs_must_share_a_recent_completed_bar(self):
+        for minutes, fragment in ((5, "matching"), (20, "stale"), (-5, "Two dated"), (1, "align")):
+            with self.subTest(minutes=minutes):
+                raw = early_charts()
+                raw["ES=F"] = chart("ES=F", -.36, EARLY - timedelta(minutes=minutes))
+                with patch.object(sources, "fetch", side_effect=raw.__getitem__):
+                    value, issue = early_futures._read(EARLY, 900)
+                self.assertIsNone(value)
+                self.assertIn(fragment, issue)
+
+    def test_missing_leg_or_mismatched_spy_day_withholds_the_pair(self):
+        raw = early_charts()
+        raw["SPY"]["meta"]["currentTradingPeriod"]["regular"]["start"] += 86400
+        with patch.object(sources, "fetch", side_effect=raw.__getitem__):
+            self.assertIn("cash-session schedule", early_futures._read(EARLY, 900)[1])
+            raw.pop("NQ=F")
+            self.assertEqual(early_futures.capture(EARLY), (None, "NQ=F quote source unavailable (KeyError)"))
+
+    def test_early_close_and_edition_revalidation_use_the_same_bars(self):
+        with patch.object(sources, "fetch", side_effect=early_charts(end_hour=13).__getitem__):
+            value, _ = early_futures.capture(EARLY)
+        self.assertTrue(all(row["baseline_at"] == "2026-11-13T18:00:00+00:00" for row in value["quotes"]))
+        with self.assertRaisesRegex(ValueError, "different prior sessions"):
+            early_futures.checked(value, EARLY, "2026-11-12")
+        with self.assertRaisesRegex(ValueError, "stale for this report"):
+            early_futures.checked(value, EARLY + timedelta(minutes=16))
+        changed = deepcopy(value)
+        changed["quotes"][0]["change"] = 1
+        with self.assertRaisesRegex(ValueError, "evidence changed"):
+            early_futures.checked(changed, EARLY)
+
+    def test_outside_window_or_disabled_makes_no_requests(self):
+        with patch.object(sources, "fetch") as fetch:
+            for now in (EARLY.replace(hour=8), EARLY.replace(hour=14, minute=30), EARLY - timedelta(days=1)):
+                self.assertIsNone(early_futures.capture(now)[0])
+            with patch.dict(os.environ, {"PREMARKET_ENABLED": "false"}):
+                self.assertEqual(early_futures.capture(EARLY), (None, "Premarket quotes disabled"))
+        fetch.assert_not_called()
+
+    def test_continuous_futures_roll_at_either_comparison_clock_is_withheld(self):
+        for day in (21, 23):
+            now = EARLY.replace(month=12, day=day)
+            with patch.object(sources, "fetch", side_effect=early_charts(now).__getitem__):
+                value, issue = early_futures._read(now, 900)
+            self.assertIsNone(value)
+            self.assertIn("roll window", issue)
 
 
 class AssessmentChecks(unittest.TestCase):
@@ -327,7 +404,7 @@ def main():
     with ExitStack() as stack:
         if args.windows_socketpair:stack.enter_context(patch.object(socket,"socketpair",portable_tcp_socketpair))
         traffic=stack.enter_context(offline_network_guard())
-        suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (SourceChecks,AssessmentChecks,SecChecks,CompatibilityChecks))
+        suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (SourceChecks,EarlyFuturesChecks,AssessmentChecks,SecChecks,CompatibilityChecks))
         result=unittest.TextTestRunner(verbosity=1).run(suite)
     good=result.wasSuccessful() and not traffic["blocked"]
     print(f"Premarket Risk Check: {'PASS' if good else 'FAIL'} ({result.testsRun} tests)")

@@ -960,6 +960,12 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
+                if futures := analysis["evidence"].get("premarket_futures"):
+                    from src.intelligence import early_futures
+
+                    lines.append(f"Premarket futures: PASS | {early_futures.clock(futures)} | prior cash close {early_futures.prior_day(futures)}")
+                elif issue := record.get("premarket_futures_issue"):
+                    lines.append("Premarket futures: LIMITED | " + clean(issue, 160))
                 if watch := analysis.get("earnings_watch"):
                     from src.intelligence.earnings_watch import source
 

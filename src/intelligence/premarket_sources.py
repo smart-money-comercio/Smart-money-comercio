@@ -16,9 +16,17 @@ PROVIDER="Yahoo chart; may be delayed; two price bars from one provider; premark
 
 
 def window(now):
+    return _morning_window(now, 8)
+
+
+def futures_window(now):
+    return _morning_window(now, 4)
+
+
+def _morning_window(now, first_hour):
     if now.tzinfo is None:raise ValueError("Premarket clock must be zoned")
     local=now.astimezone(NY)
-    return local.weekday()<5 and 8*60<=local.hour*60+local.minute<9*60+30
+    return local.weekday()<5 and first_hour*60<=local.hour*60+local.minute<9*60+30
 
 
 def fetch(symbol, *, daily=False):
@@ -67,9 +75,10 @@ def session(meta,now):
             "previous_open":before.isoformat(),"previous_close":close.isoformat(),"day":start.astimezone(NY).date().isoformat()}
 
 
-def packet(symbol,result,now,config,anchor=None):
-    if not window(now):raise ValueError("Outside the premarket check window")
+def packet(symbol,result,now,config,anchor=None,*,early_futures=False):
     meta=result.get("meta",{});future=symbol in {"NQ=F","ES=F"}
+    check_window=futures_window if early_futures and future else window
+    if not check_window(now):raise ValueError("Outside the premarket check window")
     if symbol not in SYMBOLS or meta.get("symbol")!=symbol or meta.get("currency")!="USD":
         raise ValueError("Quote identity or currency mismatch")
     if meta.get("dataGranularity")!="5m" or meta.get("instrumentType") not in ({"FUTURE"} if future else {"ETF"} if symbol in {"SPY","QQQ","SMH"} else {"EQUITY"}):
@@ -112,13 +121,17 @@ def packet(symbol,result,now,config,anchor=None):
     first,last=current[-2:]
     if last[0]-first[0]!=timedelta(minutes=5) or (now-(last[0]+timedelta(minutes=5))).total_seconds()>config["max_age"]:
         raise ValueError("Premarket bars are stale or nonconsecutive")
+    if early_futures and (last[0].timestamp() % 300 or closed.timestamp() % 300):
+        raise ValueError("Premarket bars must align with five-minute intervals")
     changes=[round(100*(row[1]/baseline[0][1]-1),6) for row in (first,last)]
     if max(map(abs,changes))>40 or abs(changes[1]-changes[0])>2:
         raise ValueError("Unusual or inconsistent gap needs another price/corporate-action check")
     if future and max(map(abs,changes))>10:raise ValueError("Unusual continuous-futures gap withheld")
     # Retain the exact admitted bars and schedules, not later bars or undated metadata prices.
     chosen=[baseline[0],first,last]
-    evidence={"meta":{k:meta[k] for k in ("symbol","currency","instrumentType","dataGranularity","currentTradingPeriod","tradingPeriods","shortName") if k in meta},
+    keys=("symbol","currency","instrumentType","dataGranularity","currentTradingPeriod")
+    if not early_futures:keys+=("tradingPeriods","shortName")
+    evidence={"meta":{k:meta[k] for k in keys if k in meta},
               "timestamp":[int(row[0].timestamp()) for row in chosen],
               "indicators":{"quote":[{"close":[row[1] for row in chosen],"volume":[row[2] for row in chosen]}]},
               "events":result.get("events",{})}

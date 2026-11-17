@@ -101,7 +101,7 @@ def analyze_report(
     focus_context: dict | None = None, narration_version: int = 1, event_context: dict | None = None,
     reader_version: int = 0, reader_limit: int = 3, earnings_context: list | None = None,
     disclosure_version: int = 0, business_version: int = 0, intel_results_baseline: dict | None = None,
-    earnings_watch: dict | None = None, watchlist_baseline: dict | None = None,
+    earnings_watch: dict | None = None, watchlist_baseline: dict | None = None, premarket_futures: dict | None = None,
 ) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
@@ -217,6 +217,13 @@ def analyze_report(
             raise ValueError("Watchlist follow-through needs two comparable completed sessions")
         evidence["watchlist_follow_through"] = comparison
         evidence["source_sections"].append(watchlist_breadth.SOURCE_SECTION)
+    if premarket_futures is not None:
+        if event_context is None or reader_version != 4 or evidence["is_open"]:
+            raise ValueError("Premarket futures require a dated brief before the cash session opens")
+        from src.intelligence import early_futures
+
+        evidence["premarket_futures"] = early_futures.checked(premarket_futures, now, evidence["session"])
+        evidence["source_sections"].append(early_futures.SOURCE_SECTION)
     value = {"schema": 1, "research_sha256": hashlib.sha256(report.encode()).hexdigest(),
              "evidence": evidence, "insights": review_daily_brief(deepcopy(evidence), presentation=presentation), "score_changes": False}
     if presentation != "full":
@@ -253,6 +260,7 @@ def retained_review(analysis: dict, report: str) -> dict:
 
 
 def validate_review(analysis: dict, research_report: str, report: str, stories: list[dict] | None = None) -> None:
+    futures = analysis.get("evidence", {}).get("premarket_futures")
     expected = analyze_report(
         research_report, stories, presentation=analysis.get("presentation", "full"), focus_context=analysis.get("focus_context"),
         narration_version=analysis.get("narration_version", 1), event_context=analysis.get("event_context"),
@@ -260,6 +268,7 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         earnings_context=analysis.get("earnings_context"), disclosure_version=analysis.get("disclosure_version", 0),
         business_version=analysis.get("business_version", 0), intel_results_baseline=analysis.get("intel_results_baseline"),
         earnings_watch=analysis.get("earnings_watch"), watchlist_baseline=analysis.get("watchlist_baseline"),
+        premarket_futures=futures,
     )
     if any(analysis.get(key) != expected.get(key) for key in (
         "schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version",
@@ -276,3 +285,8 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
     required = {key for key, row in allowed.items() if key not in {"model_support", "company_price", "participation"} or row["text"] in report}
     if seen != required:
         raise ValueError("Available analyst evidence was omitted from the brief")
+    if futures:
+        from src.intelligence import early_futures
+
+        if report.count(early_futures.source_line(futures)) != 1:
+            raise ValueError("Premarket futures lost their source links")

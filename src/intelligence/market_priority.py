@@ -57,7 +57,7 @@ def breadth_read(evidence):
 
 
 def opening_source(evidence):
-    if selloff(evidence):
+    if selloff(evidence) and not evidence.get("premarket_futures"):
         return None
     from src.intelligence.evidence_opening import opening_source as older_source
     return older_source(evidence)
@@ -77,13 +77,28 @@ def order_in_takeaway(evidence):
 
 def earnings_lead(evidence):
     watch = evidence.get("earnings_watch")
-    if not watch or selloff(evidence) or (watch["phase"] == "preview" and opening_source(evidence)):
+    if (not watch or (selloff(evidence) and not evidence.get("premarket_futures"))
+            or (watch["phase"] == "preview" and opening_source(evidence))):
         return None
     return watch
 
 
 def opening(evidence):
-    if watch := earnings_lead(evidence):
+    watch = earnings_lead(evidence)
+    if futures := evidence.get("premarket_futures"):
+        from src.intelligence import early_futures
+
+        text = "The takeaway: " + early_futures.opening(futures)
+        if watch:
+            if watch["phase"] == "preview" and watch["notice"]["symbol"] == "NVDA":
+                return text + " Nvidia's earnings are the next check on data center demand and gross margins."
+            from src.intelligence.daily_brief_analysis import NAMES
+            from src.intelligence.earnings_watch import opening as earnings_opening
+
+            return text + " " + earnings_opening(watch, NAMES)
+        point = opening_source(evidence)
+        return text + " " + point["text"] if point else text
+    if watch:
         from src.intelligence.daily_brief_analysis import NAMES
         from src.intelligence.earnings_watch import opening as earnings_opening
         return "The takeaway: " + earnings_opening(watch, NAMES)
@@ -163,7 +178,12 @@ def watching(evidence):
         rows = concise_checks(evidence, rows, lead_event)
     if evidence.get("business_version", 0) >= 3:
         rows = named_checks(evidence, rows, lead_event)
-    if comparison := evidence.get("watchlist_follow_through"):
+    if futures := evidence.get("premarket_futures"):
+        from src.intelligence import early_futures
+
+        rows = [early_futures.open_check(futures),
+                *(row for row in rows if row["id"] not in {"watch_participation", "watch_market"})]
+    elif comparison := evidence.get("watchlist_follow_through"):
         from src.intelligence import watchlist_breadth
 
         for row in rows:

@@ -255,6 +255,11 @@ def watching(evidence):
 
 def insights(evidence):
     sources = ["Executive Summary", "Market Snapshot"]
+    futures = evidence.get("premarket_futures")
+    if futures:
+        from src.intelligence.early_futures import SOURCE_SECTION
+
+        sources = [SOURCE_SECTION]
     has_earnings_lead = False
     if evidence.get("reader_version") in {3,4}:
         if evidence["reader_version"] == 4:
@@ -267,11 +272,11 @@ def insights(evidence):
             from src.intelligence.evidence_opening import opening_source
         if not has_earnings_lead and opening_source(evidence):
             sources.append("Verified story decisions")
-    if evidence.get("market_event_context", {}).get("events"):
+    if not futures and evidence.get("market_event_context", {}).get("events"):
         sources.append("Market event checks")
     first = next((row for row in evidence.get("market_event_context", {}).get("events", []) if row["status"] == "rechecked"), None)
     from src.intelligence.market_priority import selloff
-    if first and matching(evidence.get("earnings_context", []), first["symbol"]) and not (evidence.get("reader_version") == 4 and selloff(evidence)):
+    if not futures and first and matching(evidence.get("earnings_context", []), first["symbol"]) and not (evidence.get("reader_version") == 4 and selloff(evidence)):
         sources.append("Recent earnings context")
     rows = [{"id": "opening_takeaway", "section": "intro", "text": opening(evidence), "sources": sources}, *watching(evidence)]
     watch = evidence.get("earnings_watch")

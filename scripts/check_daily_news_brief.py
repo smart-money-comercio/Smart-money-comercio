@@ -610,6 +610,91 @@ class NewsChecks(IsolatedChecks):
         self.assertEqual(live.read_text(), '{"keep":"live status"}')
 
 
+class EarlyBriefChecks(IsolatedChecks):
+    def setUp(self):
+        super().setUp()
+        from scripts.check_premarket_risk import EARLY, early_charts
+        from src.intelligence import early_futures
+
+        self.bar_end = EARLY
+        self.now = EARLY + timedelta(minutes=1)
+        self.charts = early_charts()
+        self.stack.enter_context(patch.object(early_futures, "_last_capture", None))
+        self.stack.enter_context(patch.object(daily_report, "DAILY_REPORT_LIVE_QUOTES", True))
+        self.stack.enter_context(patch.dict(os.environ, {"PREMARKET_ENABLED": "true"}))
+
+    def early_research(self, now=None, prior_day="2026-11-13", market="Closed — before the open"):
+        snapshot = f"Market Session: {market}.\nQuote session: {prior_day}\nBreadth: 5 up / 15 down / 20 quoted"
+        return self.research(now=now or self.now, replacements={"Market Snapshot": snapshot}, ranked=enriched_ranked_stocks())
+
+    def test_daily_builder_pairs_the_opening_with_a_verified_issuer_preview(self):
+        from scripts.check_news_editor import candidate
+        from src.intelligence import early_futures, news_editor, news_editor_store
+        from src.reports import daily_voiceover
+
+        research = self.early_research()
+        notice = candidate("NVDA", title="Nvidia Sets Conference Call for Quarterly Financial Results",
+                           published=(self.now - timedelta(days=4)).isoformat(), source_checked_at=self.now.isoformat(),
+                           source_excerpt="Nvidia will host its earnings conference call on November 17, 2026 at 5:00 p.m. Eastern Time.",
+                           excerpt_scope="publisher feed excerpt")
+        with patch.object(daily_report, "build_research_report", return_value=research), \
+                patch.object(early_futures.sources, "fetch", side_effect=self.charts.__getitem__) as fetch, \
+                patch.object(news_editor, "cache_candidates", return_value=([notice], [])):
+            text = daily_report.build_daily_report()
+        self.assertEqual(fetch.call_count, 3)
+        intro, market = text.split("\nMarket Update\n", maxsplit=1)
+        self.assertIn("The takeaway: At 5:50 AM EST, Nasdaq-100 futures were down 0.97 percent and S&P 500 futures were down 0.36 percent", intro)
+        self.assertIn("from their levels at the prior U.S. cash close.", intro)
+        self.assertIn("Nvidia's earnings are the next check on data center demand and gross margins.", intro)
+        self.assertIn("Friday, November 13", market)
+        self.assertIn("the S&P 500 fell 0.52 percent", market)
+        self.assertIn("At the open — Check how many of the stocks and funds we track open lower.", market)
+        self.assertIn("Premarket futures source (Yahoo Finance, may be delayed)", market)
+        self.assertTrue(validate_news_brief(text)["passes"])
+        self.assertIn("Premarket futures: PASS | 5:50 AM EST | prior cash close 2026-11-13", news_editor.build_editor_status())
+        record = news_editor_store.read_editions(report=text)[0]
+        voice = daily_voiceover.checked(record, self.now)
+        self.assertIn("Nasdaq one hundred futures were down zero point nine seven percent", voice["segments"][0]["narration"])
+        self.assertEqual(voice["segments"][0]["source_ids"], [early_futures.SOURCE_ID, "calendar_NVDA"])
+        self.assertEqual(len(voice["sources"][early_futures.SOURCE_ID]), 2)
+        self.assertTrue(all(row["published_at"] == self.bar_end.isoformat() for row in voice["sources"][early_futures.SOURCE_ID]))
+        self.assertIn(early_futures.SOURCE_ID, next(row["source_ids"] for row in voice["segments"] if row["heading"] == "What We're Watching"))
+
+        from src.intelligence.daily_brief_analysis import validate_review
+
+        review = record["analyst_review"]
+        altered = text.replace(early_futures.source_line(review["evidence"]["premarket_futures"]), "")
+        with self.assertRaisesRegex(ValueError, "lost their source links"):
+            validate_review(review, research, altered, news_editor.selected_stories(record))
+
+    def test_conflicting_prior_cash_date_keeps_the_usual_dated_brief(self):
+        from src.intelligence import early_futures, news_editor
+
+        research = self.early_research(prior_day="2026-11-12")
+        with patch.object(early_futures.sources, "fetch", side_effect=self.charts.__getitem__):
+            text = build_daily_news_brief(research, futures_provider=early_futures.capture)
+        self.assertTrue(validate_news_brief(text)["passes"])
+        self.assertNotIn("Nasdaq-100 futures", text)
+        self.assertIn("Market data: completed regular session 2026-11-12", text)
+        self.assertIn("Premarket futures: LIMITED | Futures and cash quotes use different prior sessions", news_editor.build_editor_status())
+
+    def test_cash_session_weekend_and_offline_builds_skip_the_provider(self):
+        from src.intelligence import early_futures
+
+        for research in (self.early_research(self.now.replace(hour=15)),
+                         self.early_research(self.now - timedelta(days=1)),
+                         self.early_research(market="Open — live session")):
+            with patch.object(early_futures, "capture") as capture, \
+                    patch.object(daily_report, "build_research_report", return_value=research):
+                self.assertTrue(validate_news_brief(daily_report.build_daily_report())["passes"])
+            capture.assert_not_called()
+        with patch.object(early_futures, "capture") as capture, \
+                patch.object(daily_report, "DAILY_REPORT_LIVE_QUOTES", False), \
+                patch.object(daily_report, "build_research_report", return_value=self.early_research()):
+            self.assertTrue(validate_news_brief(daily_report.build_daily_report())["passes"])
+        capture.assert_not_called()
+
+
 class AnalystBriefChecks(IsolatedChecks):
     def investor_research(self, price="+1.5%", delta="up +4.0"):
         opportunities = f"""1. TSM - Opportunity 88.2/100 | Structural 86.2/100 | {delta}

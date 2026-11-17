@@ -12,6 +12,10 @@ The normal news refresh also checks Alphabet's SEC submissions and at most one r
 
 `/report`, `/brief` and `/newsbrief` return a concise news edition suitable for reading aloud and later adapting for YouTube or a podcast. The weekday Telegram schedule and `/rundailyagent` use that same edition. The scheduled Telegram post uses the Saturday Review and Sunday Outlook on their New York dates.
 
+On weekdays from 4:00 to 9:30 a.m. Eastern, the takeaway can lead with Nasdaq-100 and S&P 500 futures. Both must have matching completed five-minute bars no more than 15 minutes old, measured against their levels at the verified prior U.S. cash close. The timestamp in the takeaway is the end of the shared price bar. Market Update keeps the dated cash-session figures, and What We're Watching checks whether the opening gains or losses spread across the stocks and funds we track. Yahoo Finance chart data may be delayed.
+
+The brief checks the two futures charts and the SPY cash-session schedule with a two-minute retry interval. `DAILY_REPORT_LIVE_QUOTES` and `PREMARKET_ENABLED` control collection. `/editorstatus` shows the admitted clock and cash-session date or the reason coverage was limited. When the pair is unavailable, the brief uses its usual dated market and issuer evidence.
+
 The interactive and manual send commands use the brief's 3,800-character cap for Telegram delivery. A complete brief fits in one message with its original source link and research footer.
 
 The edition is capped at 3,800 characters and uses short paragraphs under Market Update, Companies in Focus, Global and Defense Watch, What's Ahead, What We're Watching and Research Notes. It keeps the report's generation time and the quoted regular-session date separate. Weekend and after-hours prices are described as a completed session. Returns without a dated quote session are withheld. Watchlist breadth is explicitly watchlist breadth rather than a claim about the whole market. TLT remains a bond-price proxy, not verified Treasury-yield data.

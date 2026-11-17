@@ -107,7 +107,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     try:
         # Refresh Morning Brief cache before building the real user-facing report.
-        # build_daily_report() stays cache-only so deploycheck/preflight remain fast.
+        # The daily builder handles its own bounded market quote checks.
         ensure_morning_brief_cache_is_fresh(max_age_minutes=360)
 
         report_text = await asyncio.to_thread(build_daily_report)

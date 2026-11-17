@@ -11,10 +11,11 @@ from zoneinfo import ZoneInfo
 from src.intelligence.calendar_context import checked_time, publishers
 from src.intelligence.company_catalyst_context import build_company_catalyst_brief
 from src.intelligence import news_editor as editor
-from src.intelligence import earnings_watch, news_editor_store, watchlist_breadth
+from src.intelligence import early_futures, earnings_watch, news_editor_store, watchlist_breadth
 from src.intelligence.daily_brief_analysis import analyze_report, retained_review
 from src.intelligence.market_brief import MIN_MARKET_WORDS, MAX_MARKET_WORDS, story_topics, word_count
 from src.intelligence.market_priority import order_in_takeaway, selloff
+from src.intelligence.premarket_sources import futures_window
 from src.intelligence import transaction_disclosures as transactions
 from src.utils.report_consistency import report_greeting, validate_report_greeting
 
@@ -191,7 +192,7 @@ def validate_news_brief(text: str) -> dict:
             "passes": bool(text.strip()) and len(text) <= MAX_NEWS_CHARS and not (missing or duplicates or greeting or qualification or narration_errors or market_errors)}
 
 
-def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None) -> str:
+def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None) -> str:
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
     if quality.get("format") == "news":
@@ -219,6 +220,16 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     event_context = context_for_report(research_report, now)
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
     plan = editor.build_editorial_plan(brief, now, event_context=event_context, research_report=research_report)
+    futures = None
+    if futures_provider and not is_open and futures_window(now):
+        quote_pair, issue = futures_provider(now)
+        if quote_pair is not None:
+            try:
+                futures = early_futures.checked(quote_pair, now, quote_day[1] if quote_day else None)
+            except ValueError as error:
+                issue = str(error)
+        if futures is None:
+            plan["premarket_futures_issue"] = issue or "Verified futures pair unavailable"
     disclosure_review = transactions.capture(now)
     plan["transaction_disclosures"] = disclosure_review
     disclosure_body = transactions.paragraphs(disclosure_review)
@@ -296,9 +307,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit,
                 earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0),
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
+                premarket_futures=futures,
             )
             insights = analysis["insights"]
-            if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro):
+            if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro or futures):
                 raise ValueError("Insufficient admitted evidence for a daily news edition")
             market_body = [row["text"] for row in insights if row["section"] == "market"]
             company_body = []
@@ -350,6 +362,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 notes_body.insert(-1, earnings_watch.source_line(watch, retained))
                 if comparison:
                     notes_body.insert(-1, earnings_watch.guidance_source_line(watch))
+            if futures:
+                notes_body.insert(-1, early_futures.source_line(futures))
             groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
             groups.insert(3, (transactions.HEADER, disclosure_body))
             if ipo_body:

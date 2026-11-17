@@ -268,6 +268,7 @@ def named_watch_scene(rows, sources, earnings_context):
 
 def build(record, report, research, *, schema=2):
     """Derive a spoken companion only after the original edition passes review."""
+    from src.intelligence import early_futures
     from src.intelligence import news_editor as editor
     from src.intelligence.daily_brief_analysis import NAMES, validate_review
     from src.intelligence.market_brief import MARKET_CONTEXT_TOPICS, market_story_topics, rally_leadership, story_topics
@@ -282,6 +283,12 @@ def build(record, report, research, *, schema=2):
     validate_review(review, research, report, selected)
     if not validate_news_brief(report)["passes"]: raise ValueError("Voiceover needs a passing original news brief")
     evidence = review["evidence"]; groups = sections(report); scenes = []; sources = {}
+    futures = evidence.get("premarket_futures")
+    if futures:
+        sources[early_futures.SOURCE_ID] = [
+            {"url": row["url"], "publisher": "Yahoo Finance chart", "published_at": row["asof"],
+             "verified_at": futures["checked_at"]} for row in futures["quotes"]
+        ]
     watch = evidence.get("earnings_watch")
     comparison = ""
     if watch:
@@ -340,7 +347,7 @@ def build(record, report, research, *, schema=2):
     first_checked = next((event for event in attention if event["status"] == "rechecked"), {})
     opening_context = matching(evidence.get("earnings_context", []), first_checked.get("symbol"))
     opening_sources = (["earnings_" + opening_context["symbol"]]
-                       if opening_context and (context_sources or review.get("reader_version") in {2, 3, 4}) else [])
+                       if not futures and opening_context and (context_sources or review.get("reader_version") in {2, 3, 4}) else [])
     edition_intro = " This is Smart Money for " + local.strftime("%B %d").replace(" 0", " ") + ". "
     if review.get("reader_version") in {3,4}:
         if review["reader_version"] == 4:
@@ -366,6 +373,9 @@ def build(record, report, research, *, schema=2):
         company_line = next((line for line in re.split(r"(?<=[.!?])\s+", hook) if label in line), "")
         if company_line and company_line not in hook_bullets:
             hook_bullets = [hook_bullets[0], company_line]
+    if futures:
+        opening_sources = [early_futures.SOURCE_ID, *opening_sources]
+        hook = hook.replace("Nasdaq-100", "Nasdaq 100")
     add("The Takeaway", greeting + edition_intro + hook,
         hook_bullets, opening_sources if review.get("reader_version") in {2, 3, 4} or "Recent earnings provide" in hook else ())
     leadership = rally_leadership(evidence)
@@ -487,7 +497,10 @@ def build(record, report, research, *, schema=2):
         add("What's Ahead", text, [agenda_bullet(row) for row in agenda[:2]] if modern else agenda[:2], calendar_ids)
     watch_rows = [row for row in review["insights"] if row["section"] == "watch"]
     if evidence.get("business_version", 0) >= 3:
-        add("What We're Watching", *named_watch_scene(watch_rows, sources, evidence.get("earnings_context", [])))
+        narration, bullets, watch_sources = named_watch_scene(watch_rows, sources, evidence.get("earnings_context", []))
+        if futures and any(early_futures.SOURCE_SECTION in row["sources"] for row in watch_rows):
+            watch_sources.append(early_futures.SOURCE_ID)
+        add("What We're Watching", narration, bullets, watch_sources)
     else:
         watch = [row["text"] for row in watch_rows]
         signals = []
