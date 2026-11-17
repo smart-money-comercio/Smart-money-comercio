@@ -2163,6 +2163,79 @@ class CommandChecks(unittest.IsolatedAsyncioTestCase):
         self.assertIs(callbacks["storylog"], news_editor_commands.storylog_command)
 
 
+class CompanyFactPolicyChecks(IsolatedChecks):
+    def acquisition(self, **changes):
+        body = ("AMD acquired Example Labs for $80 million, including assumed debt. "
+                "Example Labs develops licensed software for industrial customers.")
+        return candidate("AMD", title="AMD Completes Acquisition of Example Labs",
+                         **{"source_excerpt": body, "excerpt_scope": "original release excerpt", **changes})
+
+    def plan(self, stories):
+        return editor.build_editorial_plan(companies.build_company_catalyst_brief(), NOW, stories, require_company_facts=True)
+
+    def test_company_admission_holds_a_headline_feed_excerpt_and_empty_fact_body(self):
+        from src.intelligence import company_story_facts
+
+        values = [candidate(), self.acquisition(excerpt_scope="publisher feed excerpt"),
+                  candidate("NVDA", title="NVIDIA Introduces New AI Developer Kit", excerpt_scope="original release excerpt",
+                            source_excerpt="NVIDIA introduced its new AI developer kit today. Its team described the announcement as part of a long-term strategy.")]
+        plan = self.plan(values)
+        self.assertFalse(editor.selected_stories(plan))
+        self.assertCountEqual([row["reason"] for row in plan["candidates"]],
+                              [company_story_facts.BODY_REQUIRED, company_story_facts.BODY_REQUIRED, company_story_facts.FACT_REQUIRED])
+
+    def test_repeated_title_does_not_supply_a_body_fact(self):
+        title = "AMD Completes Acquisition of Example Labs for $80 Million"
+        plan = self.plan([candidate("AMD", title=title, excerpt_scope="original release excerpt",
+                                    source_excerpt=title + ". AMD develops products for industrial customers.")])
+        self.assertEqual(plan["candidates"][0]["decision"], "wait")
+        self.assertEqual(plan["candidates"][0]["reason"], "Original company disclosure yielded no concrete business fact")
+
+    def test_dated_release_with_facts_displaces_the_same_issuers_headline(self):
+        plain = candidate("AMD", published=(NOW - timedelta(minutes=9)).isoformat())
+        plan = self.plan([plain, self.acquisition()])
+        selected, = editor.selected_stories(plan)
+        self.assertEqual(selected["company_fact"], "transaction_value")
+        self.assertEqual(selected["event_evidence"]["facts"][0]["value"], "$80 million, including assumed debt")
+        self.assertEqual(plan["candidates"][0]["decision"], "wait")
+
+    def test_current_brief_and_voiceover_include_a_qualified_fact_and_its_business_check(self):
+        from src.reports import daily_report, daily_voiceover
+
+        thin = candidate("NVDA", title="NVIDIA Introduces New AI Developer Kit", excerpt_scope="original release excerpt",
+                         source_excerpt="NVIDIA introduced its new AI developer kit today. Its team described the announcement as part of a long-term strategy.")
+        values = [thin, self.acquisition(), candidate(kind="macro", symbols=[], title="Oil inventories report released",
+                                                 source="EIA", url="https://www.eia.gov/report")]
+        research = self.research()
+        with patch.object(editor, "cache_candidates", return_value=(values, [])), \
+                patch.object(daily_report, "build_research_report", return_value=research):
+            report = daily_report.build_daily_report()
+        record, = store.read_editions(report=report)
+        self.assertEqual(record["company_fact_policy"], 1)
+        self.assertIn("$80 million, including assumed debt", report)
+        self.assertIn("Watch how much cash the acquired business generates after integration costs.", report)
+        self.assertIn("Oil inventories report released", report)
+        self.assertNotIn(thin["title"], report)
+        self.assertIn("Company facts: 1 selected with verified facts | 1 held", editor.build_editor_status())
+        self.assertIn("Concrete company fact needed", editor.build_editor_status(history=True, symbol="NVDA"))
+        voice = daily_voiceover.checked(record, NOW)
+        self.assertIn("eighty million dollars, including assumed debt", voice["script"])
+
+    def test_review_and_voiceover_reject_loss_of_the_admitted_fact(self):
+        from src.reports import daily_report, daily_voiceover
+
+        research = self.research()
+        with patch.object(editor, "cache_candidates", return_value=([self.acquisition()], [])), \
+                patch.object(daily_report, "build_research_report", return_value=research):
+            report = daily_report.build_daily_report()
+        record, = store.read_editions(report=report)
+        del editor.selected_stories(record)[0]["company_fact"]
+        with self.assertRaisesRegex(ValueError, "lost its admitted business fact"):
+            editor.review_and_record(record, report, record["story_narrations"], research, record["analyst_review"])
+        with self.assertRaisesRegex(ValueError, "lost its admitted business fact"):
+            daily_voiceover.checked(record, NOW)
+
+
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument("--windows-socketpair", action="store_true"); args = parser.parse_args()
     with ExitStack() as stack:

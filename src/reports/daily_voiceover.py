@@ -268,7 +268,7 @@ def named_watch_scene(rows, sources, earnings_context):
 
 def build(record, report, research, *, schema=2):
     """Derive a spoken companion only after the original edition passes review."""
-    from src.intelligence import early_futures
+    from src.intelligence import early_futures, company_story_facts
     from src.intelligence import news_editor as editor
     from src.intelligence.daily_brief_analysis import NAMES, validate_review
     from src.intelligence.market_brief import MARKET_CONTEXT_TOPICS, market_story_topics, rally_leadership, story_topics
@@ -278,6 +278,7 @@ def build(record, report, research, *, schema=2):
     modern = schema == 2
     refined = record.get("rules_version", 0) >= 22
     concise = record.get("rules_version", 0) >= 24
+    company_story_facts.validate_edition(record)
     selected = editor.selected_stories(record)
     review = record["analyst_review"]
     validate_review(review, research, report, selected)

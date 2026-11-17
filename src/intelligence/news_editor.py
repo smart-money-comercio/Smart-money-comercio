@@ -14,6 +14,7 @@ import sqlite3
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from src.intelligence import news_live_sources as feeds, news_editor_store as store
+from src.intelligence import company_story_facts
 from src.intelligence.special_alert_sources import clean, company_url
 from src.intelligence.special_alert_engine import company_event
 from src.intelligence.market_brief import story_topics
@@ -317,7 +318,8 @@ def editorial_symbols(symbols: list[str]) -> list[str]:
                                        if feeds.is_original_source(source) and source.get("company_symbol")]))
 
 
-def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict] | None = None, *, event_context=None, research_report=None) -> dict:
+def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict] | None = None, *, event_context=None,
+                         research_report=None, require_company_facts=False) -> dict:
     if now.tzinfo is None:
         raise ValueError("News editor clock needs a timezone")
     symbols = editorial_symbols([row["symbol"] for row in brief["rows"]])
@@ -521,6 +523,15 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                         story.update(decision="wait", confirmation_check="hold",
                                      reason=("Original EIA capacity facts and a current source observation are required; the headline alone is insufficient" if solar_storage_report(story) else
                                              "Original Fed decision text and a current source observation are required; the announcement headline alone is insufficient"))
+        if require_company_facts and story["decision"] == "eligible" and story["kind"] == "company":
+            text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
+            try:
+                if scope == "original release excerpt" and "event_evidence" not in story:
+                    story["evidence_checked_at"] = observed
+                    story["event_evidence"] = build_evidence(story, text, scope)
+                story["company_fact"] = company_story_facts.required_field(story, now)
+            except (ValueError, TypeError, OverflowError) as error:
+                story.update(decision="wait", reason=str(error))
         if event_context is not None and story["decision"] == "eligible":
             from src.intelligence.market_event_desk import story_priority
             text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
@@ -555,6 +566,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 reason = f"Original {story['confirmed_by']} report with verified {story['materiality']} facts"
             elif story.get("event_evidence", {}).get("schema") == 15:
                 reason = f"Original {story['confirmed_by']} report with verified order terms"
+            elif story.get("company_fact"):
+                reason = f"Original {story['confirmed_by']} disclosure with a verified business fact"
             story.update(decision="selected", reason=reason)
             selected.append(story)
             urls.add(story["canonical_url"]); titles.add(key); companies.update(issuers)
@@ -567,6 +580,8 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
             "rules_version": 16, "source_health": health, "stages": [], "truncated_candidates": max(0, len(candidates) - MAX_CANDIDATES)}
+    if require_company_facts:
+        result["company_fact_policy"] = company_story_facts.POLICY_VERSION
     if event_context is not None:
         from src.intelligence import company_schedule, earnings_watch, weekend_store
         editions = []
@@ -707,6 +722,7 @@ def render_story(story: dict, zone, company_names: dict, *, style="source", busi
 
 def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str, analyst_review: dict | None = None) -> str:
     from src.intelligence.market_priority import order_in_takeaway
+    company_story_facts.validate_edition(plan)
     selected = selected_stories(plan)
     opening_order = order_in_takeaway((analyst_review or {}).get("evidence", {}))
     comparison_text = ""
@@ -838,7 +854,11 @@ def hold_reasons(candidates: list[dict]) -> list[tuple[str, int]]:
         if story["decision"] != "wait":
             continue
         reason = story["reason"].lower()
-        if "original company or agency report required" in reason:
+        if story["reason"] == company_story_facts.BODY_REQUIRED:
+            label = "Original company body needed"
+        elif story["reason"] == company_story_facts.FACT_REQUIRED:
+            label = "Concrete company fact needed"
+        elif "original company or agency report required" in reason:
             label = "Original-source confirmation needed"
         elif "older than 24 hours" in reason and "future-dated or" not in reason:
             label = "Publication older than 24 hours"
@@ -903,6 +923,11 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             lines.append("Editorial rules: " + str(record["rules_version"]))
         if not history:
             lines += [step["name"] + ": " + step["status"].upper() + " — " + step["detail"] for step in record["stages"]]
+            if record.get("company_fact_policy"):
+                admitted = sum(story["kind"] == "company" for story in selected_stories(record))
+                held = sum(story["reason"] in {company_story_facts.BODY_REQUIRED, company_story_facts.FACT_REQUIRED}
+                           for story in record["candidates"] if story["decision"] == "wait")
+                lines.append(f"Company facts: {admitted} selected with verified facts | {held} held for body or fact coverage")
             if record["issues"]:
                 lines.append("Coverage: " + "; ".join(clean(issue, 120) for issue in record["issues"][:3]))
             reasons = hold_reasons(record["candidates"])

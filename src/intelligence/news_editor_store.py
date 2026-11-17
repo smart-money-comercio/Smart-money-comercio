@@ -97,6 +97,8 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
                    or not isinstance(story.get("symbols"), list) for story in value["candidates"]):
                 continue
             from src.intelligence.story_analysis import checked_evidence
+            from src.intelligence.company_story_facts import validate_edition
+            validate_edition(value)
             for story in value["candidates"]:
                 if story.get("event_evidence") is not None:
                     checked_evidence(story)

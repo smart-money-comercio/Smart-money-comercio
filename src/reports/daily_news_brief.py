@@ -192,7 +192,8 @@ def validate_news_brief(text: str) -> dict:
             "passes": bool(text.strip()) and len(text) <= MAX_NEWS_CHARS and not (missing or duplicates or greeting or qualification or narration_errors or market_errors)}
 
 
-def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None) -> str:
+def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
+                           require_company_facts=False) -> str:
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
     if quality.get("format") == "news":
@@ -219,7 +220,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     from src.intelligence.market_event_desk import context_for_report
     event_context = context_for_report(research_report, now)
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
-    plan = editor.build_editorial_plan(brief, now, event_context=event_context, research_report=research_report)
+    plan = editor.build_editorial_plan(brief, now, event_context=event_context, research_report=research_report,
+                                       require_company_facts=require_company_facts)
     futures = None
     if futures_provider and not is_open and futures_window(now):
         quote_pair, issue = futures_provider(now)

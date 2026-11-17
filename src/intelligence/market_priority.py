@@ -234,6 +234,7 @@ def named_checks(evidence, rows, lead_event=None):
     """Use the selected issuer or quote symbol, including the actual share class."""
     from src.intelligence.company_focus import COMPANY_NAMES, company, issuer
     from src.intelligence.company_earnings import BASELINE_SOURCE, baseline_watch
+    from src.intelligence.company_story_facts import follow_up
 
     stories = {story["id"]: story for story in evidence.get("stories", [])}
     market_labels = {"watch_participation": "Watchlist breadth", "watch_market": "Major indexes",
@@ -266,6 +267,8 @@ def named_checks(evidence, rows, lead_event=None):
         if baseline and row["id"] == "watch_event" and symbol == "INTC":
             body = baseline_watch(baseline)
             row = {**row, "sources": [*row["sources"], BASELINE_SOURCE]}
+        if check := follow_up(story):
+            body = check
         named.append({**row, "text": f"{label} — {body}"})
 
     if not any(row.get("symbol") for row in named):

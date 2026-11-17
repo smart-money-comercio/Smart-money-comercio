@@ -143,6 +143,8 @@ def analyze_report(
             raise ValueError("Market interpretation requires admitted original-source stories")
         evidence["stories"].append({key: deepcopy(story[key]) for key in (
             "id", "title", "kind", "symbols", "source", "url", "published", "official", "publisher_symbol", "decision", "source_check")})
+        if story.get("company_fact"):
+            evidence["stories"][-1]["company_fact"] = story["company_fact"]
         if story.get("ipo"):
             from src.intelligence.ipo_monitor import checked
             checked(story)
