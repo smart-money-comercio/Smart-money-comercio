@@ -16,6 +16,8 @@ On weekdays from 4:00 to 9:30 a.m. Eastern, the takeaway can lead with Nasdaq-10
 
 The brief checks the two futures charts and the SPY cash-session schedule with a two-minute retry interval. `DAILY_REPORT_LIVE_QUOTES` and `PREMARKET_ENABLED` control collection. `/editorstatus` shows the admitted clock and cash-session date or the reason coverage was limited. When the pair is unavailable, the brief uses its usual dated market and issuer evidence.
 
+The takeaway leads with the verified market move or a material original disclosure. A confirmed earnings catalyst can explain what matters next. An admitted IPO price or indicative range can add valuation context, with the stage kept explicit. Individual price moves belong in Companies in Focus. Watchlist breadth and follow-through appear in What We're Watching. The written and spoken editions use the same takeaway evidence.
+
 Each company news story in a new Daily Brief needs a concrete fact extracted from the original release body. The editor checks the fact before it ranks stories. Qualifying details include deal and financing amounts, reported results, contract amounts with their funding qualifications, named deployments, and shipments. `/editorstatus` counts company stories admitted or held by the check, and `/storylog SYMBOL` shows the decision and its source. When the research watch covers an admitted acquisition, its follow-up uses the disclosed value and deal stage to frame the next check.
 
 The interactive and manual send commands use the brief's 3,800-character cap for Telegram delivery. A complete brief fits in one message with its original source link and research footer.

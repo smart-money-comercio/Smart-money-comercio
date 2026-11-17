@@ -350,7 +350,17 @@ def build(record, report, research, *, schema=2):
     opening_sources = (["earnings_" + opening_context["symbol"]]
                        if not futures and opening_context and (context_sources or review.get("reader_version") in {2, 3, 4}) else [])
     edition_intro = " This is Smart Money for " + local.strftime("%B %d").replace(" 0", " ") + ". "
-    if review.get("reader_version") in {3,4}:
+    if evidence.get("takeaway_version"):
+        from src.intelligence.daily_takeaway import compose
+
+        lead = compose(evidence)
+        edition_intro = " "
+        opening_sources = list(lead["story_ids"])
+        if lead["earnings"]:
+            opening_sources.append("calendar_" + watch["notice"]["symbol"] if watch["phase"] == "preview" else watch["story_id"])
+            if comparison:
+                opening_sources.append(earnings_watch.GUIDANCE_SOURCE_ID)
+    elif review.get("reader_version") in {3,4}:
         if review["reader_version"] == 4:
             from src.intelligence.market_priority import earnings_lead, opening_source, selloff
             if selloff(evidence):
@@ -369,7 +379,7 @@ def build(record, report, research, *, schema=2):
             opening_sources = ["calendar_" + watch["notice"]["symbol"]] if watch["phase"] == "preview" else [watch["story_id"]]
             if comparison:
                 opening_sources.append(earnings_watch.GUIDANCE_SOURCE_ID)
-    if modern and review.get("reader_version") in {2, 3, 4} and first_checked:
+    if modern and not evidence.get("takeaway_version") and review.get("reader_version") in {2, 3, 4} and first_checked:
         label = NAMES.get(first_checked["symbol"], first_checked["symbol"])
         company_line = next((line for line in re.split(r"(?<=[.!?])\s+", hook) if label in line), "")
         if company_line and company_line not in hook_bullets:

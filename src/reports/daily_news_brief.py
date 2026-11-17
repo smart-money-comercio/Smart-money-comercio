@@ -193,7 +193,7 @@ def validate_news_brief(text: str) -> dict:
 
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
-                           require_company_facts=False) -> str:
+                           require_company_facts=False, takeaway_version=0) -> str:
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
     if quality.get("format") == "news":
@@ -309,7 +309,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit,
                 earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0),
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
-                premarket_futures=futures,
+                premarket_futures=futures, takeaway_version=takeaway_version,
             )
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro or futures):

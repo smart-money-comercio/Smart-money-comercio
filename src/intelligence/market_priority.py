@@ -66,9 +66,14 @@ def opening_source(evidence):
 def order_in_takeaway(evidence):
     if evidence.get("business_version", 0) < 6 or evidence.get("reader_version") != 4:
         return None
-    if earnings_lead(evidence):
-        return None
-    point = opening_source(evidence)
+    if evidence.get("takeaway_version"):
+        from src.intelligence.daily_takeaway import compose
+
+        point = compose(evidence)["point"]
+    else:
+        if earnings_lead(evidence):
+            return None
+        point = opening_source(evidence)
     if point and any(story["id"] in point["story_ids"] and story.get("event_evidence", {}).get("schema") == 15
                      for story in evidence["stories"]):
         return point
@@ -84,6 +89,10 @@ def earnings_lead(evidence):
 
 
 def opening(evidence):
+    if evidence.get("takeaway_version"):
+        from src.intelligence.daily_takeaway import compose
+
+        return "The takeaway: " + compose(evidence)["text"]
     watch = earnings_lead(evidence)
     if futures := evidence.get("premarket_futures"):
         from src.intelligence import early_futures

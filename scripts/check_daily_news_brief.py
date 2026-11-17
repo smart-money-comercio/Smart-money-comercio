@@ -627,25 +627,30 @@ class EarlyBriefChecks(IsolatedChecks):
         snapshot = f"Market Session: {market}.\nQuote session: {prior_day}\nBreadth: 5 up / 15 down / 20 quoted"
         return self.research(now=now or self.now, replacements={"Market Snapshot": snapshot}, ranked=enriched_ranked_stocks())
 
-    def test_daily_builder_pairs_the_opening_with_a_verified_issuer_preview(self):
+    def nvidia_notice(self, now):
         from scripts.check_news_editor import candidate
+
+        return candidate("NVDA", title="Nvidia Sets Conference Call for Quarterly Financial Results",
+                         published=(now - timedelta(days=4)).isoformat(), source_checked_at=now.isoformat(),
+                         source_excerpt="Nvidia will host its earnings conference call on November 17, 2026 at 5:00 p.m. Eastern Time.",
+                         excerpt_scope="publisher feed excerpt")
+
+    def test_daily_builder_pairs_the_opening_with_a_verified_issuer_preview(self):
         from src.intelligence import early_futures, news_editor, news_editor_store
         from src.reports import daily_voiceover
 
         research = self.early_research()
-        notice = candidate("NVDA", title="Nvidia Sets Conference Call for Quarterly Financial Results",
-                           published=(self.now - timedelta(days=4)).isoformat(), source_checked_at=self.now.isoformat(),
-                           source_excerpt="Nvidia will host its earnings conference call on November 17, 2026 at 5:00 p.m. Eastern Time.",
-                           excerpt_scope="publisher feed excerpt")
+        notice = self.nvidia_notice(self.now)
         with patch.object(daily_report, "build_research_report", return_value=research), \
                 patch.object(early_futures.sources, "fetch", side_effect=self.charts.__getitem__) as fetch, \
                 patch.object(news_editor, "cache_candidates", return_value=([notice], [])):
             text = daily_report.build_daily_report()
         self.assertEqual(fetch.call_count, 3)
         intro, market = text.split("\nMarket Update\n", maxsplit=1)
-        self.assertIn("The takeaway: At 5:50 AM EST, Nasdaq-100 futures were down 0.97 percent and S&P 500 futures were down 0.36 percent", intro)
+        self.assertIn("The takeaway: Early losses were steeper in tech-heavy futures. At 5:50 AM EST, Nasdaq-100 futures were down 0.97 percent and S&P 500 futures were down 0.36 percent", intro)
         self.assertIn("from their levels at the prior U.S. cash close.", intro)
-        self.assertIn("Nvidia's earnings are the next check on data center demand and gross margins.", intro)
+        self.assertIn("Nvidia's Tuesday earnings are the next test of how gross margins held up against management's guidance.", intro)
+        self.assertNotIn("watchlist", intro.lower())
         self.assertIn("Friday, November 13", market)
         self.assertIn("the S&P 500 fell 0.52 percent", market)
         self.assertIn("At the open — Check how many of the stocks and funds we track open lower.", market)
@@ -654,6 +659,7 @@ class EarlyBriefChecks(IsolatedChecks):
         self.assertIn("Premarket futures: PASS | 5:50 AM EST | prior cash close 2026-11-13", news_editor.build_editor_status())
         record = news_editor_store.read_editions(report=text)[0]
         voice = daily_voiceover.checked(record, self.now)
+        self.assertTrue(voice["segments"][0]["narration"].startswith("Good morning. Early losses were steeper"))
         self.assertIn("Nasdaq one hundred futures were down zero point nine seven percent", voice["segments"][0]["narration"])
         self.assertEqual(voice["segments"][0]["source_ids"], [early_futures.SOURCE_ID, "calendar_NVDA"])
         self.assertEqual(len(voice["sources"][early_futures.SOURCE_ID]), 2)
@@ -666,6 +672,52 @@ class EarlyBriefChecks(IsolatedChecks):
         altered = text.replace(early_futures.source_line(review["evidence"]["premarket_futures"]), "")
         with self.assertRaisesRegex(ValueError, "lost their source links"):
             validate_review(review, research, altered, news_editor.selected_stories(record))
+
+    def test_after_hours_selloff_keeps_breadth_in_watching_and_the_catalyst_in_the_takeaway(self):
+        from src.intelligence import early_futures, news_editor, news_editor_store
+        from src.reports import daily_voiceover
+
+        now = datetime(2026, 11, 17, 3, 8, tzinfo=timezone.utc)
+        research = self.research(now=now, ranked=enriched_ranked_stocks(), replacements={
+            "Executive Summary": "- Main theme: Market weakness.\n- Market moves: Nasdaq -2.49%, S&P -1.92%, Russell -1.70%.",
+            "Market Snapshot": "Market Session: Closed — after hours.\nQuote session: 2026-11-16\nBreadth: 1 up / 19 down / 20 quoted",
+        })
+        with patch.object(daily_report, "build_research_report", return_value=research), \
+                patch.object(news_editor, "cache_candidates", return_value=([self.nvidia_notice(now)], [])), \
+                patch.object(early_futures, "capture") as fetch:
+            text = daily_report.build_daily_report()
+        fetch.assert_not_called()
+        intro, report = text.split("\nMarket Update\n", maxsplit=1)
+        self.assertIn("Good evening.", intro)
+        self.assertIn("The takeaway: Stocks fell at Monday's close, with the Nasdaq Composite down 2.49 percent and the S&P 500 down 1.92 percent.", intro)
+        self.assertIn("Nvidia's Tuesday earnings are the next test", intro)
+        self.assertNotIn("watchlist", intro.lower())
+        self.assertIn("Of the 20 quoted stocks and funds on our watchlist", report.split("What We're Watching", maxsplit=1)[1])
+        record, = news_editor_store.read_editions(report=text)
+        scene = daily_voiceover.checked(record, now)["segments"][0]
+        self.assertNotIn("watchlist", scene["narration"].lower())
+        self.assertEqual(scene["source_ids"], ["calendar_NVDA"])
+
+    def test_takeaway_adds_verified_ipo_range_without_inventing_a_pricing_date(self):
+        from src.intelligence import early_futures, ipo_monitor, news_editor, news_editor_store
+        from src.reports import daily_voiceover
+
+        ipo = ipo_monitor.item("anthropic", ipo_monitor.issuers()["anthropic"],
+                               "Anthropic Announces Price Range for its Initial Public Offering",
+                               "https://www.anthropic.com/news/synthetic-ipo-price-range",
+                               (self.now - timedelta(hours=2)).isoformat(), "The proposed price range is $50 to $55 per share.", self.now.isoformat())
+        research = self.early_research()
+        with patch.object(daily_report, "build_research_report", return_value=research), \
+                patch.object(early_futures.sources, "fetch", side_effect=self.charts.__getitem__), \
+                patch.object(news_editor, "cache_candidates", return_value=([{**ipo, "kind": "macro"}, self.nvidia_notice(self.now)], [])):
+            text = daily_report.build_daily_report()
+        intro = next(row for row in text.splitlines() if row.startswith("The takeaway:"))
+        self.assertIn("Anthropic's proposed IPO range sets a benchmark for its eventual pricing.", intro)
+        self.assertIn("Nvidia's Tuesday earnings", intro)
+        self.assertNotIn("pricing this week", intro)
+        record, = news_editor_store.read_editions(report=text)
+        story, = news_editor.selected_stories(record)
+        self.assertIn(story["id"], daily_voiceover.checked(record, self.now)["segments"][0]["source_ids"])
 
     def test_conflicting_prior_cash_date_keeps_the_usual_dated_brief(self):
         from src.intelligence import early_futures, news_editor

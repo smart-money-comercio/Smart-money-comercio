@@ -102,6 +102,7 @@ def analyze_report(
     reader_version: int = 0, reader_limit: int = 3, earnings_context: list | None = None,
     disclosure_version: int = 0, business_version: int = 0, intel_results_baseline: dict | None = None,
     earnings_watch: dict | None = None, watchlist_baseline: dict | None = None, premarket_futures: dict | None = None,
+    takeaway_version: int = 0,
 ) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
@@ -116,6 +117,12 @@ def analyze_report(
     if type(business_version) is not int or not 0 <= business_version <= 8 or business_version and (presentation != "news" or narration_version != 2):
         raise ValueError("Unknown business interpretation version")
     evidence = report_evidence(report)
+    if takeaway_version:
+        from src.intelligence.daily_takeaway import VERSION
+
+        if type(takeaway_version) is not int or takeaway_version != VERSION or reader_version != 4:
+            raise ValueError("Unknown dated takeaway presentation")
+        evidence["takeaway_version"] = takeaway_version
     if disclosure_version:
         evidence["disclosure_version"] = disclosure_version
     if event_context is not None or business_version >= 6:
@@ -271,6 +278,7 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         business_version=analysis.get("business_version", 0), intel_results_baseline=analysis.get("intel_results_baseline"),
         earnings_watch=analysis.get("earnings_watch"), watchlist_baseline=analysis.get("watchlist_baseline"),
         premarket_futures=futures,
+        takeaway_version=analysis.get("evidence", {}).get("takeaway_version", 0),
     )
     if any(analysis.get(key) != expected.get(key) for key in (
         "schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version",

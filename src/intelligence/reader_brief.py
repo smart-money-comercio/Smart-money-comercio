@@ -253,7 +253,20 @@ def watching(evidence):
     return rows
 
 
-def insights(evidence):
+def _takeaway_sources(evidence):
+    if evidence.get("takeaway_version"):
+        from src.intelligence.daily_takeaway import compose
+        from src.intelligence import early_futures, earnings_watch
+
+        lead = compose(evidence)
+        sources = []
+        if lead["market"]:
+            sources.extend([early_futures.SOURCE_SECTION] if evidence.get("premarket_futures") else ["Market Snapshot", "Executive Summary"])
+        if lead["earnings"]:
+            sources.append(earnings_watch.SOURCE_SECTION)
+        if lead["story_ids"]:
+            sources.append("Verified story decisions")
+        return sources or ["Market Snapshot"], lead["earnings"]
     sources = ["Executive Summary", "Market Snapshot"]
     futures = evidence.get("premarket_futures")
     if futures:
@@ -278,6 +291,11 @@ def insights(evidence):
     from src.intelligence.market_priority import selloff
     if not futures and first and matching(evidence.get("earnings_context", []), first["symbol"]) and not (evidence.get("reader_version") == 4 and selloff(evidence)):
         sources.append("Recent earnings context")
+    return sources, has_earnings_lead
+
+
+def insights(evidence):
+    sources, has_earnings_lead = _takeaway_sources(evidence)
     rows = [{"id": "opening_takeaway", "section": "intro", "text": opening(evidence), "sources": sources}, *watching(evidence)]
     watch = evidence.get("earnings_watch")
     if watch and watch.get("guidance_comparison"):
