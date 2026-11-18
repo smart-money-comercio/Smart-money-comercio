@@ -292,13 +292,19 @@ def build(record, report, research, *, schema=2):
         ]
     watch = evidence.get("earnings_watch")
     comparison = ""
+    watchlist_outcome = ""
+    if verdict := evidence.get("watchlist_verdict"):
+        from src.intelligence.watchlist_breadth import verdict_copy
+
+        watchlist_outcome = verdict_copy(verdict)
     if watch:
         from src.intelligence import earnings_watch
         if report.count(earnings_watch.source_line(watch, selected)) != 1:
             raise ValueError("Earnings watch lost its original source link")
         if watch.get("guidance_comparison"):
             comparison = earnings_watch.comparison_text(watch)
-            if (groups.get(earnings_watch.COMPARISON_HEADER) != comparison
+            follow_up = comparison + ("\n\n" + watchlist_outcome if watchlist_outcome else "")
+            if (groups.get(earnings_watch.COMPARISON_HEADER) != follow_up
                     or report.count(earnings_watch.guidance_source_line(watch)) != 1):
                 raise ValueError("Earnings follow-up narration needs its original guidance and written comparison")
             guide = watch["guidance"]
@@ -509,6 +515,8 @@ def build(record, report, research, *, schema=2):
     watch_rows = [row for row in review["insights"] if row["section"] == "watch"]
     if evidence.get("business_version", 0) >= 3:
         narration, bullets, watch_sources = named_watch_scene(watch_rows, sources, evidence.get("earnings_context", []))
+        if watchlist_outcome:
+            narration = watchlist_outcome + " " + narration
         if futures and any(early_futures.SOURCE_SECTION in row["sources"] for row in watch_rows):
             watch_sources.append(early_futures.SOURCE_ID)
         add("What We're Watching", narration, bullets, watch_sources)

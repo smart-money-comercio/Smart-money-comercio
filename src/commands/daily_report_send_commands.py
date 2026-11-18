@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.commands.admin_commands import get_current_chat_id, is_admin
+from src.intelligence.news_editor_store import confirm_watchlist_delivery
 from src.jobs.daily_report_scheduler import (
     TELEGRAM_MESSAGE_LIMIT,
     build_weekend_delivery_report,
@@ -87,6 +88,8 @@ async def senddaily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             except Exception as exc:
                 failed_destinations.append(f"{destination}: {type(exc).__name__}")
 
+        if success_count and not weekend:
+            await asyncio.to_thread(confirm_watchlist_delivery, report)
         failure_text = ""
 
         if failed_destinations:

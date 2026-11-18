@@ -193,7 +193,7 @@ def validate_news_brief(text: str) -> dict:
 
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
-                           require_company_facts=False, takeaway_version=0) -> str:
+                           require_company_facts=False, takeaway_version=0, watchlist_checkpoint_version=0) -> str:
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
     if quality.get("format") == "news":
@@ -285,6 +285,15 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     watchlist_baseline = watchlist_breadth.prior_edition(research_report, past_editions, now)
     if watchlist_baseline:
         plan["watchlist_baseline"] = watchlist_baseline
+    watchlist_checkpoint = None
+    if watchlist_checkpoint_version and past_editions:
+        try:
+            confirmed = news_editor_store.confirmed_watchlist_ids(now)
+        except (OSError, SQLiteError):
+            confirmed = []
+        watchlist_checkpoint = watchlist_breadth.delivered_checkpoint(research_report, past_editions, confirmed, now)
+        if watchlist_checkpoint:
+            plan["watchlist_checkpoint"] = watchlist_checkpoint
     chosen = None
     last_result = None
     recent = plan.get("earnings_context_candidates") or None
@@ -310,6 +319,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0),
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
                 premarket_futures=futures, takeaway_version=takeaway_version,
+                watchlist_checkpoint_version=watchlist_checkpoint_version, watchlist_checkpoint=watchlist_checkpoint,
             )
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro or futures):
@@ -381,8 +391,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             broad_selloff = selloff(analysis["evidence"])
             if broad_selloff:
                 groups.sort(key=lambda group: (0 if group[0] == "Market Update" else 1 if group[0] == "Companies in Focus" else 2, ALL_HEADERS.index(group[0])))
-            if comparison:
-                groups.insert(int(broad_selloff), (earnings_watch.COMPARISON_HEADER, [comparison]))
+            follow_up = [comparison] if comparison else []
+            if verdict := analysis["evidence"].get("watchlist_verdict"):
+                follow_up.append(watchlist_breadth.verdict_copy(verdict))
+            if follow_up:
+                groups.insert(int(broad_selloff), (earnings_watch.COMPARISON_HEADER, follow_up))
 
             def render():
                 introduction = "\n\n".join(row["text"] for row in insights if row["section"] == "intro")

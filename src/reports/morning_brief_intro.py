@@ -6,6 +6,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import RLock
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -18,6 +19,9 @@ CACHE_FILE = PROJECT_ROOT / "data" / "morning_brief_cache.json"
 TIMEZONE = "America/Lima"
 REQUEST_TIMEOUT = 6
 CACHE_TTL_SECONDS = 60 * 60 * 6
+REPORT_REFRESH_LOCK = RLock()
+REPORT_REFRESH_RETRY_SECONDS = 120
+last_report_refresh = None
 
 RECAP_SYMBOLS = [
     symbol.strip().upper()
@@ -1702,44 +1706,44 @@ def ensure_morning_brief_cache_is_fresh(
     build_daily_report() should remain cache-only so deploycheck/preflight
     stays fast and network-safe.
     """
+    global last_report_refresh
     if max_age_minutes is None:
         try:
             max_age_minutes = int(os.getenv("MORNING_BRIEF_MAX_CACHE_MINUTES", "360"))
         except Exception:
             max_age_minutes = 360
 
-    payload = load_morning_brief_cache()
-    age_minutes = get_cache_age_minutes(payload)
+    with REPORT_REFRESH_LOCK:
+        payload = load_morning_brief_cache()
+        age_minutes = get_cache_age_minutes(payload)
+        now = datetime.now(timezone.utc)
+        from src.intelligence.research_context import market_check, market_quotes
 
-    should_refresh = (
-        force_refresh
-        or not payload
-        or age_minutes is None
-        or age_minutes > max_age_minutes
-    )
-
-    if not should_refresh:
-        return payload
-
-    try:
-        refreshed = refresh_morning_brief_cache()
-
-        if refreshed:
-            return refreshed
-
-    except Exception as exc:
-        if payload:
-            payload["refresh_error"] = str(exc)
+        quotes = market_quotes(payload, now)
+        core = {"^GSPC", "^IXIC", "^RUT"}
+        check = market_check(payload, now)
+        prices_need_refresh = not core.issubset(quotes) or any(
+            quote["quote_timing"] == "regular_session"
+            and (now - datetime.fromisoformat(quote["asof"])).total_seconds() > 600
+            for symbol, quote in quotes.items() if symbol in core
+        )
+        should_refresh = (force_refresh or not payload or age_minutes is None or age_minutes > max_age_minutes
+                          or "stale" in check or "unavailable" in check or prices_need_refresh)
+        if not should_refresh:
             return payload
 
-        return {
-            "refresh_error": str(exc),
-            "market_moves": [],
-            "headlines": [],
-            "theme_summary": {},
-        }
-
-    return payload or {}
+        attempt = time.monotonic()
+        if (not force_refresh and last_report_refresh is not None
+                and 0 <= attempt - last_report_refresh < REPORT_REFRESH_RETRY_SECONDS):
+            return payload
+        last_report_refresh = attempt
+        try:
+            refreshed = refresh_morning_brief_cache()
+            if refreshed:
+                return refreshed
+        except Exception as exc:
+            return {**payload, "refresh_error": str(exc)}
+        return payload or {}
 
 
 def build_data_freshness_line(payload: dict) -> str:

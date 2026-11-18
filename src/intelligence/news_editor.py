@@ -807,6 +807,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Intel results benchmark lost its admitted source record")
         if analyst_review.get("watchlist_baseline") != plan.get("watchlist_baseline"):
             raise ValueError("Watchlist follow-through lost its admitted prior edition")
+        if analyst_review.get("watchlist_checkpoint") != plan.get("watchlist_checkpoint"):
+            raise ValueError("Watchlist outcome lost its delivered checkpoint")
         validate_review(analyst_review, research_report, report, selected)
         if analyst_review.get("business_version", 0) != plan.get("business_version", 0):
             raise ValueError("Business review version does not match the editorial plan")
@@ -998,6 +1000,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                     link = source(watch, selected_stories(record))["url"]
                     lines.append(f"Earnings watch: {notice['symbol']} — {watch['phase']} | event {notice['event_date']} | {link}")
                 comparison = analysis["evidence"].get("watchlist_follow_through")
+                if verdict := analysis["evidence"].get("watchlist_verdict"):
+                    lines.append(f"Watchlist checkpoint: {verdict['status'].upper()} | close {verdict['session']}"
+                                 f" | {verdict['available']}/{len(verdict['symbols'])} quoted | delivered edition {verdict['edition_id']}")
                 if comparison:
                     from src.intelligence.watchlist_breadth import SOURCE_SECTION
 

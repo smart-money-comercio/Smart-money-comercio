@@ -4,9 +4,11 @@ from contextlib import closing
 from datetime import datetime, timedelta
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import sqlite3
+import time
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -116,3 +118,31 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
         except (ValueError, TypeError, KeyError, AttributeError):
             continue
     return records
+
+
+def confirm_watchlist_delivery(report: str) -> None:
+    """Record a checkpoint only after the complete report reached Telegram."""
+    from src.intelligence.watchlist_breadth import WATCH_LABEL
+
+    if WATCH_LABEL not in report or not state_path().is_file():
+        return
+    digest = hashlib.sha256(report.encode()).hexdigest()
+    try:
+        with closing(sqlite3.connect(state_path(), timeout=3)) as db, db:
+            db.execute("CREATE TABLE IF NOT EXISTS watchlist_deliveries (edition_id TEXT PRIMARY KEY, confirmed REAL NOT NULL)")
+            db.execute("INSERT OR IGNORE INTO watchlist_deliveries SELECT id, ? FROM editions WHERE report_sha256 = ? "
+                       "ORDER BY generated DESC, rowid DESC LIMIT 1", (time.time(), digest))
+            db.execute("DELETE FROM watchlist_deliveries WHERE edition_id NOT IN (SELECT id FROM editions)")
+    except (OSError, sqlite3.Error):
+        logging.getLogger(__name__).warning("Watchlist checkpoint delivery could not be recorded", exc_info=True)
+
+
+def confirmed_watchlist_ids(now: datetime) -> list[str]:
+    path = state_path()
+    if not path.is_file():
+        return []
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)) as db:
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'watchlist_deliveries'").fetchone():
+            return []
+        return [row[0] for row in db.execute("SELECT edition_id FROM watchlist_deliveries WHERE confirmed <= ? "
+                                            "ORDER BY confirmed, rowid LIMIT ?", (now.timestamp(), MAX_EDITIONS))]

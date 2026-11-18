@@ -5,6 +5,7 @@ import asyncio
 from src.intelligence.company_catalyst_context import build_company_catalyst_report
 from src.intelligence.special_alert_universe import SYMBOL
 from src.reports.daily_report import build_research_report
+from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
 from src.utils.telegram_messages import reply_long_message
 
 
@@ -23,5 +24,6 @@ async def catalysts_command(update, context) -> None:
 async def fullreport_command(update, context) -> None:
     if not update.message:
         return
+    await asyncio.to_thread(ensure_morning_brief_cache_is_fresh)
     text = await asyncio.to_thread(build_research_report)
     await reply_long_message(update, text, title="Detailed Research Report", parse_mode=None)

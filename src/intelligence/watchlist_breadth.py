@@ -7,6 +7,9 @@ from src.intelligence.special_alert_sources import NY, timestamp
 
 
 SOURCE_SECTION = "Prior watchlist closes"
+CHECKPOINT_SOURCE = "Delivered watchlist checkpoint"
+CHECKPOINT_VERSION = 1
+WATCH_LABEL = "Watchlist follow-through — "
 CLOSES = "Watchlist closes vs "
 DAY = r"(\d{4}-\d{2}-\d{2})"
 BREADTH = r"^Breadth: (\d{1,3}) up / (\d{1,3}) down / (\d{1,3}) quoted$"
@@ -138,4 +141,88 @@ def watch_copy(comparison):
         check = f"{up} advanced at the latest close. Watch whether at least {majority} do so again."
     else:
         check = f"Watch for at least {majority} advances at the next close to see if gains reach a majority."
-    return "Watchlist follow-through — " + result + " " + check
+    return WATCH_LABEL + result + " " + check
+
+
+def delivered_checkpoint(report, editions, confirmed_ids, now):
+    """Use the first confirmed brief that printed the checkpoint for the preceding close."""
+    by_id = {edition["id"]: edition for edition in editions}
+    for edition_id in confirmed_ids:
+        edition = by_id.get(edition_id)
+        if not edition or not edition.get("voiceover"):
+            continue
+        analysis = edition["analyst_review"]
+        comparison = analysis["evidence"].get("watchlist_follow_through")
+        if not comparison or not any(row["name"] == "Editorial Review" and row["status"] == "pass" for row in edition["stages"]):
+            continue
+        text = watch_copy(comparison)
+        if text not in edition["report_text"].splitlines() or not any(
+                row["section"] == "watch" and row["text"] == text for row in analysis["insights"]):
+            continue
+        proof = {"edition_id": edition_id, "generated_at": edition["generated_at"], "text": text,
+                 "snapshot": market_snapshot(edition["research_text"]), "baseline": analysis.get("watchlist_baseline")}
+        if evaluate(report, proof, now):
+            return proof
+    return None
+
+
+def evaluate(report, proof, now):
+    """Reconstruct the original criterion and check it against the same names at the next close."""
+    edition_id = proof.get("edition_id", "")
+    generated = timestamp(proof.get("generated_at"))
+    prior = closing_snapshot(proof.get("snapshot", ""))
+    if not re.fullmatch(r"[0-9a-f]{20}", edition_id) or not generated or generated >= now or not prior:
+        return None
+    comparison = compare(prior, proof.get("baseline"), generated)
+    if not comparison or watch_copy(comparison) != proof.get("text"):
+        return None
+
+    snapshot = market_snapshot(report)
+    session_day = re.findall(r"^Quote session: " + DAY + r"$", snapshot, re.M)
+    if not re.match(r"Market Session: Closed\b", snapshot) or len(session_day) != 1:
+        return None
+    try:
+        session = date.fromisoformat(session_day[0])
+    except ValueError:
+        return None
+    before = date.fromisoformat(prior["session"])
+    if (not 1 <= (session - before).days <= 4 or session.weekday() >= 5
+            or session > now.astimezone(NY).date()):
+        return None
+    current = closing_snapshot(snapshot)
+    # A verified different predecessor means this was not the promised close.
+    if current and current["previous_session"] != prior["session"]:
+        return None
+
+    symbols = comparison["symbols"]
+    directions = current["directions"] if current else {}
+    available = sum(symbol in directions for symbol in symbols)
+    total = len(symbols)
+    majority = total // 2 + 1
+    metric = "down" if comparison["down"] >= majority else "up"
+    limit = majority - 1 if metric == "down" else majority
+    earlier = comparison[metric]
+    result = {"edition_id": edition_id, "previous_session": prior["session"], "session": session.isoformat(),
+              "symbols": symbols, "available": available, "metric": metric, "threshold": limit, "previous_count": earlier}
+    if available != total:
+        return {**result, "status": "limited"}
+    count = sum(directions[symbol] == metric for symbol in symbols)
+    met = count <= limit if metric == "down" else count >= limit
+    return {**result, "status": "met" if met else "missed", "count": count}
+
+
+def verdict_copy(result):
+    session = date.fromisoformat(result["session"])
+    day = f"{session:%B} {session.day}"
+    total = len(result["symbols"])
+    if result["status"] == "limited":
+        return (f"Comparable quotes covered {result['available']} of the {total} names in our watchlist check at the {day} close. "
+                "The outcome needs a complete set of closing quotes.")
+    down = result["metric"] == "down"
+    verb, noun = ("fell", "decliners") if down else ("rose", "advancers")
+    direction = "down" if result["count"] < result["previous_count"] else "up"
+    earlier = "unchanged from the prior close" if result["count"] == result["previous_count"] else f"{direction} from {result['previous_count']}"
+    target = f"{result['threshold']} or fewer" if down else f"at least {result['threshold']}"
+    state = "met" if result["status"] == "met" else "missed"
+    return (f"At the {day} close, {result['count']} of the same {total} watchlist names {verb}, {earlier}. "
+            f"That {state} our target of {target} {noun}.")

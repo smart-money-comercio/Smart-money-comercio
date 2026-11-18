@@ -7,8 +7,10 @@ from zoneinfo import ZoneInfo
 
 from telegram.error import TelegramError
 
+from src.intelligence.news_editor_store import confirm_watchlist_delivery
 from src.reports import weekend_telegram
 from src.reports.daily_report import build_daily_report
+from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
 from src.utils.telegram_messages import send_long_message_to_chat
 
 
@@ -125,6 +127,7 @@ def daily_report_enabled() -> bool:
 
 
 async def build_daily_report_safe() -> str:
+    await asyncio.to_thread(ensure_morning_brief_cache_is_fresh)
     return await asyncio.to_thread(build_daily_report)
 
 
@@ -181,6 +184,7 @@ async def send_daily_report_to_chat(bot, chat_id: int | str) -> bool:
                 text=chunk
             )
 
+        await asyncio.to_thread(confirm_watchlist_delivery, report)
         return True
 
     except TelegramError as error:

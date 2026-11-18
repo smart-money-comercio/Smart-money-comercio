@@ -103,6 +103,7 @@ def analyze_report(
     disclosure_version: int = 0, business_version: int = 0, intel_results_baseline: dict | None = None,
     earnings_watch: dict | None = None, watchlist_baseline: dict | None = None, premarket_futures: dict | None = None,
     takeaway_version: int = 0,
+    watchlist_checkpoint_version: int = 0, watchlist_checkpoint: dict | None = None,
 ) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
@@ -226,6 +227,19 @@ def analyze_report(
             raise ValueError("Watchlist follow-through needs two comparable completed sessions")
         evidence["watchlist_follow_through"] = comparison
         evidence["source_sections"].append(watchlist_breadth.SOURCE_SECTION)
+    if watchlist_checkpoint_version or watchlist_checkpoint is not None:
+        from src.intelligence import watchlist_breadth
+
+        if (type(watchlist_checkpoint_version) is not int or watchlist_checkpoint_version != watchlist_breadth.CHECKPOINT_VERSION
+                or event_context is None or reader_version != 4):
+            raise ValueError("Watchlist checkpoints require a dated daily brief")
+        evidence["watchlist_checkpoint_version"] = watchlist_checkpoint_version
+        if watchlist_checkpoint is not None:
+            verdict = watchlist_breadth.evaluate(report, watchlist_checkpoint, now)
+            if not verdict:
+                raise ValueError("Watchlist outcome needs the original delivered checkpoint and a later close")
+            evidence["watchlist_verdict"] = verdict
+            evidence["source_sections"].append(watchlist_breadth.CHECKPOINT_SOURCE)
     if premarket_futures is not None:
         if event_context is None or reader_version != 4 or evidence["is_open"]:
             raise ValueError("Premarket futures require a dated brief before the cash session opens")
@@ -254,6 +268,8 @@ def analyze_report(
         value["earnings_watch"] = deepcopy(earnings_watch)
     if watchlist_baseline is not None:
         value["watchlist_baseline"] = deepcopy(watchlist_baseline)
+    if watchlist_checkpoint is not None:
+        value["watchlist_checkpoint"] = deepcopy(watchlist_checkpoint)
     if disclosure_version:
         value["disclosure_version"] = disclosure_version
     if business_version:
@@ -279,11 +295,13 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         earnings_watch=analysis.get("earnings_watch"), watchlist_baseline=analysis.get("watchlist_baseline"),
         premarket_futures=futures,
         takeaway_version=analysis.get("evidence", {}).get("takeaway_version", 0),
+        watchlist_checkpoint_version=analysis.get("evidence", {}).get("watchlist_checkpoint_version", 0),
+        watchlist_checkpoint=analysis.get("watchlist_checkpoint"),
     )
     if any(analysis.get(key) != expected.get(key) for key in (
         "schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version",
         "event_context", "reader_version", "reader_limit", "earnings_context", "disclosure_version",
-        "business_version", "intel_results_baseline", "earnings_watch", "watchlist_baseline",
+        "business_version", "intel_results_baseline", "earnings_watch", "watchlist_baseline", "watchlist_checkpoint",
     )):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
@@ -295,6 +313,14 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
     required = {key for key, row in allowed.items() if key not in {"model_support", "company_price", "participation"} or row["text"] in report}
     if seen != required:
         raise ValueError("Available analyst evidence was omitted from the brief")
+    if verdict := expected["evidence"].get("watchlist_verdict"):
+        from src.intelligence import earnings_watch, watchlist_breadth
+        from src.reports.daily_voiceover import sections
+
+        outcome = watchlist_breadth.verdict_copy(verdict)
+        follow_up = sections(report).get(earnings_watch.COMPARISON_HEADER, "")
+        if outcome not in follow_up.split("\n\n") or report.count(outcome) != 1:
+            raise ValueError("Watchlist outcome lost its verified copy or follow-up section")
     if futures:
         from src.intelligence import early_futures
 

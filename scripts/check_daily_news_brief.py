@@ -1353,8 +1353,12 @@ class CommandChecks(unittest.IsolatedAsyncioTestCase):
     async def test_fullreport_uses_the_detailed_research_builder(self):
         from src.commands import company_catalyst_commands as commands
         update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
-        with patch.object(commands, "build_research_report", return_value="Executive Summary\nDetailed evidence") as build:
+        calls = []
+        with patch.object(commands, "ensure_morning_brief_cache_is_fresh", side_effect=lambda: calls.append("refresh")) as refresh, \
+                patch.object(commands, "build_research_report", side_effect=lambda: calls.append("build") or "Executive Summary\nDetailed evidence") as build:
             await commands.fullreport_command(update, SimpleNamespace(args=[]))
+        refresh.assert_called_once_with()
+        self.assertEqual(calls, ["refresh", "build"])
         build.assert_called_once()
         self.assertIn("Executive Summary", update.message.reply_text.await_args.kwargs["text"])
 

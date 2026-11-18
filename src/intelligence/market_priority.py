@@ -187,12 +187,22 @@ def watching(evidence):
         rows = concise_checks(evidence, rows, lead_event)
     if evidence.get("business_version", 0) >= 3:
         rows = named_checks(evidence, rows, lead_event)
-    if futures := evidence.get("premarket_futures"):
+    futures = evidence.get("premarket_futures")
+    comparison = evidence.get("watchlist_follow_through")
+    if comparison and evidence.get("watchlist_checkpoint_version"):
+        from src.intelligence import early_futures, watchlist_breadth
+
+        checkpoint = {"id": "watch_participation", "section": "watch", "text": watchlist_breadth.watch_copy(comparison),
+                      "sources": ["Market Snapshot", watchlist_breadth.SOURCE_SECTION]}
+        rows = [checkpoint, *(row for row in rows if row["id"] not in {"watch_participation", "watch_market"})]
+        if futures:
+            rows.insert(1, early_futures.open_check(futures))
+    elif futures:
         from src.intelligence import early_futures
 
         rows = [early_futures.open_check(futures),
                 *(row for row in rows if row["id"] not in {"watch_participation", "watch_market"})]
-    elif comparison := evidence.get("watchlist_follow_through"):
+    elif comparison:
         from src.intelligence import watchlist_breadth
 
         for row in rows:

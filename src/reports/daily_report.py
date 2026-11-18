@@ -1514,7 +1514,7 @@ def build_executive_summary(
 
     lines = [
         f"- Main theme: {primary_theme}.",
-        f"- Market tone: {market_tone}; macro pressure: {pressure}.",
+        f"- Market tone: {market_tone} (quoted watchlist); macro pressure: {pressure}.",
         f"- Market moves: {market_moves}",
     ]
 
@@ -2152,7 +2152,9 @@ Research only. Not financial advice.
 def build_daily_report() -> str:
     from src.intelligence import early_futures
     from src.intelligence.daily_takeaway import VERSION
+    from src.intelligence.watchlist_breadth import CHECKPOINT_VERSION
     from src.reports.daily_news_brief import build_daily_news_brief
     return build_daily_news_brief(build_research_report(),
                                   futures_provider=early_futures.capture if DAILY_REPORT_LIVE_QUOTES else None,
-                                  require_company_facts=True, takeaway_version=VERSION)
+                                  require_company_facts=True, takeaway_version=VERSION,
+                                  watchlist_checkpoint_version=CHECKPOINT_VERSION)

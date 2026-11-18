@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -23,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.check_special_alerts import offline_network_guard, portable_tcp_socketpair
 from scripts.check_watchlist_quotes import market_row
 from src.jobs import daily_agent_job as daily
+from src.jobs import daily_report_scheduler as scheduler
 from src.commands import daily_agent_commands as commands
 from src.intelligence import research_context
 from src.reports import daily_report, morning_brief_intro
@@ -272,6 +274,91 @@ class TelegramChecks(unittest.IsolatedAsyncioTestCase):
             await commands.rundailyagent_command(update, SimpleNamespace())
         self.assertIn("Status: FAIL", loading.edit_text.await_args.args[0])
         chat.send_message.assert_not_awaited()
+
+
+class ReaderRefreshChecks(unittest.TestCase):
+    def setUp(self):
+        self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        self.now = datetime(2026, 10, 19, 17, tzinfo=timezone.utc)
+        self.payload = {"cached_at": self.now.timestamp(), "market_moves": [
+            market_row(symbol, -0.5, self.now) for symbol in ("^GSPC", "^IXIC", "^RUT")
+        ]}
+        self.clock = Mock(wraps=datetime); self.clock.now.return_value = self.now
+        self.stack.enter_context(patch.object(morning_brief_intro, "datetime", self.clock))
+        self.stack.enter_context(patch.object(morning_brief_intro.time, "time", return_value=self.now.timestamp()))
+        self.monotonic = self.stack.enter_context(patch.object(morning_brief_intro.time, "monotonic", return_value=1000.0))
+        self.stack.enter_context(patch.object(morning_brief_intro, "last_report_refresh", None))
+        self.stack.enter_context(patch.object(morning_brief_intro, "load_morning_brief_cache", return_value=self.payload))
+        self.refresh = self.stack.enter_context(patch.object(morning_brief_intro, "refresh_morning_brief_cache", return_value={"refreshed": True}))
+
+    def test_recent_file_with_aging_live_quotes_refreshes_before_the_quotes_expire(self):
+        self.payload["cached_at"] -= 7200
+        self.payload["market_moves"] = [market_row(symbol, -0.5, self.now - timedelta(minutes=11))
+                                       for symbol in ("^GSPC", "^IXIC", "^RUT")]
+        self.assertEqual(len(research_context.market_quotes(self.payload, self.now)), 3)
+        result = morning_brief_intro.ensure_morning_brief_cache_is_fresh(max_age_minutes=360)
+        self.refresh.assert_called_once_with()
+        self.assertEqual(result, {"refreshed": True})
+
+    def test_expired_live_quotes_refresh_even_when_the_cache_file_is_recent(self):
+        self.payload["market_moves"] = [market_row(symbol, -0.5, self.now - timedelta(minutes=25))
+                                       for symbol in ("^GSPC", "^IXIC", "^RUT")]
+        self.assertEqual(research_context.market_quotes(self.payload, self.now), {})
+        morning_brief_intro.ensure_morning_brief_cache_is_fresh()
+        self.refresh.assert_called_once_with()
+
+    def test_current_core_quotes_reuse_the_cache_without_provider_requests(self):
+        self.payload["cached_at"] -= 3600
+        self.assertIs(morning_brief_intro.ensure_morning_brief_cache_is_fresh(), self.payload)
+        self.refresh.assert_not_called()
+
+    def test_missing_benchmark_retries_share_a_two_minute_interval(self):
+        self.payload["market_moves"].pop()
+        self.refresh.return_value = self.payload
+        self.monotonic.side_effect = [1000.0, 1001.0, 1121.0]
+        for _ in range(3):
+            self.assertIs(morning_brief_intro.ensure_morning_brief_cache_is_fresh(), self.payload)
+        self.assertEqual(self.refresh.call_count, 2)
+
+    def test_forced_agent_refresh_bypasses_the_automatic_retry_interval(self):
+        for _ in range(2):
+            morning_brief_intro.ensure_morning_brief_cache_is_fresh(force_refresh=True)
+        self.assertEqual(self.refresh.call_count, 2)
+
+    def test_simultaneous_report_requests_share_one_incomplete_refresh(self):
+        self.payload["market_moves"].pop()
+        self.refresh.return_value = self.payload
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda _: morning_brief_intro.ensure_morning_brief_cache_is_fresh(), range(4)))
+        self.refresh.assert_called_once_with()
+        self.assertTrue(all(result is self.payload for result in results))
+
+    def test_refresh_failure_preserves_the_original_clock_and_withholds_expired_prices(self):
+        self.payload["cached_at"] -= 3600
+        self.payload["market_moves"] = [market_row(symbol, -0.5, self.now - timedelta(minutes=25))
+                                       for symbol in ("^GSPC", "^IXIC", "^RUT")]
+        before = deepcopy(self.payload)
+        self.refresh.side_effect = RuntimeError("source unavailable")
+        result = morning_brief_intro.ensure_morning_brief_cache_is_fresh()
+        self.assertEqual(self.payload, before)
+        self.assertEqual(result["cached_at"], before["cached_at"])
+        self.assertEqual(result["refresh_error"], "source unavailable")
+        self.assertEqual(research_context.market_quotes(result, self.now), {})
+
+    def test_valid_completed_session_quotes_do_not_need_an_intraday_refresh(self):
+        self.payload.clear(); self.payload.update(fresh_payload())
+        self.clock.now.return_value = NOW
+        with patch.object(morning_brief_intro.time, "time", return_value=NOW.timestamp()):
+            self.assertIs(morning_brief_intro.ensure_morning_brief_cache_is_fresh(), self.payload)
+        self.refresh.assert_not_called()
+
+    def test_scheduled_weekday_build_refreshes_before_building_the_brief(self):
+        actions = []
+        with patch.object(scheduler, "ensure_morning_brief_cache_is_fresh", side_effect=lambda: actions.append("refresh")), \
+                patch.object(scheduler, "build_daily_report", side_effect=lambda: actions.append("build") or REPORT):
+            result = asyncio.run(scheduler.build_daily_report_safe())
+        self.assertEqual(actions, ["refresh", "build"])
+        self.assertEqual(result, REPORT)
 
 
 class MacroFreshnessChecks(unittest.TestCase):

@@ -3,14 +3,15 @@
 from contextlib import ExitStack
 from copy import deepcopy
 import argparse
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timedelta, timezone
 import socket
 import sys
 from pathlib import Path
 import json
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -102,6 +103,75 @@ class ReaderChecks(IsolatedChecks):
                 self.assertNotIn("Watchlist follow-through", self.render(report=report))
         bad_counts = later.replace("Breadth: 1 up / 1 down / 2 quoted", "Breadth: 2 up / 0 down / 2 quoted")
         self.assertIsNone(watchlist_breadth.closing_snapshot(watchlist_breadth.market_snapshot(bad_counts)))
+
+    def checkpoint_fixture(self):
+        friday = datetime(2026, 10, 23, 21, tzinfo=timezone.utc)
+        monday = datetime(2026, 10, 26, 21, tzinfo=timezone.utc)
+        symbols = {"NVDA": -1, "MSFT": -1, "GOOGL": -1, "CIBR": -1}
+        self.render(report=self.close_report(friday, "2026-10-23", "2026-10-22", symbols))
+        report = self.close_report(monday, "2026-10-26", "2026-10-23", symbols)
+        return monday, symbols, self.render_current(report)
+
+    def render_current(self, report):
+        with patch.object(editor, "cache_candidates", return_value=([], [])), \
+                patch.object(daily_report, "build_research_report", return_value=report), \
+                patch.object(daily_report, "DAILY_REPORT_LIVE_QUOTES", False):
+            return daily_report.build_daily_report()
+
+    def deliver(self, brief, when, *, error=None):
+        from src.jobs import daily_report_scheduler as scheduler
+
+        bot = SimpleNamespace(send_message=AsyncMock(side_effect=[None, error] if error else None))
+        with patch.object(scheduler, "build_daily_report_safe", AsyncMock(return_value=brief)), \
+                patch.object(store.time, "time", return_value=when.timestamp()):
+            return asyncio.run(scheduler.send_daily_report_to_chat(bot, 1))
+
+    def test_delivered_checkpoint_ignores_previews_and_uses_exact_same_names(self):
+        monday, _, brief = self.checkpoint_fixture()
+        tuesday = monday + timedelta(days=1)
+        self.assertIn("2 or fewer", brief)
+        research = self.close_report(tuesday, "2026-10-27", "2026-10-26",
+                                     {"NVDA": -2, "MSFT": 2, "GOOGL": -1, "CIBR": 0, "AMD": -2})
+        text = self.render_current(research)
+        self.assertNotIn("What Changed Since Our Last Brief", text)
+        self.assertTrue(self.deliver(brief, monday + timedelta(seconds=1)))
+        self.assertTrue(self.deliver(brief, monday + timedelta(seconds=2)))
+        self.assertEqual(store.confirmed_watchlist_ids(tuesday), [self.record(brief)["id"]])
+        text = self.render_current(research)
+        body = section(text, "What Changed Since Our Last Brief")
+        self.assertEqual(body, "At the October 27 close, 2 of the same 4 watchlist names fell, down from 4. "
+                               "That met our target of 2 or fewer decliners.")
+        record = self.record(text)
+        verdict = record["analyst_review"]["evidence"]["watchlist_verdict"]
+        self.assertEqual(verdict["symbols"], ["CIBR", "GOOGL", "MSFT", "NVDA"])
+        self.assertIn("Watchlist checkpoint: MET | close 2026-10-27 | 4/4 quoted | delivered edition " + self.record(brief)["id"],
+                      editor.build_editor_status())
+        self.assertIn("two of the same four watchlist names fell", daily_voiceover.checked(record)["script"])
+        with self.assertRaisesRegex(ValueError, "lost its verified copy"):
+            analysis.validate_review(record["analyst_review"], research, text.replace("That met our target", "That missed our target"), [])
+
+    def test_incomplete_coverage_stays_pending_and_can_resolve_later_for_same_close(self):
+        monday, symbols, brief = self.checkpoint_fixture()
+        tuesday = monday + timedelta(days=1)
+        self.assertTrue(self.deliver(brief, monday + timedelta(seconds=1)))
+        partial = self.close_report(tuesday, "2026-10-27", "2026-10-26",
+                                    {**{key: -1 for key in symbols if key != "CIBR"}, "AMD": 1})
+        text = self.render_current(partial)
+        self.assertIn("Comparable quotes covered 3 of the 4 names", section(text, "What Changed Since Our Last Brief"))
+        self.assertIn("Watchlist checkpoint: LIMITED", editor.build_editor_status())
+        full = self.close_report(tuesday + timedelta(minutes=5), "2026-10-27", "2026-10-26", {**symbols, "MSFT": 1})
+        self.assertIn("That missed our target of 2 or fewer decliners", self.render_current(full))
+        intraday = self.close_report(tuesday.replace(hour=18), "2026-10-27", "2026-10-26", symbols, timing="regular_session")
+        skipped = self.close_report(tuesday + timedelta(days=1), "2026-10-28", "2026-10-27", symbols)
+        for report in (intraday, skipped):
+            self.assertNotIn("What Changed Since Our Last Brief", self.render_current(report))
+
+    def test_failed_telegram_send_does_not_register_a_checkpoint(self):
+        from telegram.error import TelegramError
+
+        monday, _, brief = self.checkpoint_fixture()
+        self.assertFalse(self.deliver(brief, monday + timedelta(seconds=1), error=TelegramError("offline simulated failure")))
+        self.assertEqual(store.confirmed_watchlist_ids(monday + timedelta(minutes=1)), [])
 
     def test_takeaway_follows_greeting_and_precedes_every_news_section(self):
         text = self.render()

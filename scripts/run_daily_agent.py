@@ -50,6 +50,7 @@ def split_text(text: str, limit: int = MAX_TELEGRAM_CHARS) -> list[str]:
 
 async def send_to_telegram(text: str) -> None:
     from telegram import Bot
+    from src.intelligence.news_editor_store import confirm_watchlist_delivery
 
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = (
@@ -73,6 +74,7 @@ async def send_to_telegram(text: str) -> None:
             parse_mode=None,
             disable_web_page_preview=True,
         )
+    await asyncio.to_thread(confirm_watchlist_delivery, text)
 
 
 def main() -> int:
