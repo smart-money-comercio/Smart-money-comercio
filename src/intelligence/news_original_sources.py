@@ -166,12 +166,33 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
     return text
 
 
+def financial_results_title(title: str) -> bool:
+    return bool(re.search(r"\b(?:financial|quarterly|annual|earnings) results\b|\breports? (?:record )?(?:quarterly|annual) (?:revenue|sales|earnings)\b", title, re.I))
+
+
+def has_fresh_results(source: dict, payload: dict, parse_feed, now: datetime) -> bool:
+    """Prioritize source work; this does not admit a story or its figures."""
+    if not source.get("company_symbol") or source.get("format") or payload.get("status") != "ok":
+        return False
+    try:
+        observed = payload["fetched_at_epoch"]
+        if type(observed) not in (int, float) or not math.isfinite(observed) or not -60 <= now.timestamp()-observed <= 21600 or not authorized_response(source, payload):
+            return False
+        from src.intelligence.original_disclosures import calendar_notice
+        return any(financial_results_title(row["title"]) and not calendar_notice(row["title"])
+                   and (published := timestamp(row["published"])) is not None and 0 <= (now-published).total_seconds() <= 86400
+                   and authorized_response(source, {"url": row["link"]})
+                   for row in parse_feed(payload["body"], source, full_titles=True))
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
 def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *, budget=None) -> dict:
     """Read fresh articles first. Intel can use its one page for a prior result."""
     fed = source.get("name") == "Federal Reserve" and source.get("category") == "fed"
     intel = source.get("company_symbol") == "INTC"
     # Reprocess Intel's cached listing once under the new lookback.
-    profile = 5 if intel else 4 if source.get("company_symbol") == "AMD" else 3
+    profile = 5 if intel else 4 if source.get("company_symbol") == "AMD" else 6 if source.get("company_symbol") else 3
     agency = source.get("name") in {"EIA", "DARPA"}
     if (not source.get("company_symbol") and not fed and not agency) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:
         return payload
@@ -204,6 +225,8 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *
         # Keep the single-page budget for a material release when a newer
         # community or calendar notice would otherwise consume that read.
         candidates.sort(key=lambda value: not material(value))
+    if source.get("company_symbol"):
+        candidates.sort(key=lambda value: not financial_results_title(value[1]["title"]))
     # Distinct URLs consume the fixed request budget, including failures.
     unique = {}
     for value in candidates:

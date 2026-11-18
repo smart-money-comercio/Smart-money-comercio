@@ -790,7 +790,14 @@ def fetch_news_live_context(force_refresh: bool = False) -> dict:
             if result is not payload:
                 set_cached_source(source["url"], result)
             return result
-        payloads = list(pool.map(read_release, zip(NEWS_SOURCES, payloads)))
+        indexed = list(enumerate(zip(NEWS_SOURCES, payloads)))
+        read_clock = datetime.now(timezone.utc)
+        indexed.sort(key=lambda entry: not originals.has_fresh_results(*entry[1], parse_rss_items, read_clock))
+        def read_indexed(entry):
+            index, pair = entry
+            return index, read_release(pair)
+        for index, result in pool.map(read_indexed, indexed):
+            payloads[index] = result
     earnings_backup = None
     if any(source.get("format") == "alphabet" for source in NEWS_SOURCES):
         from src.intelligence.alphabet_earnings import refresh, health

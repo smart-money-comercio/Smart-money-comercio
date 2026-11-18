@@ -271,6 +271,23 @@ class MarketReportingChecks(ResearchFixture):
         with self.assertRaisesRegex(ValueError, "source link"):
             validate_review(record["analyst_review"], research, text.replace(reporting.source_line(value), ""), news_editor.selected_stories(record))
 
+    def test_empty_market_context_reports_a_not_run_desk_without_starting_work(self):
+        with patch.object(desk, "run", side_effect=AssertionError("Rendering must not run research")):
+            text = build_daily_news_brief(self.research(), market_reporting_version=1)
+        status = news_editor.build_editor_status()
+        self.assertIn("no eligible reviewed article used", status)
+        self.assertIn("latest hourly scan not run", status)
+        self.assertIn("0 market article bodies verified", status)
+
+    def test_empty_market_context_retains_the_scan_state_and_is_not_a_successful_news_claim(self):
+        lead = {"url": MARKET_URL, "title": MARKET_TITLE, "topic": "markets"}
+        self.run_desk(Client([lead], quote="An invented assertion without a supporting source passage."), fetch=lambda _: market_html())
+        build_daily_news_brief(self.research(), market_reporting_version=1)
+        status = news_editor.build_editor_status()
+        self.assertIn("latest hourly scan complete", status)
+        self.assertIn("no eligible reviewed article used", status)
+        self.assertIn("1 market article bodies verified", status)
+
 
 class ResearchChecks(ResearchFixture):
     def test_two_separate_model_roles_and_search_budget(self):

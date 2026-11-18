@@ -247,6 +247,26 @@ def cached(now: datetime) -> list[dict]:
     return retain(result, now)
 
 
+def health() -> dict:
+    """Capture the latest desk state for this edition without starting work."""
+    from src.intelligence.hourly_research import settings, status
+    value = status()
+    bodies = value.get("details", {}).get("market_reports", 0)
+    state = value.get("status")
+    return {"enabled": settings()["enabled"],
+            "status": state if state in {"complete", "limited", "paused", "not run", "unavailable"} else "unavailable",
+            "run_at": value.get("started") if timestamp(value.get("started")) else "",
+            "market_bodies": bodies if type(bodies) is int and 0 <= bodies <= 8 else 0}
+
+
+def health_line(value: dict) -> str:
+    if value.get("enabled") is not True:
+        return "Market reporting: disabled for this edition. /researchdesk status"
+    return ("Market reporting: no eligible reviewed article used in this edition; latest hourly scan "
+            + value["status"] + (" at " + value["run_at"] if value["run_at"] else "")
+            + f"; {value['market_bodies']} market article bodies verified in that scan. /researchdesk history")
+
+
 def summary(value: dict) -> str:
     proof = checked(value)
     day = timestamp(proof["published"]).astimezone(ZoneInfo("America/New_York")).strftime("%B %d").replace(" 0", " ")

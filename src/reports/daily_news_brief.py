@@ -230,6 +230,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         from src.intelligence import market_reporting
         market_context = market_reporting.cached(now)[:1]
         plan["market_context"] = market_context
+        plan["market_reporting_health"] = market_reporting.health()
     futures = None
     if futures_provider and not is_open and futures_window(now):
         quote_pair, issue = futures_provider(now)

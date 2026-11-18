@@ -4,9 +4,10 @@ All article text below is synthetic. No paid APIs, live requests or sends run.
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -95,6 +96,73 @@ class OriginalReadChecks(unittest.TestCase):
         parsed = feeds.parse_article_items(value, NVDA, full_titles=True, full_text=True)
         self.assertEqual(sum(r["evidence_scope"] == "original release excerpt" for r in parsed), 2)
 
+    def test_financial_results_are_read_before_newer_product_stories(self):
+        result_url = "https://nvidianews.nvidia.com/news/synthetic-quarter-results"
+        rows = [("NVIDIA introduces a developer community feature", URL+"feature", (NOW-timedelta(minutes=5)).isoformat()),
+                ("NVIDIA launches a gaming demonstration", URL+"demo", (NOW-timedelta(minutes=10)).isoformat()),
+                ("NVIDIA Announces Financial Results for Third Quarter Fiscal 2027", result_url, PUBLICATION)]
+        by_url = {url: (title, stamp) for title, url, stamp in rows}
+        def fetch(url):
+            title, stamp = by_url[url]
+            return payload(url, page(title=title, published=stamp))
+        fetch = Mock(side_effect=fetch)
+        value = self.enrich(rows, fetch)
+        self.assertEqual(fetch.call_args_list[0].args[0], result_url)
+        self.assertEqual(fetch.call_count, 2)
+        self.assertIn(result_url, [row["url"] for row in value["release_evidence"]])
+
+    def test_results_priority_keeps_the_two_read_limit_and_newest_result_first(self):
+        rows = [("NVIDIA Announces Quarterly Financial Results", URL+str(i), (NOW-timedelta(minutes=10+i)).isoformat()) for i in range(4)]
+        by_url = {url: (title, stamp) for title, url, stamp in rows}
+        fetch = Mock(side_effect=lambda url: payload(url, page(title=by_url[url][0], published=by_url[url][1])))
+        self.enrich(rows, fetch, budget=originals.DetailReadBudget(reads=1))
+        fetch.assert_called_once_with(rows[0][1])
+
+    def test_future_expired_and_calendar_results_do_not_take_priority(self):
+        rows = [("NVIDIA Announces Financial Results", URL+"future", (NOW+timedelta(minutes=1)).isoformat()),
+                ("NVIDIA Announces Financial Results", URL+"old", (NOW-timedelta(days=2)).isoformat()),
+                ("NVIDIA sets earnings conference call", URL+"call", PUBLICATION), (TITLE, URL, PUBLICATION)]
+        fetch = Mock(side_effect=lambda url: payload(url, page()))
+        self.enrich(rows, fetch)
+        fetch.assert_called_once_with(URL)
+
+    def test_processed_old_company_profile_is_upgraded_once_without_changing_the_feed_clock(self):
+        old = payload(NVDA["url"], rss([("NVIDIA Announces Financial Results", URL, PUBLICATION)]), release_excerpt_schema=3)
+        fetch = Mock(side_effect=lambda url: payload(url, page(title="NVIDIA Announces Financial Results")))
+        updated = originals.enrich_feed(NVDA, old, feeds.parse_rss_items, fetch, NOW)
+        self.assertEqual(updated["release_excerpt_schema"], 6)
+        self.assertEqual(updated["fetched_at_epoch"], old["fetched_at_epoch"])
+        self.assertIs(originals.enrich_feed(NVDA, updated, feeds.parse_rss_items, fetch, NOW), updated)
+        self.assertEqual(fetch.call_count, 1)
+
+    def test_results_sources_use_the_shared_budget_before_other_feeds_and_keep_source_pairing(self):
+        other = {**CACI}
+        result_title = "NVIDIA Announces Financial Results for Third Quarter Fiscal 2027"
+        result_url = "https://nvidianews.nvidia.com/news/synthetic-quarter-results"
+        other_url = "https://investor.caci.com/news/synthetic-award"
+        payloads = {other["url"]: payload(other["url"], rss([(AWARD_TITLE, other_url, PUBLICATION)])),
+                    NVDA["url"]: payload(NVDA["url"], rss([(result_title, result_url, PUBLICATION)]))}
+        reads = []
+        def fetch(url, *args, **kwargs):
+            reads.append(url)
+            return payload(url, page(title=result_title, published=PUBLICATION))
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+        budget = originals.DetailReadBudget(reads=1)
+        with patch.object(feeds, "NEWS_SOURCES", [other, NVDA]), patch.object(feeds, "datetime", Clock), \
+                patch.object(feeds, "fetch_source", side_effect=lambda source, *args: payloads[source["url"]]), \
+                patch.object(feeds, "fetch_url", side_effect=fetch), patch.object(feeds, "set_cached_source") as save, \
+                patch.object(originals, "DetailReadBudget", return_value=budget), \
+                patch.object(feeds, "ThreadPoolExecutor", side_effect=lambda **kwargs: ThreadPoolExecutor(max_workers=1)):
+            context = feeds.fetch_news_live_context()
+        self.assertEqual(reads, [result_url])
+        self.assertEqual([row["name"] for row in context["source_results"]], [other["name"], NVDA["name"]])
+        saved = {call.args[0]: call.args[1] for call in save.call_args_list}
+        self.assertIn(result_url, [row["url"] for row in saved[NVDA["url"]]["release_evidence"]])
+        self.assertEqual(saved[other["url"]]["release_evidence"], [])
+
     def test_calendar_notices_do_not_consume_the_article_budget(self):
         rows = [("NVIDIA sets earnings conference call", URL+"call", PUBLICATION), (TITLE, URL, PUBLICATION)]
         fetch = Mock(side_effect=lambda url: payload(url, page()))
@@ -134,7 +202,7 @@ class OriginalReadChecks(unittest.TestCase):
     def test_old_feed_marker_is_reprocessed_once(self):
         old = payload(NVDA["url"], rss([(TITLE,URL,PUBLICATION)]), release_excerpt_schema=1)
         result = originals.enrich_feed(NVDA, old, feeds.parse_rss_items, lambda url: payload(url,page()), NOW)
-        self.assertEqual(result["release_excerpt_schema"], 3)
+        self.assertEqual(result["release_excerpt_schema"], 6)
         self.assertEqual(result["fetched_at_epoch"], old["fetched_at_epoch"])
 
     def test_article_clock_conflict_does_not_supply_facts(self):
@@ -247,6 +315,54 @@ class DisclosureFactChecks(unittest.TestCase):
             with self.assertRaises(ValueError):build_evidence(source(),DEPLOYMENTS,scope,schema=8)
 
 
+class NvidiaResultChecks(unittest.TestCase):
+    title = "NVIDIA Announces Financial Results for Third Quarter Fiscal 2027"
+    text = ("NVIDIA (NASDAQ: NVDA) today reported revenue for the third quarter ended October 25, 2026, of $20 billion. "
+            "For the quarter, GAAP and non-GAAP gross margins were 60.1% and 61.2%, respectively.")
+
+    def profile(self, text=None, **changes):
+        row = source(title=self.title, **changes)
+        row["event_evidence"] = build_evidence(row, self.text if text is None else text, "original release excerpt", schema=17)
+        return row
+
+    def test_reported_revenue_and_gaap_margin_are_bound_to_the_fiscal_quarter(self):
+        row = self.profile()
+        fields = {item["field"]: item["value"] for item in checked_evidence(row)["facts"]}
+        self.assertEqual(fields["reported_revenue"], "$20 billion (third quarter fiscal 2027, reported)")
+        self.assertEqual(fields["reported_gross_margin"], "60.1% (GAAP, third quarter fiscal 2027)")
+        self.assertNotIn("61.2%", fields["reported_gross_margin"])
+
+    def test_wrong_fiscal_year_or_quarter_does_not_supply_results(self):
+        for text in (self.text.replace("2026", "2025"), self.text.replace("third quarter", "second quarter")):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                self.profile(text)
+
+    def test_forecasts_and_conflicting_reported_revenue_are_withheld(self):
+        for text in ("NVIDIA expects revenue of $30 billion for the third quarter.",
+                     self.text + self.text.replace("$20 billion", "$25 billion")):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                self.profile(text)
+
+    def test_other_quarter_margin_is_not_borrowed_when_current_margin_is_absent(self):
+        text = self.text.split(" For the quarter", 1)[0] + "\nPrior-quarter context. For the quarter, GAAP gross margin was 75.0%."
+        fields = {item["field"] for item in checked_evidence(self.profile(text))["facts"]}
+        self.assertEqual(fields, {"reported_revenue"})
+
+    def test_facts_and_issuer_identity_cannot_be_changed_after_admission(self):
+        row = self.profile()
+        row["event_evidence"]["facts"][0]["value"] = "$999 billion"
+        with self.assertRaises(ValueError):
+            checked_evidence(row)
+        with self.assertRaises(ValueError):
+            self.profile(publisher_symbol="MSFT")
+
+    def test_old_disclosure_schema_retains_its_original_interpretation(self):
+        row = source(title=self.title)
+        profile = build_evidence(row, self.text, "original release excerpt", schema=8)
+        self.assertEqual(profile["schema"], 8)
+        self.assertEqual(profile["facts"], [])
+
+
 class EditionChecks(IsolatedChecks):
     def setUp(self):
         super().setUp()
@@ -260,6 +376,28 @@ class EditionChecks(IsolatedChecks):
         with patch.object(editor,"cache_candidates",return_value=(rows,[])):
             report = build_daily_news_brief(self.research())
         return report,store.read_editions(report=report)[0]
+
+    def test_read_results_reach_company_fact_admission_and_the_brief(self):
+        result_title = "NVIDIA Announces Financial Results for Third Quarter Fiscal 2027"
+        result_url = "https://nvidianews.nvidia.com/news/synthetic-quarter-results"
+        text = ("NVIDIA (NASDAQ: NVDA) today reported revenue for the third quarter ended October 25, 2026, of $20 billion. "
+                "For the quarter, GAAP and non-GAAP gross margins were 60.1% and 61.2%, respectively.")
+        rows = [(TITLE, URL, (NOW-timedelta(minutes=5)).isoformat()),
+                (TITLE+" demonstration", URL+"demo", (NOW-timedelta(minutes=10)).isoformat()),
+                (result_title, result_url, PUBLICATION)]
+        by_url = {url: (title, stamp) for title, url, stamp in rows}
+        enriched = originals.enrich_feed(NVDA, payload(NVDA["url"], rss(rows)), feeds.parse_rss_items,
+            lambda url: payload(url, page(title=by_url[url][0], published=by_url[url][1], text=text if url == result_url else DEPLOYMENTS)), NOW)
+        candidates, _ = editor.cache_candidates(NOW, ["NVDA"], cache={NVDA["url"]: enriched})
+        with patch.object(editor, "cache_candidates", return_value=(candidates, [])):
+            report = build_daily_news_brief(self.research(), require_company_facts=True)
+        record = store.read_editions(report=report)[0]
+        selected = editor.selected_stories(record)
+        result = next(row for row in selected if row["url"] == result_url)
+        self.assertEqual(result["company_fact"], "reported_revenue")
+        self.assertIn("$20 billion", report)
+        self.assertEqual(checked_evidence(result)["source_url"], result_url)
+        self.assertTrue(validate_news_brief(report)["passes"])
 
     def test_caci_headline_is_promoted_only_after_a_material_original_award_is_read(self):
         row = source("CACI")

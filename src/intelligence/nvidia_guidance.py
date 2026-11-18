@@ -36,6 +36,47 @@ def results_period(title: str) -> tuple[str, int] | None:
     return None
 
 
+def results_facts(story: dict, text: str) -> list[dict]:
+    """Read the issuer's reported quarter; keep forecast figures separate."""
+    if story.get("kind") != "company" or story.get("publisher_symbol") != "NVDA" or not (period := results_period(story["title"])):
+        raise ValueError("Nvidia results need the issuer and fiscal-quarter title")
+    from src.intelligence.earnings_watch import NVIDIA_REVENUE, NVIDIA_MARGIN
+    reported = []
+    for match in NVIDIA_REVENUE.finditer(text):
+        ended = re.search(r"ended [A-Za-z]+ \d{1,2}, (20\d{2})", match[0])
+        if match[1].lower() != period[0] + " quarter" or not ended or int(ended[1]) != period[1] - (period[0] != "fourth"):
+            continue
+        if not re.fullmatch(r"\$(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)? (?:billion|million)", match[2], re.I):
+            continue
+        reported.append(match)
+    if len({match[2] for match in reported}) != 1:
+        raise ValueError("A unique reported Nvidia revenue for this fiscal quarter is required")
+    match = reported[0]
+    revenue, quote = match[2], match[0]
+    label = period[0] + " quarter fiscal " + str(period[1])
+    result = [{"field": "reported_revenue", "value": revenue + " (" + label + ", reported)", "evidence": quote}]
+    # Bind the margin to the current result paragraph before the outlook.
+    end = text.find("\n", match.end())
+    section = text[match.end():end if end >= 0 else len(text)]
+    margins = [(next(value for value in match.groups() if value is not None), match[0]) for match in NVIDIA_MARGIN.finditer(section)]
+    if len({value for value, _ in margins}) == 1 and -100 <= Decimal(margins[0][0]) <= 100:
+        value, quote = margins[0]
+        result.append({"field": "reported_gross_margin", "value": value + "% (GAAP, " + label + ")", "evidence": quote})
+    return result
+
+
+def results_review(profile: dict) -> dict:
+    fields = {row["field"]: row["value"] for row in profile["facts"]}
+    revenue = fields["reported_revenue"].split(" (", 1)[0]
+    period = fields["reported_revenue"].split(" (", 1)[1].removesuffix(", reported)")
+    text = "Nvidia reported " + period + " revenue of " + revenue + "."
+    if "reported_gross_margin" in fields:
+        text += " Its GAAP gross margin was " + fields["reported_gross_margin"].split("%", 1)[0] + " percent."
+    return {"evidence": profile, "facts": text,
+            "why": "Revenue shows the scale of demand; gross margin shows how much remains after the cost of sales.",
+            "watch": "Compare these results with original guidance, then check the next-quarter revenue and margin outlook."}
+
+
 def preceding_release(period: tuple[str, int]) -> tuple[str, str]:
     quarter, fiscal_year = period
     index = QUARTERS.index(quarter)
