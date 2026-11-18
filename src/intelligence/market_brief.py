@@ -158,6 +158,9 @@ def rally_leadership(evidence: dict) -> str:
 
 
 def market_segment(evidence: dict) -> str:
+    if evidence.get("market_context"):
+        from src.intelligence.market_reporting import segment
+        return segment(evidence)
     leadership = rally_leadership(evidence)
     if leadership:
         return leadership

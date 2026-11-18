@@ -25,7 +25,8 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
 
     from src.intelligence.market_brief import market_segment, defense_segment, story_topics
     add("market_pulse", "market", market_segment(evidence), ["Executive Summary", "Market Snapshot"]
-        + (["Verified story decisions"] if evidence.get("stories") else []))
+        + (["Verified story decisions"] if evidence.get("stories") else [])
+        + (["Dated market reporting"] if evidence.get("market_context") else []))
     broadcast = evidence.get("narration_version") == 2
     add("defense_watch", "global", defense_segment(evidence.get("stories", []), broadcast=broadcast, business_version=evidence.get("business_version", 0)),
         ["Verified story decisions"] if evidence.get("stories") else ["Research coverage policy"])

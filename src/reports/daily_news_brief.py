@@ -193,7 +193,8 @@ def validate_news_brief(text: str) -> dict:
 
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
-                           require_company_facts=False, takeaway_version=0, watchlist_checkpoint_version=0) -> str:
+                           require_company_facts=False, takeaway_version=0, watchlist_checkpoint_version=0,
+                           market_reporting_version=0) -> str:
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
     if quality.get("format") == "news":
@@ -222,6 +223,13 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     brief = catalyst_brief if catalyst_brief is not None else build_company_catalyst_brief(now=now)
     plan = editor.build_editorial_plan(brief, now, event_context=event_context, research_report=research_report,
                                        require_company_facts=require_company_facts)
+    market_context = None
+    if market_reporting_version:
+        if type(market_reporting_version) is not int or market_reporting_version != 1:
+            raise ValueError("Unknown market reporting presentation")
+        from src.intelligence import market_reporting
+        market_context = market_reporting.cached(now)[:1]
+        plan["market_context"] = market_context
     futures = None
     if futures_provider and not is_open and futures_window(now):
         quote_pair, issue = futures_provider(now)
@@ -320,6 +328,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
                 premarket_futures=futures, takeaway_version=takeaway_version,
                 watchlist_checkpoint_version=watchlist_checkpoint_version, watchlist_checkpoint=watchlist_checkpoint,
+                market_context=market_context,
             )
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro or futures):
@@ -368,6 +377,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if not watching:
                 watching.append(market_outlook(moves, breadth if quote_day else None))
             notes_body = list(notes)
+            for value in market_context or []:
+                notes_body.insert(-1, market_reporting.source_line(value))
             if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:
                 notes_body.insert(-1, no_company_story)
             if watch:

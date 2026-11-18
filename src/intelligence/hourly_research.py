@@ -68,14 +68,18 @@ def identity(url: str) -> dict | None:
 
 
 def fetch_original(url: str) -> bytes:
+    from src.intelligence import market_reporting
     expected = identity(url)
+    reporting = market_reporting.configured(url)
     sec = sec_research.authority(url)
     from src.intelligence.alphabet_source import attachment_url
     alphabet_pdf = attachment_url(url)
-    if expected is None and not sec and not alphabet_pdf:
+    if expected is None and not sec and not alphabet_pdf and not reporting:
         raise ValueError("Original publisher is not configured")
     class Redirects(HTTPRedirectHandler):
         def redirect_request(self, request, fp, code, msg, headers, newurl):
+            if reporting and market_reporting.canonical_url(newurl) != market_reporting.canonical_url(url):
+                raise ValueError("Market reporting redirected outside its specific article")
             if (alphabet_pdf and newurl != url) or (sec and (not sec_research.authority(newurl) or urlsplit(newurl).hostname != urlsplit(url).hostname)) or (not sec and not alphabet_pdf and identity(newurl) != expected):
                 raise ValueError("Research source redirected outside its original publisher")
             return super().redirect_request(request, fp, code, msg, headers, newurl)
@@ -90,6 +94,9 @@ def fetch_original(url: str) -> bytes:
 
 
 def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
+    from src.intelligence import market_reporting
+    if market_reporting.configured(lead["url"]):
+        return market_reporting.article(lead, now, fetch)
     from src.intelligence import ipo_monitor
     url = research_agents.url_key(lead["url"])
     ipo = next((item for item in ipo_monitor.cached_items(now) if research_agents.url_key(item["url"]) == url), None)
@@ -151,6 +158,10 @@ def verified(lead: dict, now: datetime, fetch=fetch_original) -> dict:
 
 
 def check_proof(value: dict, now: datetime | None = None) -> dict:
+    if value.get("reporting_evidence"):
+        from src.intelligence.market_reporting import checked
+        proof = checked(value, now)
+        return {"name": proof["publisher"], "symbol": "", "kind": "reported market context"}
     if value.get("ipo"):
         from src.intelligence.ipo_monitor import checked
         return checked(value, now)
@@ -372,7 +383,7 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         symbols = list(dict.fromkeys(symbols))
         from src.intelligence.alphabet_source import aliases
         symbols = aliases(symbols)
-        domains = list(dict.fromkeys(row["domain"] for row in identities())) + ["reuters.com", "apnews.com", "sec.gov"]
+        domains = list(dict.fromkeys(row["domain"] for row in identities())) + ["reuters.com", "apnews.com", "finance.yahoo.com", "sec.gov"]
         history = read_history(80)
         latest = latest_findings(history)
         catalogue, coverage = publisher_reports(now, symbols, latest, identity, finding_key, include_unread=True)
@@ -402,7 +413,7 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
             topic = "company" if value["kind"] == "company" else "macro"
             work.append(({key: value[key] for key in ("title", "url")} | {"topic": topic}, latest.get(finding_key(value["url"])), False))
         details.update(candidates=len(work), search_leads=len(leads), retried=len(pending), publisher_candidates=len(additions), publisher_cache_used=0, resolved_releases=0)
-        reads = 0
+        reads, market_reads = 0, 0
         def bounded_fetch(url):
             nonlocal reads
             if reads >= 6:
@@ -433,6 +444,11 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                 record["screened_out"] = True
             else:
                 try:
+                    from src.intelligence.market_reporting import configured
+                    if configured(lead["url"]):
+                        if market_reads >= 2:
+                            raise ValueError("Market article read budget reached; other source reads retained")
+                        market_reads += 1
                     if cached_value:
                         record["verified"] = resolver.verify(cached_value)
                     else:
@@ -457,7 +473,8 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                         details["resolved_releases"] += int(cached_value["url"] != lead["url"])
                         record["verification"] = "Original publisher release verified; original feed clock retained"
                     else:
-                        record["verification"] = "Original source verified"
+                        record["verification"] = ("Dated market article body verified; reported context only"
+                                                  if record["verified"].get("reporting_evidence") else "Original source verified")
                 except SourceRejected as exc:
                     record["source_outcome"] = {"status": exc.status, "published": exc.published}
                     record["verification"] = str(exc)
@@ -476,6 +493,7 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
             handoff = [{"id": row["id"], "title": (row["verified"] or row["lead"])["title"], "topic": row["lead"]["topic"],
                         "url": (row["verified"] or row["lead"])["url"], "published": (row["verified"] or {}).get("published", "unverified"),
                         "verification": row["verification"], "lead_origin": row["origin"],
+                        "source_role": "reported market context" if (row["verified"] or {}).get("reporting_evidence") else "original disclosure",
                         "source_text": (row["verified"] or {}).get("source_excerpt", "")} for row in reviewable]
             decisions, metadata = research_agents.review(client, config["review_model"], handoff, symbols)
             details["agents"].append(metadata)
@@ -495,6 +513,7 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
             source_verified=sum(row["verified"] is not None for row in records),
             held=sum(row["review"]["final"] == "hold" for row in records), skipped=sum(row["review"]["final"] == "skip" for row in records))
         details["expired"] = sum(row.get("source_outcome", {}).get("status") == "expired" for row in records)
+        details["market_reports"] = sum(bool((row["verified"] or {}).get("reporting_evidence")) for row in records)
         final_status = "complete" if settings()["enabled"] else "paused"
         finish(now, final_status, records, details)
     except Exception as exc:
@@ -530,6 +549,9 @@ def routine_page(url: str) -> str:
 
 
 def finding_key(url: str) -> str:
+    from src.intelligence.market_reporting import canonical_url, configured
+    if configured(url):
+        return canonical_url(url)
     try:
         cik, accession, _ = sec_research.location(url)
         return "sec:" + cik + ":" + accession
@@ -543,7 +565,7 @@ def context_provider():
     if not items: return None
     return IntelligenceContextBlock(feature="Hourly AI Research", priority=106,
         signal="; ".join(value["title"] for value in items[:2])[:500],
-        implication="A separate AI relevance review approved these original-source findings for research.",
+        implication="A separate relevance review approved these findings; market reporting retains its attributed context role.",
         validation="Confirm the original disclosures and current price/volume before changing conviction.",
         symbols=list(dict.fromkeys(symbol for value in items for symbol in value.get("symbols", []))),
         commands=["/researchdesk history", "/storylog"], metadata={"score_changes": False, "findings": len(items), "model_roles": 2})

@@ -1791,6 +1791,9 @@ def build_research_report() -> str:
         market_tone=market_tone,
         what_changed_today=what_changed_today,
     )
+    from src.intelligence import market_reporting
+    if reported_context := market_reporting.cached(now)[:1]:
+        theme_read = market_reporting.detailed(reported_context)
 
     defense_impact = build_compact_defense_impact(
         context=global_context,
@@ -2157,4 +2160,4 @@ def build_daily_report() -> str:
     return build_daily_news_brief(build_research_report(),
                                   futures_provider=early_futures.capture if DAILY_REPORT_LIVE_QUOTES else None,
                                   require_company_facts=True, takeaway_version=VERSION,
-                                  watchlist_checkpoint_version=CHECKPOINT_VERSION)
+                                  watchlist_checkpoint_version=CHECKPOINT_VERSION, market_reporting_version=1)

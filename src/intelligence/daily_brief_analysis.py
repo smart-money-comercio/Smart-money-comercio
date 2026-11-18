@@ -104,6 +104,7 @@ def analyze_report(
     earnings_watch: dict | None = None, watchlist_baseline: dict | None = None, premarket_futures: dict | None = None,
     takeaway_version: int = 0,
     watchlist_checkpoint_version: int = 0, watchlist_checkpoint: dict | None = None,
+    market_context: list[dict] | None = None,
 ) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
@@ -139,6 +140,13 @@ def analyze_report(
         now = datetime.strptime(generated[1], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo(generated[2]))
         evidence["market_event_context"] = deepcopy(checked_context(event_context, report, now))
         evidence["source_sections"].append("Market event checks")
+    if market_context is not None:
+        if event_context is None or reader_version != 4:
+            raise ValueError("Market reporting requires a dated reader edition")
+        from src.intelligence.market_reporting import retain, SOURCE_SECTION
+        evidence["market_context"] = retain(market_context, now)
+        if evidence["market_context"]:
+            evidence["source_sections"].append(SOURCE_SECTION)
     if narration_version == 2:
         evidence["narration_version"] = narration_version
     if reader_version:
@@ -270,6 +278,8 @@ def analyze_report(
         value["watchlist_baseline"] = deepcopy(watchlist_baseline)
     if watchlist_checkpoint is not None:
         value["watchlist_checkpoint"] = deepcopy(watchlist_checkpoint)
+    if market_context is not None:
+        value["market_context"] = deepcopy(market_context)
     if disclosure_version:
         value["disclosure_version"] = disclosure_version
     if business_version:
@@ -297,11 +307,12 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         takeaway_version=analysis.get("evidence", {}).get("takeaway_version", 0),
         watchlist_checkpoint_version=analysis.get("evidence", {}).get("watchlist_checkpoint_version", 0),
         watchlist_checkpoint=analysis.get("watchlist_checkpoint"),
+        market_context=analysis.get("market_context"),
     )
     if any(analysis.get(key) != expected.get(key) for key in (
         "schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version",
         "event_context", "reader_version", "reader_limit", "earnings_context", "disclosure_version",
-        "business_version", "intel_results_baseline", "earnings_watch", "watchlist_baseline", "watchlist_checkpoint",
+        "business_version", "intel_results_baseline", "earnings_watch", "watchlist_baseline", "watchlist_checkpoint", "market_context",
     )):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
@@ -326,3 +337,7 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
 
         if report.count(early_futures.source_line(futures)) != 1:
             raise ValueError("Premarket futures lost their source links")
+    from src.intelligence.market_reporting import source_line
+    for value in analysis.get("market_context") or []:
+        if report.count(source_line(value)) != 1:
+            raise ValueError("Market reporting lost its dated source link")

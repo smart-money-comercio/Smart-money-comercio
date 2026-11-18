@@ -38,6 +38,8 @@ STAGE_NAMES = ("Scan", "Source Check", "Relevance", "Selection", "Editorial Revi
 
 
 def primary_source(story: dict) -> str:
+    if story.get("reporting_evidence"):
+        return ""
     """Require both publisher provenance and an original issuer/agency link."""
     if story.get("sec_filing"):
         from src.intelligence.sec_research import checked
@@ -339,7 +341,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if settings().get("ipo_enabled"):
             cached += [{**value, "kind": "macro", "origin": "IPO original-source cache", "relevant": True} for value in cached_items(now)]
         from src.intelligence.hourly_research import approved
-        cached += approved(now)
+        cached += [value for value in approved(now) if not value.get("reporting_evidence")]
     if health:
         from src.intelligence.company_focus import FUNDS
         configured = {row["symbol"] for row in health}
@@ -721,6 +723,11 @@ def render_story(story: dict, zone, company_names: dict, *, style="source", busi
 
 
 def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], research_report: str, analyst_review: dict | None = None) -> str:
+    if "market_context" in plan:
+        from src.intelligence.market_reporting import retain
+        values = retain(plan["market_context"], dated(plan["generated_at"]))
+        if analyst_review is None or analyst_review.get("market_context") != values:
+            raise ValueError("Market reporting does not match the analyst edition")
     from src.intelligence.market_priority import order_in_takeaway
     company_story_facts.validate_edition(plan)
     selected = selected_stories(plan)
@@ -987,6 +994,11 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
             analysis = record.get("analyst_review")
             if analysis:
                 lines.append("Analyst inputs: " + ", ".join(analysis["evidence"]["source_sections"]) + ". Numerical scores retained.")
+                for value in analysis.get("market_context") or []:
+                    proof = value["reporting_evidence"]
+                    lines.append("Market reporting: " + value["source"] + " | " + proof["connection"]["family"]
+                                 + " | published " + proof["published"] + " | observed " + proof["observed"]
+                                 + " | attributed context; issuer facts and numerical scores unchanged")
                 if futures := analysis["evidence"].get("premarket_futures"):
                     from src.intelligence import early_futures
 

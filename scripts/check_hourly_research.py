@@ -24,6 +24,7 @@ from src.agents import research_agents as agents
 from src.config.special_alerts import settings
 from src.intelligence import hourly_research as desk, ipo_filing_analysis as financials, ipo_monitor as ipo
 from src.intelligence import sec_research as sec
+from src.intelligence import market_reporting as reporting
 from src.intelligence.research_evidence import SourceRejected
 from src.intelligence import special_alert_engine as engine, special_alert_context as alert_context, news_editor
 from src.jobs import hourly_research_scheduler as scheduler
@@ -75,6 +76,200 @@ class ResearchFixture(IsolatedChecks):
 
     def run_desk(self, client=None, now=NOW, fetch=None):
         return desk.run(now, client=client or Client(), fetch=fetch or (lambda _: html()))
+
+
+MARKET_TITLE = "Gold declines as Treasury yields and dollar rise"
+MARKET_URL = "https://www.reuters.com/markets/commodities/gold-rates-fixture-" + NOW.strftime("%Y-%m-%d") + "/"
+GOLD_SENTENCE = "Gold fell during the quoted session as investors reviewed funding conditions."
+GOLD_BODY = GOLD_SENTENCE + " Treasury yields rose during the session. The dollar strengthened against other currencies. The report describes a dated market snapshot for research review."
+
+
+def market_html(text=GOLD_BODY, *, published=None, modified=None, title=MARKET_TITLE, schema_title=None,
+                publisher="Reuters", visible=False):
+    node = {"@context": "https://schema.org", "@type": "NewsArticle", "headline": schema_title or title,
+            "datePublished": published or (NOW-timedelta(minutes=10)).isoformat(),
+            "dateModified": modified or NOW.isoformat(), "publisher": {"name": publisher}}
+    if text is not None:
+        node["articleBody"] = text
+    else:
+        node["description"] = GOLD_BODY
+    body = '<article><p>' + (text or GOLD_BODY) + '</p></article>' if visible else ''
+    return (f'<html><head><meta property="og:title" content="{title}">'
+            + '<script type="application/ld+json">' + json.dumps(node) + '</script></head>'
+            + '<body><h1>' + title + '</h1>' + body + '</body></html>').encode()
+
+
+class MarketReportingChecks(ResearchFixture):
+    def read(self, **options):
+        return desk.verified({"url": MARKET_URL, "title": MARKET_TITLE}, NOW, lambda _: market_html(**options))
+
+    def reviewed(self):
+        lead = {"url": MARKET_URL, "title": MARKET_TITLE, "topic": "markets"}
+        client = Client([lead], quote=GOLD_SENTENCE)
+        result = self.run_desk(client, fetch=lambda _: market_html())
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["details"]["market_reports"], 1)
+        return reporting.cached(NOW)[0], client
+
+    def test_market_body_is_dated_attributed_and_never_an_official_company_disclosure(self):
+        value = self.read()
+        self.assertFalse(value["official"])
+        self.assertEqual(value["symbols"], [])
+        self.assertEqual(value["source"], "Reuters")
+        self.assertEqual(reporting.checked(value, NOW)["connection"]["family"], "gold_rates")
+        self.assertFalse(news_editor.primary_source(value))
+        self.assertFalse(news_editor.primary_source({**value, "discovery_evidence": {"unexpected": True}}))
+        self.assertIn("gold demand and growth valuations", reporting.detailed([value]))
+
+    def test_missing_original_body_cannot_be_replaced_by_a_description(self):
+        with self.assertRaisesRegex(ValueError, "body unavailable"):
+            self.read(text=None)
+
+    def test_visible_article_body_is_an_allowed_fallback(self):
+        raw = market_html(text=None, visible=True)
+        value = desk.verified({"url": MARKET_URL}, NOW, lambda _: raw)
+        self.assertEqual(reporting.checked(value)["connection"]["family"], "gold_rates")
+
+    def test_recent_update_cannot_promote_old_or_future_original_publication(self):
+        for clock in ((NOW-timedelta(days=2)).isoformat(), (NOW+timedelta(minutes=1)).isoformat()):
+            with self.subTest(clock=clock), self.assertRaises(SourceRejected):
+                self.read(published=clock, modified=NOW.isoformat())
+
+    def test_mismatched_article_title_or_publisher_is_rejected(self):
+        for options in ({"schema_title": "Different market report"}, {"publisher": "Sponsored provider"}):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                self.read(**options)
+
+    def test_tracking_query_is_removed_before_the_article_read_and_deduplication(self):
+        url = "https://finance.yahoo.com/markets/commodities/articles/gold-rates-fixture-174735472.html"
+        seen = []
+        body = market_html(text="Nov 25 (Reuters) - " + GOLD_BODY, publisher="Yahoo Finance")
+        value = desk.verified({"url": url + "?ncid=private&bt_ee=tracking"}, NOW, lambda link: seen.append(link) or body)
+        self.assertEqual(seen, [url]); self.assertEqual(value["url"], url)
+        self.assertEqual(value["source"], "Reuters")
+        self.assertEqual(desk.finding_key(url + "?ncid=one"), desk.finding_key(url + "?ncid=two"))
+
+    def test_unconfigured_sponsored_and_landing_pages_are_not_market_sources(self):
+        for url in ("https://reuters.com.evil.invalid/markets/x-2026-10-25/", "http://www.reuters.com/markets/x-2026-10-25/",
+                    "https://www.reuters.com:444/markets/x-2026-10-25/", "https://www.reuters.com/markets/",
+                    "https://finance.yahoo.com/quote/GLD/", "https://www.reuters.com/breakingviews/gold-2026-10-25/"):
+            with self.subTest(url=url):
+                self.assertFalse(reporting.configured(url))
+
+    def test_syndicated_promotion_does_not_become_yahoo_original_reporting(self):
+        url = "https://finance.yahoo.com/news/gold-rates-fixture-174735472.html"
+        with self.assertRaisesRegex(ValueError, "publisher"):
+            desk.verified({"url": url}, NOW, lambda _: market_html(publisher="PR Newswire"))
+
+    def test_conditionals_negation_and_conflicting_directions_do_not_establish_a_connection(self):
+        cases = ["Gold could fall if Treasury yields rose and the dollar strengthened.",
+                 "Gold did not fall. Treasury yields rose. The dollar strengthened.",
+                 "GLD fell during the session. TLT fell during the session. The dollar strengthened against other currencies.",
+                 GOLD_BODY + " Treasury yields fell later in the session."]
+        for text in cases:
+            with self.subTest(text=text):
+                self.assertIsNone(reporting.connection(text))
+
+    def test_facts_come_from_the_body_and_support_several_macro_channels(self):
+        for text, family in ((GOLD_BODY, "gold_rates"),
+                             ("Treasury yields rose. Stocks fell during the session.", "rates_growth"),
+                             ("Oil prices surged during the session. Shipping flows were disrupted at the port.", "energy_supply"),
+                             ("Oil prices rose during the session. Fuel costs increased during the period.", "energy_inflation"),
+                             ("Copper fell during the session. Factory output contracted during the period.", "industrial_demand"),
+                             ("The dollar strengthened during the session. The euro weakened against the dollar.", "dollar_currency")):
+            with self.subTest(family=family):
+                self.assertEqual(reporting.connection(text)["family"], family)
+
+    def test_high_yield_level_is_distinct_from_a_move_and_future_policy(self):
+        level = GOLD_BODY.replace("Treasury yields rose during the session.", "Treasury yields were high during the session.")
+        self.assertIsNone(reporting.connection(level))
+        move = GOLD_BODY.replace("Treasury yields rose during the session.", "Treasury yields have jumped on expectations that policy will tighten.")
+        evidence = reporting.connection(move)
+        self.assertEqual(evidence["family"], "gold_rates")
+        self.assertIn("have jumped", evidence["facts"]["yields_up"])
+        forecast = GOLD_BODY.replace("Treasury yields rose during the session.", "Higher Treasury yields are expected if policy tightens.")
+        self.assertIsNone(reporting.connection(forecast))
+
+    def test_proof_body_fact_and_clock_changes_are_rejected(self):
+        value = self.read()
+        for change in (lambda row: row.update(official=True),
+                       lambda row: row["reporting_evidence"].update(text=GOLD_BODY + " Changed text."),
+                       lambda row: row["reporting_evidence"]["connection"].update(summary="Guaranteed gains"),
+                       lambda row: row.update(source_checked_at=(NOW+timedelta(days=1)).isoformat())):
+            modified = deepcopy(value); change(modified)
+            with self.assertRaises(ValueError):
+                reporting.checked(modified, NOW)
+
+    def test_independent_review_and_search_budgets_are_retained(self):
+        value, client = self.reviewed()
+        self.assertEqual(value["research_review"]["quote"], GOLD_SENTENCE)
+        self.assertEqual(client.calls[0]["max_tool_calls"], 2)
+        self.assertTrue({"reuters.com", "apnews.com", "finance.yahoo.com"} <= set(client.calls[0]["tools"][0]["filters"]["allowed_domains"]))
+        self.assertEqual(client.calls[1]["tools"], [])
+        handoff = json.loads(client.calls[1]["input"])["candidates"][0]
+        self.assertEqual(handoff["source_role"], "reported market context")
+        tasks = " ".join(json.loads(client.calls[0]["input"])["search_tasks"])
+        self.assertIn("gold", tasks); self.assertIn("Treasury yields", tasks)
+        self.assertIn("dollar", tasks); self.assertIn("cyber", tasks)
+
+    def test_unreviewed_or_stale_reports_are_not_exposed_as_market_context(self):
+        value = self.read()
+        with self.assertRaises(ValueError):
+            reporting.retain([value], NOW)
+        self.reviewed()
+        self.assertEqual(reporting.cached(NOW+timedelta(hours=7)), [])
+
+    def test_reporting_has_a_two_article_read_limit_within_the_existing_six_read_budget(self):
+        leads = [{"url": MARKET_URL.replace("fixture-", f"fixture-{index}-"), "title": MARKET_TITLE, "topic": "markets"} for index in range(3)]
+        reads = []
+        result = self.run_desk(Client(leads, quote=GOLD_SENTENCE), fetch=lambda url: reads.append(url) or market_html())
+        self.assertEqual(len(reads), 2)
+        self.assertLessEqual(result["details"]["original_reads"], 6)
+        self.assertEqual(result["details"]["market_reports"], 2)
+        self.assertEqual(len(reporting.cached(NOW)), 1)
+
+    def test_review_cannot_approve_a_quote_absent_from_the_article(self):
+        lead = {"url": MARKET_URL, "title": MARKET_TITLE, "topic": "markets"}
+        result = self.run_desk(Client([lead], quote="A new invented claim is not in this source."), fetch=lambda _: market_html())
+        self.assertEqual(result["details"]["approved"], 0)
+        self.assertEqual(reporting.cached(NOW), [])
+
+    def test_narration_budget_and_missing_index_coverage_are_preserved(self):
+        from src.intelligence.market_brief import word_count
+        bodies = [GOLD_BODY, "Treasury yields rose during the session. Stocks fell during the session.",
+                  "Oil prices surged during the session. Shipping flows were disrupted at the port.",
+                  "Oil prices rose during the session. Fuel costs increased during the period.",
+                  "Copper fell during the session. Factory output contracted during the period.",
+                  "The dollar strengthened during the session. The euro weakened against the dollar."]
+        for body in bodies:
+            value = self.read(text=body + " This synthetic dated article supplies context for the offline research check.")
+            for moves in ({}, {"S&P": -1.2}, {"S&P": -1.2, "Nasdaq": -2.3}):
+                with self.subTest(body=body, moves=moves):
+                    text = reporting.segment({"market_context": [value], "moves": moves, "session": "2026-10-23", "is_open": False})
+                    self.assertTrue(45 <= word_count(text) <= 90)
+                    self.assertIn("Analyst view:", text)
+                    self.assertIn("October 25", text)
+                    if not moves:
+                        self.assertIn("does not supply live market prices", text)
+
+    def test_reader_brief_uses_the_connection_and_keeps_its_source_and_audit(self):
+        value, _ = self.reviewed()
+        research = self.research()
+        self.assertIn("Reuters", research)
+        self.assertIn(value["url"], research)
+        text = build_daily_news_brief(research, market_reporting_version=1)
+        self.assertTrue(validate_news_brief(text)["passes"])
+        self.assertIn("gold demand and growth valuations", text)
+        self.assertIn("Watch whether gold stabilizes", text)
+        self.assertEqual(text.count(reporting.source_line(value)), 1)
+        record = news_editor.store.read_editions(1, report=text)[0]
+        self.assertEqual(record["analyst_review"]["market_context"][0]["url"], value["url"])
+        self.assertFalse(any(story["url"] == value["url"] for story in record["candidates"]))
+        self.assertIn("Market reporting: Reuters", news_editor.build_editor_status())
+        self.assertIn("sourced stories selected", news_editor.review_daily_edition(text))
+        from src.intelligence.daily_brief_analysis import validate_review
+        with self.assertRaisesRegex(ValueError, "source link"):
+            validate_review(record["analyst_review"], research, text.replace(reporting.source_line(value), ""), news_editor.selected_stories(record))
 
 
 class ResearchChecks(ResearchFixture):
@@ -1371,7 +1566,7 @@ if __name__ == "__main__":
         if args.windows_socketpair:
             stack.enter_context(patch.object(socket, "socketpair", portable_tcp_socketpair))
         traffic = stack.enter_context(offline_network_guard())
-        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks, FollowupChecks, PublisherEvidenceChecks, SourceRoutingChecks, QuoteSelectionChecks))
+        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(cls) for cls in (ResearchChecks, ContractChecks, FinancialChecks, SECResearchChecks, FollowupChecks, PublisherEvidenceChecks, SourceRoutingChecks, QuoteSelectionChecks, MarketReportingChecks))
         result = unittest.TextTestRunner(verbosity=1).run(suite)
     ok = result.wasSuccessful() and not traffic["blocked"]
     print(f"Hourly Research Check: {'PASS' if ok else 'FAIL'} ({result.testsRun} tests)")
