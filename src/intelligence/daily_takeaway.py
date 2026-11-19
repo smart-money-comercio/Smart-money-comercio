@@ -43,7 +43,7 @@ def _earnings_line(watch):
         label = NAMES.get(notice["symbol"], notice["symbol"])
         day = date.fromisoformat(notice["event_date"]).strftime("%A")
         return f"{label}'s {day} earnings are the next test of how gross margins held up against management's guidance."
-    if watch.get("guidance_comparison"):
+    if earnings_watch.has_answer(watch):
         return earnings_watch.opening(watch, NAMES)
     symbol = watch["preview"]["notice"]["symbol"]
     label = NAMES.get(symbol, symbol)

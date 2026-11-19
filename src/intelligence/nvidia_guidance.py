@@ -29,6 +29,68 @@ GAAP_MARGIN = re.compile(
 )
 
 
+CURRENT_OUTLOOK = re.compile(
+    r"^NVIDIA['’]s outlook for the (first|second|third|fourth) quarter of fiscal (20\d{2})"
+    r"(, which includes an additional week,)? is as follows:$", re.I | re.M)
+MARGIN_BAND = re.compile(
+    rf"^GAAP and non[-‑]GAAP gross margins are expected to be between ({NUMBER})% and ({NUMBER})%\.$", re.I)
+
+
+def forward_guidance(text, target):
+    """Bind complete rows to a single outlook heading and its fiscal quarter."""
+    headings = list(CURRENT_OUTLOOK.finditer(text))
+    if len(headings) != 1:
+        return None
+    heading = headings[0]
+    if (heading[1].lower(), int(heading[2])) != target:
+        return None
+    lines = [heading[0]]
+    metrics = {}
+    for row in text[heading.end():].strip().splitlines()[:4]:
+        # Guidance rows are consecutive. Stop before operating expenses, full-year or other sections.
+        if match := REVENUE.match(row):
+            key = "revenue"
+            if Decimal(match[1]) <= 0 or Decimal(match[3]) >= 100:
+                return None
+            value = {"center": decimal_text(Decimal(match[1])), "unit": match[2].lower(),
+                     "tolerance": decimal_text(Decimal(match[3]))}
+        elif band := MARGIN_BAND.fullmatch(row):
+            key = "gaap_margin"
+            low, high = Decimal(band[1]), Decimal(band[2])
+            value = {"low": decimal_text(low), "high": decimal_text(high)}
+        elif (margin := GAAP_MARGIN.match(row)) and row[margin.end():] in {".", ""}:
+            key = "gaap_margin"
+            center, spread = Decimal(margin[1]), Decimal(margin[2]) / 100
+            low, high = center - spread, center + spread
+            value = {"low": decimal_text(low), "high": decimal_text(high)}
+        else:
+            break
+        if key in metrics or key == "gaap_margin" and not 0 <= low <= high <= 100:
+            return None
+        metrics[key] = value
+        lines.append(row)
+    excerpt = "\n".join(lines)
+    if not metrics or len(excerpt) > 1200:
+        return None
+    return {**metrics, "quarter": target[0], "year": target[1], "additional_week": bool(heading[3]), "excerpt": excerpt}
+
+
+def following_period(period):
+    index = QUARTERS.index(period[0]) + 1
+    return QUARTERS[index % 4], period[1] + int(index == 4)
+
+
+def projected_ranges(outlook):
+    ranges = {}
+    if rev := outlook.get("revenue"):
+        center = Decimal(rev["center"])
+        spread = center * Decimal(rev["tolerance"]) / 100
+        ranges["revenue"] = center-spread, center+spread, rev["unit"]
+    if margin := outlook.get("gaap_margin"):
+        ranges["gaap_margin"] = Decimal(margin["low"]), Decimal(margin["high"]), "percent"
+    return ranges
+
+
 def results_period(title: str) -> tuple[str, int] | None:
     match = RESULTS_TITLE.fullmatch(title)
     if match and (match[1].lower() == "fourth" or not match[2]):
@@ -139,13 +201,18 @@ def checked(proof: dict, period: tuple[str, int], previewed_at: datetime, now: d
     observed = timestamp(proof["observed"])
     published = date.fromisoformat(proof["published_date"])
     excerpt = proof["outlook"]
-    if (proof["schema"] != 1 or proof["title"] != title or proof["url"] != url
+    if (type(proof["schema"]) is not int or proof["schema"] not in (1, 2) or proof["title"] != title or proof["url"] != url
             or published >= previewed_at.date() or observed is None
             or not -60 <= (now - observed).total_seconds() <= 21600
             or observed.date() < published or len(excerpt) > 1200
             or proof["sha256"] != sha256(excerpt.encode()).hexdigest()):
         raise ValueError("Original Nvidia guidance identity or observation is invalid")
-    guidance_ranges(excerpt, period)
+    if proof["schema"] == 1:
+        guidance_ranges(excerpt, period)
+    else:
+        outlook = forward_guidance(excerpt, period)
+        if not outlook or outlook["excerpt"] != excerpt:
+            raise ValueError("Nvidia outlook excerpt changed")
     return proof
 
 
@@ -173,16 +240,21 @@ def capture(story: dict, previewed_at: datetime, now: datetime, fetch) -> dict |
     if len(dates) > 1:
         raise ValueError("Original Nvidia guidance page has conflicting release dates")
     published = dates.pop() if dates else publication_time(body.encode(), title, url=url).date()
-    excerpt = outlook_excerpt("\n".join(lines), period)
+    outlook = forward_guidance("\n".join(lines), period)
+    if outlook is None:
+        raise ValueError("Original Nvidia outlook missing or ambiguous")
+    excerpt = outlook["excerpt"]
     observed = datetime.fromtimestamp(response["fetched_at_epoch"], timezone.utc)
-    proof = {"schema": 1, "title": title, "url": url, "published_date": published.isoformat(),
+    proof = {"schema": 2, "title": title, "url": url, "published_date": published.isoformat(),
              "observed": observed.isoformat(), "outlook": excerpt, "sha256": sha256(excerpt.encode()).hexdigest()}
     return checked(proof, period, previewed_at, now)
 
 
 def comparisons(proof: dict, reported: dict, period: tuple[str, int]) -> dict:
     results = {}
-    for field, (low, high, units) in guidance_ranges(proof["outlook"], period).items():
+    ranges = (guidance_ranges(proof["outlook"], period) if proof["schema"] == 1 else
+              projected_ranges(forward_guidance(proof["outlook"], period)))
+    for field, (low, high, units) in ranges.items():
         actual = reported.get(field)
         if actual is None:
             continue

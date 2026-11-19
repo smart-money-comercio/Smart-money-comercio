@@ -297,17 +297,27 @@ def build(record, report, research, *, schema=2):
         from src.intelligence.watchlist_breadth import verdict_copy
 
         watchlist_outcome = verdict_copy(verdict)
+    sector_outcome = evidence.get("sector_verdict", "")
+    if sector_outcome:
+        quotes = review["sector_checkpoint"]["quotes"]
+        if quotes:
+            from src.intelligence import sector_followup
+            base = datetime.fromisoformat(review["sector_checkpoint"]["published_at"]).astimezone(sector_followup.NY).date()
+            day, _ = sector_followup.closing_pair("SMH", quotes["SMH"], base, datetime.fromisoformat(record["generated_at"]))
+            sources["sector_closes"] = [{"url": quotes[symbol]["url"], "publisher": "Yahoo Finance chart",
+                                        "verified_at": quotes[symbol]["observed"], "published_at": day.isoformat()}
+                                       for symbol in sector_followup.SYMBOLS]
     if watch:
         from src.intelligence import earnings_watch
         if report.count(earnings_watch.source_line(watch, selected)) != 1:
             raise ValueError("Earnings watch lost its original source link")
-        if watch.get("guidance_comparison"):
+        if earnings_watch.has_answer(watch):
             comparison = earnings_watch.comparison_text(watch)
-            follow_up = comparison + ("\n\n" + watchlist_outcome if watchlist_outcome else "")
+            follow_up = "\n\n".join(row for row in (comparison, watchlist_outcome, sector_outcome) if row)
             if (groups.get(earnings_watch.COMPARISON_HEADER) != follow_up
-                    or report.count(earnings_watch.guidance_source_line(watch)) != 1):
+                    or watch.get("guidance") and report.count(earnings_watch.guidance_source_line(watch)) != 1):
                 raise ValueError("Earnings follow-up narration needs its original guidance and written comparison")
-            guide = watch["guidance"]
+        if guide := watch.get("guidance"):
             sources[earnings_watch.GUIDANCE_SOURCE_ID] = [{
                 "url": guide["url"], "publisher": "Nvidia Newsroom",
                 "published_at": guide["published_date"], "verified_at": guide["observed"],
@@ -364,7 +374,7 @@ def build(record, report, research, *, schema=2):
         opening_sources = list(lead["story_ids"])
         if lead["earnings"]:
             opening_sources.append("calendar_" + watch["notice"]["symbol"] if watch["phase"] == "preview" else watch["story_id"])
-            if comparison:
+            if watch.get("guidance"):
                 opening_sources.append(earnings_watch.GUIDANCE_SOURCE_ID)
     elif review.get("reader_version") in {3,4}:
         if review["reader_version"] == 4:
@@ -383,7 +393,7 @@ def build(record, report, research, *, schema=2):
                     edition_intro = " This is Smart Money. "
         if review["reader_version"] == 4 and earnings_lead(evidence):
             opening_sources = ["calendar_" + watch["notice"]["symbol"]] if watch["phase"] == "preview" else [watch["story_id"]]
-            if comparison:
+            if watch.get("guidance"):
                 opening_sources.append(earnings_watch.GUIDANCE_SOURCE_ID)
     if modern and not evidence.get("takeaway_version") and review.get("reader_version") in {2, 3, 4} and first_checked:
         label = NAMES.get(first_checked["symbol"], first_checked["symbol"])
@@ -413,7 +423,7 @@ def build(record, report, research, *, schema=2):
     for story in sorted(selected, key=editor.news_order):
         if comparison and story["id"] == watch["story_id"]:
             add("Earnings Follow-up", comparison, (),
-                (story["id"], earnings_watch.GUIDANCE_SOURCE_ID))
+                (story["id"], earnings_watch.GUIDANCE_SOURCE_ID) if watch.get("guidance") else (story["id"],))
             covered.update(issuer(symbol) for symbol in story.get("symbols", []))
             continue
         introduced_in_takeaway = story["id"] in opening_sources
@@ -515,6 +525,10 @@ def build(record, report, research, *, schema=2):
     watch_rows = [row for row in review["insights"] if row["section"] == "watch"]
     if evidence.get("business_version", 0) >= 3:
         narration, bullets, watch_sources = named_watch_scene(watch_rows, sources, evidence.get("earnings_context", []))
+        if sector_outcome:
+            narration = sector_outcome + " " + narration
+            if "sector_closes" in sources:
+                watch_sources.append("sector_closes")
         if watchlist_outcome:
             narration = watchlist_outcome + " " + narration
         if futures and any(early_futures.SOURCE_SECTION in row["sources"] for row in watch_rows):

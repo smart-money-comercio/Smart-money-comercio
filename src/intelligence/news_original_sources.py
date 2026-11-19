@@ -124,7 +124,22 @@ def article_excerpt(body: str, title: str, published: str, *, publisher: str = "
         raise ValueError("Original article needs the admitted feed publication clock")
     parser = ArticleBody(publisher, url)
     parser.feed(body)
-    text = release_text("".join(parser.parts))
+    raw = "".join(parser.parts)
+    text = release_text(raw)
+    if publisher == "Nvidia Newsroom":
+        from src.intelligence.nvidia_guidance import results_period, following_period, forward_guidance
+        from src.intelligence.story_analysis import MAX_EXCERPT
+        period = results_period(title)
+        if period and sum(h.casefold() == title.casefold() for h in parser.headings) == 1:
+            lines = "\n".join(" ".join(line.split()) for line in raw.splitlines() if line.strip())
+            outlook = forward_guidance(lines, following_period(period))
+            if outlook and outlook["excerpt"] not in text:
+                # Keep the issuer's opening and a complete, possibly distant, outlook block.
+                prefix = text.split(outlook["excerpt"].splitlines()[0], 1)[0]
+                prefix = prefix[:MAX_EXCERPT - len(outlook["excerpt"]) - 2]
+                boundary = len(prefix)-1 if prefix.endswith(".") else max(prefix.rfind(". "), prefix.rfind("\n"))
+                if boundary >= 0:
+                    text = prefix[:boundary + 1].rstrip() + "\n" + outlook["excerpt"]
     if not text:
         raise ValueError("Recognizable original release body unavailable")
     from src.intelligence.policy_analysis import is_fomc_statement, release_clock
@@ -192,7 +207,8 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *
     fed = source.get("name") == "Federal Reserve" and source.get("category") == "fed"
     intel = source.get("company_symbol") == "INTC"
     # Reprocess Intel's cached listing once under the new lookback.
-    profile = 5 if intel else 4 if source.get("company_symbol") == "AMD" else 6 if source.get("company_symbol") else 3
+    profiles = {"INTC": 5, "AMD": 4, "NVDA": 7}
+    profile = profiles.get(source.get("company_symbol"), 6 if source.get("company_symbol") else 3)
     agency = source.get("name") in {"EIA", "DARPA"}
     if (not source.get("company_symbol") and not fed and not agency) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:
         return payload

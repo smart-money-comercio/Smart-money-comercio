@@ -130,7 +130,7 @@ class OriginalReadChecks(unittest.TestCase):
         old = payload(NVDA["url"], rss([("NVIDIA Announces Financial Results", URL, PUBLICATION)]), release_excerpt_schema=3)
         fetch = Mock(side_effect=lambda url: payload(url, page(title="NVIDIA Announces Financial Results")))
         updated = originals.enrich_feed(NVDA, old, feeds.parse_rss_items, fetch, NOW)
-        self.assertEqual(updated["release_excerpt_schema"], 6)
+        self.assertEqual(updated["release_excerpt_schema"], 7)
         self.assertEqual(updated["fetched_at_epoch"], old["fetched_at_epoch"])
         self.assertIs(originals.enrich_feed(NVDA, updated, feeds.parse_rss_items, fetch, NOW), updated)
         self.assertEqual(fetch.call_count, 1)
@@ -202,7 +202,7 @@ class OriginalReadChecks(unittest.TestCase):
     def test_old_feed_marker_is_reprocessed_once(self):
         old = payload(NVDA["url"], rss([(TITLE,URL,PUBLICATION)]), release_excerpt_schema=1)
         result = originals.enrich_feed(NVDA, old, feeds.parse_rss_items, lambda url: payload(url,page()), NOW)
-        self.assertEqual(result["release_excerpt_schema"], 6)
+        self.assertEqual(result["release_excerpt_schema"], 7)
         self.assertEqual(result["fetched_at_epoch"], old["fetched_at_epoch"])
 
     def test_article_clock_conflict_does_not_supply_facts(self):
@@ -217,6 +217,21 @@ class OriginalReadChecks(unittest.TestCase):
     def test_stale_and_prepublication_article_observations_are_not_reused(self):
         for stamp in ((NOW-timedelta(hours=7)).timestamp(), (NOW-timedelta(hours=1)).timestamp()):
             self.assertFalse(self.enrich(fetch=lambda url: payload(url,page(),fetched_at_epoch=stamp))["release_evidence"])
+
+    def test_late_outlook_survives_the_original_excerpt_budget(self):
+        from src.intelligence import nvidia_guidance as nv
+        title = "NVIDIA Announces Financial Results for Third Quarter Fiscal 2027"
+        url = "https://nvidianews.nvidia.com/news/synthetic-earnings"
+        opening = "NVIDIA today reported revenue for the third quarter ended October 25, 2026, of $20 billion."
+        heading = "NVIDIA’s outlook for the fourth quarter of fiscal 2027, which includes an additional week, is as follows:"
+        band = "GAAP and non-GAAP gross margins are expected to be between 71.0% and 72.0%."
+        body = (f'<meta property="og:title" content="{title}"><meta property="article:published_time" content="{PUBLICATION}">'
+                f'<h1>{title}</h1><div class="article-body"><p>{opening}</p><p>' + "Financial table text. "*360
+                + f'</p><p>{heading}</p><ul><li>{band}</li></ul></div>')
+        text = originals.article_excerpt(body, title, PUBLICATION, publisher=NVDA["name"], url=url)
+        self.assertLessEqual(len(text), 6000)
+        self.assertIn(opening, text)
+        self.assertEqual(nv.forward_guidance(text, ("fourth", 2027))["gaap_margin"], {"low": "71", "high": "72"})
 
     def test_nvidia_body_excludes_header_and_share_controls(self):
         body = page(container="div").replace('<div>', '<article><p>Share controls are not article evidence.</p><div class="entry-content">').replace('</div>', '</div></article>')

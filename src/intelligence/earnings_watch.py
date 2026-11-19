@@ -1,6 +1,7 @@
 """Bind earnings previews and follow-ups to the issuer's original disclosures."""
 
 from datetime import date, timedelta
+from decimal import Decimal
 import re
 
 from src.intelligence.company_schedule import NY, checked_notice
@@ -145,6 +146,79 @@ def with_original_guidance(value, story, now, fetch):
     return value
 
 
+def resolve_outlook(story, prior, now):
+    """A published forecast can answer a watch even if no earlier preview was archived."""
+    from src.intelligence import nvidia_guidance as nv
+    from src.intelligence.news_editor import primary_source
+    from src.intelligence.story_analysis import checked_evidence
+
+    if (story.get("decision") != "selected" or story.get("source_check") != "pass"
+            or story.get("publisher_symbol") != "NVDA" or primary_source(story) != "NVDA"
+            or not (period := nv.results_period(story["title"]))):
+        return prior
+    profile = checked_evidence(story)
+    published, observed = timestamp(story["published"]), timestamp(profile.get("observed_at"))
+    if (profile["scope"] != "original release excerpt" or profile["event"] != "earnings"
+            or not published or not observed or not 0 <= (now-published).total_seconds() <= 86400
+            or not -60 <= (now-observed).total_seconds() <= 21600 or published > observed + timedelta(seconds=60)):
+        return prior
+    outlook = nv.forward_guidance(profile["source_text"], nv.following_period(period))
+    if not outlook:
+        if prior and prior.get("guidance_comparison"):
+            return {**prior, "outlook_checked": True}
+        return prior
+    try:
+        actuals = nv.results_facts(story, profile["source_text"])
+    except ValueError:
+        return prior
+    facts = {fact["field"]: fact["value"].partition(" (")[0] for fact in actuals}
+    base = prior or {"phase": "results", "story_id": story["id"], "period": period[0] + " quarter",
+                     "fiscal_year": period[1], "revenue": facts["reported_revenue"]}
+    value = {**base, "fiscal_year": period[1], "published_outlook": outlook, "published_at": published.isoformat()}
+    if "reported_gross_margin" in facts:
+        value["gaap_margin"] = facts["reported_gross_margin"].removesuffix("%")
+    from src.intelligence.sector_followup import open_question
+    if open_question(value["published_at"], now):
+        value["sector_watch"] = True
+    return value
+
+
+def has_answer(value):
+    return bool(value and (value.get("guidance_comparison") or value.get("published_outlook")))
+
+
+def outlook_text(value):
+    outlook = value["published_outlook"]
+    parts = []
+    if rev := outlook.get("revenue"):
+        parts.append(f"revenue of ${rev['center']} {rev['unit']}, plus or minus {rev['tolerance']} percent")
+    if margin := outlook.get("gaap_margin"):
+        parts.append(f"a GAAP gross margin of {margin['low']} to {margin['high']} percent")
+    timing = f"the {outlook['quarter']} quarter of fiscal {outlook['year']}"
+    if outlook["additional_week"]:
+        timing += ", which includes an extra week"
+    return f"For {timing}, management expects " + " and ".join(parts) + "."
+
+
+def outlook_opening(value):
+    from src.intelligence.nvidia_guidance import AMOUNT, projected_ranges
+    bounds = projected_ranges(value["published_outlook"])
+    revenue = re.fullmatch(AMOUNT, value["revenue"].replace(",", ""))
+    if revenue and "revenue" in bounds and "gaap_margin" in bounds and "gaap_margin" in value:
+        low, high, unit = bounds["revenue"]
+        actual = Decimal(revenue[1])
+        if revenue[2].lower() != unit:
+            actual *= Decimal(1000) if unit == "million" else Decimal("0.001")
+        margin_low, margin_high, _ = bounds["gaap_margin"]
+        margin = Decimal(value["gaap_margin"])
+        if low > actual and margin_high < margin:
+            return "Nvidia expects higher sales next quarter and a smaller gross profit on each dollar of revenue."
+        if low > actual and margin_low > margin:
+            return "Nvidia expects both sales and gross margin to rise next quarter."
+    return "Nvidia has set new targets for " + ("sales and gross margin." if len(bounds) == 2 else
+            "sales." if "revenue" in bounds else "gross margin.")
+
+
 def checked(value, now, stories):
     if not isinstance(value, dict) or value.get("phase") not in {"preview", "results"}:
         raise ValueError("Unknown issuer earnings watch")
@@ -152,13 +226,19 @@ def checked(value, now, stories):
         expected = preview(value["notice"], now)
     else:
         story = next((row for row in stories if row["id"] == value.get("story_id")), None)
-        expected = followup(value["preview"], value["previewed_at"], story, now, guidance=value.get("guidance")) if story else None
+        expected = None
+        if story and "preview" in value:
+            expected = followup(value["preview"], value["previewed_at"], story, now, guidance=value.get("guidance"))
+        if story and ("published_outlook" in value or value.get("outlook_checked")):
+            expected = resolve_outlook(story, expected, now)
     if expected != value:
         raise ValueError("Earnings watch does not match the issuer disclosure and edition clock")
     return value
 
 
 def opening(value, names):
+    if value.get("published_outlook"):
+        return outlook_opening(value)
     if value["phase"] == "results":
         symbol = value["preview"]["notice"]["symbol"]
         if comparison := value.get("guidance_comparison"):
@@ -207,7 +287,12 @@ def source_line(value, stories):
 
 
 def comparison_text(value):
-    comparison = value["guidance_comparison"]
+    comparison = value.get("guidance_comparison", {})
+    if not comparison:
+        text = f"Nvidia reported {value['revenue']} in revenue for the {value['period']} of fiscal {value['fiscal_year']}."
+        if "gaap_margin" in value:
+            text += f" GAAP gross margin was {value['gaap_margin']} percent."
+        return text + " " + outlook_text(value)
     published = date.fromisoformat(value["guidance"]["published_date"])
     sentences = []
     if revenue := comparison.get("revenue"):
@@ -223,13 +308,23 @@ def comparison_text(value):
             f"{margin['range']} range."
         )
     sentences.append(f"Nvidia issued that guidance on {published:%B} {published.day}.")
+    if value.get("published_outlook"):
+        sentences.append(outlook_text(value))
     return " ".join(sentences)
 
 
 def next_guidance_check(value):
+    if outlook := value.get("published_outlook"):
+        if band := outlook.get("gaap_margin"):
+            return f"When Nvidia reports its {outlook['quarter']} quarter, compare actual GAAP gross margin with the {band['low']} to {band['high']} percent it now expects."
+        return f"When Nvidia reports its {outlook['quarter']} quarter, compare actual sales with management's new revenue range."
     if bounds := value.get("next_guidance_range"):
         metric = "GAAP gross margin" if "gaap_margin" in value["guidance_comparison"] else "revenue"
         return f"Management's next-quarter {metric} guidance is {bounds}. Use it as the benchmark when the company next reports or updates its outlook."
+    if value.get("outlook_checked"):
+        if margin := value.get("gaap_margin"):
+            return f"At the next quarterly release, compare actual GAAP gross margin with the {margin} percent just reported."
+        return f"At the next quarterly release, compare reported revenue with this quarter's {value['revenue']}."
     if "gaap_margin" in value["guidance_comparison"]:
         return (
             f"Check the next quarter's GAAP gross-margin guidance against the {value['gaap_margin']} percent just reported. "

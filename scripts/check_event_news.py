@@ -349,6 +349,173 @@ class EarningsWatchChecks(IsolatedChecks):
         with self.assertRaisesRegex(ValueError, "Earnings watch does not match"):
             analysis.validate_review(altered, research, text, editor.selected_stories(record))
 
+    def next_release(self):
+        release = self.result_release()
+        release["source_excerpt"] += (
+            "\nNVIDIA’s outlook for the fourth quarter of fiscal 2027, which includes an additional week, is as follows:"
+            "\nRevenue is expected to be $50.0 billion, plus or minus 3%."
+            "\nGAAP and non-GAAP gross margins are expected to be between 69.0% and 70.0%.")
+        return release
+
+    def resolved_report(self, release, when, reader=None):
+        with patch.object(editor, "cache_candidates", return_value=([release] if release else [], [])), \
+                patch.object(editor.feeds, "fetch_url", return_value=self.guidance_response()):
+            return build_daily_news_brief(self.research(now=when), resolve_watches=True,
+                                          takeaway_version=1, sector_price_reader=reader)
+
+    def test_forward_outlook_answers_the_watch_before_asking_a_new_question(self):
+        self.preview_report([self.scheduled_release(self.preview_at)])
+        text = self.resolved_report(self.next_release(), self.results_at)
+        parts = text.split("What Changed Since Our Last Brief\n")
+        self.assertIn("higher sales next quarter and a smaller gross profit", parts[0])
+        self.assertIn("above its original $39.2 billion to $40.8 billion range", parts[1])
+        self.assertIn("includes an extra week", parts[1])
+        self.assertIn("$50 billion, plus or minus 3 percent", parts[1])
+        self.assertIn("GAAP gross margin of 69 to 70 percent", parts[1])
+        self.assertNotIn("Check the next quarter's GAAP", text)
+        self.assertIn("SMH semiconductor ETF", text.partition("What We're Watching\n")[2])
+        record = store.read_editions(report=text)[0]
+        self.assertTrue(record["voiceover"]["quality"]["passes"])
+        self.assertTrue(validate_news_brief(text)["passes"])
+        altered = deepcopy(record["analyst_review"])
+        altered["earnings_watch"]["published_outlook"]["gaap_margin"]["high"] = "80"
+        with self.assertRaises(ValueError):
+            analysis.validate_review(altered, record["research_text"], text, editor.selected_stories(record))
+
+    def test_current_outlook_requires_no_archived_preview_or_historical_guidance(self):
+        text = self.resolved_report(self.next_release(), self.results_at)
+        self.assertIn("For the fourth quarter of fiscal 2027", text)
+        self.assertNotIn("Original guidance source —", text)
+        record = store.read_editions(report=text)[0]
+        self.assertNotIn("preview", record["analyst_review"]["earnings_watch"])
+        scene = next(row for row in record["voiceover"]["segments"] if row["heading"] == "Earnings Follow-up")
+        self.assertEqual(scene["source_ids"], [record["analyst_review"]["earnings_watch"]["story_id"]])
+        self.assertIn("NVDA — results", editor.build_editor_status())
+
+    def test_outlook_keeps_quarters_metrics_and_forecast_bounds_separate(self):
+        from src.intelligence.nvidia_guidance import forward_guidance, following_period
+        section = self.next_release()["source_excerpt"]
+        target = following_period(("third", 2027))
+        self.assertEqual(following_period(("fourth", 2027)), ("first", 2028))
+        self.assertIsNone(forward_guidance(section, ("first", 2028)))
+        for invalid in (section.replace("69.0%", "71.0%"), section + "\n" + section,
+                        section + "\nRevenue is expected to be $8 billion, plus or minus 1%."):
+            self.assertIsNone(forward_guidance(invalid, target))
+        margin_missing = section.replace("GAAP and non-GAAP gross", "Non-GAAP gross")
+        self.assertNotIn("gaap_margin", forward_guidance(margin_missing, target))
+        section = section.replace("between 69.0% and 70.0%.", "73.5% and 76.0%, respectively, plus or minus 50 basis points.")
+        self.assertEqual(forward_guidance(section, target)["gaap_margin"], {"low": "73", "high": "74"})
+
+    def closing_reader(self, url):
+        from src.intelligence import sector_followup
+        symbol = next(symbol for symbol in sector_followup.SYMBOLS if url == sector_followup.url(symbol))
+        close = 101 if symbol == "SMH" else 100.25
+        day = self.results_at + timedelta(days=1)
+        end = day.replace(hour=21, minute=0)
+        opened = end.replace(hour=14, minute=30)
+        chart = {"meta": {"symbol": symbol, "currency": "USD", "instrumentType": "ETF", "dataGranularity": "1d",
+                          "exchangeTimezoneName": "America/New_York", "regularMarketTime": int(end.timestamp()),
+                          "regularMarketPrice": close, "currentTradingPeriod": {"regular": {"end": int(end.timestamp())}}},
+                 "timestamp": [int((opened-timedelta(days=1)).timestamp()), int(opened.timestamp())],
+                 "indicators": {"quote": [{"close": [100, close]}]}, "events": {}}
+        return {"url": url, "status": "ok", "fetched_at_epoch": day.timestamp(),
+                "body": json.dumps({"chart": {"result": [chart], "error": None}})}
+
+    def test_confirmed_question_then_pending_then_verified_price_answer_then_retirement(self):
+        from src.intelligence import sector_followup
+        question = self.resolved_report(self.next_release(), self.results_at)
+        tomorrow = self.results_at + timedelta(days=1)
+        fetch = Mock(side_effect=self.closing_reader)
+        self.assertNotIn(sector_followup.ANSWER, self.resolved_report(None, tomorrow, fetch))
+        fetch.assert_not_called()
+        with patch.object(store.time, "time", return_value=self.results_at.timestamp()+5):
+            store.confirm_watchlist_delivery(question)
+        self.assertNotIn(sector_followup.ANSWER, self.resolved_report(None, tomorrow.replace(hour=18), fetch))
+        fetch.assert_not_called()
+        pending = self.resolved_report(None, tomorrow, lambda url: {"status": "error"})
+        self.assertIn("waiting for verified closing prices for SMH and SPY", pending)
+        with patch.object(store.time, "time", return_value=tomorrow.timestamp()+5):
+            store.confirm_watchlist_delivery(pending)
+        answer = self.resolved_report(None, tomorrow + timedelta(minutes=1), fetch)
+        self.assertEqual(fetch.call_count, 2)
+        self.assertIn("SMH returned +1.00 percent and SPY returned +0.25 percent", answer)
+        self.assertIn("SMH outperformed SPY.", answer)
+        record = store.read_editions(report=answer)[0]
+        self.assertTrue(record["voiceover"]["quality"]["passes"])
+        check = record["analyst_review"]["sector_checkpoint"]
+        modified = deepcopy(check)
+        modified["quotes"]["SPY"]["chart"]["meta"]["symbol"] = "SMH"
+        with self.assertRaises(ValueError):
+            sector_followup.verdict(modified, tomorrow + timedelta(minutes=1))
+        with patch.object(store.time, "time", return_value=tomorrow.timestamp()+65):
+            store.confirm_watchlist_delivery(answer)
+        self.assertNotIn(sector_followup.ANSWER, self.resolved_report(None, tomorrow + timedelta(minutes=2), fetch))
+        self.assertEqual(fetch.call_count, 2)
+
+    def test_missing_new_range_uses_a_future_reported_metric_and_archived_copy_rebuilds(self):
+        self.preview_report([self.scheduled_release(self.preview_at)])
+        release = self.result_release()
+        with patch.object(editor, "cache_candidates", return_value=([release], [])), \
+                patch.object(editor.feeds, "fetch_url", return_value=self.guidance_response()):
+            research = self.research(now=self.results_at)
+            legacy = build_daily_news_brief(research)
+        old = store.read_editions(report=legacy)[0]
+        self.assertIn("Check the next quarter's GAAP gross-margin guidance", legacy)
+        current = self.resolved_report(release, self.results_at)
+        self.assertIn("At the next quarterly release, compare actual GAAP gross margin", current)
+        self.assertNotIn("Check the next quarter's GAAP gross-margin guidance", current)
+        analysis.validate_review(old["analyst_review"], research, legacy, editor.selected_stories(old))
+        self.assertEqual(store.read_editions(report=legacy)[0]["voiceover"], old["voiceover"])
+
+    def test_published_guidance_survives_unavailable_historical_source(self):
+        self.preview_report([self.scheduled_release(self.preview_at)])
+        with patch.object(editor, "cache_candidates", return_value=([self.next_release()], [])), \
+                patch.object(editor.feeds, "fetch_url", return_value={"status": "error"}):
+            text = build_daily_news_brief(self.research(now=self.results_at), resolve_watches=True)
+        self.assertIn("quarter of fiscal 2027, which includes an extra week", text)
+        self.assertNotIn("Original guidance source —", text)
+
+    def test_sector_outcomes_hold_on_stale_intraday_split_or_nonmatching_quotes(self):
+        from src.intelligence import sector_followup as sector
+        tomorrow = self.results_at + timedelta(days=1)
+        published = self.result_release()["published"]
+        prior = {"published_at": published, "edition_id": "a"*20, "confirmed_at": self.results_at.isoformat(),
+                 "question": sector.question(published)}
+        good = sector.capture(prior, tomorrow, self.closing_reader)
+        self.assertTrue(good["quotes"])
+        for defect in ("missing", "intraday", "split", "date", "partial"):
+            with self.subTest(defect=defect):
+                value = deepcopy(good)
+                packet = value["quotes"]["SMH"]
+                chart = packet["chart"]
+                if defect == "missing":
+                    chart["indicators"]["quote"][0]["close"][1] = None
+                elif defect == "intraday":
+                    chart["meta"]["regularMarketTime"] -= 3600
+                elif defect == "split":
+                    at = chart["timestamp"][1]
+                    chart["events"] = {"splits": {str(at): {"date": at}}}
+                elif defect == "date":
+                    chart["timestamp"][0] -= 86400
+                else:
+                    del value["quotes"]["SPY"]
+                with self.assertRaises(ValueError):
+                    sector.verdict(value, tomorrow)
+        late = tomorrow + timedelta(days=1)
+        packet = deepcopy(good)
+        for row in packet["quotes"].values():
+            row["observed"] = late.isoformat()
+            row["chart"]["meta"]["currentTradingPeriod"]["regular"]["end"] += 86400
+        self.assertIn("outperformed SPY", sector.verdict(packet, late))
+        packet["quotes"]["SMH"]["chart"]["meta"]["regularMarketTime"] -= 3600
+        with self.assertRaises(ValueError):
+            sector.verdict(packet, late)
+        for close, expected in ((100.25, "matched SPY"), (99, "trailed SPY")):
+            value = deepcopy(good)
+            chart = value["quotes"]["SMH"]["chart"]
+            chart["meta"]["regularMarketPrice"] = chart["indicators"]["quote"][0]["close"][1] = close
+            self.assertIn(expected, sector.verdict(value, tomorrow))
+
     def test_guidance_capture_withholds_wrong_quarters_late_releases_and_redirects(self):
         from src.intelligence import nvidia_guidance
 

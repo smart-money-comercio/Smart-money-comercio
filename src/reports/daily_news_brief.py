@@ -194,7 +194,7 @@ def validate_news_brief(text: str) -> dict:
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
                            require_company_facts=False, takeaway_version=0, watchlist_checkpoint_version=0,
-                           market_reporting_version=0) -> str:
+                           market_reporting_version=0, resolve_watches=False, sector_price_reader=None) -> str:
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
     if quality.get("format") == "news":
@@ -270,6 +270,14 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     company_schedules = plan.get("company_schedules", [])[:1]
     preview = earnings_watch.preview(company_schedules[0], now) if company_schedules else None
     followup = plan.get("earnings_followup_candidate")
+    if resolve_watches:
+        for story in editor.selected_stories(plan):
+            if followup and followup["story_id"] != story["id"]:
+                continue
+            resolved = earnings_watch.resolve_outlook(story, followup, now)
+            if resolved and (resolved.get("published_outlook") or resolved.get("outlook_checked")):
+                followup = plan["earnings_followup_candidate"] = resolved
+                break
     macro_limit = 1 if company_schedules else 2
     ahead.extend(macro[:macro_limit])
     ahead.extend(schedule_narration(row, zone, NAMES) for row in company_schedules)
@@ -303,6 +311,19 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         watchlist_checkpoint = watchlist_breadth.delivered_checkpoint(research_report, past_editions, confirmed, now)
         if watchlist_checkpoint:
             plan["watchlist_checkpoint"] = watchlist_checkpoint
+    sector_checkpoint = None
+    if resolve_watches and any((row["analyst_review"].get("earnings_watch") or {}).get("sector_watch")
+                               for row in past_editions if row.get("analyst_review")):
+        from src.intelligence import sector_followup
+        try:
+            receipts = news_editor_store.checkpoint_receipts(now)
+        except (OSError, SQLiteError):
+            receipts = []
+        prior = sector_followup.delivered(past_editions, receipts, now)
+        if prior:
+            sector_checkpoint = (sector_followup.capture(prior, now, sector_price_reader) if sector_price_reader
+                                 else {**prior, "quotes": {}})
+            plan["sector_checkpoint"] = sector_checkpoint
     chosen = None
     last_result = None
     recent = plan.get("earnings_context_candidates") or None
@@ -321,7 +342,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         for indexes, (context_values, intel_baseline), focus_limit, reader_limit in product(combinations(range(len(initial_stories)), count), context_choices, (3, 2, 1), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
             watch = followup if followup and any(story["id"] == followup["story_id"] for story in retained) else preview
-            comparison = earnings_watch.comparison_text(watch) if watch and watch.get("guidance_comparison") else ""
+            comparison = earnings_watch.comparison_text(watch) if earnings_watch.has_answer(watch) else ""
             analysis = analyze_report(
                 research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit},
                 narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit,
@@ -329,7 +350,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
                 premarket_futures=futures, takeaway_version=takeaway_version,
                 watchlist_checkpoint_version=watchlist_checkpoint_version, watchlist_checkpoint=watchlist_checkpoint,
-                market_context=market_context,
+                market_context=market_context, sector_checkpoint=sector_checkpoint,
             )
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro or futures):
@@ -384,8 +405,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 notes_body.insert(-1, no_company_story)
             if watch:
                 notes_body.insert(-1, earnings_watch.source_line(watch, retained))
-                if comparison:
+                if watch.get("guidance"):
                     notes_body.insert(-1, earnings_watch.guidance_source_line(watch))
+            if sector_checkpoint and sector_checkpoint["quotes"]:
+                notes_body.insert(-1, sector_followup.source_line())
             if futures:
                 notes_body.insert(-1, early_futures.source_line(futures))
             groups = list(zip(HEADERS, (market_body, company_body, global_body, ahead_body, watching, notes_body)))
@@ -406,6 +429,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             follow_up = [comparison] if comparison else []
             if verdict := analysis["evidence"].get("watchlist_verdict"):
                 follow_up.append(watchlist_breadth.verdict_copy(verdict))
+            if sector_checkpoint:
+                follow_up.append(analysis["evidence"]["sector_verdict"])
             if follow_up:
                 groups.insert(int(broad_selloff), (earnings_watch.COMPARISON_HEADER, follow_up))
 

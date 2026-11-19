@@ -104,7 +104,7 @@ def analyze_report(
     earnings_watch: dict | None = None, watchlist_baseline: dict | None = None, premarket_futures: dict | None = None,
     takeaway_version: int = 0,
     watchlist_checkpoint_version: int = 0, watchlist_checkpoint: dict | None = None,
-    market_context: list[dict] | None = None,
+    market_context: list[dict] | None = None, sector_checkpoint: dict | None = None,
 ) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
@@ -248,6 +248,12 @@ def analyze_report(
                 raise ValueError("Watchlist outcome needs the original delivered checkpoint and a later close")
             evidence["watchlist_verdict"] = verdict
             evidence["source_sections"].append(watchlist_breadth.CHECKPOINT_SOURCE)
+    if sector_checkpoint is not None:
+        from src.intelligence import sector_followup
+        if event_context is None or reader_version != 4:
+            raise ValueError("A delivered sector watch requires a dated brief")
+        evidence["sector_verdict"] = sector_followup.verdict(sector_checkpoint, now)
+        evidence["source_sections"].append(sector_followup.SOURCE)
     if premarket_futures is not None:
         if event_context is None or reader_version != 4 or evidence["is_open"]:
             raise ValueError("Premarket futures require a dated brief before the cash session opens")
@@ -276,6 +282,8 @@ def analyze_report(
         value["earnings_watch"] = deepcopy(earnings_watch)
     if watchlist_baseline is not None:
         value["watchlist_baseline"] = deepcopy(watchlist_baseline)
+    if sector_checkpoint is not None:
+        value["sector_checkpoint"] = deepcopy(sector_checkpoint)
     if watchlist_checkpoint is not None:
         value["watchlist_checkpoint"] = deepcopy(watchlist_checkpoint)
     if market_context is not None:
@@ -307,12 +315,12 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         takeaway_version=analysis.get("evidence", {}).get("takeaway_version", 0),
         watchlist_checkpoint_version=analysis.get("evidence", {}).get("watchlist_checkpoint_version", 0),
         watchlist_checkpoint=analysis.get("watchlist_checkpoint"),
-        market_context=analysis.get("market_context"),
+        market_context=analysis.get("market_context"), sector_checkpoint=analysis.get("sector_checkpoint"),
     )
     if any(analysis.get(key) != expected.get(key) for key in (
         "schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version",
         "event_context", "reader_version", "reader_limit", "earnings_context", "disclosure_version",
-        "business_version", "intel_results_baseline", "earnings_watch", "watchlist_baseline", "watchlist_checkpoint", "market_context",
+        "business_version", "intel_results_baseline", "earnings_watch", "watchlist_baseline", "watchlist_checkpoint", "market_context", "sector_checkpoint",
     )):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
@@ -324,6 +332,12 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
     required = {key for key, row in allowed.items() if key not in {"model_support", "company_price", "participation"} or row["text"] in report}
     if seen != required:
         raise ValueError("Available analyst evidence was omitted from the brief")
+    if sector := expected["evidence"].get("sector_verdict"):
+        from src.intelligence import earnings_watch, sector_followup
+        from src.reports.daily_voiceover import sections
+        if (sector not in sections(report).get(earnings_watch.COMPARISON_HEADER, "").split("\n\n") or report.count(sector) != 1
+                or analysis["sector_checkpoint"]["quotes"] and report.count(sector_followup.source_line()) != 1):
+            raise ValueError("Closing-price answer lost its written outcome or sources")
     if verdict := expected["evidence"].get("watchlist_verdict"):
         from src.intelligence import earnings_watch, watchlist_breadth
         from src.reports.daily_voiceover import sections

@@ -9,6 +9,7 @@ import json
 import math
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import re
 import sqlite3
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -782,10 +783,10 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
                 raise ValueError("Earnings follow-up lost its earlier preview")
             if report.count(earnings_watch.source_line(watch, selected)) != 1:
                 raise ValueError("Earnings watch lost its original source link")
-            if watch.get("guidance_comparison"):
+            if earnings_watch.has_answer(watch):
                 comparison_text = earnings_watch.comparison_text(watch)
                 if (report.count(earnings_watch.COMPARISON_HEADER + "\n" + comparison_text) != 1
-                        or report.count(earnings_watch.guidance_source_line(watch)) != 1):
+                        or watch.get("guidance") and report.count(earnings_watch.guidance_source_line(watch)) != 1):
                     raise ValueError("Earnings comparison lost its original guidance or written section")
     for story in selected:
         if story.get("title_truncated"):
@@ -821,6 +822,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Intel results benchmark lost its admitted source record")
         if analyst_review.get("watchlist_baseline") != plan.get("watchlist_baseline"):
             raise ValueError("Watchlist follow-through lost its admitted prior edition")
+        if analyst_review.get("sector_checkpoint") != plan.get("sector_checkpoint"):
+            raise ValueError("Closing-price answer differs from the delivered watch evidence")
         if analyst_review.get("watchlist_checkpoint") != plan.get("watchlist_checkpoint"):
             raise ValueError("Watchlist outcome lost its delivered checkpoint")
         validate_review(analyst_review, research_report, report, selected)
@@ -1018,9 +1021,13 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if watch := analysis.get("earnings_watch"):
                     from src.intelligence.earnings_watch import source
 
-                    notice = watch["notice"] if watch["phase"] == "preview" else watch["preview"]["notice"]
+                    notice = watch.get("notice") or watch.get("preview", {}).get("notice") or {
+                        "symbol": "NVDA", "event_date": dated(watch["published_at"]).astimezone(ZoneInfo("America/New_York")).date().isoformat()}
                     link = source(watch, selected_stories(record))["url"]
                     lines.append(f"Earnings watch: {notice['symbol']} — {watch['phase']} | event {notice['event_date']} | {link}")
+                if checkpoint := analysis.get("sector_checkpoint"):
+                    lines.append("Semiconductor follow-up: " + ("verified paired closes" if checkpoint["quotes"] else "closing prices pending")
+                                 + " | delivered edition " + checkpoint["edition_id"])
                 comparison = analysis["evidence"].get("watchlist_follow_through")
                 if verdict := analysis["evidence"].get("watchlist_verdict"):
                     lines.append(f"Watchlist checkpoint: {verdict['status'].upper()} | close {verdict['session']}"

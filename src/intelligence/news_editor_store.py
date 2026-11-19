@@ -124,7 +124,8 @@ def confirm_watchlist_delivery(report: str) -> None:
     """Record a checkpoint only after the complete report reached Telegram."""
     from src.intelligence.watchlist_breadth import WATCH_LABEL
 
-    if WATCH_LABEL not in report or not state_path().is_file():
+    from src.intelligence.sector_followup import ANSWER, LABEL
+    if not any(label in report for label in (WATCH_LABEL, LABEL, ANSWER)) or not state_path().is_file():
         return
     digest = hashlib.sha256(report.encode()).hexdigest()
     try:
@@ -138,11 +139,15 @@ def confirm_watchlist_delivery(report: str) -> None:
 
 
 def confirmed_watchlist_ids(now: datetime) -> list[str]:
+    return [row[0] for row in checkpoint_receipts(now)]
+
+
+def checkpoint_receipts(now: datetime) -> list[tuple]:
     path = state_path()
     if not path.is_file():
         return []
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)) as db:
         if not db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'watchlist_deliveries'").fetchone():
             return []
-        return [row[0] for row in db.execute("SELECT edition_id FROM watchlist_deliveries WHERE confirmed <= ? "
-                                            "ORDER BY confirmed, rowid LIMIT ?", (now.timestamp(), MAX_EDITIONS))]
+        return list(db.execute("SELECT edition_id, confirmed FROM watchlist_deliveries WHERE confirmed <= ? "
+                                            "ORDER BY confirmed, rowid LIMIT ?", (now.timestamp(), MAX_EDITIONS)))

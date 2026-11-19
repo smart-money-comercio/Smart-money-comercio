@@ -298,8 +298,8 @@ def insights(evidence):
     sources, has_earnings_lead = _takeaway_sources(evidence)
     rows = [{"id": "opening_takeaway", "section": "intro", "text": opening(evidence), "sources": sources}, *watching(evidence)]
     watch = evidence.get("earnings_watch")
-    if watch and watch.get("guidance_comparison"):
-        from src.intelligence import earnings_watch
+    from src.intelligence import earnings_watch
+    if earnings_watch.has_answer(watch):
 
         remainder = [row for row in rows[1:]
                      if row.get("story_id") != watch["story_id"] and row.get("symbol") != "NVDA"]
@@ -308,6 +308,10 @@ def insights(evidence):
             "text": "Nvidia (NVDA) — " + earnings_watch.next_guidance_check(watch),
             "story_id": watch["story_id"], "sources": [earnings_watch.SOURCE_SECTION],
         }, *remainder[:evidence.get("reader_limit", 3) - 1]]
+        if watch.get("sector_watch"):
+            from src.intelligence.sector_followup import question
+            rows[1] = {"id": "watch_semiconductor_close", "section": "watch", "text": question(watch["published_at"]),
+                       "story_id": watch["story_id"], "sources": [earnings_watch.SOURCE_SECTION]}
     elif watch and watch["phase"] == "results" and not has_earnings_lead:
         from src.intelligence import earnings_watch
 
