@@ -197,10 +197,16 @@ def _from_admitted_text(story: dict, text: str, scope: str, *, schema: int | Non
     from src.intelligence.defense_program import applicable, program_facts, material
     from src.intelligence import refinery_mix
     from src.intelligence import disclosure_details
-    if type(schema) is not int or schema not in range(1, 18) or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema >= 8 and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
+    if type(schema) is not int or schema not in range(1, 19) or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema >= 8 and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
         raise ValueError("Unknown original story evidence scope")
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
-    if schema == 17:
+    if schema == 18:
+        from src.intelligence.defense_coverage import dividend_facts
+        facts = dividend_facts(story, text)
+        if not facts:
+            raise ValueError("Original dividend declaration terms are incomplete or ambiguous")
+        kind, stage = "dividend", "declared"
+    elif schema == 17:
         from src.intelligence.nvidia_guidance import results_facts
         facts = results_facts(story, text)
         kind, stage = "earnings", "reported"
@@ -267,6 +273,9 @@ def checked_evidence(story: dict) -> dict:
 
 def investor_read(story: dict) -> dict:
     evidence = checked_evidence(story)
+    if evidence["schema"] == 18:
+        from src.intelligence.defense_coverage import dividend_review
+        return dividend_review(evidence)
     if evidence["schema"] == 17:
         from src.intelligence.nvidia_guidance import results_review
         return results_review(evidence)

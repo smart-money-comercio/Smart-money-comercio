@@ -27,7 +27,10 @@ def assess(story):
     why, watch = base["why"], base["watch"]
     test = "Further original disclosures are needed to assess the scale and timing of the business effect."
 
-    if profile["schema"] == 16:
+    if profile["schema"] == 18:
+        kind, channel = "dividend declaration", "shareholder distributions"
+        test = watch
+    elif profile["schema"] == 16:
         kind, channel = "software collaboration", "inference adoption"
         test = base["watch"]
     elif profile["schema"] == 15:

@@ -2160,5 +2160,5 @@ def build_daily_report() -> str:
     return build_daily_news_brief(build_research_report(),
                                   futures_provider=early_futures.capture if DAILY_REPORT_LIVE_QUOTES else None,
                                   require_company_facts=True, takeaway_version=VERSION,
-                                  watchlist_checkpoint_version=CHECKPOINT_VERSION, market_reporting_version=1, resolve_watches=True,
+                                  watchlist_checkpoint_version=CHECKPOINT_VERSION, market_reporting_version=1, resolve_watches=True, defense_context_version=1,
                                   sector_price_reader=news_live_sources.fetch_url if DAILY_REPORT_LIVE_QUOTES else None)

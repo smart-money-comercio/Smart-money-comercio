@@ -194,7 +194,8 @@ def validate_news_brief(text: str) -> dict:
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
                            require_company_facts=False, takeaway_version=0, watchlist_checkpoint_version=0,
-                           market_reporting_version=0, resolve_watches=False, sector_price_reader=None) -> str:
+                           market_reporting_version=0, resolve_watches=False, sector_price_reader=None, defense_context_version=0) -> str:
+    from src.intelligence.defense_coverage import global_policy
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
     if quality.get("format") == "news":
@@ -350,7 +351,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
                 premarket_futures=futures, takeaway_version=takeaway_version,
                 watchlist_checkpoint_version=watchlist_checkpoint_version, watchlist_checkpoint=watchlist_checkpoint,
-                market_context=market_context, sector_checkpoint=sector_checkpoint,
+                market_context=market_context, sector_checkpoint=sector_checkpoint, defense_context_version=defense_context_version,
             )
             insights = analysis["insights"]
             if not (analysis["evidence"]["moves"] or analysis["evidence"]["companies"] or retained or macro or futures):
@@ -371,7 +372,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                     narrations[opening_order_id] = opening_order["text"]
                     continue
                 body = (ipo_body if story.get("ipo") or story.get("sec_filing") else
-                        global_body if "defense" in story_topics(story) else
+                        global_body if "defense" in story_topics(story) or defense_context_version and global_policy(story) else
                         policy_body if story["kind"] == "macro" else company_body)
                 body.append(story_paragraphs[story["id"]])
             company_body += [row["text"] for row in insights if row["section"] == "company"]
@@ -420,7 +421,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if retained:
                 lead = min(retained, key=editor.news_order)
                 lead_header = (IPO_HEADER if lead.get("ipo") or lead.get("sec_filing") else
-                               "Global and Defense Watch" if "defense" in story_topics(lead) else
+                               "Global and Defense Watch" if "defense" in story_topics(lead) or defense_context_version and global_policy(lead) else
                                POLICY_HEADER if lead["kind"] == "macro" else "Companies in Focus")
                 groups.sort(key=lambda group: (0 if group[0] == lead_header else 1 if group[0] == "Market Update" else 2, ALL_HEADERS.index(group[0])))
             broad_selloff = selloff(analysis["evidence"])

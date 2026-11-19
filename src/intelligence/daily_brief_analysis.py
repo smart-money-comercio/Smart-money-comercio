@@ -104,7 +104,7 @@ def analyze_report(
     earnings_watch: dict | None = None, watchlist_baseline: dict | None = None, premarket_futures: dict | None = None,
     takeaway_version: int = 0,
     watchlist_checkpoint_version: int = 0, watchlist_checkpoint: dict | None = None,
-    market_context: list[dict] | None = None, sector_checkpoint: dict | None = None,
+    market_context: list[dict] | None = None, sector_checkpoint: dict | None = None, defense_context_version: int = 0,
 ) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
@@ -140,6 +140,12 @@ def analyze_report(
         now = datetime.strptime(generated[1], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo(generated[2]))
         evidence["market_event_context"] = deepcopy(checked_context(event_context, report, now))
         evidence["source_sections"].append("Market event checks")
+    if defense_context_version:
+        from src.intelligence.defense_coverage import price_context
+        if type(defense_context_version) is not int or defense_context_version != 1 or event_context is None:
+            raise ValueError("Defense price context requires a dated news edition")
+        evidence["defense_context_version"] = defense_context_version
+        evidence["defense_price"] = price_context(report, now, evidence["market_event_context"]["events"])
     if market_context is not None:
         if event_context is None or reader_version != 4:
             raise ValueError("Market reporting requires a dated reader edition")
@@ -316,6 +322,7 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         watchlist_checkpoint_version=analysis.get("evidence", {}).get("watchlist_checkpoint_version", 0),
         watchlist_checkpoint=analysis.get("watchlist_checkpoint"),
         market_context=analysis.get("market_context"), sector_checkpoint=analysis.get("sector_checkpoint"),
+        defense_context_version=analysis.get("evidence", {}).get("defense_context_version", 0),
     )
     if any(analysis.get(key) != expected.get(key) for key in (
         "schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version",

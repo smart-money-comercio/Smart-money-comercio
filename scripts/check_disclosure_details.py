@@ -273,6 +273,99 @@ class RebuildDetailChecks(IsolatedChecks):
         self.assertIn("Treasury said OFAC",report)
 
 
+class DefenseCoverageChecks(IsolatedChecks):
+    title = "Northrop Grumman Board Declares Quarterly Dividend"
+    body = ("The board of directors of Northrop Grumman Corporation declared a quarterly dividend of $2.47 per share "
+            "on its common stock, payable December 16, 2026, to shareholders of record as of the close of business "
+            "November 30, 2026.")
+    snapshot = ("Market Session: Closed — weekend. Price moves reflect the last completed regular session.\n"
+                "Scope: watchlist regular-session returns versus dated prior closes.\nQuote session: 2026-10-23\n"
+                "Quote timestamps (UTC): 2026-10-23T20:00:00+00:00 to 2026-10-23T20:00:02+00:00\n"
+                "Tone: Defensive / mildly bearish\nBreadth: 7 up / 11 down / 18 quoted\n"
+                "Strongest: AMZN +3.82%\nWeakest: AVAV -3.17%")
+
+    def declaration(self, **changes):
+        row = maintenance(text=self.body, title=self.title,
+                          url="https://news.northropgrumman.com/news/releases/example-quarterly-dividend")
+        row.update(changes)
+        return row
+
+    def render(self, rows, snapshot=None):
+        research = self.research(replacements={"Market Snapshot": snapshot or self.snapshot})
+        with patch.object(editor, "cache_candidates", return_value=(rows, [])):
+            report = build_daily_news_brief(research, require_company_facts=True, defense_context_version=1)
+        record = store.read_editions(report=report)[0]
+        return voice.sections(report)["Global and Defense Watch"], record
+
+    def test_declaration_reaches_written_and_spoken_editions_before_price_context(self):
+        section, record = self.render([self.declaration()])
+        story, = editor.selected_stories(record)
+        self.assertEqual(story["company_fact"], "dividend_per_share")
+        self.assertEqual(len(story["event_evidence"]["facts"]), 3)
+        self.assertIn("$2.47 per common share", section)
+        self.assertIn("November 30, 2026", section)
+        self.assertIn("December 16, 2026", section)
+        self.assertNotIn("AeroVironment", section)
+        self.assertIn("dividend", record["voiceover"]["script"])
+        self.assertIn("dividend_payment_date", editor.build_editor_status("NOC", history=True))
+        changed = deepcopy(story)
+        changed["event_evidence"]["facts"][0]["value"] = "$2.90"
+        with self.assertRaises(ValueError):
+            analysis.checked_evidence(changed)
+
+    def test_declaring_issuer_share_class_amount_and_dates_must_agree(self):
+        from src.intelligence.defense_coverage import dividend_facts
+        invalid = [self.body.replace("Northrop Grumman Corporation", "Example Corporation"),
+                   self.body.replace("its common stock", "preferred stock"),
+                   self.body.replace("declared a", "plans to declare a"),
+                   self.body.replace("November 30", "December 30"),
+                   self.body.replace("November 30", "November 31"),
+                   self.body.replace("December 16, 2026", "December 16, 2025"),
+                   self.body + " The corrected amount was $2.75 per share.",
+                   self.body + " The board subsequently canceled this distribution."]
+        for body in invalid:
+            with self.subTest(body=body):
+                self.assertEqual(dividend_facts(self.declaration(), body), [])
+        self.assertEqual(dividend_facts(self.declaration(publisher_symbol="LMT"), self.body), [])
+
+    def test_unverified_stale_and_headline_only_dividends_do_not_clear_review(self):
+        for overrides in ({"official": False}, {"excerpt_scope": "headline only", "source_excerpt": ""},
+                          {"published": (NOW-timedelta(hours=25)).isoformat()}):
+            with self.subTest(overrides=overrides):
+                section, record = self.render([self.declaration(**overrides)])
+                self.assertFalse(editor.selected_stories(record))
+                self.assertNotIn("dividend", section)
+
+    def test_quiet_edition_reports_one_dated_price_in_both_outputs(self):
+        section, record = self.render([])
+        self.assertIn("October 23, AeroVironment was down 3.17 percent at the close", section)
+        self.assertIn("AeroVironment", record["voiceover"]["script"])
+        self.assertIn("No fresh disclosure in this edition explains the move", section)
+        self.assertNotIn("Funded orders", section)
+
+    def test_quiet_days_omit_unusable_or_immaterial_prices(self):
+        from src.intelligence.defense_coverage import NO_UPDATE, price_context
+        for snapshot in (self.snapshot.replace("2026-10-23", "2026-10-22"),
+                         self.snapshot.replace("Quote timestamps (UTC):", "Missing:"),
+                         self.snapshot.replace("20:00:00", "05:00:00"),
+                         self.snapshot.replace("-3.17%", "-0.17%"),
+                         self.snapshot.replace("-3.17%", "-6.17%"),
+                         self.snapshot.replace("AVAV", "AMZN")):
+            with self.subTest(snapshot=snapshot):
+                report = self.research(replacements={"Market Snapshot": snapshot})
+                self.assertIsNone(price_context(report, NOW, []))
+        section, _ = self.render([], self.snapshot.replace("AVAV", "AAPL"))
+        self.assertEqual(section.strip(), NO_UPDATE)
+
+    def test_verified_cross_border_designations_fill_global_section(self):
+        section, record = self.render([sanctions()])
+        self.assertIn("based in Canada", section)
+        self.assertNotIn("No fresh", section)
+        self.assertNotIn("AeroVironment", section)
+        self.assertTrue(any(scene["heading"] == "Global and Defense Watch" and scene["source_ids"]
+                            for scene in record["voiceover"]["segments"]))
+
+
 class SpeechChecks(unittest.TestCase):
     def test_new_designators_are_conversational_without_changing_legacy_scripts(self):
         self.assertEqual(normalize("C-130 Hercules",disclosure_names=True),"C one thirty Hercules")
@@ -293,7 +386,7 @@ def main():
     with ExitStack() as stack:
         if args.windows_socketpair:stack.enter_context(patch.object(socket,"socketpair",portable_tcp_socketpair))
         traffic=stack.enter_context(offline_network_guard())
-        suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (FactChecks,PublicationChecks,RebuildDetailChecks,SpeechChecks))
+        suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (FactChecks,PublicationChecks,RebuildDetailChecks,DefenseCoverageChecks,SpeechChecks))
         result=unittest.TextTestRunner(verbosity=1).run(suite)
     good=result.wasSuccessful() and not traffic["blocked"]
     print(f"Disclosure Details Check: {'PASS' if good else 'FAIL'} ({result.testsRun} tests)")

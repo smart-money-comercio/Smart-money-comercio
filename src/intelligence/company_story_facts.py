@@ -18,6 +18,7 @@ SPECIALIZED_FIELDS = {
     14: ("customer_purchases", "system_shipments", "delivery_milestone"),
     15: ("order_value",),
     16: ("optimization_target",),
+    18: ("dividend_per_share",),
 }
 
 

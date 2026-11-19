@@ -28,8 +28,15 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
         + (["Verified story decisions"] if evidence.get("stories") else [])
         + (["Dated market reporting"] if evidence.get("market_context") else []))
     broadcast = evidence.get("narration_version") == 2
-    add("defense_watch", "global", defense_segment(evidence.get("stories", []), broadcast=broadcast, business_version=evidence.get("business_version", 0)),
-        ["Verified story decisions"] if evidence.get("stories") else ["Research coverage policy"])
+    stories = evidence.get("stories", [])
+    if evidence.get("defense_context_version") and not any("defense" in story_topics(story) for story in stories):
+        from src.intelligence.defense_coverage import global_policy, quiet_copy
+        if not any(global_policy(story) for story in stories):
+            quote = evidence["defense_price"]
+            add("defense_watch", "global", quiet_copy(quote), ["Market Snapshot"] if quote else ["Research coverage policy"])
+    else:
+        add("defense_watch", "global", defense_segment(stories, broadcast=broadcast, business_version=evidence.get("business_version", 0)),
+            ["Verified story decisions"] if stories else ["Research coverage policy"])
     from src.intelligence.market_priority import order_in_takeaway
     opening_order = order_in_takeaway(evidence)
     if opening_order:

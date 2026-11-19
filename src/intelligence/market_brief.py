@@ -224,6 +224,9 @@ def defense_segment(stories: list[dict], *, broadcast=False, business_version=0)
             for story in companies:
                 review = review_sourced_development(story)
                 symbol = story.get("publisher_symbol") or story["symbols"][0]
+                if review["evidence"]["schema"] == 18:
+                    parts.append(review["watch"])
+                    continue
                 if broadcast:
                     from src.intelligence.broadcast_story import company_read, next_check
                     review = company_read(story, business_version=business_version)

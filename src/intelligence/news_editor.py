@@ -477,6 +477,10 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                         profile = 14
                     elif profile == 8 and order_facts(story, text):
                         profile = 15
+                    elif profile == 8 and story.get("publisher_symbol") == "NOC":
+                        from src.intelligence.defense_coverage import dividend_facts
+                        if dividend_facts(story, text):
+                            profile = 18
                     story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=profile)
                     checked_evidence(story)
             except (ValueError, TypeError, OverflowError) as exc:
@@ -585,7 +589,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
-            if story.get("event_evidence", {}).get("schema") not in range(8, 18):
+            if story.get("event_evidence", {}).get("schema") not in range(8, 19):
                 story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
@@ -842,7 +846,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
-         + f"; {sum(story.get('event_evidence', {}).get('schema') in range(8, 18) for story in value['candidates'])} original article materiality reviews"
+         + f"; {sum(story.get('event_evidence', {}).get('schema') in range(8, 19) for story in value['candidates'])} original article materiality reviews"
          + (f"; {len(analyst_review['evidence'].get('business_reviews', []))} business-channel reviews tied to disclosed fields" if (analyst_review or {}).get("business_version") else "")
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
@@ -1109,7 +1113,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Not specified in reviewed text: " + "; ".join(review["undisclosed"]))
                     if review.get("not_established"):
                         lines.append("Not established by these extracted facts: " + "; ".join(review["not_established"]))
-                    if event.get("schema") in range(8, 18):
+                    if event.get("schema") in range(8, 19):
                         for fact in event["facts"]:
                             lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]

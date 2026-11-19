@@ -121,6 +121,8 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False, i
         review = enhance(story, review)
     implication = review["why"] + (" " + review["watch"] if business_version else "")
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
+    if profile["schema"] == 18:
+        return review["facts"] + " " + review["watch"]
     if profile["schema"] == 16:
         return review["facts"] + " " + review["why"]
     if profile["schema"] == 15:
@@ -283,6 +285,7 @@ def build(record, report, research, *, schema=2):
     review = record["analyst_review"]
     validate_review(review, research, report, selected)
     if not validate_news_brief(report)["passes"]: raise ValueError("Voiceover needs a passing original news brief")
+    from src.intelligence.defense_coverage import global_policy, quiet_copy
     evidence = review["evidence"]; groups = sections(report); scenes = []; sources = {}
     futures = evidence.get("premarket_futures")
     if futures:
@@ -433,7 +436,11 @@ def build(record, report, research, *, schema=2):
         defense = "defense" in story_topics(story)
         label = "Defense and Innovation" if defense else "Capital Markets" if story.get("ipo") or story.get("sec_filing") else "Policy and Economy" if story["kind"] == "macro" else "Company News"
         transition = "In defense and innovation. " if defense else "In capital markets. " if label == "Capital Markets" else "On policy. " if story["kind"] == "macro" else "In company news. "
-        if modern and story.get("event_evidence", {}).get("event") == "solar storage":
+        if evidence.get("defense_context_version") and global_policy(story):
+            label, transition = "Global and Defense Watch", "On cross-border payments. "
+        elif story.get("event_evidence", {}).get("schema") == 18:
+            label, transition = "Defense Watch", "In defense-company finances. "
+        elif modern and story.get("event_evidence", {}).get("event") == "solar storage":
             label, transition = "Energy and Infrastructure", "In energy and infrastructure. "
         elif modern and refined and story.get("source") == "EIA" and story.get("materiality") == "energy":
             label, transition = "Energy Watch", "In energy. "
@@ -484,7 +491,10 @@ def build(record, report, research, *, schema=2):
         add("Companies in Focus", text, bullets, ids)
         covered.add(issuer(row["symbol"]))
     if not any("defense" in story_topics(story) for story in selected):
-        if evidence.get("business_version", 0) >= 7:
+        if evidence.get("defense_context_version"):
+            if not any(global_policy(story) for story in selected):
+                add("Defense Watch", quiet_copy(evidence["defense_price"]))
+        elif evidence.get("business_version", 0) >= 7:
             from src.intelligence.market_brief import defense_segment
             add("Defense Watch", defense_segment([], business_version=7))
         elif evidence.get("business_version", 0) >= 2:
