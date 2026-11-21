@@ -406,6 +406,118 @@ class EarningsWatchChecks(IsolatedChecks):
         section = section.replace("between 69.0% and 70.0%.", "73.5% and 76.0%, respectively, plus or minus 50 basis points.")
         self.assertEqual(forward_guidance(section, target)["gaap_margin"], {"low": "73", "high": "74"})
 
+    def november_week(self):
+        from src.intelligence import nvidia_guidance as nv
+        saturday = self.results_at.replace(day=21, hour=18)
+        item = self.next_release()
+        item["title"], item["url"] = nv.preceding_release(("fourth", 2027))
+        guide = {**self.guidance_response(), "fetched_at_epoch": saturday.timestamp()}
+        html = (f'<h1>{item["title"]}</h1><div class="article-date">November 17, 2026</div>'
+                '<div class="article-body">' + "".join("<p>" + escape(line) + "</p>"
+                for line in item["source_excerpt"].splitlines()) + '</div>')
+        release = {"status": "ok", "body": html, "fetched_at_epoch": saturday.timestamp(), "url": item["url"]}
+        return saturday, item, {item["url"]: release, guide["url"]: guide}
+
+    def test_saturday_daily_brief_answers_the_week_with_zero_new_stories(self):
+        from src.intelligence import earnings_takeaway
+        from src.reports import daily_voiceover
+        saturday, item, pages = self.november_week()
+        snapshot = ("Market Session: Closed — weekend. Price moves reflect the last completed regular session.\n"
+                    "Quote session: 2026-11-20\nTone: Defensive / mildly bearish\nBreadth: 1 up / 19 down / 20 quoted")
+        research = self.research(now=saturday, replacements={"Market Snapshot": snapshot,
+            "Executive Summary": "- Market moves: S&P -3.70%, Nasdaq -5.28%, Russell -2.76%, VIX +26.20%."})
+        with patch.object(editor, "cache_candidates", return_value=([item], [])), \
+                patch.object(editor.feeds, "fetch_url", side_effect=pages.__getitem__):
+            text = build_daily_news_brief(research, takeaway_version=2)
+        record = store.read_editions(report=text)[0]
+        self.assertEqual(editor.selected_stories(record), [])
+        lead = next(x for x in text.splitlines() if x.startswith("The takeaway:"))
+        for part in ("Friday", "5.28 percent", "On Tuesday", "72.1 percent", "below its forecast floor of 73 percent",
+                     "69 to 70 percent", "less gross profit"):
+            self.assertIn(part, lead)
+        self.assertNotIn("watchlist", lead)
+        for url in pages:
+            self.assertIn(url, text)
+        self.assertIn(earnings_takeaway.SOURCE_ID, record["voiceover"]["segments"][0]["source_ids"])
+        self.assertTrue(daily_voiceover.checked(record, saturday)["quality"]["passes"])
+
+    def test_saturday_review_opens_with_weekly_prices_then_the_earnings_answer(self):
+        from scripts import check_weekend_outlook as weekly
+        from src.reports import weekend_telegram
+        saturday = weekly.NOW - timedelta(days=1)
+        _, item, pages = self.november_week()
+        item.update(published="2026-11-03T21:20:00+00:00", source_checked_at=saturday.isoformat(),
+                    evidence_checked_at=saturday.isoformat())
+        def read(url):
+            return {**pages[url], "fetched_at_epoch": saturday.timestamp()}
+        record = weekly.edition(now=saturday, raw=[item], body_fetch=read,
+                                market_fetch=lambda url: {**weekly.market_fetch(url), "fetched_at_epoch": saturday.timestamp()},
+                                calendar_snapshot={**weekly.calendar(), "checked_at": saturday.isoformat()})
+        weekly.report.checked(record, saturday, require_publishable=True)
+        text = weekend_telegram.render(record, saturday)
+        lead = next(x for x in text.splitlines() if x.startswith("The takeaway:"))
+        self.assertLess(text.index(lead), text.index("Market scorecard"))
+        self.assertIn("for the week", lead)
+        self.assertIn("below its forecast floor", lead)
+        self.assertIn("higher sales", lead)
+        self.assertNotIn("Compare these results with original guidance", text)
+        self.assertTrue(all(url in text for url in pages))
+
+    def test_original_forecasts_are_optional_and_never_cross_weeks(self):
+        from src.intelligence import earnings_takeaway as take
+        saturday, item, pages = self.november_week()
+        def current_only(url):
+            return pages[url] if url == item["url"] else {"status": "error"}
+        packet = take.capture([item], saturday, current_only)
+        lead = take.opening(packet, saturday)
+        self.assertIn("69 to 70 percent", lead)
+        self.assertNotIn("forecast floor", lead)
+        self.assertEqual(len(take.sources(packet)), 1)
+        with self.assertRaises(ValueError):
+            take.opening(packet, saturday + timedelta(days=2))
+        denied = Mock(side_effect=AssertionError("No eligible dated release"))
+        self.assertIsNone(take.capture([item], saturday + timedelta(days=2), denied))
+        self.assertIsNone(take.capture([{**item, "url": item["url"] + "/different"}], saturday, denied))
+        self.assertIsNone(take.capture([item], self.results_at - timedelta(days=1), denied))
+        denied.assert_not_called()
+        self.assertIsNone(take.capture([item], saturday, lambda url: {**pages[url], "final_url": url + "/other"}))
+        self.assertIsNone(take.capture([item], saturday, lambda url: {**pages[url], "fetched_at_epoch": self.results_at.timestamp()}))
+
+    def test_quiet_daily_brief_uses_the_verified_next_release(self):
+        from src.intelligence import daily_takeaway as take, calendar_sources as cal
+        saturday, _, _ = self.november_week()
+        event = {"eventName": "Personal Income and Outlays", "event_at": "2026-11-25T08:30:00-05:00",
+                 "source_date": "2026-11-25", "publisher": "BEA", "time_status": "verified",
+                 "timing_url": cal.SOURCE_URLS["BEA"], "timing_checked_at": saturday.isoformat()}
+        snapshot = "Market Session: Closed — weekend.\nQuote session: 2026-11-20\nBreadth: 1 up / 19 down / 20 quoted"
+        research = self.research(now=saturday, replacements={"Market Snapshot": snapshot})
+        with patch.object(editor, "cache_candidates", return_value=([], [])):
+            text = build_daily_news_brief(research, {**catalysts.build_company_catalyst_brief(now=saturday),
+                                                   "macro": [event]}, takeaway_version=2)
+        lead = next(x for x in text.splitlines() if x.startswith("The takeaway:"))
+        self.assertIn("Wednesday's inflation and personal spending figures", lead)
+        record = store.read_editions(report=text)[0]
+        self.assertIn(take.CALENDAR_ID, record["voiceover"]["segments"][0]["source_ids"])
+        self.assertIn(cal.SOURCE_URLS["BEA"], text)
+        for changes in ({"time_status": "unverified"}, {"source_date": "2026-11-24"},
+                        {"timing_url": "https://example.invalid/calendar"}, {"event_at": saturday.isoformat()},
+                        {"timing_checked_at": (saturday-timedelta(days=2)).isoformat()}):
+            self.assertIsNone(take.next_calendar([{**event, **changes}], saturday))
+
+    def test_current_takeaway_keeps_market_scope_and_legacy_opening(self):
+        from src.intelligence import daily_takeaway as take
+        evidence = {"session": "2026-11-20", "is_open": False, "moves": {
+            "Nasdaq": -5.28, "S&P": -3.7, "Russell": -2.76, "VIX": 26.2}, "stories": [], "takeaway_version": 2}
+        text = take.compose(evidence)["text"]
+        self.assertIn("small caps", text)
+        self.assertIn("higher expected volatility", text)
+        self.assertNotIn("Nvidia", text)
+        legacy = take.compose({**evidence, "takeaway_version": 1})["text"]
+        self.assertEqual(legacy, "Stocks fell at Friday's close, with the Nasdaq Composite down 5.28 percent and the S&P 500 down 3.70 percent.")
+        for key in ("Russell", "Nasdaq"):
+            thin = {**evidence, "moves": {k: v for k, v in evidence["moves"].items() if k != key}}
+            self.assertNotIn("small caps", take.compose(thin)["text"])
+
     def closing_reader(self, url):
         from src.intelligence import sector_followup
         symbol = next(symbol for symbol in sector_followup.SYMBOLS if url == sector_followup.url(symbol))

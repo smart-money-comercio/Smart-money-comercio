@@ -300,6 +300,21 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         past_editions = news_editor_store.read_editions(limit=news_editor_store.MAX_EDITIONS)
     except (OSError, ValueError, TypeError, SQLiteError):
         past_editions = []
+    from src.intelligence import daily_takeaway
+    calendar_lead = daily_takeaway.next_calendar(brief.get("macro", []), now) if takeaway_version == 2 else None
+    earnings_context = None
+    if takeaway_version == 2 and (not initial_stories or any(s.get("event_evidence", {}).get("schema") == 17 for s in initial_stories)):
+        from src.intelligence import earnings_takeaway, weekend_store
+        weekend = now.astimezone(earnings_takeaway.NY).weekday() >= 5
+        nvidia_move = any(row["symbol"] == "NVDA" and row["status"] == "rechecked" for row in event_context["events"])
+        if weekend or nvidia_move or any(s.get("event_evidence", {}).get("schema") == 17 for s in initial_stories):
+            leads = list(plan["candidates"])
+            if weekend:
+                weekly = weekend_store.latest() or {}
+                leads.extend(weekly.get("inputs", {}).get("stories", []))
+            for edition in past_editions:
+                leads.extend(editor.selected_stories(edition))
+            earnings_context = earnings_takeaway.capture(leads, now, editor.feeds.fetch_url)
     focus_history = history_context(now, past_editions)
     watchlist_baseline = watchlist_breadth.prior_edition(research_report, past_editions, now)
     if watchlist_baseline:
@@ -348,7 +363,13 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     # At most three stories: try the fuller, higher-priority editions first.
     # Each attempt starts from all sourced market/calendar context.
     survey_options = (survey_candidate, None) if survey_candidate else (None,)
-    for count, survey in product(range(len(initial_stories), -1, -1), survey_options):
+    lead_options = []
+    if earnings_context:
+        lead_options.append((earnings_context, None))
+    if calendar_lead:
+        lead_options.append((None, calendar_lead))
+    lead_options.append((None, None))
+    for count, survey, (earnings_packet, calendar_packet) in product(range(len(initial_stories), -1, -1), survey_options, lead_options):
         survey_copy = sentiment_followup.checked_text(survey, now) if survey else ""
         # Preserve company coverage while trying shorter follow-up sections.
         # Otherwise a smaller focus can silently remove the very company whose
@@ -356,13 +377,20 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         for indexes, (context_values, intel_baseline), focus_limit, reader_limit in product(combinations(range(len(initial_stories)), count), context_choices, (3, 2, 1), (3, 2, 1)):
             retained = [initial_stories[index] for index in indexes]
             watch = followup if followup and any(story["id"] == followup["story_id"] for story in retained) else preview
+            packet = earnings_packet
+            if packet and retained and all(row["url"] != packet["url"] for row in retained):
+                packet = None
+            if packet and watch and (watch["phase"] != "results" or not any(
+                    row["id"] == watch["story_id"] and row["url"] == packet["url"] for row in retained)):
+                packet = None
             comparison = earnings_watch.comparison_text(watch) if earnings_watch.has_answer(watch) else ""
             analysis = analyze_report(
                 research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit},
                 narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit,
                 earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0),
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
-                premarket_futures=futures, takeaway_version=takeaway_version,
+                premarket_futures=futures, takeaway_version=takeaway_version, earnings_takeaway=packet,
+                takeaway_calendar=calendar_packet if not (retained or packet or watch) else None,
                 watchlist_checkpoint_version=watchlist_checkpoint_version, watchlist_checkpoint=watchlist_checkpoint,
                 market_context=market_context, sector_checkpoint=sector_checkpoint, defense_context_version=defense_context_version,
             )
@@ -432,6 +460,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 notes_body.insert(-1, earnings_watch.source_line(watch, retained))
                 if watch.get("guidance"):
                     notes_body.insert(-1, earnings_watch.guidance_source_line(watch))
+            if analysis.get("takeaway_calendar"):
+                notes_body.insert(-1, "Publisher schedule — " + calendar_lead["timing_url"])
+            if packet:
+                notes_body.insert(-1, earnings_takeaway.source_line(packet))
             if sector_checkpoint and sector_checkpoint["quotes"]:
                 notes_body.insert(-1, sector_followup.source_line())
             if futures:

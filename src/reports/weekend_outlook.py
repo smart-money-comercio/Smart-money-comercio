@@ -240,6 +240,17 @@ def assemble(inputs):
         from src.intelligence import weekend_ipo
 
         weekend_ipo.checked(ipo, inputs["window"], evidence.clock(inputs["generated_at"]))
+    if packet := inputs.get("earnings_takeaway"):
+        from src.intelligence import earnings_takeaway
+        _, margin, _, _, _ = earnings_takeaway.metrics(packet, evidence.clock(inputs["generated_at"]))
+        matching = next((s for s in inputs["stories"] if s["event_evidence"]["schema"] == 17
+                         and s["url"] == packet["url"] and s["title"] == packet["title"]
+                         and evidence.clock(s["published"]) == evidence.clock(packet["published"])
+                         and s["publication_label"] == "week disclosure"), None)
+        if not matching or not any(f["field"] == "reported_gross_margin" and
+                                   f["value"].split("%", 1)[0] == str(margin)
+                                   for f in matching["event_evidence"]["facts"]):
+            raise ValueError("Saturday earnings comparison lost its original result")
     theme=themes.choose(inputs["stories"], ipo)
     business_version = weekend_business.revision(inputs)
     if business_version:
@@ -280,6 +291,9 @@ def checked(record,now=None,*,require_publishable=False):
             for row in inputs["prices"]:
                 if row["status"]=="available":evidence.fresh(row["proof"]["observed"],now)
             for row in inputs["stories"]:evidence.fresh(row["evidence_checked_at"],now)
+            if inputs.get("earnings_takeaway"):
+                from src.intelligence import earnings_takeaway
+                earnings_takeaway.metrics(inputs["earnings_takeaway"], now)
             if inputs.get("ipo"):
                 evidence.fresh(inputs["ipo"]["source"]["source_checked_at"], now)
             evidence.checked_calendar(inputs["calendar"],periods,now)
@@ -320,6 +334,12 @@ def build(now=None,*,force=False,raw=None,market_fetch=None,body_fetch=None,cale
             ipo, ipo_issues = ipo_result.result()
             inputs={"generated_at":now.isoformat(),"weekend_rules":WEEKEND_RULES,"narration_revision":weekend_narration.REVISION,"window":periods,"prices":prices.result(),"stories":found,
                 "ledger":ledger,"calendar":calendar.result(),"source_issues":issues + ipo_issues}
+        if allow_network or body_fetch is not None:
+            from src.intelligence import earnings_takeaway
+            results = [row for row in found if row["event_evidence"]["schema"] == 17
+                       and row["publication_label"] == "week disclosure"]
+            if packet := earnings_takeaway.capture(results, now, body_fetch or evidence.feeds.fetch_url):
+                inputs["earnings_takeaway"] = packet
         if ipo:
             inputs["ipo"] = ipo
         theme = themes.choose(found, ipo)

@@ -140,12 +140,32 @@ def saturday_review(inputs: dict) -> tuple[list[str], list[tuple[str, str]]]:
     markets.append(f"{baseline:%b} {baseline.day} close to {end:%b} {end.day} close. Price returns exclude dividends.")
     sections = [f"Week ended {day_label(window['week_end'])}", "\n".join(markets)]
 
+    packet = inputs.get("earnings_takeaway")
+    if packet:
+        from src.intelligence import earnings_takeaway
+        nasdaq = next((row["proof"] for row in inputs["prices"] if row["symbol"] == "^IXIC"
+                       and row["status"] == "available"), None)
+        market = ""
+        if nasdaq:
+            def movement(key):
+                move = round(nasdaq[key], 2)
+                if not move:
+                    return "was unchanged"
+                return f"{'fell' if move < 0 else 'rose'} {abs(move):.2f}%"
+            market = f"The Nasdaq {movement('weekly_percent')} for the week and {movement('friday_percent')} on Friday. "
+        sections.insert(1, "The takeaway: " + market + earnings_takeaway.opening(packet, weekend_inputs.clock(inputs["generated_at"])))
+        sources.extend((ref["publisher"], ref["url"]) for ref in earnings_takeaway.sources(packet))
+
     stories = []
     for row in review_stories(inputs["stories"]):
         published = weekend_inputs.clock(row["published"]).astimezone(weekend_inputs.NY)
         text = weekend_business.dated_summary(row, published)
         review = business_analysis.assess(row)
-        if review:
+        if packet and row["url"] == packet["url"]:
+            facts = {f["field"]: f["value"] for f in row["event_evidence"]["facts"]}
+            revenue, _, quarter = facts["reported_revenue"].partition(" (")
+            text = f"{published:%B} {published.day} — Nvidia reported {revenue} in revenue for its {quarter.split(',')[0].replace(' quarter fiscal', ' quarter of fiscal')}."
+        elif review:
             followup = review["watch"] if row["event_evidence"]["schema"] == 17 else review["decision_test"]
             text += f"\nFollow-up · {followup}"
         stories.append(text)

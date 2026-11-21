@@ -3,8 +3,47 @@
 from datetime import date
 
 
-VERSION = 1
+VERSION = 2
 INDEXES = (("Nasdaq", "the Nasdaq Composite"), ("S&P", "the S&P 500"), ("Russell", "the Russell 2000"))
+
+
+# The calendar verifies timing; the question describes what that release measures.
+CALENDAR_TESTS = {
+    ("BEA", "pce"): ("inflation and personal spending figures", "whether prices are easing while households keep spending"),
+    ("BEA", "gdp"): ("GDP report", "whether consumer spending or business investment is driving growth"),
+    ("BLS", "cpi"): ("consumer price report", "whether price increases are concentrated or widespread"),
+    ("BLS", "jobs"): ("jobs report", "whether hiring and wage growth are slowing together"),
+    ("DOL", "claims"): ("jobless claims release", "whether more workers are filing for unemployment benefits"),
+}
+CALENDAR_SECTION = "Upcoming publisher release"
+CALENDAR_ID = "takeaway_calendar"
+
+
+def calendar_text(row, now):
+    from datetime import timedelta
+    from src.intelligence import calendar_context as calendar, calendar_sources as publishers
+    at = calendar.checked_time(row["event_at"]).astimezone(publishers.NY)
+    observed = calendar.checked_time(row["timing_checked_at"])
+    publisher = row["publisher"]
+    family = publishers.category(row["eventName"])
+    if (row["time_status"] != "verified" or row.get("timing_cached") or (publisher, family) not in CALENDAR_TESTS
+            or row["timing_url"] != publishers.SOURCE_URLS[publisher] or at.date().isoformat() != row["source_date"]
+            or not now < at <= now + timedelta(days=7) or not -60 <= (now - observed).total_seconds() <= 86400):
+        raise ValueError("Upcoming release needs a current verified publisher schedule")
+    label, question = CALENDAR_TESTS[publisher, family]
+    return f"{at:%A}'s {label} will help show {question}."
+
+
+def next_calendar(rows, now):
+    from src.intelligence.calendar_context import checked_time
+    eligible = []
+    for row in rows:
+        try:
+            calendar_text(row, now)
+            eligible.append(row)
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+            continue
+    return min(eligible, key=lambda row: (checked_time(row["event_at"]), row["publisher"], row["eventName"]), default=None)
 
 
 def _cash_lead(evidence):
@@ -51,6 +90,40 @@ def _earnings_line(watch):
     return f"{label} reported revenue of {watch['revenue']} for the {watch['period']}{margin}."
 
 
+def market_read(evidence):
+    """Explain the breadth or divergence visible in the dated indexes."""
+    if not evidence.get("session"):
+        return ""
+    moves = evidence["moves"]
+    if not all(key in moves for key, _ in INDEXES):
+        return ""
+    nasdaq, broad, small = (moves[key] for key, _ in INDEXES)
+    day = date.fromisoformat(evidence["session"]).strftime("%A")
+    during = evidence["is_open"]
+    when = f"during {day}'s session" if during else f"at {day}'s close"
+    if nasdaq < min(broad, small) and max(broad, small) < 0 and evidence.get("earnings_takeaway_text"):
+        if during:
+            return f"The Nasdaq Composite is leading {day}'s decline, down {abs(nasdaq):.2f} percent as large companies and small caps also lose ground."
+        return f"The Nasdaq Composite led {day}'s selloff, falling {abs(nasdaq):.2f} percent as large companies and small caps also lost ground."
+    if nasdaq < broad < 0 and small < 0:
+        return (f"Large companies and small caps both lost ground {when}. "
+                f"The Nasdaq Composite {'is down' if during else 'fell'} {abs(nasdaq):.2f} percent, "
+                f"compared with {abs(broad):.2f} percent for the S&P 500.")
+    if nasdaq > broad > 0 and small > 0:
+        return (f"Gains reached both large companies and small caps {when}. "
+                f"The Nasdaq Composite {'is up' if during else 'rose'} {nasdaq:.2f} percent, "
+                f"compared with {broad:.2f} percent for the S&P 500.")
+    if all(value < 0 for value in (nasdaq, broad, small)) or all(value > 0 for value in (nasdaq, broad, small)):
+        verb = "lost" if broad < 0 else "gained"
+        return (f"Large companies and small caps both {verb} ground {when}. "
+                f"The S&P 500 {verb} {abs(broad):.2f} percent and the Russell 2000 {verb} {abs(small):.2f} percent.")
+    if nasdaq * small < 0:
+        return (f"The Nasdaq Composite and small caps moved in opposite directions {when}. "
+                f"The Nasdaq {'gained' if nasdaq > 0 else 'lost'} {abs(nasdaq):.2f} percent while "
+                f"the Russell 2000 {'gained' if small > 0 else 'lost'} {abs(small):.2f} percent.")
+    return ""
+
+
 def compose(evidence):
     """Return the copy and exactly the evidence roles used in it."""
     from src.intelligence.evidence_opening import opening_source
@@ -59,21 +132,26 @@ def compose(evidence):
     futures = evidence.get("premarket_futures")
     watch = evidence.get("earnings_watch")
     market_first = bool(futures) or selloff(evidence)
-    point = opening_source(evidence) if not market_first and not watch else None
+    context = evidence.get("earnings_takeaway_text")
+    point = opening_source(evidence) if not (market_first or watch or context) else None
+    use_context = bool(context and not point and (not watch or watch["phase"] == "results"))
+    modern = evidence.get("takeaway_version") == VERSION
     market = ""
     if futures:
         market = _futures_lead(futures)
     elif not point and (not watch or watch["phase"] == "preview" or market_first):
-        market = _cash_lead(evidence)
+        market = (market_read(evidence) if modern else "") or _cash_lead(evidence)
 
     sentences = [market] if market else []
     story_ids = []
     if point:
         sentences.append(point["text"])
         story_ids.extend(point["story_ids"])
-    if watch:
+    if use_context:
+        sentences.append(context)
+    elif watch:
         sentences.append(_earnings_line(watch))
-    if not point and (not watch or watch["phase"] == "preview"):
+    if not use_context and not point and (not watch or watch["phase"] == "preview"):
         from src.intelligence.ipo_monitor import checked
 
         ipo = next((story for story in evidence.get("stories", [])
@@ -84,6 +162,12 @@ def compose(evidence):
                     f"{name}'s proposed IPO range sets a benchmark for its eventual pricing.")
             sentences.append(text)
             story_ids.append(ipo["id"])
+    use_calendar = bool(modern and evidence.get("takeaway_calendar_text") and not (point or watch or use_context or story_ids))
+    if use_calendar:
+        sentences.append(evidence["takeaway_calendar_text"])
+    elif modern and sentences == [market] and market and not futures and selloff(evidence):
+        if evidence["moves"].get("VIX", 0) > 0:
+            sentences.append("The VIX also rose, signaling higher expected volatility in the S&P 500 over the next month.")
     if not sentences:
         sentences.append("The available evidence gives a limited read on market direction.")
-    return {"text": " ".join(sentences), "market": bool(market), "earnings": bool(watch), "point": point, "story_ids": story_ids}
+    return {"text": " ".join(sentences), "market": bool(market), "earnings": bool(watch) and not use_context, "recent_result": use_context, "calendar": use_calendar, "point": point, "story_ids": story_ids}

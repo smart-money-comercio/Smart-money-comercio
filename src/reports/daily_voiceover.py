@@ -252,6 +252,8 @@ def focus_bullet(row, evidence):
 def named_watch_scene(rows, sources, earnings_context):
     from src.intelligence.company_earnings import BASELINE_SOURCE, matching
 
+    from src.intelligence import earnings_takeaway
+
     narration, bullets, source_ids = [], [], []
     for row in rows:
         label, _, body = row["text"].partition(" — ")
@@ -263,6 +265,8 @@ def named_watch_scene(rows, sources, earnings_context):
         narration.append(body)
         if row.get("story_id") in sources:
             source_ids.append(row["story_id"])
+        if earnings_takeaway.SOURCE_SECTION in row["sources"]:
+            source_ids.append(earnings_takeaway.SOURCE_ID)
         if BASELINE_SOURCE in row["sources"]:
             source_ids.append("earnings_baseline_INTC")
         if "Recent earnings context" in row["sources"]:
@@ -391,6 +395,21 @@ def build(record, report, research, *, schema=2):
         lead = compose(evidence)
         edition_intro = " "
         opening_sources = list(lead["story_ids"])
+        if lead["calendar"]:
+            from src.intelligence.daily_takeaway import CALENDAR_ID
+            event = review["takeaway_calendar"]
+            if "Publisher schedule — " + event["timing_url"] not in report:
+                raise ValueError("Calendar takeaway lost its publisher link")
+            sources[CALENDAR_ID] = [{"url": event["timing_url"], "publisher": event["publisher"],
+                                     "published_at": "", "verified_at": event["timing_checked_at"]}]
+            opening_sources.append(CALENDAR_ID)
+        if recent_result := review.get("earnings_takeaway"):
+            from src.intelligence import earnings_takeaway
+            if report.count(earnings_takeaway.source_line(recent_result)) != 1:
+                raise ValueError("Recent earnings comparison lost its original source links")
+            sources[earnings_takeaway.SOURCE_ID] = earnings_takeaway.sources(recent_result)
+            if lead["recent_result"]:
+                opening_sources.append(earnings_takeaway.SOURCE_ID)
         if lead["earnings"]:
             opening_sources.append("calendar_" + watch["notice"]["symbol"] if watch["phase"] == "preview" else watch["story_id"])
             if watch.get("guidance"):

@@ -262,6 +262,12 @@ def _takeaway_sources(evidence):
         sources = []
         if lead["market"]:
             sources.extend([early_futures.SOURCE_SECTION] if evidence.get("premarket_futures") else ["Market Snapshot", "Executive Summary"])
+        if lead["calendar"]:
+            from src.intelligence.daily_takeaway import CALENDAR_SECTION
+            sources.append(CALENDAR_SECTION)
+        if lead["recent_result"]:
+            from src.intelligence.earnings_takeaway import SOURCE_SECTION
+            sources.append(SOURCE_SECTION)
         if lead["earnings"]:
             sources.append(earnings_watch.SOURCE_SECTION)
         if lead["story_ids"]:
@@ -312,6 +318,12 @@ def insights(evidence):
             from src.intelligence.sector_followup import question
             rows[1] = {"id": "watch_semiconductor_close", "section": "watch", "text": question(watch["published_at"]),
                        "story_id": watch["story_id"], "sources": [earnings_watch.SOURCE_SECTION]}
+    elif evidence.get("earnings_takeaway_text"):
+        for row in rows:
+            if row.get("symbol") == "NVDA" and row["id"] in {"watch_results", "watch_event"}:
+                from src.intelligence.earnings_takeaway import SOURCE_SECTION
+                row.update(text="Nvidia (NVDA) — At the next earnings release, check whether sales growth also lifts gross profit dollars.",
+                           sources=[SOURCE_SECTION])
     elif watch and watch["phase"] == "results" and not has_earnings_lead:
         from src.intelligence import earnings_watch
 

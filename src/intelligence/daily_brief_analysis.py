@@ -102,7 +102,7 @@ def analyze_report(
     reader_version: int = 0, reader_limit: int = 3, earnings_context: list | None = None,
     disclosure_version: int = 0, business_version: int = 0, intel_results_baseline: dict | None = None,
     earnings_watch: dict | None = None, watchlist_baseline: dict | None = None, premarket_futures: dict | None = None,
-    takeaway_version: int = 0,
+    takeaway_version: int = 0, earnings_takeaway: dict | None = None, takeaway_calendar: dict | None = None,
     watchlist_checkpoint_version: int = 0, watchlist_checkpoint: dict | None = None,
     market_context: list[dict] | None = None, sector_checkpoint: dict | None = None, defense_context_version: int = 0,
 ) -> dict:
@@ -122,7 +122,7 @@ def analyze_report(
     if takeaway_version:
         from src.intelligence.daily_takeaway import VERSION
 
-        if type(takeaway_version) is not int or takeaway_version != VERSION or reader_version != 4:
+        if type(takeaway_version) is not int or takeaway_version not in (1, VERSION) or reader_version != 4:
             raise ValueError("Unknown dated takeaway presentation")
         evidence["takeaway_version"] = takeaway_version
     if disclosure_version:
@@ -140,6 +140,18 @@ def analyze_report(
         now = datetime.strptime(generated[1], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo(generated[2]))
         evidence["market_event_context"] = deepcopy(checked_context(event_context, report, now))
         evidence["source_sections"].append("Market event checks")
+    if takeaway_calendar is not None:
+        from src.intelligence import daily_takeaway
+        if takeaway_version != 2 or event_context is None:
+            raise ValueError("Publisher release needs a dated daily edition")
+        evidence["takeaway_calendar_text"] = daily_takeaway.calendar_text(takeaway_calendar, now)
+        evidence["source_sections"].append(daily_takeaway.CALENDAR_SECTION)
+    if earnings_takeaway is not None:
+        from src.intelligence import earnings_takeaway as issuer
+        if takeaway_version != 2 or event_context is None:
+            raise ValueError("Earnings comparison needs a dated daily edition")
+        evidence["earnings_takeaway_text"] = issuer.opening(earnings_takeaway, now)
+        evidence["source_sections"].append(issuer.SOURCE_SECTION)
     if defense_context_version:
         from src.intelligence.defense_coverage import price_context
         if type(defense_context_version) is not int or defense_context_version not in (1, 2) or event_context is None:
@@ -284,6 +296,10 @@ def analyze_report(
         value["reader_limit"] = reader_limit
     if earnings_context is not None:
         value["earnings_context"] = deepcopy(earnings_context)
+    if takeaway_calendar is not None:
+        value["takeaway_calendar"] = deepcopy(takeaway_calendar)
+    if earnings_takeaway is not None:
+        value["earnings_takeaway"] = deepcopy(earnings_takeaway)
     if intel_results_baseline is not None:
         value["intel_results_baseline"] = deepcopy(intel_results_baseline)
     if earnings_watch is not None:
@@ -319,7 +335,8 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         earnings_context=analysis.get("earnings_context"), disclosure_version=analysis.get("disclosure_version", 0),
         business_version=analysis.get("business_version", 0), intel_results_baseline=analysis.get("intel_results_baseline"),
         earnings_watch=analysis.get("earnings_watch"), watchlist_baseline=analysis.get("watchlist_baseline"),
-        premarket_futures=futures,
+        premarket_futures=futures, earnings_takeaway=analysis.get("earnings_takeaway"),
+        takeaway_calendar=analysis.get("takeaway_calendar"),
         takeaway_version=analysis.get("evidence", {}).get("takeaway_version", 0),
         watchlist_checkpoint_version=analysis.get("evidence", {}).get("watchlist_checkpoint_version", 0),
         watchlist_checkpoint=analysis.get("watchlist_checkpoint"),
