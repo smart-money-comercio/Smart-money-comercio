@@ -215,14 +215,14 @@ def parse_michigan_schedule(text: str) -> list[dict]:
     text = " ".join(unescape(re.sub(r"<[^>]+>", " ", text)).split())
     matches = re.findall(
         r"Next data release:\s*(Monday|Tuesday|Wednesday|Thursday|Friday),\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})"
-        r"\s+for\s+(Final|Preliminary|Prelim)\s+[A-Za-z]+\s+data at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+(ET|EST|EDT)\b",
+        r"\s+for\s+(Final|Preliminary|Prelim)\s+([A-Za-z]+)\s+data at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+(ET|EST|EDT)\b",
         text, flags=re.I)
     if len(matches) != 1:
         raise ValueError("Michigan did not provide one dated release with an Eastern time")
-    weekday, month, day, year, stage, hour, minute, meridiem, _ = matches[0]
+    weekday, month, day, year, stage, survey_month, hour, minute, meridiem, zone = matches[0]
     months = {name: number for number, name in enumerate(
         ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"), 1)}
-    if month.lower() not in months:
+    if month.lower() not in months or survey_month.lower() != month.lower():
         raise ValueError("Michigan release month is unrecognized")
     release_day = date(int(year), months[month.lower()], int(day))
     hour, minute = int(hour), int(minute or 0)
@@ -230,6 +230,8 @@ def parse_michigan_schedule(text: str) -> list[dict]:
     if weekdays[release_day.weekday()] != weekday.lower() or not 1 <= hour <= 12 or not 0 <= minute <= 59:
         raise ValueError("Michigan release date or clock is inconsistent")
     at = datetime.combine(release_day, time(hour % 12 + (12 if meridiem.lower() == "pm" else 0), minute), NY)
+    if zone.upper() != "ET" and zone.upper() != at.tzname():
+        raise ValueError("Michigan release timezone conflicts with its date")
     stage = "Final" if stage.lower() == "final" else "Preliminary"
     return [{"category": "michigan_sentiment", "name": f"Michigan Consumer Sentiment ({stage})",
              "at": at.astimezone(timezone.utc).isoformat(), "publisher": "Michigan", "url": MICHIGAN_URL}]
@@ -252,13 +254,18 @@ def _collect_schedules(dates: list[date]) -> tuple[list[dict], dict]:
             label = "cached" if rows else "unavailable"
             retry = pause.astimezone(timezone.utc).strftime("%m-%d %H:%M UTC")
             return rows, f"{label} ({record['error']}; retry after {retry})", {**record, "events": previous}
+        survey = None
+        fetched = False
         try:
             text = request_schedule(SOURCE_URLS[publisher])
+            fetched = True
             if publisher == "DOL":
                 events = parse_claims_schedule(text, dates)
             elif publisher == "Fed":
                 events = parse_fed_calendar(text)
             elif publisher == "Michigan":
+                from src.intelligence.sentiment_followup import capture
+                survey = capture(text, now)
                 events = parse_michigan_schedule(text)
                 if dates and datetime.fromisoformat(events[0]["at"]).astimezone(NY).date() < min(dates):
                     raise ValueError("Michigan's next-release notice predates the requested window")
@@ -270,11 +277,19 @@ def _collect_schedules(dates: list[date]) -> tuple[list[dict], dict]:
                 previous = []
                 raise ValueError("No recognized publisher releases")
             record = source_cache.success(events, previous, publisher, now)
+            if survey:
+                record["survey"] = survey
             rows = [{**row, "cached": row["fetched_at"] != now.isoformat()} for row in record["events"]]
             return rows, "available", record
         except Exception as exc:
             detail = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else type(exc).__name__
             record = source_cache.failure(previous, detail, now, isinstance(exc, HTTPError) and exc.code == 403)
+            if publisher == "Michigan":
+                old_record = saved.get(publisher)
+                if not fetched and isinstance(old_record, dict):
+                    survey = old_record.get("survey")
+                if survey:
+                    record["survey"] = survey
             rows = [{**row, "cached": True} for row in previous]
             label = "cached" if rows else "unavailable"
             retry = source_cache.timestamp(record["retry_after"]).astimezone(timezone.utc).strftime("%m-%d %H:%M UTC")

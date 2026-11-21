@@ -195,6 +195,7 @@ def validate_news_brief(text: str) -> dict:
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
                            require_company_facts=False, takeaway_version=0, watchlist_checkpoint_version=0,
                            market_reporting_version=0, resolve_watches=False, sector_price_reader=None, defense_context_version=0) -> str:
+    from src.intelligence import sentiment_followup
     from src.intelligence.defense_coverage import global_policy
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
@@ -325,6 +326,16 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             sector_checkpoint = (sector_followup.capture(prior, now, sector_price_reader) if sector_price_reader
                                  else {**prior, "quotes": {}})
             plan["sector_checkpoint"] = sector_checkpoint
+    survey_candidate = None
+    if resolve_watches:
+        from src.intelligence import calendar_source_cache
+        michigan = calendar_source_cache.load().get("Michigan") or {}
+        if isinstance(michigan, dict) and michigan.get("survey"):
+            try:
+                receipts = news_editor_store.checkpoint_receipts(now)
+            except (OSError, SQLiteError):
+                receipts = []
+            survey_candidate = sentiment_followup.select(michigan, past_editions, receipts, now)
     chosen = None
     last_result = None
     recent = plan.get("earnings_context_candidates") or None
@@ -336,7 +347,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         context_choices.append((None, None))
     # At most three stories: try the fuller, higher-priority editions first.
     # Each attempt starts from all sourced market/calendar context.
-    for count in range(len(initial_stories), -1, -1):
+    survey_options = (survey_candidate, None) if survey_candidate else (None,)
+    for count, survey in product(range(len(initial_stories), -1, -1), survey_options):
+        survey_copy = sentiment_followup.checked_text(survey, now) if survey else ""
         # Preserve company coverage while trying shorter follow-up sections.
         # Otherwise a smaller focus can silently remove the very company whose
         # verified results context this attempt is meant to include.
@@ -389,6 +402,12 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                     market_body.append(alert)
             global_body += [row["text"] for row in insights if row["section"] == "global"]
             ahead_body = list(ahead)
+            if survey:
+                if "final" in survey:
+                    policy_body.insert(0, survey_copy)
+                else:
+                    ahead_body = [row for row in ahead_body if not row.startswith("The available company announcements and calendars")]
+                    ahead_body.insert(0, survey_copy)
             schedule_focus = None
             if company_schedules and plan.get("business_version", 0) >= 7:
                 schedule_focus = (earnings_watch.preview_question(watch) if watch and watch["phase"] == "preview"
@@ -400,6 +419,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if not watching:
                 watching.append(market_outlook(moves, breadth if quote_day else None))
             notes_body = list(notes)
+            if survey:
+                notes_body.insert(-1, sentiment_followup.SOURCE)
             for story in retained:
                 if story.get("event_evidence", {}).get("schema") == 19:
                     notes_body.insert(-1, "Original Fed meeting minutes — " + story["document_url"])
@@ -454,6 +475,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             protected = set(narrations.values()) | {no_company_story} | {
                 row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
             protected.update(schedule_narration(row, zone, NAMES) for row in company_schedules)
+            if survey:
+                protected.add(survey_copy)
             if schedule_focus:
                 protected.add(schedule_focus)
             if brief.get("market_events"):
@@ -487,6 +510,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             errors.append(f"A complete {MIN_NARRATION_WORDS}-word narration does not fit the {MAX_NEWS_CHARS}-character budget.")
         raise ValueError("News brief quality review failed: " + "; ".join(errors))
     text, retained, analysis, narrations = chosen
+    if survey:
+        plan["sentiment_watch"] = survey
     plan["narrated_company_schedules"] = [row for row in company_schedules if schedule_narration(row, zone, NAMES) in text]
     plan["lead_story_id"] = min(retained, key=editor.news_order)["id"] if retained else ""
     retained_ids = {story["id"] for story in retained}

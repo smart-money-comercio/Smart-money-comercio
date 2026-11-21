@@ -89,6 +89,9 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
                     continue
                 from src.intelligence.transaction_disclosures import validate_section
                 validate_section(value.get("transaction_disclosures"), value["report_text"], datetime.fromisoformat(value["generated_at"]))
+                if "sentiment_watch" in value:
+                    from src.intelligence.sentiment_followup import validate_report
+                    validate_report(value["sentiment_watch"], value["report_text"], now=datetime.fromisoformat(value["generated_at"]))
             if analysis is not None and (not isinstance(analysis, dict) or analysis.get("schema") != 1
                     or not isinstance(analysis.get("evidence"), dict) or not isinstance(analysis["evidence"].get("source_sections"), list)
                     or any(not isinstance(section, str) for section in analysis["evidence"]["source_sections"])
@@ -125,7 +128,8 @@ def confirm_watchlist_delivery(report: str) -> None:
     from src.intelligence.watchlist_breadth import WATCH_LABEL
 
     from src.intelligence.sector_followup import ANSWER, LABEL
-    if not any(label in report for label in (WATCH_LABEL, LABEL, ANSWER)) or not state_path().is_file():
+    from src.intelligence import sentiment_followup
+    if not any(label in report for label in (WATCH_LABEL, LABEL, ANSWER, sentiment_followup.QUESTION, sentiment_followup.ANSWER)) or not state_path().is_file():
         return
     digest = hashlib.sha256(report.encode()).hexdigest()
     try:

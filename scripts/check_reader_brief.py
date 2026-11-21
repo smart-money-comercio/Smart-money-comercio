@@ -57,6 +57,111 @@ class ReaderChecks(IsolatedChecks):
             "- Market moves: S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.",
         )
 
+    def survey_page(self, stage="Preliminary", level="51.0", previous="48.0"):
+        notice = ("Friday, November 20, 2026 for Final November" if stage == "Preliminary"
+                  else "Friday, December 04, 2026 for Preliminary December")
+        current, expectations = ("51.0", "50.9") if stage == "Preliminary" else ("49.4", "52.9")
+        return (f"<h1>{stage} Results for November 2026</h1><table>"
+                "<tr><th></th><th>Nov</th><th>Oct</th><th>Nov</th><th>M-M</th><th>Y-Y</th></tr>"
+                "<tr><th></th><th>2026</th><th>2026</th><th>2025</th><th>Change</th><th>Change</th></tr>"
+                f"<tr><td>Index of Consumer Sentiment</td><td>{level}</td><td>{previous}</td><td>51.0</td>"
+                "<td>+7.3%</td><td>+1.0%</td></tr>"
+                f"<tr><td>Current Economic Conditions</td><td>{current}</td><td>46.7</td><td>51.1</td></tr>"
+                f"<tr><td>Index of Consumer Expectations</td><td>{expectations}</td><td>48.8</td><td>51.0</td></tr></table>"
+                f"<p>Next data release: {notice} data at 10am ET</p>")
+
+    def refresh_survey(self, page, now):
+        from src.intelligence import calendar_sources as sources, calendar_source_cache as cache
+        with patch.object(sources, "request_schedule", side_effect=lambda url: page if url == sources.MICHIGAN_URL else ""), patch.object(cache, "utc_now", return_value=now):
+            sources.collect_schedules([now.date()])
+        return cache.load()["Michigan"]
+
+    def test_michigan_followup_across_verified_release_and_delivery(self):
+        from src.intelligence import sentiment_followup as survey
+        thurs = datetime(2026, 11, 19, 14, 0, tzinfo=timezone.utc)
+        friday = thurs + timedelta(days=1, hours=2)
+        preview_report = self.research(now=thurs)
+        result_report = self.research(now=friday)
+        with patch.object(editor, "cache_candidates", return_value=([], [])):
+            self.refresh_survey(self.survey_page(), thurs)
+            preview = news.build_daily_news_brief(preview_report, resolve_watches=True)
+            record = self.record(preview)
+            self.assertIn("Will the early improvement hold?", preview)
+            self.assertIn(survey.SOURCE_ID, daily_voiceover.checked(record, thurs)["sources"])
+            self.refresh_survey(self.survey_page("Final", "51.5"), friday)
+            # The results are usable even if the publisher has removed its next-date notice.
+            state = self.refresh_survey(self.survey_page("Final","51.5").split("<p>")[0], friday)
+            self.assertIn("survey", state)
+            draft_only = news.build_daily_news_brief(result_report, resolve_watches=True)
+            self.assertNotIn(survey.ANSWER, draft_only)
+            with patch("src.intelligence.news_editor_store.time.time", return_value=thurs.timestamp()+2):
+                store.confirm_watchlist_delivery(preview)
+            result = news.build_daily_news_brief(result_report, resolve_watches=True)
+            record = self.record(result)
+            self.assertIn("Our consumer confidence check — The improvement held.", result)
+            self.assertIn("51.5, compared with the preliminary 51.0 and 48.0", result)
+            self.assertIn("Households’ expectations improved more", result)
+            self.assertIn("Watch November retail sales", result)
+            self.assertIn(survey.SOURCE_ID, daily_voiceover.checked(record, friday)["sources"])
+            self.assertIn("Final result for question delivered", editor.build_editor_status())
+            with patch("src.intelligence.news_editor_store.time.time", return_value=friday.timestamp()+2):
+                store.confirm_watchlist_delivery(result)
+            later = self.research(now=friday+timedelta(minutes=10))
+            self.assertNotIn(survey.ANSWER, news.build_daily_news_brief(later, resolve_watches=True))
+
+    def test_scheduled_destinations_receive_the_same_followup(self):
+        from src.jobs import daily_report_scheduler as scheduler
+        report = "Our consumer confidence check — The improvement held."
+        bot = SimpleNamespace(send_message=AsyncMock())
+        with patch.object(scheduler, "get_daily_report_chat_ids", return_value=[1, 2]), \
+                patch.object(scheduler, "utc_now", return_value=datetime(2026, 11, 20, 14, tzinfo=timezone.utc)), \
+                patch.object(scheduler, "build_daily_report_safe", AsyncMock(side_effect=[report, "Retired"])) as build, \
+                patch.object(scheduler, "confirm_watchlist_delivery"):
+            asyncio.run(scheduler.daily_report_job(SimpleNamespace(bot=bot)))
+        build.assert_awaited_once()
+        self.assertEqual([call.kwargs["chat_id"] for call in bot.send_message.await_args_list if call.kwargs["text"] == report], [1, 2])
+
+    def test_michigan_requires_one_index_and_matching_period_columns(self):
+        from src.intelligence import sentiment_followup as survey
+        from src.intelligence.calendar_sources import parse_michigan_schedule
+        original = self.survey_page()
+        shorter = original.replace("<tr><th></th><th>2026</th>", "<tr><th>2026</th>")
+        self.assertEqual(survey.capture(original, NOW), survey.capture(shorter, NOW))
+        for modified in [original.replace("Results for November", "Results for October"),
+                         original.replace("<th>Oct", "<th>Sep"), original.replace("2025</th>", "2026</th>"),
+                         original.replace("Index of Consumer Sentiment", "Current Economic Conditions"),
+                         original.replace("51.0</td>", "6.3%</td>"), original+original]:
+            with self.subTest(modified=modified):
+                self.assertIsNone(survey.capture(modified, NOW))
+        with self.assertRaises(ValueError):
+            parse_michigan_schedule(original.replace("for Final November", "for Final December"))
+        with self.assertRaises(ValueError):
+            parse_michigan_schedule(original.replace("10am ET", "10am EDT"))
+
+    def test_michigan_reversal_and_release_windows(self):
+        from src.intelligence import sentiment_followup as survey
+        before = datetime(2026, 11, 19, 14, tzinfo=timezone.utc)
+        due = before + timedelta(days=1, hours=1)
+        preview = {"preliminary": survey.capture(self.survey_page(), before), "due": due.isoformat()}
+        item = {**preview, "prior_edition":"a"*20, "confirmed_at":before.isoformat()}
+        for level, expected in (("47.5","reversed"),("48.0","faded"),("48.5","improvement held")):
+            test = {**item, "final": survey.capture(self.survey_page("Final",level), due)}
+            self.assertIn(expected, survey.checked_text(test, due))
+        for new in ({"observed":before.isoformat()}, {"heading":"Final Results for October 2026"},
+                    {"levels":["51.5","47.0"]}, {"heading":"Preliminary Results for November 2026"}):
+            with self.assertRaises(ValueError):
+                survey.checked_text({**test,"final":{**test["final"],**new}},due)
+        with self.assertRaises(ValueError):
+            survey.checked_text(preview, due)
+        with self.assertRaises(ValueError):
+            survey.checked_text(test, due+timedelta(days=3))
+        monday = due + timedelta(days=3)
+        current = {**test, "final":{**test["final"],"observed":monday.isoformat()}}
+        self.assertIn("improvement held", survey.checked_text(current, monday))
+        with self.assertRaises(ValueError):
+            tuesday = monday+timedelta(days=1)
+            survey.checked_text({**test,"final":{**test["final"],"observed":tuesday.isoformat()}},tuesday)
+
     def test_watchlist_follow_through_uses_only_names_quoted_at_both_closes(self):
         friday = datetime(2026, 10, 23, 21, tzinfo=timezone.utc)
         monday = datetime(2026, 10, 26, 21, tzinfo=timezone.utc)

@@ -755,6 +755,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         if analyst_review is None or analyst_review.get("market_context") != values:
             raise ValueError("Market reporting does not match the analyst edition")
     from src.intelligence.market_priority import order_in_takeaway
+    from src.intelligence import sentiment_followup
+    sentiment_followup.validate_report(plan.get("sentiment_watch"), report, dated(plan["generated_at"]))
     company_story_facts.validate_edition(plan)
     selected = selected_stories(plan)
     opening_order = order_in_takeaway((analyst_review or {}).get("evidence", {}))
@@ -1010,6 +1012,10 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 lines.append("Market event check: " + event["symbol"] + " — " + event["status"] + "; issuer-disclosure search cue, market cause not inferred")
             for row in record.get("narrated_company_schedules", []):
                 lines.append("Company-confirmed calendar: " + row["symbol"] + " — " + row["event_date"] + "; " + row["source"]["url"])
+            if survey := record.get("sentiment_watch"):
+                stage = ("Final result for question delivered in edition " + survey["prior_edition"]
+                         if "final" in survey else "Preview for " + survey["due"])
+                lines.append("Michigan sentiment: " + stage + " | " + survey["preliminary"]["url"])
             backup = record.get("earnings_backup_health")
             if backup:
                 lines.append("Alphabet SEC earnings context: " + backup["status"] + " — " + backup["reason"])

@@ -169,14 +169,14 @@ def build_weekend_delivery_report(now: datetime) -> str:
     return weekend_telegram.render(record, now)
 
 
-async def send_daily_report_to_chat(bot, chat_id: int | str) -> bool:
+async def send_daily_report_to_chat(bot, chat_id: int | str, *, report_builder=None) -> bool:
     try:
         await bot.send_message(
             chat_id=chat_id,
             text="🗞 Building your Smart Money AI Daily Report..."
         )
 
-        report = await build_daily_report_safe()
+        report = await (report_builder or build_daily_report_safe)()
 
         for chunk in split_long_message(report):
             await bot.send_message(
@@ -225,8 +225,17 @@ async def daily_report_job(context) -> None:
 
     now = utc_now()
     if not weekend_outlook_due(now):
+        # A delivery can retire a question. Share one successful build for this run.
+        edition_text = None
+
+        async def weekday_edition():
+            nonlocal edition_text
+            if edition_text is None:
+                edition_text = await build_daily_report_safe()
+            return edition_text
+
         for chat_id in chat_ids:
-            await send_daily_report_to_chat(context.bot, chat_id)
+            await send_daily_report_to_chat(context.bot, chat_id, report_builder=weekday_edition)
         return
 
     edition = weekend_telegram.edition_name(now)

@@ -22,6 +22,8 @@ def packet(record, report, research):
     value = {"report_sha256": digest(report), "research_sha256": digest(research),
              "generated_at": record["generated_at"], "candidates": record["candidates"],
              "analyst_review": record.get("analyst_review"), "company_schedules": record.get("narrated_company_schedules", [])}
+    if "sentiment_watch" in record:
+        value["sentiment_watch"] = record["sentiment_watch"]
     if "transaction_disclosures" in record:
         value["transaction_disclosures"] = record["transaction_disclosures"]
     return value
@@ -328,6 +330,15 @@ def build(record, report, research, *, schema=2):
                 "published_at": guide["published_date"], "verified_at": guide["observed"],
             }]
     generated = datetime.fromisoformat(record["generated_at"])
+    from src.intelligence import sentiment_followup
+    survey = record.get("sentiment_watch")
+    sentiment_followup.validate_report(survey, report, generated)
+    survey_copy = sentiment_followup.checked_text(survey, generated) if survey else ""
+    if survey:
+        tables = [survey["preliminary"]] + ([survey["final"]] if "final" in survey else [])
+        sources[sentiment_followup.SOURCE_ID] = [
+            {"url": table["url"], "publisher": "University of Michigan Surveys of Consumers",
+             "verified_at": table["observed"], "published_at": ""} for table in tables]
     from src.intelligence import transaction_disclosures as transactions
     disclosure_review = record.get("transaction_disclosures")
     transactions.validate_section(disclosure_review, report, generated)
@@ -425,6 +436,8 @@ def build(record, report, research, *, schema=2):
             market_sources = []
     add("Market Update", market,
         [f"{key}: {evidence['moves'][key]:+.2f}%" for key in market_keys if key in evidence["moves"]], market_sources)
+    if survey and "final" in survey:
+        add("Consumer confidence", survey_copy, ("Final consumer sentiment",), [sentiment_followup.SOURCE_ID])
     covered = set()
     from src.intelligence.company_focus import issuer, grouped_price_watch
     introduced = set()
@@ -523,8 +536,11 @@ def build(record, report, research, *, schema=2):
     agenda_paragraphs = groups.get("What's Ahead", "").split("\n\n")
     agenda = [paragraph for paragraph in agenda_paragraphs
               if "schedule lists" in paragraph or "has scheduled" in paragraph]
-    if agenda:
-        text = "Looking ahead. " + " ".join(agenda[:2])
+    survey_preview = bool(survey and "final" not in survey)
+    if agenda or survey_preview:
+        text = "Looking ahead. " + " ".join(([survey_copy] if survey_preview else []) + agenda[:2])
+        if survey_preview:
+            calendar_ids.append(sentiment_followup.SOURCE_ID)
         text = text.replace("The publisher schedule lists", "Watch").replace("A previously checked, cached schedule lists", "A previously checked schedule lists")
         if evidence.get("business_version", 0) >= 2:
             implication = next((row.removeprefix("Why it matters: ") for row in agenda_paragraphs
