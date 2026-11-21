@@ -910,6 +910,75 @@ class WeeklyDiscoveryChecks(unittest.TestCase):
 
 
 class TelegramEditionChecks(unittest.TestCase):
+    def earnings_and_dividend(self):
+        from scripts.check_disclosure_details import DefenseCoverageChecks
+
+        earnings = story(publisher_symbol="NVDA", symbols=["NVDA"], source="Nvidia Newsroom",
+                         title="NVIDIA Announces Financial Results for Third Quarter Fiscal 2027",
+                         url="https://nvidianews.nvidia.com/news/synthetic-quarterly-results",
+                         source_excerpt=("NVIDIA reported revenue for the third quarter ended October 25, 2026, "
+                                         "of $80 billion. For the quarter, GAAP and non-GAAP gross margins were "
+                                         "71.1% and 72.3%, respectively."))
+        dividend = story(title=DefenseCoverageChecks.title, source_excerpt=DefenseCoverageChecks.body,
+                         url="https://news.northropgrumman.com/news/releases/synthetic-dividend")
+        return earnings, dividend
+
+    def test_saturday_delivery_reads_completed_earnings_and_declared_dividend(self):
+        at = NOW - timedelta(days=1)
+        earnings, dividend = self.earnings_and_dividend()
+        row = telegram_edition(at, raw=[dividend, earnings])
+        report.checked(row, at, require_publishable=True)
+        self.assertEqual(row["theme"]["id"], "reported_results")
+        fields = {s["publisher_symbol"]: {f["field"] for f in s["event_evidence"]["facts"]}
+                  for s in row["inputs"]["stories"]}
+        self.assertEqual(fields["NVDA"], {"reported_revenue", "reported_gross_margin"})
+        self.assertEqual(fields["NOC"], {"dividend_per_share", "dividend_record_date", "dividend_payment_date"})
+        with patch.object(store, "latest", return_value=row):
+            text = scheduler.build_weekend_delivery_report(at)
+        self.assertLess(text.index("Nvidia reported"), text.index("Northrop Grumman declared"))
+        for term in ("$80 billion", "71.1 percent", "$2.47", "November 30, 2026", "December 16, 2026",
+                     earnings["url"], dividend["url"]):
+            self.assertIn(term, text)
+        self.assertNotIn("72.3 percent", text)
+
+    def test_declared_dividend_alone_uses_shareholder_payout_theme(self):
+        at = NOW - timedelta(days=1)
+        _, dividend = self.earnings_and_dividend()
+        row = telegram_edition(at, raw=[dividend])
+        report.checked(row, at, require_publishable=True)
+        self.assertEqual(row["theme"]["id"], "payout")
+        text = weekend_telegram.render(row, at)
+        self.assertIn("cash left after capital spending", text)
+        self.assertNotIn("procurement", text.lower())
+
+    def test_thin_earnings_or_conditional_dividend_keep_the_edition_in_review(self):
+        at = NOW - timedelta(days=1)
+        earnings, dividend = self.earnings_and_dividend()
+        earnings["source_excerpt"] = earnings["source_excerpt"].split(" For the quarter,")[0] + (
+            " Management expects a non-GAAP gross margin of 75% next quarter.")
+        dividend["source_excerpt"] += " The distribution is subject to approval."
+        row = telegram_edition(at, raw=[earnings, dividend])
+        self.assertEqual(row["quality"]["status"], "CHECK")
+        self.assertFalse(row["quality"]["checks"]["original_theme"])
+        self.assertFalse(row["inputs"]["stories"])
+        with self.assertRaises(ValueError):
+            report.checked(row, at, require_publishable=True)
+
+    def test_stale_earnings_lead_must_be_read_again_at_the_original_url(self):
+        earnings, _ = self.earnings_and_dividend()
+        earnings.update(weekend_archive_lead=True, evidence_checked_at=(NOW - timedelta(hours=7)).isoformat())
+        page = original_notice_page(earnings).replace("November 3, 2026", "November 6, 2026")
+        for redirected in (False, True):
+            with self.subTest(redirected=redirected):
+                fetch = Mock(return_value={"status": "ok", "url": earnings["url"],
+                             "final_url": earnings["url"] + ("/moved" if redirected else ""),
+                             "body": page, "fetched_at_epoch": NOW.timestamp()})
+                found, log = inputs.collect_stories([earnings], inputs.window(NOW), NOW, fetch)
+                fetch.assert_called_once_with(earnings["url"])
+                self.assertEqual(bool(found), not redirected, log)
+                if redirected:
+                    self.assertIn("redirected", log[0]["reason"])
+
     def test_saturday_leads_with_closes_and_distinct_verified_business_topics(self):
         from scripts.check_delivery_disclosures import release
 

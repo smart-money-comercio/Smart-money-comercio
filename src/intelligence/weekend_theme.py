@@ -17,6 +17,20 @@ AI_FINANCING = {
 }
 
 FRAMES={
+ "reported_results":{
+  "title":"Nvidia’s quarterly sales and margins",
+  "question":"How much of Nvidia’s sales did it retain after the cost of making its products?",
+  "case":"The reported quarter provides a benchmark for future results. Sales show the scale of the business, while gross margin measures the share left after the cost of sales.",
+  "base":"Use the reported fiscal quarter and GAAP accounting basis for comparisons.",
+  "stronger":"Growth in sales alongside stable or higher gross margins would show the company is retaining more gross profit.",
+  "weaker":"If sales grow while margins fall, check whether higher costs or changes in the products sold explain the difference."},
+ "payout":{
+  "title":"Northrop Grumman’s next shareholder payout",
+  "question":"What cash payout did Northrop Grumman declare for shareholders?",
+  "case":"The declaration sets the amount per share and identifies who qualifies and when payment is due.",
+  "base":"Use the declared per-share amount and record date to assess this distribution.",
+  "stronger":"At the next results, compare dividends paid with cash generated after capital spending.",
+  "weaker":"A sustained gap between distributions and cash generated would put the payout under greater pressure."},
  "business":{
   "title":"Business commitments and the route to profitable growth",
   "question":"What do this week's original disclosures change about the company's sales, costs or delivery commitments?",
@@ -71,6 +85,10 @@ FRAMES={
 
 def group(story):
     p=checked_evidence(story);symbol=story.get("publisher_symbol","")
+    if p["schema"] == 17:
+        return "reported_results"
+    if p["schema"] == 18:
+        return "payout"
     if p["schema"]==13:return "counterparty"
     if p["schema"] in {10,12} or symbol in {"NOC","LMT","CACI","AVAV","KTOS","RTX","GD","HII"}:return "defense"
     if symbol=="CRWD":return "cyber"
@@ -85,12 +103,17 @@ def choose(stories, ipo=None):
     groups={}
     for row in stories:groups.setdefault(group(row),[]).append(row)
     if ipo:
-        related = min(groups.get("ai", []),
+        related = min(groups.get("ai", []) + groups.get("reported_results", []),
                       key=lambda row: (-len(row["event_evidence"]["facts"]), row["published"], row["id"]), default=None)
         return {**AI_FINANCING, "story_ids": [related["id"]] if related else []}
     if not groups:return None
-    key=min(groups,key=lambda g:(-len({row.get("publisher_symbol") or row["source"] for row in groups[g]}),
-                                 -sum(min(len(row["event_evidence"]["facts"]),4) for row in groups[g]),g))
+    def relevance(topic):
+        rows = groups[topic]
+        issuers = {row.get("publisher_symbol") or row["source"] for row in rows}
+        fields = sum(min(len(row["event_evidence"]["facts"]), 4) for row in rows)
+        return topic == "payout", -len(issuers), topic != "reported_results", -fields, topic
+
+    key = min(groups, key=relevance)
     rows=sorted(groups[key],key=lambda row:(-len(row["event_evidence"]["facts"]),row["published"],row["id"]))
     selected=[];issuers=set()
     for row in rows:
@@ -107,6 +130,8 @@ def name(story):
 
 def summary(story):
     p=checked_evidence(story);label=name(story)
+    if p["schema"] in {17, 18}:
+        return investor_read(story)["facts"]
     if p["schema"] == 14:
         from src.intelligence.delivery_disclosures import summary as render
         return render(p, speech=True)

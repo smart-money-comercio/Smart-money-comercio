@@ -110,7 +110,8 @@ def render(record: dict, now: datetime) -> str:
 def review_stories(stories: list[dict]) -> list[dict]:
     """Choose two qualified weekday disclosures from different publishers."""
     publishers = {}
-    for story in stories:
+    # Give reported earnings priority over a routine payout when both are verified.
+    for story in sorted(stories, key=lambda row: row["event_evidence"]["schema"] != 17):
         if story["publication_label"] == "week disclosure":
             publisher = story["publisher_symbol"] or story["source"]
             publishers.setdefault(publisher, story)
@@ -145,7 +146,8 @@ def saturday_review(inputs: dict) -> tuple[list[str], list[tuple[str, str]]]:
         text = weekend_business.dated_summary(row, published)
         review = business_analysis.assess(row)
         if review:
-            text += f"\nFollow-up · {review['decision_test']}"
+            followup = review["watch"] if row["event_evidence"]["schema"] == 17 else review["decision_test"]
+            text += f"\nFollow-up · {followup}"
         stories.append(text)
         sources.append((row["source"], row["url"]))
     ipo = inputs.get("ipo")

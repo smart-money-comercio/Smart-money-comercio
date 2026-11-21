@@ -6,12 +6,15 @@ import re
 from src.intelligence import weekend_inputs as evidence, company_schedule
 from src.intelligence.calendar_sources import category
 from src.intelligence.daily_brief_analysis import NAMES
+from src.intelligence.weekend_theme import FRAMES
 from src.utils.market_quote_source import BENCHMARKS
 from src.utils.speech_text import normalize
 
 REVISION = 2
 
 QUESTIONS = {
+    "reported_results": FRAMES["reported_results"]["question"],
+    "payout": FRAMES["payout"]["question"],
     "ai": "Can paying demand keep up with what companies are spending on AI?",
     "business": "What would turn this week's business developments into higher sales or better margins?",
     "counterparty": "Which companies have a direct exposure to the payment restrictions?",
@@ -157,6 +160,8 @@ def opening(prices, question):
 
 
 def driver_watch(theme):
+    if theme["id"] in {"reported_results", "payout"}:
+        return theme["stronger"] + " " + theme["weaker"]
     return {
         "ai": "For chipmakers and cloud providers, compare new sales guidance with the cost of adding and running capacity. Rising sales alongside stable margins would strengthen the business case. Higher spending and weaker margins would show that growth is becoming more expensive to deliver.",
         "defense": "Watch for follow-on orders with committed funding and delivery dates. Those details show when work could start contributing to sales. Delays or higher delivery costs could put pressure on margins.",

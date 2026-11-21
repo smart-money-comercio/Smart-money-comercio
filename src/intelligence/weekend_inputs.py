@@ -125,7 +125,15 @@ def collect_prices(periods, now, fetch=None, *, force=False):
         return list(pool.map(read,BENCHMARKS))
 
 
-def fact_schema(story):
+def fact_schema(story, *, issuer_results=True):
+    if issuer_results:
+        from src.intelligence.defense_coverage import DIVIDEND_TITLE
+        from src.intelligence.nvidia_guidance import results_period
+        symbol = story.get("publisher_symbol")
+        if symbol == "NVDA" and results_period(story["title"]):
+            return 17
+        if symbol == "NOC" and DIVIDEND_TITLE.fullmatch(story["title"]):
+            return 18
     from src.intelligence import disclosure_details, defense_program, refinery_mix, treasury_financing
     family = disclosure_details.family(story)
     if family:return 12 if family == "maintenance" else 13
@@ -139,7 +147,7 @@ def fact_schema(story):
     return 8
 
 
-def admit_story(raw, text, observed, periods, now, *, delivery_facts=True):
+def admit_story(raw, text, observed, periods, now, *, delivery_facts=True, issuer_results=True):
     from src.intelligence.original_disclosures import calendar_notice
     story = deepcopy(raw)
     for key in ("event_evidence","canonical_url","discovery_evidence","sec_filing","ipo","materiality"):
@@ -160,7 +168,7 @@ def admit_story(raw, text, observed, periods, now, *, delivery_facts=True):
     story["materiality"] = editor.materiality(story)
     # article_excerpt and the verified cache already produce admitted plain text.
     # Preserve that exact text; decoding it again can alter evidence sentences.
-    schema = fact_schema(story)
+    schema = fact_schema(story, issuer_results=issuer_results)
     if schema == 8 and delivery_facts:
         from src.intelligence.delivery_disclosures import extract
         if extract(story, text):
@@ -179,7 +187,8 @@ def admit_story(raw, text, observed, periods, now, *, delivery_facts=True):
 
 def checked_story(story, periods, now):
     expected = admit_story(story,story["source_excerpt"],story["evidence_checked_at"],periods,now,
-                           delivery_facts=story["event_evidence"]["schema"] == 14)
+                           delivery_facts=story["event_evidence"]["schema"] == 14,
+                           issuer_results=story["event_evidence"]["schema"] in {17, 18})
     if story != expected:
         raise ValueError("Weekly disclosure facts, stage, dates or original proof changed")
     analysis.checked_evidence(story)
@@ -216,7 +225,7 @@ def collect_stories(raw, periods, now, fetch=None, *, force=False):
                 if p["scope"]=="original release excerpt" and len(p["facts"])>=2:return (1,-min(len(p["facts"]),6))
             except (ValueError,KeyError,TypeError,AttributeError):pass
         try:
-            if fact_schema(row) in {9,10,11,12,13}:return (2,0)
+            if fact_schema(row) in {9,10,11,12,13,17,18}:return (2,0)
             from src.intelligence.delivery_disclosures import family
             if family(row):return (2,0)
             return (3,not bool(editor.materiality({**row,"disclosure_version":1})))

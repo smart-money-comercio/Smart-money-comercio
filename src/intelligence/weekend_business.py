@@ -64,6 +64,8 @@ def conditions(stories, theme, value):
 
 def dated_summary(story, stamp):
     label = "weekend update" if story["publication_label"] == "weekend update" else "disclosure"
+    if story["event_evidence"]["schema"] in {17, 18}:
+        return f"{stamp:%B} {stamp.day} — " + themes.summary(story)
     return f"In its {stamp:%B} {stamp.day} {label}, " + themes.summary(story)
 
 
