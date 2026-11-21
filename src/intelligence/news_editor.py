@@ -21,6 +21,7 @@ from src.intelligence.special_alert_engine import company_event
 from src.intelligence.market_brief import story_topics
 from src.intelligence.story_analysis import build_evidence, checked_evidence, event_type
 from src.intelligence.policy_analysis import is_fomc_statement
+from src.intelligence import fomc_minutes
 from src.intelligence.editorial_context import fed_calendar_notice, intel_inference
 
 
@@ -73,6 +74,8 @@ def primary_source(story: dict) -> str:
 
 def materiality(story: dict) -> str:
     title = story["title"]
+    if story.get("event_evidence", {}).get("schema") == 19:
+        return "monetary policy" if primary_source(story) and checked_evidence(story)["facts"] else ""
     if story.get("event_evidence", {}).get("schema") == 17:
         return "earnings" if primary_source(story) and checked_evidence(story)["facts"] else ""
     if story.get("event_evidence", {}).get("schema") == 16:
@@ -401,7 +404,12 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
             if not isinstance(raw_title, str) or not title or not story["source"]:
                 raise ValueError("Headline or source missing")
             story["canonical_url"] = canonical_url(raw.get("url"))
-            if "document_url" in story:
+            if fomc_minutes.is_minutes(story):
+                _, expected_document = fomc_minutes.reference(story)
+                if (story.get("document_url") != expected_document or raw.get("excerpt_scope") != "original release excerpt"
+                        or not primary_source(story)):
+                    raise ValueError("Original Fed minutes document required for the meeting discussion")
+            elif "document_url" in story:
                 from src.intelligence.alphabet_source import document_reference
                 if not document_reference(story["url"], story["document_url"]):
                     raise ValueError("Original Alphabet document reference is invalid")
@@ -455,7 +463,11 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
                 specialized = (is_fomc_statement(story) or solar_storage_report(story)
                                or story.get("publisher_symbol") in {"GOOG", "GOOGL", "INTC"})
                 from src.intelligence.nvidia_guidance import results_period
-                if story.get("publisher_symbol") == "NVDA" and results_period(story["title"]):
+                if fomc_minutes.is_minutes(story):
+                    story["evidence_checked_at"] = observed
+                    story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=19)
+                    checked_evidence(story)
+                elif story.get("publisher_symbol") == "NVDA" and results_period(story["title"]):
                     story["evidence_checked_at"] = observed
                     story["event_evidence"] = build_evidence(story, text, "original release excerpt", schema=17)
                     checked_evidence(story)
@@ -589,7 +601,7 @@ def build_editorial_plan(brief: dict, now: datetime, extra_candidates: list[dict
         if not story.get("ipo") and not story.get("sec_filing"):
             text, scope, observed = excerpts.get(id(story), ("", "headline only", story["source_checked_at"]))
             story["evidence_checked_at"] = observed
-            if story.get("event_evidence", {}).get("schema") not in range(8, 19):
+            if story.get("event_evidence", {}).get("schema") not in range(8, 20):
                 story["event_evidence"] = build_evidence(story, text, scope)
     result = {"schema": 1, "generated_at": now.astimezone(timezone.utc).isoformat(), "candidates": ledger,
             "issues": list(dict.fromkeys(brief.get("issues", []) + issues)), "ranking_date": brief.get("ranking_date"),
@@ -720,6 +732,8 @@ def render_story(story: dict, zone, company_names: dict, *, style="source", busi
                 "This is a headline-only report, unconfirmed by the company.")
     else:
         if story["official"]:
+            if story.get("event_evidence", {}).get("schema") == 19:
+                return fomc_minutes.review(checked_evidence(story))["facts"]
             if is_fomc_statement(story):
                 from src.intelligence.story_analysis import investor_read
                 review = investor_read(story)
@@ -846,7 +860,7 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         {"name": "Selection", "status": "pass", "detail": f"{counts['selected']} selected / {counts['skip']} skipped; one story per represented company"},
         {"name": "Editorial Review", "status": "pass", "detail": "Original publisher, materiality, dates and complete selected wording checked"
          + f"; {sum(story['kind'] == 'company' for story in selected)} event-specific company reviews and {sum(len(story.get('event_evidence', {}).get('facts', [])) for story in selected)} sourced fact fields"
-         + f"; {sum(story.get('event_evidence', {}).get('schema') in range(8, 19) for story in value['candidates'])} original article materiality reviews"
+         + f"; {sum(story.get('event_evidence', {}).get('schema') in range(8, 20) for story in value['candidates'])} original article materiality reviews"
          + (f"; {len(analyst_review['evidence'].get('business_reviews', []))} business-channel reviews tied to disclosed fields" if (analyst_review or {}).get("business_version") else "")
          + (f"; {len(analyst_review['insights'])} analyst insights matched to this edition's market, ranking and trade-plan evidence" if analyst_review is not None else "")},
         {"name": "Decision Log", "status": "pass", "detail": "Built edition and source decisions recorded; this is not a delivery receipt"}]
@@ -1113,7 +1127,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                         lines.append("Not specified in reviewed text: " + "; ".join(review["undisclosed"]))
                     if review.get("not_established"):
                         lines.append("Not established by these extracted facts: " + "; ".join(review["not_established"]))
-                    if event.get("schema") in range(8, 19):
+                    if event.get("schema") in range(8, 20):
                         for fact in event["facts"]:
                             lines.append("Fact evidence — " + fact["field"] + ": " + fact["evidence"])
                     lines += ["Agent interpretation: " + review["why"], "Watch next: " + review["watch"]]

@@ -400,6 +400,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if not watching:
                 watching.append(market_outlook(moves, breadth if quote_day else None))
             notes_body = list(notes)
+            for story in retained:
+                if story.get("event_evidence", {}).get("schema") == 19:
+                    notes_body.insert(-1, "Original Fed meeting minutes — " + story["document_url"])
             for value in market_context or []:
                 notes_body.insert(-1, market_reporting.source_line(value))
             if not any(story["kind"] == "company" for story in retained) and analysis["evidence"]["companies"]:

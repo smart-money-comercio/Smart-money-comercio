@@ -197,10 +197,14 @@ def _from_admitted_text(story: dict, text: str, scope: str, *, schema: int | Non
     from src.intelligence.defense_program import applicable, program_facts, material
     from src.intelligence import refinery_mix
     from src.intelligence import disclosure_details
-    if type(schema) is not int or schema not in range(1, 19) or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema >= 8 and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
+    if type(schema) is not int or schema not in range(1, 20) or scope not in SCOPES or schema == 6 and not solar_storage_report(story) or schema == 7 and not intel_results or schema >= 8 and scope != "original release excerpt" or schema == 9 and not document_kind(story) or schema == 10 and not applicable(story) or schema == 11 and not refinery_mix.applicable(story) or schema == 12 and disclosure_details.family(story) != "maintenance" or schema == 13 and disclosure_details.family(story) != "financial sanctions":
         raise ValueError("Unknown original story evidence scope")
     kind, stage = event_type(story["title"], story.get("materiality", ""), version=4 if schema == 8 else schema)
-    if schema == 18:
+    if schema == 19:
+        from src.intelligence.fomc_minutes import facts as minutes_facts
+        kind, stage = "monetary policy", "meeting minutes"
+        facts = minutes_facts(story, text)
+    elif schema == 18:
         from src.intelligence.defense_coverage import dividend_facts
         facts = dividend_facts(story, text)
         if not facts:
@@ -252,7 +256,7 @@ def _from_admitted_text(story: dict, text: str, scope: str, *, schema: int | Non
     else:
         facts = disclosed_facts(text, kind, stage, version=schema, title=story["title"])
     return {"schema": schema, "event": kind, "stage": stage, "scope": scope if text else "headline only",
-            "source_url": story["url"], "published": story["published"], "source_text": text,
+            "source_url": story["document_url"] if schema == 19 else story["url"], "published": story["published"], "source_text": text,
             "observed_at": story.get("evidence_checked_at", story.get("source_checked_at")),
             "source_sha256": hashlib.sha256(text.encode()).hexdigest(), "facts": facts}
 
@@ -273,6 +277,9 @@ def checked_evidence(story: dict) -> dict:
 
 def investor_read(story: dict) -> dict:
     evidence = checked_evidence(story)
+    if evidence["schema"] == 19:
+        from src.intelligence.fomc_minutes import review
+        return review(evidence)
     if evidence["schema"] == 18:
         from src.intelligence.defense_coverage import dividend_review
         return dividend_review(evidence)

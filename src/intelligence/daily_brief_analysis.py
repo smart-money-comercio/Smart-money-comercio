@@ -142,7 +142,7 @@ def analyze_report(
         evidence["source_sections"].append("Market event checks")
     if defense_context_version:
         from src.intelligence.defense_coverage import price_context
-        if type(defense_context_version) is not int or defense_context_version != 1 or event_context is None:
+        if type(defense_context_version) is not int or defense_context_version not in (1, 2) or event_context is None:
             raise ValueError("Defense price context requires a dated news edition")
         evidence["defense_context_version"] = defense_context_version
         evidence["defense_price"] = price_context(report, now, evidence["market_event_context"]["events"])
@@ -165,6 +165,8 @@ def analyze_report(
             raise ValueError("Market interpretation requires admitted original-source stories")
         evidence["stories"].append({key: deepcopy(story[key]) for key in (
             "id", "title", "kind", "symbols", "source", "url", "published", "official", "publisher_symbol", "decision", "source_check")})
+        if story.get("event_evidence", {}).get("schema") == 19:
+            evidence["stories"][-1]["document_url"] = story["document_url"]
         if story.get("company_fact"):
             evidence["stories"][-1]["company_fact"] = story["company_fact"]
         if story.get("ipo"):

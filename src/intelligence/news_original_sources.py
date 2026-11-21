@@ -209,6 +209,9 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *
     # Reprocess Intel's cached listing once under the new lookback.
     profiles = {"INTC": 5, "AMD": 4, "NVDA": 7}
     profile = profiles.get(source.get("company_symbol"), 6 if source.get("company_symbol") else 3)
+    if fed:
+        profile = 8
+    from src.intelligence import fomc_minutes
     agency = source.get("name") in {"EIA", "DARPA"}
     if (not source.get("company_symbol") and not fed and not agency) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:
         return payload
@@ -220,7 +223,8 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *
     for row in parse_feed(payload.get("body", ""), source, full_titles=True):
         published = timestamp(row["published"])
         from src.intelligence.policy_analysis import is_fomc_statement
-        allowed = (is_fomc_statement({"source": source["name"], "title": row["title"]})
+        fed_row = {"source": source["name"], "title": row["title"]}
+        allowed = ((is_fomc_statement(fed_row) or fomc_minutes.is_minutes(fed_row))
                    and authorized_response(source, {"url": row["link"]})) if fed else authorized_response(source, {"url": row["link"]})
         context_release = intel and intel_period(row["title"])
         max_age = MAX_AGE if context_release else 24 * 3600
@@ -259,6 +263,10 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *
             detail = fetch(row["link"])
             if detail.get("status") != "ok" or not authorized_response(source, detail):
                 raise ValueError(detail.get("error") or "Original release redirect mismatch")
+            if fed and fomc_minutes.is_minutes({"source": source["name"], "title": row["title"]}):
+                details.append(fomc_minutes.read(row, detail, fetch, now, budget))
+                reviews.append({"url": row["link"], "status": "read", "reason": "Original Fed release and meeting document matched"})
+                continue
             excerpt = article_excerpt(detail["body"], row["title"], row["published"], publisher=source["name"], url=row["link"])
             checked = detail.get("fetched_at_epoch")
             if type(checked) not in (int, float) or not math.isfinite(checked) or not -60 <= now.timestamp()-checked <= 6*3600 or checked < timestamp(row["published"]).timestamp()-60:

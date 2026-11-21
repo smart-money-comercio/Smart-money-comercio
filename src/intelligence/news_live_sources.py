@@ -544,6 +544,8 @@ def parse_article_items(payload: dict, source: dict, *, full_titles: bool = Fals
                         and timestamp(detail.get("published")) == timestamp(row["published"])):
                     row.update(description=originals.release_text(detail.get("text", "")), evidence_scope="original release excerpt",
                                evidence_checked_at=detail.get("checked_at_epoch"))
+                    if source.get("name") == "Federal Reserve" and detail.get("document_url"):
+                        row["document_url"] = detail["document_url"]
     return rows
 
 

@@ -20,7 +20,11 @@ def opening_source(evidence):
         if evidence.get("disclosure_version", 0) >= 2 and story.get("source") == "Eaton Newsroom":
             name = "Eaton"
         text, watch, priority = "", "", 9
-        if profile["event"] == "monetary policy" and profile["stage"] == "rate decision" and "policy_target_range" in fields:
+        if profile["schema"] == 19:
+            from src.intelligence.fomc_minutes import review
+            minutes = review(profile)
+            text, watch, priority = minutes["opening"], minutes["watch"], 1
+        elif profile["event"] == "monetary policy" and profile["stage"] == "rate decision" and "policy_target_range" in fields:
             from src.intelligence.story_analysis import investor_read
             text = investor_read(story)["facts"]
             watch, priority = "Watch inflation readings and company financing plans.", 0

@@ -121,6 +121,8 @@ def story_copy(story, evidence, *, modern=False, refined=False, concise=False, i
         review = enhance(story, review)
     implication = review["why"] + (" " + review["watch"] if business_version else "")
     profile = review["evidence"]; fields = {fact["field"]:fact["value"] for fact in profile["facts"]}
+    if profile["schema"] == 19:
+        return review["body"] if introduced_in_takeaway else review["facts"] + " " + review["watch"]
     if profile["schema"] == 18:
         return review["facts"] + " " + review["watch"]
     if profile["schema"] == 16:
@@ -334,6 +336,9 @@ def build(record, report, research, *, schema=2):
     for story in selected:
         if story.get("source_check") != "pass" or not editor.primary_source(story): raise ValueError("Voiceover story lost its original evidence")
         sources[story["id"]] = [{"url":story["url"], "publisher":story["source"], "published_at":story["published"], "verified_at":story["source_checked_at"]}]
+        if story.get("event_evidence", {}).get("schema") == 19:
+            sources[story["id"]].append({"url": story["document_url"], "publisher": story["source"],
+                "published_at": story["published"], "verified_at": story["evidence_checked_at"]})
     for context in evidence.get("earnings_context", []):
         sources["earnings_" + context["symbol"]] = [{"url":url, "publisher":context["source"], "published_at":context["published"], "verified_at":context["observed"]}
             for url in dict.fromkeys((context.get("primary_url", context["url"]), context.get("document_url", context["url"])))]

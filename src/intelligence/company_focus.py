@@ -178,43 +178,44 @@ def select_focus(report: str, evidence: dict, context: dict) -> dict:
                 "Watch whether volume and the next company disclosure support a lasting change in the setup.",
                 ["Market Snapshot", "Watchlist Movers", "Top Opportunities"], metric={"price": value})
 
-    def theme(key, group, role, why, watch, tier=60, metric=None):
-        for symbol in THEME_TICKERS.get(key, []):
-            add(symbol, group, role, tier, why, watch, ["Executive Summary", "Market Snapshot", "Research theme universe"], metric=metric)
+    if evidence.get("defense_context_version", 0) < 2:
+        def theme(key, group, role, why, watch, tier=60, metric=None):
+            for symbol in THEME_TICKERS.get(key, []):
+                add(symbol, group, role, tier, why, watch, ["Executive Summary", "Market Snapshot", "Research theme universe"], metric=metric)
 
-    oil = moves.get("Oil")
-    if oil is not None and abs(oil) >= 1.5:
-        theme("Oil / Geopolitical Risk", "energy", "Energy spotlight",
-            f"Oil {'rose' if oil > 0 else 'fell'} {abs(oil):.2f} percent in the quoted session, putting the energy business backdrop in focus.",
-            "Watch realized pricing, customer investment decisions and cash flow after costs and capital spending.", metric={"Oil": oil})
-    breadth = evidence.get("breadth")
-    if moves.get("Nasdaq", 0) <= -1.5 or moves.get("VIX", 0) >= 5:
-        theme("AI / Chips", "growth pressure", "Growth risk watch",
-            "Pressure in the market indicators raises the bar for growth-company confirmation.",
-            "Watch demand, margins and whether price and volume stabilize together.")
-    if breadth and breadth["down"] > breadth["up"]:
-        theme("Consumer Stress", "consumer", "Consumer watch",
-            f"More names fell than rose in the {breadth['total']}-symbol quoted watchlist, putting resilience in focus.",
-            "Watch consumer demand, pricing and operating margins in the next company update.")
-    if moves.get("Nasdaq", 0) >= .5 and (not breadth or breadth["up"] >= breadth["down"]):
-        theme("AI Infrastructure / Power", "infrastructure", "Infrastructure watch",
-            "Improving growth-index support puts the AI infrastructure and power investment cycle in focus.",
-            "Watch funded orders, power availability, delivery timing and cash requirements.")
-    if (abs(moves.get("TLT", 0)) >= .75 or re.search(r"\[(?:Fed|BLS|BEA)\]", sections.get("Earnings & Economic Calendar", ""))
-            or any("policy" in story_topics(story) for story in stories)):
-        theme("Banks / Credit", "credit", "Credit and policy watch",
-            "The rate-sensitive backdrop puts lending economics and funding conditions in focus.",
-            "Watch loan demand, funding costs and credit losses; bond-price moves alone do not verify yields.")
-    if any("defense" in story_topics(story) or "geopolitics" in story_topics(story) for story in stories):
-        theme("Defense / AI Warfare", "defense", "Defense industry watch",
-            "Verified defense or global-risk reports put the sector's execution pipeline in focus.",
-            "Watch procurement approvals, funded backlog and the path from testing to production.")
-    if moves or evidence["companies"] or stories:
-        for key, group, role, watch in (
-            ("AI / Chips", "technology", "Technology research watch", "Watch customer demand, commercial timing and cash generation."),
-            ("Defense / AI Warfare", "defense", "Defense research watch", "Watch funded procurement and production milestones in original disclosures."),
-            ("Consumer Stress", "consumer", "Consumer research watch", "Watch demand, pricing and margin trends in the next company update.")):
-            theme(key, group, role, "This is a longer-term research follow-up while fresh company-specific confirmation remains the next check.", watch, tier=20)
+        oil = moves.get("Oil")
+        if oil is not None and abs(oil) >= 1.5:
+            theme("Oil / Geopolitical Risk", "energy", "Energy spotlight",
+                f"Oil {'rose' if oil > 0 else 'fell'} {abs(oil):.2f} percent in the quoted session, putting the energy business backdrop in focus.",
+                "Watch realized pricing, customer investment decisions and cash flow after costs and capital spending.", metric={"Oil": oil})
+        breadth = evidence.get("breadth")
+        if moves.get("Nasdaq", 0) <= -1.5 or moves.get("VIX", 0) >= 5:
+            theme("AI / Chips", "growth pressure", "Growth risk watch",
+                "Pressure in the market indicators raises the bar for growth-company confirmation.",
+                "Watch demand, margins and whether price and volume stabilize together.")
+        if breadth and breadth["down"] > breadth["up"]:
+            theme("Consumer Stress", "consumer", "Consumer watch",
+                f"More names fell than rose in the {breadth['total']}-symbol quoted watchlist, putting resilience in focus.",
+                "Watch consumer demand, pricing and operating margins in the next company update.")
+        if moves.get("Nasdaq", 0) >= .5 and (not breadth or breadth["up"] >= breadth["down"]):
+            theme("AI Infrastructure / Power", "infrastructure", "Infrastructure watch",
+                "Improving growth-index support puts the AI infrastructure and power investment cycle in focus.",
+                "Watch funded orders, power availability, delivery timing and cash requirements.")
+        if (abs(moves.get("TLT", 0)) >= .75 or re.search(r"\[(?:Fed|BLS|BEA)\]", sections.get("Earnings & Economic Calendar", ""))
+                or any("policy" in story_topics(story) for story in stories)):
+            theme("Banks / Credit", "credit", "Credit and policy watch",
+                "The rate-sensitive backdrop puts lending economics and funding conditions in focus.",
+                "Watch loan demand, funding costs and credit losses; bond-price moves alone do not verify yields.")
+        if any("defense" in story_topics(story) or "geopolitics" in story_topics(story) for story in stories):
+            theme("Defense / AI Warfare", "defense", "Defense industry watch",
+                "Verified defense or global-risk reports put the sector's execution pipeline in focus.",
+                "Watch procurement approvals, funded backlog and the path from testing to production.")
+        if moves or evidence["companies"] or stories:
+            for key, group, role, watch in (
+                ("AI / Chips", "technology", "Technology research watch", "Watch customer demand, commercial timing and cash generation."),
+                ("Defense / AI Warfare", "defense", "Defense research watch", "Watch funded procurement and production milestones in original disclosures."),
+                ("Consumer Stress", "consumer", "Consumer research watch", "Watch demand, pricing and margin trends in the next company update.")):
+                theme(key, group, role, "This is a longer-term research follow-up while fresh company-specific confirmation remains the next check.", watch, tier=20)
 
     selected, used_groups = [], set()
     while pool and len(selected) < context["limit"]:

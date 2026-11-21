@@ -313,6 +313,18 @@ class DefenseCoverageChecks(IsolatedChecks):
         with self.assertRaises(ValueError):
             analysis.checked_evidence(changed)
 
+    def test_dividend_cannot_populate_other_companies_from_sector_alone(self):
+        research = self.research(replacements={"Market Snapshot": self.snapshot, "Watchlist Movers":
+            "Largest regular-session movers:\n• HII: $305.00 (-2.32%)\n• AMZN: $250.00 (+3.82%)"})
+        with patch.object(editor, "cache_candidates", return_value=([self.declaration()], [])):
+            report = build_daily_news_brief(research, require_company_facts=True, defense_context_version=2)
+        record = store.read_editions(report=report)[0]
+        focus = record["analyst_review"]["evidence"]["company_focus"]["selected"]
+        self.assertTrue(any(r["symbol"] == "HII" and r["basis"] == "price move" for r in focus))
+        self.assertFalse(any(r["basis"] == "sector context" for r in focus))
+        self.assertNotIn("execution pipeline", report)
+        self.assertIn("$2.47 per common share", report)
+
     def test_declaring_issuer_share_class_amount_and_dates_must_agree(self):
         from src.intelligence.defense_coverage import dividend_facts
         invalid = [self.body.replace("Northrop Grumman Corporation", "Example Corporation"),
@@ -366,6 +378,90 @@ class DefenseCoverageChecks(IsolatedChecks):
                             for scene in record["voiceover"]["segments"]))
 
 
+class MinutesChecks(IsolatedChecks):
+    heading = "Minutes of the Federal Open Market Committee"
+    dates = "October 6–7, 2026"
+    title = heading + ", October 6-7, 2026"
+    notice = "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261025a.htm"
+    document = "https://www.federalreserve.gov/monetarypolicy/fomcminutes20261007.htm"
+    published = (NOW - timedelta(hours=1)).isoformat()
+    action = "The Committee decided to maintain the target range for the federal funds rate at 3-3/4 to 4 percent."
+    dissent = "Two members voted against the decision to maintain the target range for the federal funds rate, preferring an increase of 25 basis points in the target range at this meeting."
+    discussion = "Most participants discussed risks associated with a scenario in which returns on AI investment disappointed investors."
+
+    def materials(self):
+        landing = (f"<h3>{self.title}</h3><p>October 25, 2026</p><p>For release at 12:00 p.m. EDT</p>"
+                   f'<a href="{self.document}">HTML</a>')
+        minutes = (f"<h3>{self.heading}</h3><p>{self.dates}</p><p><b>Staff Review and Policymakers’ Discussion of Financial Stability</b><br/>"
+                   f"{self.discussion}</p><p>Developments in Financial Markets</p><p>{'Historical background. ' * 400}</p>"
+                   f'<p><strong>Committee Policy Actions</strong><br/>{self.action} The statement said "stability." {self.dissent}</p><h4>Attendance</h4>')
+        return landing, minutes
+
+    def enrich(self, *, landing=None, minutes=None, budget=2, final_url=None, document_time=None):
+        source = next(s for s in feeds.NEWS_SOURCES if s["name"] == "Federal Reserve")
+        base, original = self.materials()
+        pages = {self.notice: base if landing is None else landing, self.document: original if minutes is None else minutes}
+        calls = []
+        def read(url):
+            calls.append(url)
+            return {"url": url, "final_url": final_url if final_url and url == self.document else url,
+                    "body": pages[url], "fetched_at_epoch": document_time if url == self.document and document_time else NOW.timestamp(),
+                    "status": "ok"}
+        rss = (f"<rss><channel><item><title>{self.title}</title><link>{self.notice}</link>"
+               f"<pubDate>{self.published}</pubDate></item></channel></rss>")
+        cached = {"url": source["url"], "body": rss, "status": "ok", "fetched_at_epoch": NOW.timestamp(),
+                  "release_excerpt_schema": 3}
+        enriched = originals.enrich_feed(source, cached, feeds.parse_rss_items, read, NOW,
+                                         budget=originals.DetailReadBudget(reads=budget))
+        with patch.object(feeds, "NEWS_SOURCES", [source]):
+            values, _ = editor.cache_candidates(NOW, [], cache={source["url"]: enriched})
+        return values, calls
+
+    def test_announcement_to_full_minutes_to_published_brief(self):
+        rows, calls = self.enrich()
+        self.assertEqual(calls, [self.notice, self.document])
+        self.assertEqual(rows[0]["document_url"], self.document)
+        with patch.object(editor, "cache_candidates", return_value=(rows, [])):
+            report = build_daily_news_brief(self.research(), require_company_facts=True, defense_context_version=2, takeaway_version=1)
+        record = store.read_editions(report=report)[0]
+        fed, = editor.selected_stories(record)
+        evidence = analysis.checked_evidence(fed)
+        self.assertEqual(evidence["source_url"], self.document)
+        self.assertEqual([r["field"] for r in evidence["facts"]], ["policy_action", "policy_target_range", "dissent", "ai_risk_discussion"])
+        self.assertIn("two voters favored a quarter-point increase", report)
+        self.assertIn("3.75 to 4 percent", voice.sections(report)["Policy & Economy"])
+        self.assertIn("Most participants discussed", report)
+        self.assertIn(self.document, report)
+        self.assertEqual({r["url"] for r in record["voiceover"]["sources"][fed["id"]]}, {self.document, self.notice})
+        self.assertIn("voters", record["voiceover"]["script"])
+
+    def test_announcement_alone_mismatched_or_stale_pages_and_ambiguous_rates_are_held(self):
+        landing, minutes = self.materials()
+        for options in ({"budget": 1}, {"minutes": minutes.replace(self.dates, "September 1–2, 2026")},
+                        {"landing": landing.replace("12:00", "11:00")},
+                        {"landing": landing.replace(self.document, self.document + "?preview=true")},
+                        {"final_url": self.notice}, {"document_time": (NOW-timedelta(hours=7)).timestamp()},
+                        {"minutes": minutes.replace(self.action, self.action.replace("decided to", "could decide to"))},
+                        {"minutes": minutes.replace(self.action, self.action + " " + self.action.replace("3-3/4 to 4", "1 to 2"))}):
+            with self.subTest(options=list(options)):
+                rows, calls = self.enrich(**options)
+                self.assertFalse(rows[0].get("document_url"))
+                plan = editor.build_editorial_plan({"rows": []}, NOW, rows)
+                self.assertFalse(editor.selected_stories(plan))
+
+    def test_staff_views_and_unrelated_dissents_are_excluded(self):
+        _, minutes = self.materials()
+        rows, _ = self.enrich(minutes=minutes.replace("Most participants", "Staff economists")
+                                         .replace("decision to maintain", "decision to lower"))
+        plan = editor.build_editorial_plan({"rows": []}, NOW, rows)
+        fed, = editor.selected_stories(plan)
+        self.assertEqual([r["field"] for r in analysis.checked_evidence(fed)["facts"]], ["policy_action", "policy_target_range"])
+        bad = deepcopy(fed)
+        bad["document_url"] = self.notice
+        with self.assertRaises(ValueError):
+            analysis.checked_evidence(bad)
+
+
 class SpeechChecks(unittest.TestCase):
     def test_new_designators_are_conversational_without_changing_legacy_scripts(self):
         self.assertEqual(normalize("C-130 Hercules",disclosure_names=True),"C one thirty Hercules")
@@ -386,7 +482,7 @@ def main():
     with ExitStack() as stack:
         if args.windows_socketpair:stack.enter_context(patch.object(socket,"socketpair",portable_tcp_socketpair))
         traffic=stack.enter_context(offline_network_guard())
-        suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (FactChecks,PublicationChecks,RebuildDetailChecks,DefenseCoverageChecks,SpeechChecks))
+        suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (FactChecks,PublicationChecks,RebuildDetailChecks,DefenseCoverageChecks,MinutesChecks,SpeechChecks))
         result=unittest.TextTestRunner(verbosity=1).run(suite)
     good=result.wasSuccessful() and not traffic["blocked"]
     print(f"Disclosure Details Check: {'PASS' if good else 'FAIL'} ({result.testsRun} tests)")
