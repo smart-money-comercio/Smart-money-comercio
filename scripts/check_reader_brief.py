@@ -209,6 +209,59 @@ class ReaderChecks(IsolatedChecks):
         bad_counts = later.replace("Breadth: 1 up / 1 down / 2 quoted", "Breadth: 2 up / 0 down / 2 quoted")
         self.assertIsNone(watchlist_breadth.closing_snapshot(watchlist_breadth.market_snapshot(bad_counts)))
 
+    def test_friday_decliners_answer_at_mondays_close_from_revision_42(self):
+        friday = datetime(2026, 11, 20, 22, tzinfo=timezone.utc)
+        monday = friday + timedelta(days=3)
+        names = "AAPL AMD AMZN AVAV AVGO CAT CRWD GOOGL INTC KTOS LMT META MSFT NVDA PEP PLTR QQQ SPY TSM SONY".split()
+        friday_moves = dict.fromkeys(names, -1) | {"SONY": 1}
+        report = self.close_report(friday + timedelta(days=1), "2026-11-20", "2026-11-19", friday_moves)
+        with patch.object(watchlist_breadth, "CHECKPOINT_VERSION", 1):
+            baseline = self.record(self.render_current(report))
+        self.assertIn("19 lower", baseline["report_text"])
+        self.assertEqual(store.confirmed_watchlist_ids(monday), [])
+        monday_moves = dict.fromkeys(names, 1) | dict.fromkeys(names[:8], -1) | {"SONY": -1}
+        # A rotation in the premarket rebuild still quotes the Friday session.
+        premarket = self.close_report(monday.replace(hour=13), "2026-11-20", "2026-11-19",
+                                      {"NVDA": -1, "TSM": -1, "XYZ": 2})
+        self.render_current(premarket)
+        live = self.close_report(monday.replace(hour=17), "2026-11-23", "2026-11-20", monday_moves, timing="regular_session")
+        self.assertNotIn("fell again", self.render_current(live))
+        closing = self.close_report(monday, "2026-11-23", "2026-11-20", monday_moves)
+        brief = self.render_current(closing)
+        record = self.record(brief)
+        watch = section(brief, "What We're Watching")
+        self.assertIn("selling narrowed from 19 decliners on Friday to 9 on Monday", watch)
+        self.assertIn("Of the names that fell on Friday, 8 fell again.", watch)
+        takeaway = next(line for line in brief.splitlines() if line.startswith("The takeaway:"))
+        self.assertNotIn("watchlist", takeaway.lower())
+        self.assertNotIn("What Changed Since Our Last Brief", brief)
+        self.assertEqual(record["analyst_review"]["watchlist_baseline"]["edition_id"], baseline["id"])
+        self.assertIn("eight fell again", daily_voiceover.checked(record)["script"])
+        self.assertIn("8 of 19 prior decliners | 20/20 prior names matched", editor.build_editor_status())
+        altered = deepcopy(record["analyst_review"])
+        altered["evidence"]["watchlist_follow_through"]["fell_again"] = 9
+        with self.assertRaisesRegex(ValueError, "evidence does not match"):
+            analysis.validate_review(altered, closing, brief, editor.selected_stories(record))
+        next_morning = self.close_report(monday + timedelta(hours=15), "2026-11-23", "2026-11-20", monday_moves)
+        self.assertIn("8 fell again", self.render_current(next_morning))
+
+    def test_changing_watchlist_scopes_partial_and_unchanged_counts(self):
+        friday = datetime(2026, 10, 23, 21, tzinfo=timezone.utc)
+        monday = friday + timedelta(days=3)
+        friday_moves = {"NVDA": -1, "MSFT": -1, "META": -1, "CIBR": 1, "AMD": 0}
+        self.render_current(self.close_report(friday, "2026-10-23", "2026-10-22", friday_moves))
+        # META drops out. Both previous decliners stop falling; two different names fall.
+        moves = {"NVDA": 0, "MSFT": 1, "CIBR": -1, "AMD": -1, "NEW": -1}
+        brief = self.render_current(self.close_report(monday, "2026-10-26", "2026-10-23", moves))
+        self.assertIn("covered 4 of Friday's 5 watchlist names", brief)
+        self.assertIn("number of decliners stayed at 2 from Friday to Monday", brief)
+        self.assertIn("None of the names that fell on Friday fell again", brief)
+        self.assertIn("0 of 2 prior decliners | 4/5 prior names matched", editor.build_editor_status())
+        moves["NVDA"] = -1
+        update = self.render_current(self.close_report(monday + timedelta(minutes=2), "2026-10-26", "2026-10-23", moves))
+        self.assertIn("selling spread from 2 decliners on Friday to 3 on Monday", update)
+        self.assertIn("1 fell again", update)
+
     def checkpoint_fixture(self):
         friday = datetime(2026, 10, 23, 21, tzinfo=timezone.utc)
         monday = datetime(2026, 10, 26, 21, tzinfo=timezone.utc)
@@ -270,6 +323,22 @@ class ReaderChecks(IsolatedChecks):
         skipped = self.close_report(tuesday + timedelta(days=1), "2026-10-28", "2026-10-27", symbols)
         for report in (intraday, skipped):
             self.assertNotIn("What Changed Since Our Last Brief", self.render_current(report))
+
+    def test_revision_42_delivered_target_survives_new_comparison_wording(self):
+        with patch.object(watchlist_breadth, "CHECKPOINT_VERSION", 1):
+            monday, symbols, brief = self.checkpoint_fixture()
+        self.assertTrue(self.deliver(brief, monday + timedelta(seconds=1)))
+        # A later unsent rebuild rotates one of the four names.
+        rotated = {key: -1 for key in symbols if key != "CIBR"} | {"META": -1}
+        self.render_current(self.close_report(monday + timedelta(minutes=5), "2026-10-26", "2026-10-23", rotated))
+        tuesday = monday + timedelta(days=1)
+        report = self.close_report(tuesday, "2026-10-27", "2026-10-26", symbols | {"CIBR": 1})
+        text = self.render_current(report)
+        record = self.record(text)
+        self.assertEqual(record["analyst_review"]["watchlist_baseline"]["edition_id"], self.record(brief)["id"])
+        self.assertIn("selling narrowed from 4 decliners on Monday to 3 on Tuesday", text)
+        self.assertIn("3 fell again", text)
+        self.assertIn("missed our target of 2 or fewer decliners", text)
 
     def test_failed_telegram_send_does_not_register_a_checkpoint(self):
         from telegram.error import TelegramError

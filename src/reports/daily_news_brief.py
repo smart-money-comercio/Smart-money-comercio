@@ -316,10 +316,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 leads.extend(editor.selected_stories(edition))
             earnings_context = earnings_takeaway.capture(leads, now, editor.feeds.fetch_url)
     focus_history = history_context(now, past_editions)
-    watchlist_baseline = watchlist_breadth.prior_edition(research_report, past_editions, now)
-    if watchlist_baseline:
-        plan["watchlist_baseline"] = watchlist_baseline
     watchlist_checkpoint = None
+    confirmed = []
     if watchlist_checkpoint_version and past_editions:
         try:
             confirmed = news_editor_store.confirmed_watchlist_ids(now)
@@ -328,6 +326,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         watchlist_checkpoint = watchlist_breadth.delivered_checkpoint(research_report, past_editions, confirmed, now)
         if watchlist_checkpoint:
             plan["watchlist_checkpoint"] = watchlist_checkpoint
+    watchlist_baseline = watchlist_breadth.prior_edition(research_report, past_editions, now,
+                                                        version=watchlist_checkpoint_version, confirmed_ids=confirmed)
+    if watchlist_baseline:
+        plan["watchlist_baseline"] = watchlist_baseline
     sector_checkpoint = None
     if resolve_watches and any((row["analyst_review"].get("earnings_watch") or {}).get("sector_watch")
                                for row in past_editions if row.get("analyst_review")):

@@ -1064,6 +1064,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                             f"Watchlist follow-through: {comparison['previous_session']} to {comparison['session']}"
                             f" | {len(comparison['symbols'])} matched names | prior edition {comparison['edition_id']}"
                         )
+                        if "fell_again" in comparison:
+                            lines.append(f"Watchlist repeat declines: {comparison['fell_again']} of {comparison['previous_down']} prior decliners"
+                                         f" | {len(comparison['symbols'])}/{comparison['prior_total']} prior names matched")
                 for context in analysis["evidence"].get("earnings_context", []):
                     lines.append("Dated earnings context: " + context["symbol"] + " — " + context["source"] + "; release " + context["release_date"]
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")

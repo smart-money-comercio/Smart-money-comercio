@@ -250,7 +250,7 @@ def analyze_report(
         from src.intelligence import watchlist_breadth
 
         current = watchlist_breadth.closing_snapshot(watchlist_breadth.market_snapshot(report))
-        comparison = watchlist_breadth.compare(current, watchlist_baseline, now)
+        comparison = watchlist_breadth.compare(current, watchlist_baseline, now, version=watchlist_checkpoint_version)
         if comparison is None:
             raise ValueError("Watchlist follow-through needs two comparable completed sessions")
         evidence["watchlist_follow_through"] = comparison
@@ -258,7 +258,7 @@ def analyze_report(
     if watchlist_checkpoint_version or watchlist_checkpoint is not None:
         from src.intelligence import watchlist_breadth
 
-        if (type(watchlist_checkpoint_version) is not int or watchlist_checkpoint_version != watchlist_breadth.CHECKPOINT_VERSION
+        if (type(watchlist_checkpoint_version) is not int or watchlist_checkpoint_version not in (1, 2)
                 or event_context is None or reader_version != 4):
             raise ValueError("Watchlist checkpoints require a dated daily brief")
         evidence["watchlist_checkpoint_version"] = watchlist_checkpoint_version

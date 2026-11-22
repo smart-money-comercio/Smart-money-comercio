@@ -129,7 +129,8 @@ def confirm_watchlist_delivery(report: str) -> None:
 
     from src.intelligence.sector_followup import ANSWER, LABEL
     from src.intelligence import sentiment_followup
-    if not any(label in report for label in (WATCH_LABEL, LABEL, ANSWER, sentiment_followup.QUESTION, sentiment_followup.ANSWER)) or not state_path().is_file():
+    labels = (WATCH_LABEL, "Watchlist breadth — ", LABEL, ANSWER, sentiment_followup.QUESTION, sentiment_followup.ANSWER)
+    if not any(label in report for label in labels) or not state_path().is_file():
         return
     digest = hashlib.sha256(report.encode()).hexdigest()
     try:

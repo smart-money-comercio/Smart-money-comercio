@@ -8,7 +8,7 @@ from src.intelligence.special_alert_sources import NY, timestamp
 
 SOURCE_SECTION = "Prior watchlist closes"
 CHECKPOINT_SOURCE = "Delivered watchlist checkpoint"
-CHECKPOINT_VERSION = 1
+CHECKPOINT_VERSION = 2
 WATCH_LABEL = "Watchlist follow-through — "
 CLOSES = "Watchlist closes vs "
 DAY = r"(\d{4}-\d{2}-\d{2})"
@@ -76,7 +76,7 @@ def attach_completed_closes(report, movers, max_chars):
     return report.replace("Market Snapshot\n" + snapshot, "Market Snapshot\n" + with_closes, 1)
 
 
-def compare(current, baseline, now):
+def compare(current, baseline, now, *, version=1):
     if not current or not isinstance(baseline, dict):
         return None
     snapshot = baseline.get("snapshot")
@@ -95,7 +95,7 @@ def compare(current, baseline, now):
     symbols = sorted(old.keys() & new.keys())
     if len(symbols) < 2:
         return None
-    return {
+    comparison = {
         "edition_id": edition_id,
         "previous_session": prior["session"],
         "session": current["session"],
@@ -104,12 +104,18 @@ def compare(current, baseline, now):
         "down": sum(new[symbol] == "down" for symbol in symbols),
         "up": sum(new[symbol] == "up" for symbol in symbols),
     }
+    if version == 2:
+        comparison.update(prior_total=len(old),
+                          fell_again=sum(old[symbol] == new[symbol] == "down" for symbol in symbols))
+    return comparison
 
 
-def prior_edition(report, editions, now):
+def prior_edition(report, editions, now, *, version=1, confirmed_ids=()):
     current = closing_snapshot(market_snapshot(report))
     if not current:
         return None
+    fallback = None
+    best_rank = None
     for edition in editions:
         evidence = (edition.get("analyst_review") or {}).get("evidence", {})
         if evidence.get("session") != current["previous_session"]:
@@ -121,9 +127,45 @@ def prior_edition(report, editions, now):
             continue
         baseline = {"edition_id": edition["id"], "generated_at": edition["generated_at"],
                     "snapshot": market_snapshot(prior_report)}
-        if compare(current, baseline, now):
+        if not compare(current, baseline, now):
+            continue
+        if version != 2:
             return baseline
-    return None
+        # A premarket rebuild can rotate symbols while still quoting yesterday's close.
+        # Prefer the cohort already on record before the new session's local date.
+        before_session = timestamp(baseline["generated_at"]).astimezone(NY).date().isoformat() < current["session"]
+        rank = (before_session, edition["id"] in confirmed_ids)
+        if rank == (True, True):
+            return baseline
+        if best_rank is None or rank > best_rank:
+            fallback, best_rank = baseline, rank
+    return fallback
+
+
+def cohort_copy(comparison, previous, session):
+    total = len(comparison["symbols"])
+    prior_total = comparison["prior_total"]
+    before, after = comparison["previous_down"], comparison["down"]
+    previous_day, day = previous.strftime("%A"), session.strftime("%A")
+    if total < prior_total:
+        scope = f"Closing quotes covered {total} of {previous_day}'s {prior_total} watchlist names. In that group, "
+    else:
+        scope = f"Across the same {total} watchlist names, "
+    if before == after:
+        change = f"the number of decliners stayed at {after} from {previous_day} to {day}."
+    else:
+        direction = "narrowed" if after < before else "spread"
+        noun = "decliner" if before == 1 else "decliners"
+        change = f"selling {direction} from {before} {noun} on {previous_day} to {after} on {day}."
+    if before:
+        repeat = comparison["fell_again"]
+        if before == 1:
+            change += f" The one {previous_day} decliner " + ("fell again." if repeat else "did not fall again.")
+        elif repeat == 0:
+            change += f" None of the names that fell on {previous_day} fell again."
+        else:
+            change += f" Of the names that fell on {previous_day}, {repeat} fell again."
+    return scope + change
 
 
 def watch_copy(comparison):
@@ -134,6 +176,8 @@ def watch_copy(comparison):
     later = f"{session:%B} {session.day}"
     result = (f"Of {total} watchlist names quoted at both closes, "
               f"{comparison['previous_down']} finished lower on {earlier} and {down} on {later}.")
+    if "fell_again" in comparison:
+        result = cohort_copy(comparison, previous, session)
     majority = total // 2 + 1
     if down >= majority:
         check = f"Watch whether the next close brings the number of decliners down to {majority - 1} or fewer."
@@ -161,6 +205,8 @@ def delivered_checkpoint(report, editions, confirmed_ids, now):
             continue
         proof = {"edition_id": edition_id, "generated_at": edition["generated_at"], "text": text,
                  "snapshot": market_snapshot(edition["research_text"]), "baseline": analysis.get("watchlist_baseline")}
+        if analysis["evidence"].get("watchlist_checkpoint_version") == 2:
+            proof["comparison_version"] = 2
         if evaluate(report, proof, now):
             return proof
     return None
@@ -173,7 +219,10 @@ def evaluate(report, proof, now):
     prior = closing_snapshot(proof.get("snapshot", ""))
     if not re.fullmatch(r"[0-9a-f]{20}", edition_id) or not generated or generated >= now or not prior:
         return None
-    comparison = compare(prior, proof.get("baseline"), generated)
+    version = proof.get("comparison_version", 1)
+    if type(version) is not int or version not in (1, 2):
+        return None
+    comparison = compare(prior, proof.get("baseline"), generated, version=version)
     if not comparison or watch_copy(comparison) != proof.get("text"):
         return None
 
