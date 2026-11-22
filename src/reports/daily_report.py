@@ -2153,11 +2153,12 @@ Research only. Not financial advice.
 
 
 def build_daily_report() -> str:
-    from src.intelligence import early_futures, news_live_sources
+    from src.intelligence import calendar_source_cache, early_futures, news_live_sources, pce_followup
     from src.intelligence.daily_takeaway import VERSION
     from src.intelligence.watchlist_breadth import CHECKPOINT_VERSION
     from src.reports.daily_news_brief import build_daily_news_brief
-    return build_daily_news_brief(build_research_report(),
+    pce = pce_followup.prepare(calendar_source_cache.utc_now(), news_live_sources.fetch_url)
+    return build_daily_news_brief(build_research_report(), pce_watch=pce,
                                   futures_provider=early_futures.capture if DAILY_REPORT_LIVE_QUOTES else None,
                                   require_company_facts=True, takeaway_version=VERSION,
                                   watchlist_checkpoint_version=CHECKPOINT_VERSION, market_reporting_version=1, resolve_watches=True, defense_context_version=2,

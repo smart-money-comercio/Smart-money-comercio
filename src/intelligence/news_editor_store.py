@@ -41,15 +41,24 @@ def save_edition(record: dict, report: str) -> str:
     return edition
 
 
-def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
+def read_editions(limit: int = 3, report: str | None = None, *, edition_ids=None) -> list[dict]:
     path = state_path()
     if not path.is_file():
         return []
     query = "SELECT id,report_sha256,record FROM editions"
     args = []
+    filters = []
     if report is not None:
-        query += " WHERE report_sha256=?"
+        filters.append("report_sha256=?")
         args.append(hashlib.sha256(report.encode()).hexdigest())
+    if edition_ids is not None:
+        ids = list(edition_ids)[:MAX_EDITIONS]
+        if not ids:
+            return []
+        filters.append("id IN (" + ",".join("?" for _ in ids) + ")")
+        args.extend(ids)
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY generated DESC, rowid DESC LIMIT ?"
     args.append(min(max(int(limit), 1), MAX_EDITIONS))
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)) as db:
@@ -87,6 +96,12 @@ def read_editions(limit: int = 3, report: str | None = None) -> list[dict]:
                         or hashlib.sha256(value["report_text"].encode()).hexdigest() != report_digest
                         or hashlib.sha256(value["research_text"].encode()).hexdigest() != value.get("research_sha256")):
                     continue
+                if "pce_watch" in value or "pce_answer_omitted" in value:
+                    from src.intelligence import pce_followup
+                    when = datetime.fromisoformat(value["generated_at"])
+                    pce_followup.validate(value.get("pce_watch"), value["report_text"], when)
+                    if omitted := value.get("pce_answer_omitted"):
+                        pce_followup.checked_text(omitted, when)
                 from src.intelligence.transaction_disclosures import validate_section
                 validate_section(value.get("transaction_disclosures"), value["report_text"], datetime.fromisoformat(value["generated_at"]))
                 if "sentiment_watch" in value:
@@ -130,7 +145,8 @@ def confirm_watchlist_delivery(report: str) -> None:
     from src.intelligence.sector_followup import ANSWER, LABEL
     from src.intelligence import sentiment_followup
     labels = (WATCH_LABEL, "Watchlist breadth — ", LABEL, ANSWER, sentiment_followup.QUESTION, sentiment_followup.ANSWER)
-    if not any(label in report for label in labels) or not state_path().is_file():
+    if not state_path().is_file() or not (report.startswith("Smart Money Daily News Brief\n")
+                                             or any(label in report for label in labels)):
         return
     digest = hashlib.sha256(report.encode()).hexdigest()
     try:

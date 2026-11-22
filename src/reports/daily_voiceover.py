@@ -334,7 +334,15 @@ def build(record, report, research, *, schema=2):
                 "published_at": guide["published_date"], "verified_at": guide["observed"],
             }]
     generated = datetime.fromisoformat(record["generated_at"])
-    from src.intelligence import sentiment_followup
+    from src.intelligence import pce_followup, sentiment_followup
+    pce = record.get("pce_watch")
+    pce_followup.validate(pce, report, generated)
+    pce_copy = pce_followup.checked_text(pce, generated) if pce else ""
+    if pce:
+        entry = pce.get("result") or pce["schedule"]
+        sources[pce_followup.SOURCE_ID] = [{"url": entry["url"], "publisher": "U.S. Bureau of Economic Analysis",
+                                            "verified_at": entry.get("observed") or entry["fetched_at"],
+                                            "published_at": entry.get("published", "")}]
     survey = record.get("sentiment_watch")
     sentiment_followup.validate_report(survey, report, generated)
     survey_copy = sentiment_followup.checked_text(survey, generated) if survey else ""
@@ -455,6 +463,8 @@ def build(record, report, research, *, schema=2):
             market_sources = []
     add("Market Update", market,
         [f"{key}: {evidence['moves'][key]:+.2f}%" for key in market_keys if key in evidence["moves"]], market_sources)
+    if pce and pce["phase"] == "answer":
+        add("Inflation and spending", pce_copy, ["Monthly prices and real spending"], [pce_followup.SOURCE_ID])
     if survey and "final" in survey:
         add("Consumer confidence", survey_copy, ("Final consumer sentiment",), [sentiment_followup.SOURCE_ID])
     covered = set()
@@ -556,8 +566,11 @@ def build(record, report, research, *, schema=2):
     agenda = [paragraph for paragraph in agenda_paragraphs
               if "schedule lists" in paragraph or "has scheduled" in paragraph]
     survey_preview = bool(survey and "final" not in survey)
-    if agenda or survey_preview:
-        text = "Looking ahead. " + " ".join(([survey_copy] if survey_preview else []) + agenda[:2])
+    pce_ahead = pce and pce["phase"] != "answer"
+    if agenda or survey_preview or pce_ahead:
+        text = "Looking ahead. " + " ".join(([pce_copy] if pce_ahead else []) + ([survey_copy] if survey_preview else []) + agenda[:2])
+        if pce_ahead:
+            calendar_ids.append(pce_followup.SOURCE_ID)
         if survey_preview:
             calendar_ids.append(sentiment_followup.SOURCE_ID)
         text = text.replace("The publisher schedule lists", "Watch").replace("A previously checked, cached schedule lists", "A previously checked schedule lists")

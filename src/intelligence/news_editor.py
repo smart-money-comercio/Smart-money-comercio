@@ -755,7 +755,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
         if analyst_review is None or analyst_review.get("market_context") != values:
             raise ValueError("Market reporting does not match the analyst edition")
     from src.intelligence.market_priority import order_in_takeaway
-    from src.intelligence import sentiment_followup
+    from src.intelligence import pce_followup, sentiment_followup
+    pce_followup.validate(plan.get("pce_watch"), report, dated(plan["generated_at"]))
     sentiment_followup.validate_report(plan.get("sentiment_watch"), report, dated(plan["generated_at"]))
     company_story_facts.validate_edition(plan)
     selected = selected_stories(plan)
@@ -1012,6 +1013,15 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 lines.append("Market event check: " + event["symbol"] + " — " + event["status"] + "; issuer-disclosure search cue, market cause not inferred")
             for row in record.get("narrated_company_schedules", []):
                 lines.append("Company-confirmed calendar: " + row["symbol"] + " — " + row["event_date"] + "; " + row["source"]["url"])
+            if record.get("pce_tracking_version"):
+                from src.intelligence import pce_followup
+                item = record.get("pce_watch") or record.get("pce_answer_omitted")
+                if item:
+                    stage = "omitted for length" if "pce_answer_omitted" in record else item["phase"]
+                    lines.append(f"BEA inflation and spending: {stage} | due {item['schedule']['at']}"
+                                 + (" | question edition " + item["prior_edition"] if "prior_edition" in item else "")
+                                 + " | " + (item.get("result") or item["schedule"])["url"])
+                lines.append(pce_followup.delivery_summary())
             if survey := record.get("sentiment_watch"):
                 stage = ("Final result for question delivered in edition " + survey["prior_edition"]
                          if "final" in survey else "Preview for " + survey["due"])

@@ -57,6 +57,94 @@ class ReaderChecks(IsolatedChecks):
             "- Market moves: S&P -0.52%, Nasdaq -0.21%, Russell -0.29%, VIX +2.21%, Oil +4.32%, TLT -0.49%.",
         )
 
+    def bea_schedule(self, when, due, name="Personal Income and Outlays, October 2026"):
+        from src.intelligence import calendar_source_cache as cache, calendar_sources as pub
+        row = {"name": name, "category": "pce", "publisher": "BEA", "url": pub.BEA_URL,
+               "at": due.isoformat(), "fetched_at": when.isoformat()}
+        cache.save({"BEA": {"events": [row]}})
+        return row
+
+    def bea_payload(self, observed):
+        url = "https://www.bea.gov/news/2026/personal-income-and-outlays-october-2026"
+        # Synthetic results, including a revised previous month.
+        page = """<h1>News Release</h1>
+          <p>EMBARGOED UNTIL RELEASE AT 8:30 a.m. EST, Wednesday, November 25, 2026</p>
+          <h1>Personal Income and Outlays, October 2026</h1>
+          <table><caption>Personal Income and Related Measures<br>[Percent change from preceding month]</caption>
+          <tr><th></th><th>September</th><th>October</th></tr>
+          <tr><th>Current-dollar PCE</th><td>0.9</td><td>0.8</td></tr>
+          <tr><th>Real PCE</th><td>0.3</td><td>-0.1</td></tr>
+          <tr><th>PCE price index</th><td>0.4</td><td>0.2</td></tr>
+          <tr><th>PCE price index excluding food and energy</th><td>0.7</td><td>0.5</td></tr></table>"""
+        return {"status": "ok", "url": url, "final_url": url, "fetched_at_epoch": observed.timestamp(), "body": page}
+
+    def test_bea_question_pending_answer_and_first_eligible_delivery(self):
+        from src.intelligence import calendar_source_cache as cache, pce_followup as pce, news_live_sources
+        due = datetime(2026, 11, 25, 13, 30, tzinfo=timezone.utc)
+        before = due - timedelta(days=1)
+        self.bea_schedule(before, due)
+        def build(at, payload=None):
+            with patch.object(cache, "utc_now", return_value=at), \
+                    patch.object(news_live_sources, "fetch_url", return_value=payload), \
+                    patch.object(news_live_sources, "get_cached_source", return_value=payload):
+                return self.render_current(self.research(now=at))
+        question = build(before)
+        self.assertIn(pce.QUESTION, section(question, "What's Ahead"))
+        self.assertTrue(self.deliver(question, before + timedelta(seconds=1)))
+        self.assertNotIn(pce.QUESTION, build(before + timedelta(minutes=5)))
+        # The schedule rolls forward; a delivered question survives the rollover.
+        cache.save({})
+        pending = build(due)
+        self.assertIn(pce.PENDING, pending)
+        self.assertNotIn(pce.ANSWER, pending)
+        self.assertTrue(self.deliver(pending, due + timedelta(seconds=1)))
+        at = due + timedelta(minutes=2)
+        answer = build(at, self.bea_payload(at))
+        record = self.record(answer)
+        self.assertIn("inflation slowed from 0.4% to 0.2%", answer)
+        self.assertIn("Households spent 0.1% less after inflation", answer)
+        self.assertEqual(record["pce_watch"]["prior_edition"], self.record(question)["id"])
+        self.assertIn(pce.SOURCE_ID, daily_voiceover.checked(record, at)["sources"])
+        self.assertIn("less after inflation", daily_voiceover.checked(record, at)["script"])
+        with self.assertRaisesRegex(ValueError, "text, section or source"):
+            pce.validate(record["pce_watch"], answer.replace("0.4%", "0.9%", 1), at)
+        self.assertIn(pce.ANSWER, build(at + timedelta(seconds=1), self.bea_payload(at)))
+        self.assertTrue(self.deliver(answer, at + timedelta(seconds=3)))
+        with patch.object(cache, "utc_now", return_value=at + timedelta(minutes=1)):
+            self.assertIn("1/1 delivered questions answered", pce.delivery_summary())
+        self.assertNotIn(pce.ANSWER, build(at + timedelta(minutes=2), self.bea_payload(at)))
+
+    def test_bea_standalone_result_never_claims_an_unsent_question(self):
+        from src.intelligence import calendar_source_cache as cache, pce_followup as pce
+        due = datetime(2026, 11, 25, 13, 30, tzinfo=timezone.utc)
+        self.bea_schedule(due - timedelta(hours=1), due)
+        with patch.object(cache, "utc_now", return_value=due):
+            result = pce.prepare(due, lambda url: self.bea_payload(due))
+        self.assertEqual(result["phase"], "answer")
+        self.assertNotIn("prior_edition", result)
+        self.assertNotIn("earlier question", pce.checked_text(result, due))
+
+    def test_bea_wrong_units_period_clock_redirect_and_missing_cells_stay_pending(self):
+        from src.intelligence import calendar_source_cache as cache, pce_followup as pce
+        due = datetime(2026, 11, 25, 13, 30, tzinfo=timezone.utc)
+        self.bea_schedule(due - timedelta(minutes=1), due)
+        payload = self.bea_payload(due)
+        bad = [None, {**payload, "final_url": "https://www.bea.gov/news"}, {**payload, "fetched_at_epoch": (due - timedelta(seconds=1)).timestamp()},
+               {**payload, "fetched_at_epoch": (due + timedelta(minutes=10)).timestamp()}]
+        for old, new in (("preceding month", "year ago"), ("October 2026</h1>", "September 2026</h1>"),
+                         ("<th>October</th>", "<th>August</th>"), ("Real PCE</th>", "Real DPI</th>"),
+                         ("<td>-0.1</td>", "<td>n/a</td>"), ("8:30 a.m.", "9:30 a.m."), (" EST,", " EDT,")):
+            bad.append({**payload, "body": payload["body"].replace(old,new)})
+        with patch.object(cache, "utc_now", return_value=due):
+            for candidate in bad:
+                with self.subTest(candidate=str(candidate)[:90]):
+                    result = pce.prepare(due, lambda url: candidate)
+                    self.assertEqual(result["phase"], "pending")
+        with patch.object(cache, "utc_now", return_value=due-timedelta(seconds=1)):
+            def early_fetch(url):
+                self.fail("Attempted to fetch an unreleased result")
+            self.assertEqual(pce.prepare(due-timedelta(seconds=1), early_fetch)["phase"], "preview")
+
     def survey_page(self, stage="Preliminary", level="51.0", previous="48.0"):
         notice = ("Friday, November 20, 2026 for Final November" if stage == "Preliminary"
                   else "Friday, December 04, 2026 for Preliminary December")

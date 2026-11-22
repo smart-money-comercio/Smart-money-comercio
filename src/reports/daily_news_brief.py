@@ -194,8 +194,8 @@ def validate_news_brief(text: str) -> dict:
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
                            require_company_facts=False, takeaway_version=0, watchlist_checkpoint_version=0,
-                           market_reporting_version=0, resolve_watches=False, sector_price_reader=None, defense_context_version=0) -> str:
-    from src.intelligence import sentiment_followup
+                           market_reporting_version=0, resolve_watches=False, sector_price_reader=None, defense_context_version=0, pce_watch=None) -> str:
+    from src.intelligence import pce_followup, sentiment_followup
     from src.intelligence.defense_coverage import global_policy
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
     quality = validate_daily_report_quality(research_report)
@@ -353,6 +353,18 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             except (OSError, SQLiteError):
                 receipts = []
             survey_candidate = sentiment_followup.select(michigan, past_editions, receipts, now)
+    # The calendar can refresh inside the research build. A newly verified
+    # schedule can still supply a question or a pending line on this run.
+    if resolve_watches and pce_watch is None:
+        from src.intelligence.news_live_sources import get_cached_source
+        pce_watch = pce_followup.prepare(now, get_cached_source, past_editions)
+    if pce_watch:
+        if pce_watch["phase"] == "preview" and checked_time(pce_watch["schedule"]["at"]) <= now:
+            pce_watch = {"phase": "pending", "schedule": pce_watch["schedule"]}
+        try:
+            pce_followup.checked_text(pce_watch, now)
+        except ValueError:
+            pce_watch = None
     chosen = None
     last_result = None
     recent = plan.get("earnings_context_candidates") or None
@@ -371,7 +383,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     if calendar_lead:
         lead_options.append((None, calendar_lead))
     lead_options.append((None, None))
-    for count, survey, (earnings_packet, calendar_packet) in product(range(len(initial_stories), -1, -1), survey_options, lead_options):
+    pce_options = (pce_watch, None) if pce_watch else (None,)
+    for pce, count, survey, (earnings_packet, calendar_packet) in product(pce_options, range(len(initial_stories), -1, -1), survey_options, lead_options):
+        if survey and "final" not in survey and pce and pce["phase"] == "preview":
+            continue
+        pce_copy = pce_followup.checked_text(pce, now) if pce else ""
         survey_copy = sentiment_followup.checked_text(survey, now) if survey else ""
         # Preserve company coverage while trying shorter follow-up sections.
         # Otherwise a smaller focus can silently remove the very company whose
@@ -432,6 +448,20 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                     market_body.append(alert)
             global_body += [row["text"] for row in insights if row["section"] == "global"]
             ahead_body = list(ahead)
+            if pce:
+                ahead_body = [line for line in ahead_body if "schedule lists PCE inflation and personal income" not in line
+                              and not line.startswith("The available company announcements and calendars")]
+                if "pce" in macro_families[:macro_limit] and implication in ahead_body:
+                    ahead_body.remove(implication)
+                    other = calendar_implication(set(macro_families[:macro_limit]) - {"pce"}, concise=concise)
+                    if other:
+                        ahead_body.insert(len(ahead_body) - bool(plan["issues"]), other)
+                if pce["phase"] == "answer":
+                    policy_body.insert(0, pce_copy)
+                    if not ahead_body:
+                        ahead_body.append("Watch the next monthly release for a change in household spending after inflation.")
+                else:
+                    ahead_body.insert(0, pce_copy)
             if survey:
                 if "final" in survey:
                     policy_body.insert(0, survey_copy)
@@ -449,6 +479,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             if not watching:
                 watching.append(market_outlook(moves, breadth if quote_day else None))
             notes_body = list(notes)
+            if pce:
+                notes_body.insert(-1, pce_followup.source_line(pce))
             if survey:
                 notes_body.insert(-1, sentiment_followup.SOURCE)
             for story in retained:
@@ -498,7 +530,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 return prefix + "\n\n" + introduction + "\n\n" + "\n\n".join(header + "\n" + "\n\n".join(body) for header, body in groups)
 
             text = render()
-            extras = [(ahead_body, paragraph) for paragraph in macro[2:]]
+            extras = [(ahead_body, paragraph) for paragraph in macro[2:]
+                      if not pce or "schedule lists PCE inflation and personal income" not in paragraph]
             extras += [(watching, paragraph) for paragraph in market_detail(moves, breadth if quote_day else None)]
             for body, paragraph in extras:
                 if narration_metrics(text)["spoken_words"] >= MIN_NARRATION_WORDS:
@@ -508,6 +541,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
 
             protected = set(narrations.values()) | {no_company_story} | {
                 row["text"] for row in insights if row["id"] not in {"model_support", "company_price", "participation"}}
+            if pce:
+                protected.add(pce_copy)
             protected.update(schedule_narration(row, zone, NAMES) for row in company_schedules)
             if survey:
                 protected.add(survey_copy)
@@ -544,6 +579,12 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             errors.append(f"A complete {MIN_NARRATION_WORDS}-word narration does not fit the {MAX_NEWS_CHARS}-character budget.")
         raise ValueError("News brief quality review failed: " + "; ".join(errors))
     text, retained, analysis, narrations = chosen
+    if pce:
+        plan["pce_watch"] = pce
+    elif pce_watch and pce_watch["phase"] == "answer":
+        plan["pce_answer_omitted"] = pce_watch
+    if resolve_watches:
+        plan["pce_tracking_version"] = 1
     if survey:
         plan["sentiment_watch"] = survey
     plan["narrated_company_schedules"] = [row for row in company_schedules if schedule_narration(row, zone, NAMES) in text]
