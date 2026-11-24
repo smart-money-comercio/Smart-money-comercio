@@ -647,7 +647,7 @@ class EarlyBriefChecks(IsolatedChecks):
             text = daily_report.build_daily_report()
         self.assertEqual(fetch.call_count, 3)
         intro, market = text.split("\nMarket Update\n", maxsplit=1)
-        self.assertIn("The takeaway: Early losses were steeper in tech-heavy futures. At 5:50 AM EST, Nasdaq-100 futures were down 0.97 percent and S&P 500 futures were down 0.36 percent", intro)
+        self.assertIn("The takeaway: Tech-heavy futures led the early decline. At 5:50 AM EST, Nasdaq-100 futures were down 0.97 percent and S&P 500 futures were down 0.36 percent", intro)
         self.assertIn("from their levels at the prior U.S. cash close.", intro)
         self.assertIn("Nvidia's Tuesday earnings are the next test of how gross margins held up against management's guidance.", intro)
         self.assertNotIn("watchlist", intro.lower())
@@ -659,7 +659,7 @@ class EarlyBriefChecks(IsolatedChecks):
         self.assertIn("Premarket futures: PASS | 5:50 AM EST | prior cash close 2026-11-13", news_editor.build_editor_status())
         record = news_editor_store.read_editions(report=text)[0]
         voice = daily_voiceover.checked(record, self.now)
-        self.assertTrue(voice["segments"][0]["narration"].startswith("Good morning. Early losses were steeper"))
+        self.assertTrue(voice["segments"][0]["narration"].startswith("Good morning. Tech-heavy futures led the early decline."))
         self.assertIn("Nasdaq one hundred futures were down zero point nine seven percent", voice["segments"][0]["narration"])
         self.assertEqual(voice["segments"][0]["source_ids"], [early_futures.SOURCE_ID, "calendar_NVDA"])
         self.assertEqual(len(voice["sources"][early_futures.SOURCE_ID]), 2)
@@ -672,6 +672,17 @@ class EarlyBriefChecks(IsolatedChecks):
         altered = text.replace(early_futures.source_line(review["evidence"]["premarket_futures"]), "")
         with self.assertRaisesRegex(ValueError, "lost their source links"):
             validate_review(review, research, altered, news_editor.selected_stories(record))
+
+    def test_premarket_voice_follows_the_pair_and_preserves_prior_editions(self):
+        from src.intelligence import daily_takeaway, early_futures
+        pair = {"quotes": [{"change": -.97}, {"change": -.36}]}
+        with patch.object(early_futures, "opening", return_value="Verified futures pair."):
+            self.assertEqual(daily_takeaway._futures_lead(pair, 2), "Early losses were steeper in tech-heavy futures. Verified futures pair.")
+            for first, second, lead in [(.8, .3, "Tech-heavy futures led the early gains. "),
+                                        (-.97, -.36, "Tech-heavy futures led the early decline. "),
+                                        (.31, .3, ""), (-.9, .2, ""), (.1, .8, "")]:
+                pair["quotes"][0]["change"], pair["quotes"][1]["change"] = first, second
+                self.assertEqual(daily_takeaway._futures_lead(pair, 3), lead + "Verified futures pair.")
 
     def test_after_hours_selloff_keeps_breadth_in_watching_and_the_catalyst_in_the_takeaway(self):
         from src.intelligence import early_futures, news_editor, news_editor_store
@@ -689,8 +700,8 @@ class EarlyBriefChecks(IsolatedChecks):
         fetch.assert_not_called()
         intro, report = text.split("\nMarket Update\n", maxsplit=1)
         self.assertIn("Good evening.", intro)
-        self.assertIn("The takeaway: Large companies and small caps both lost ground at Monday's close.", intro)
-        self.assertIn("The Nasdaq Composite fell 2.49 percent, compared with 1.92 percent for the S&P 500.", intro)
+        self.assertIn("The takeaway: The selling reached beyond the Nasdaq at Monday's close.", intro)
+        self.assertIn("The Nasdaq Composite fell 2.49 percent, and the Russell 2000 lost 1.70 percent.", intro)
         self.assertIn("Nvidia's Tuesday earnings are the next test", intro)
         self.assertNotIn("watchlist", intro.lower())
         self.assertIn("Of the 20 quoted stocks and funds on our watchlist", report.split("What We're Watching", maxsplit=1)[1])

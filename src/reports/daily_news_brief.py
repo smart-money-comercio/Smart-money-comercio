@@ -12,7 +12,7 @@ from src.intelligence.calendar_context import checked_time, publishers
 from src.intelligence.company_catalyst_context import build_company_catalyst_brief
 from src.intelligence import news_editor as editor
 from src.intelligence import early_futures, earnings_watch, news_editor_store, watchlist_breadth
-from src.intelligence.daily_brief_analysis import analyze_report, retained_review
+from src.intelligence.daily_brief_analysis import analyze_report, report_evidence, retained_review
 from src.intelligence.market_brief import MIN_MARKET_WORDS, MAX_MARKET_WORDS, story_topics, word_count
 from src.intelligence.market_priority import order_in_takeaway, selloff
 from src.intelligence.premarket_sources import futures_window
@@ -301,9 +301,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     except (OSError, ValueError, TypeError, SQLiteError):
         past_editions = []
     from src.intelligence import daily_takeaway
-    calendar_lead = daily_takeaway.next_calendar(brief.get("macro", []), now) if takeaway_version == 2 else None
+    calendar_lead = daily_takeaway.next_calendar(brief.get("macro", []), now) if takeaway_version in (2, 3) else None
     earnings_context = None
-    if takeaway_version == 2 and (not initial_stories or any(s.get("event_evidence", {}).get("schema") == 17 for s in initial_stories)):
+    if takeaway_version in (2, 3) and (not initial_stories or any(s.get("event_evidence", {}).get("schema") == 17 for s in initial_stories)):
         from src.intelligence import earnings_takeaway, weekend_store
         weekend = now.astimezone(earnings_takeaway.NY).weekday() >= 5
         nvidia_move = any(row["symbol"] == "NVDA" and row["status"] == "rechecked" for row in event_context["events"])
@@ -330,6 +330,15 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                                                         version=watchlist_checkpoint_version, confirmed_ids=confirmed)
     if watchlist_baseline:
         plan["watchlist_baseline"] = watchlist_baseline
+    session_options = [None]
+    if takeaway_version == 3 and snapshot.startswith("Market Session: Closed"):
+        from src.intelligence import session_followup
+        context = session_followup.capture(report_evidence(research_report), past_editions, confirmed, now)
+        if context:
+            session_options = [context]
+            if "intraday" in context and "market" in context:
+                session_options.append({"intraday": context["intraday"]})
+            session_options.append(None)
     sector_checkpoint = None
     if resolve_watches and any((row["analyst_review"].get("earnings_watch") or {}).get("sector_watch")
                                for row in past_editions if row.get("analyst_review")):
@@ -384,7 +393,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         lead_options.append((None, calendar_lead))
     lead_options.append((None, None))
     pce_options = (pce_watch, None) if pce_watch else (None,)
-    for pce, count, survey, (earnings_packet, calendar_packet) in product(pce_options, range(len(initial_stories), -1, -1), survey_options, lead_options):
+    for pce, session_context, count, survey, (earnings_packet, calendar_packet) in product(pce_options, session_options, range(len(initial_stories), -1, -1), survey_options, lead_options):
         if survey and "final" not in survey and pce and pce["phase"] == "preview":
             continue
         pce_copy = pce_followup.checked_text(pce, now) if pce else ""
@@ -408,8 +417,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0),
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
                 premarket_futures=futures, takeaway_version=takeaway_version, earnings_takeaway=packet,
-                takeaway_calendar=calendar_packet if not (retained or packet or watch) else None,
+                takeaway_calendar=calendar_packet if not (retained or packet or watch or (session_context or {}).get("market")) else None,
                 watchlist_checkpoint_version=watchlist_checkpoint_version, watchlist_checkpoint=watchlist_checkpoint,
+                session_context=session_context,
                 market_context=market_context, sector_checkpoint=sector_checkpoint, defense_context_version=defense_context_version,
             )
             insights = analysis["insights"]
@@ -520,6 +530,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             follow_up = [comparison] if comparison else []
             if verdict := analysis["evidence"].get("watchlist_verdict"):
                 follow_up.append(watchlist_breadth.verdict_copy(verdict))
+            if answer := analysis["evidence"].get("intraday_answer"):
+                follow_up.append(answer)
             if sector_checkpoint:
                 follow_up.append(analysis["evidence"]["sector_verdict"])
             if follow_up:
@@ -585,6 +597,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
         plan["pce_answer_omitted"] = pce_watch
     if resolve_watches:
         plan["pce_tracking_version"] = 1
+    if session_context:
+        plan["session_context"] = session_context
     if survey:
         plan["sentiment_watch"] = survey
     plan["narrated_company_schedules"] = [row for row in company_schedules if schedule_narration(row, zone, NAMES) in text]

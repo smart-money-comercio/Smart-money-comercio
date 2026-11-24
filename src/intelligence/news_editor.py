@@ -841,6 +841,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Earnings context lost its admitted source record")
         if analyst_review.get("intel_results_baseline") is not None and analyst_review["intel_results_baseline"] != plan.get("intel_results_baseline"):
             raise ValueError("Intel results benchmark lost its admitted source record")
+        if analyst_review.get("session_context") != plan.get("session_context"):
+            raise ValueError("Closing comparison lost its edition evidence")
         if analyst_review.get("watchlist_baseline") != plan.get("watchlist_baseline"):
             raise ValueError("Watchlist follow-through lost its admitted prior edition")
         if analyst_review.get("sector_checkpoint") != plan.get("sector_checkpoint"):
@@ -1062,6 +1064,9 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                 if checkpoint := analysis.get("sector_checkpoint"):
                     lines.append("Semiconductor follow-up: " + ("verified paired closes" if checkpoint["quotes"] else "closing prices pending")
                                  + " | delivered edition " + checkpoint["edition_id"])
+                closing = analysis.get("session_context") or {}
+                if prior := closing.get("intraday"):
+                    lines.append(f"Intraday watch answered at the close | earlier edition {prior['edition']} | {prior['at']}")
                 comparison = analysis["evidence"].get("watchlist_follow_through")
                 if verdict := analysis["evidence"].get("watchlist_verdict"):
                     lines.append(f"Watchlist checkpoint: {verdict['status'].upper()} | close {verdict['session']}"
@@ -1082,10 +1087,11 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")
                 if analysis.get("reader_version") in {1, 2, 3, 4}:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
-                    if analysis.get("evidence", {}).get("takeaway_version") == 2:
+                    if analysis.get("evidence", {}).get("takeaway_version") in (2, 3):
                         from src.intelligence import daily_takeaway
                         lead = daily_takeaway.compose(analysis["evidence"])
-                        basis = ("dated earnings comparison" if lead["recent_result"] else "issuer earnings watch" if lead["earnings"]
+                        basis = ("benchmark closing history" if closing.get("market") else
+                                 "dated earnings comparison" if lead["recent_result"] else "issuer earnings watch" if lead["earnings"]
                                  else "original disclosure" if lead["story_ids"] else "upcoming publisher release" if lead["calendar"]
                                  else "dated market indicators" if lead["market"]
                                  else "limited market coverage")

@@ -104,6 +104,7 @@ def analyze_report(
     earnings_watch: dict | None = None, watchlist_baseline: dict | None = None, premarket_futures: dict | None = None,
     takeaway_version: int = 0, earnings_takeaway: dict | None = None, takeaway_calendar: dict | None = None,
     watchlist_checkpoint_version: int = 0, watchlist_checkpoint: dict | None = None,
+    session_context: dict | None = None,
     market_context: list[dict] | None = None, sector_checkpoint: dict | None = None, defense_context_version: int = 0,
 ) -> dict:
     if presentation not in {"full", "news"}:
@@ -122,7 +123,7 @@ def analyze_report(
     if takeaway_version:
         from src.intelligence.daily_takeaway import VERSION
 
-        if type(takeaway_version) is not int or takeaway_version not in (1, VERSION) or reader_version != 4:
+        if type(takeaway_version) is not int or takeaway_version not in (1, 2, VERSION) or reader_version != 4:
             raise ValueError("Unknown dated takeaway presentation")
         evidence["takeaway_version"] = takeaway_version
     if disclosure_version:
@@ -140,15 +141,27 @@ def analyze_report(
         now = datetime.strptime(generated[1], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo(generated[2]))
         evidence["market_event_context"] = deepcopy(checked_context(event_context, report, now))
         evidence["source_sections"].append("Market event checks")
+    if session_context is not None:
+        from src.intelligence import session_followup
+        if takeaway_version != 3 or event_context is None:
+            raise ValueError("Session follow-up needs a dated closing edition")
+        if prior := session_context.get("intraday"):
+            evidence["intraday_answer"] = session_followup.breadth_answer(prior, evidence, now)
+            evidence["source_sections"].append(session_followup.WATCH_SOURCE)
+        if packet := session_context.get("market"):
+            evidence["reversal"] = session_followup.reversal_text(packet, evidence, now)
+            if not evidence["reversal"]:
+                raise ValueError("Closing history does not support the comparison")
+            evidence["source_sections"].append(session_followup.MARKET_SOURCE)
     if takeaway_calendar is not None:
         from src.intelligence import daily_takeaway
-        if takeaway_version != 2 or event_context is None:
+        if takeaway_version not in (2, 3) or event_context is None:
             raise ValueError("Publisher release needs a dated daily edition")
         evidence["takeaway_calendar_text"] = daily_takeaway.calendar_text(takeaway_calendar, now)
         evidence["source_sections"].append(daily_takeaway.CALENDAR_SECTION)
     if earnings_takeaway is not None:
         from src.intelligence import earnings_takeaway as issuer
-        if takeaway_version != 2 or event_context is None:
+        if takeaway_version not in (2, 3) or event_context is None:
             raise ValueError("Earnings comparison needs a dated daily edition")
         evidence["earnings_takeaway_text"] = issuer.opening(earnings_takeaway, now)
         evidence["source_sections"].append(issuer.SOURCE_SECTION)
@@ -304,6 +317,8 @@ def analyze_report(
         value["intel_results_baseline"] = deepcopy(intel_results_baseline)
     if earnings_watch is not None:
         value["earnings_watch"] = deepcopy(earnings_watch)
+    if session_context is not None:
+        value["session_context"] = deepcopy(session_context)
     if watchlist_baseline is not None:
         value["watchlist_baseline"] = deepcopy(watchlist_baseline)
     if sector_checkpoint is not None:
@@ -339,14 +354,14 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         takeaway_calendar=analysis.get("takeaway_calendar"),
         takeaway_version=analysis.get("evidence", {}).get("takeaway_version", 0),
         watchlist_checkpoint_version=analysis.get("evidence", {}).get("watchlist_checkpoint_version", 0),
-        watchlist_checkpoint=analysis.get("watchlist_checkpoint"),
+        watchlist_checkpoint=analysis.get("watchlist_checkpoint"), session_context=analysis.get("session_context"),
         market_context=analysis.get("market_context"), sector_checkpoint=analysis.get("sector_checkpoint"),
         defense_context_version=analysis.get("evidence", {}).get("defense_context_version", 0),
     )
     if any(analysis.get(key) != expected.get(key) for key in (
         "schema", "research_sha256", "evidence", "score_changes", "focus_context", "narration_version",
         "event_context", "reader_version", "reader_limit", "earnings_context", "disclosure_version",
-        "business_version", "intel_results_baseline", "earnings_watch", "watchlist_baseline", "watchlist_checkpoint", "market_context", "sector_checkpoint",
+        "business_version", "intel_results_baseline", "earnings_watch", "watchlist_baseline", "watchlist_checkpoint", "market_context", "sector_checkpoint", "session_context",
     )):
         raise ValueError("Analyst brief evidence does not match this research edition")
     allowed = {row["id"]: row for row in expected["insights"]}
@@ -358,6 +373,11 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
     required = {key for key, row in allowed.items() if key not in {"model_support", "company_price", "participation"} or row["text"] in report}
     if seen != required:
         raise ValueError("Available analyst evidence was omitted from the brief")
+    if answer := expected["evidence"].get("intraday_answer"):
+        from src.intelligence.earnings_watch import COMPARISON_HEADER
+        from src.reports.daily_voiceover import sections
+        if answer not in sections(report).get(COMPARISON_HEADER, "").split("\n\n") or report.count(answer) != 1:
+            raise ValueError("Closing breadth answer lost its original wording or section")
     if sector := expected["evidence"].get("sector_verdict"):
         from src.intelligence import earnings_watch, sector_followup
         from src.reports.daily_voiceover import sections

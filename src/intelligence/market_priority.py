@@ -209,6 +209,10 @@ def watching(evidence):
             if row["id"] == "watch_participation":
                 row.update(text=watchlist_breadth.watch_copy(comparison),
                            sources=["Market Snapshot", watchlist_breadth.SOURCE_SECTION])
+    if evidence.get("intraday_answer") and not comparison:
+        for row in rows:
+            if row["id"] == "watch_participation":
+                row["text"] = "Watchlist breadth — " + breadth_read(evidence)
     return rows[:evidence.get("reader_limit",3)]
 
 

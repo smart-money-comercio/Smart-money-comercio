@@ -3,7 +3,7 @@
 from datetime import date
 
 
-VERSION = 2
+VERSION = 3
 INDEXES = (("Nasdaq", "the Nasdaq Composite"), ("S&P", "the S&P 500"), ("Russell", "the Russell 2000"))
 
 
@@ -65,11 +65,17 @@ def _cash_lead(evidence):
     return f"{lead} {when}, with {' and '.join(moves)}."
 
 
-def _futures_lead(value):
+def _futures_lead(value, version):
     from src.intelligence import early_futures
 
     nasdaq, broad = (round(row["change"], 2) for row in value["quotes"])
     lead = "Early losses were steeper in tech-heavy futures. " if nasdaq < broad < 0 else ""
+    if version == 3:
+        lead = ""
+        if broad < 0 and round(broad - nasdaq, 2) >= .15:
+            lead = "Tech-heavy futures led the early decline. "
+        elif broad > 0 and round(nasdaq - broad, 2) >= .15:
+            lead = "Tech-heavy futures led the early gains. "
     return lead + early_futures.opening(value)
 
 
@@ -105,6 +111,15 @@ def market_read(evidence):
         if during:
             return f"The Nasdaq Composite is leading {day}'s decline, down {abs(nasdaq):.2f} percent as large companies and small caps also lose ground."
         return f"The Nasdaq Composite led {day}'s selloff, falling {abs(nasdaq):.2f} percent as large companies and small caps also lost ground."
+    if evidence.get("takeaway_version") == 3:
+        if nasdaq > broad > 0 and small > 0:
+            return (f"Small caps joined the rally. The Nasdaq Composite "
+                    f"{'is up' if during else 'rose'} {nasdaq:.2f} percent {when}, "
+                    f"and the Russell 2000 {'is up' if during else 'gained'} {small:.2f} percent.")
+        if nasdaq < broad < 0 and small < 0:
+            return (f"The selling reached beyond the Nasdaq {when}. "
+                    f"The Nasdaq Composite {'is down' if during else 'fell'} {abs(nasdaq):.2f} percent, "
+                    f"and the Russell 2000 {'is down' if during else 'lost'} {abs(small):.2f} percent.")
     if nasdaq < broad < 0 and small < 0:
         return (f"Large companies and small caps both lost ground {when}. "
                 f"The Nasdaq Composite {'is down' if during else 'fell'} {abs(nasdaq):.2f} percent, "
@@ -131,14 +146,18 @@ def compose(evidence):
 
     futures = evidence.get("premarket_futures")
     watch = evidence.get("earnings_watch")
+    reversal = evidence.get("reversal")
+    if reversal and not futures:
+        return {"text": reversal, "market": True, "earnings": False, "recent_result": False,
+                "calendar": False, "point": None, "story_ids": []}
     market_first = bool(futures) or selloff(evidence)
     context = evidence.get("earnings_takeaway_text")
     point = opening_source(evidence) if not (market_first or watch or context) else None
     use_context = bool(context and not point and (not watch or watch["phase"] == "results"))
-    modern = evidence.get("takeaway_version") == VERSION
+    modern = evidence.get("takeaway_version") in (2, 3)
     market = ""
     if futures:
-        market = _futures_lead(futures)
+        market = _futures_lead(futures, evidence.get("takeaway_version"))
     elif not point and (not watch or watch["phase"] == "preview" or market_first):
         market = (market_read(evidence) if modern else "") or _cash_lead(evidence)
 

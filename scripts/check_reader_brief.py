@@ -322,7 +322,8 @@ class ReaderChecks(IsolatedChecks):
         self.assertIn("Of the names that fell on Friday, 8 fell again.", watch)
         takeaway = next(line for line in brief.splitlines() if line.startswith("The takeaway:"))
         self.assertNotIn("watchlist", takeaway.lower())
-        self.assertNotIn("What Changed Since Our Last Brief", brief)
+        self.assertNotIn("watchlist_verdict", record["analyst_review"]["evidence"])
+        self.assertIn("9 of 20 finished lower", section(brief, "What Changed Since Our Last Brief"))
         self.assertEqual(record["analyst_review"]["watchlist_baseline"]["edition_id"], baseline["id"])
         self.assertIn("eight fell again", daily_voiceover.checked(record)["script"])
         self.assertIn("8 of 19 prior decliners | 20/20 prior names matched", editor.build_editor_status())
@@ -434,6 +435,116 @@ class ReaderChecks(IsolatedChecks):
         monday, _, brief = self.checkpoint_fixture()
         self.assertFalse(self.deliver(brief, monday + timedelta(seconds=1), error=TelegramError("offline simulated failure")))
         self.assertEqual(store.confirmed_watchlist_ids(monday + timedelta(minutes=1)), [])
+
+    def index_history(self, symbol, days, prices):
+        from scripts.check_market_resilience import raw
+        from src.utils.market_quote_source import source_evidence
+
+        start = datetime(2026, 11, days[-1], 14, 30, tzinfo=timezone.utc)
+        end = start.replace(hour=21, minute=0)
+        chart = raw(symbol, prices[-1], index=True)
+        chart["meta"].update(regularMarketTime=end.timestamp(),
+                             currentTradingPeriod={"regular": {"start": start.timestamp(), "end": end.timestamp()}})
+        chart["timestamp"] = [start.replace(day=day).timestamp() for day in days]
+        chart["indicators"]["quote"] = [{"close": prices}]
+        return {"symbol": symbol, "move": round(100 * (prices[-1] / prices[-2] - 1), 2),
+                "asof": end.isoformat(), "quote_evidence": source_evidence(chart)}
+
+    def test_monday_intraday_question_and_rebound_reach_the_closing_brief_and_voice(self):
+        from src.intelligence import session_followup as follow, weekend_inputs
+        monday = datetime(2026, 11, 23, 22, 29, tzinfo=timezone.utc)
+        midday = monday.replace(hour=19, minute=32)
+        names = "AAPL AMD AMZN AVAV AVGO CAT CRWD GOOGL INTC KTOS LMT META MSFT NVDA PEP PLTR QQQ SPY TSM".split()
+        moves = dict.fromkeys(names, 1) | {"TSM": -1}
+        def research(at, timing):
+            return self.close_report(at, "2026-11-23", "2026-11-20", moves, timing=timing).replace(
+                "S&P -0.52%, Nasdaq -0.21%, Russell -0.29%", "S&P +4.73%, Nasdaq +6.51%, Russell +3.10%")
+        first = self.render_current(research(midday, "regular_session"))
+        self.assertIn("Watch whether the share of advancers holds by the close", first)
+        prior_id = self.record(first)["id"]
+        close = research(monday, "completed_session")
+        charts = [self.index_history("^IXIC", [19, 20, 23], [100, 94.72, 94.72 * 1.0651]),
+                  self.index_history("^GSPC", [19, 20, 23], [100, 96.3, 96.3 * 1.0473])]
+        saturday = monday.replace(day=21)
+        history = self.index_history("^IXIC", [13, 19, 20], [94.72 / .8998, 100, 94.72])
+        proof = weekend_inputs.price_packet("^IXIC", history["quote_evidence"], saturday.isoformat(),
+                                           weekend_inputs.window(saturday), saturday)
+        weekend = {"generated_at": saturday.isoformat(), "inputs": {"prices": [
+            {"status": "available", "symbol": "^IXIC", "proof": proof}]}}
+        with patch.object(follow.research_context, "load_market_payload", return_value={"market_moves": charts}), \
+                patch.object(follow.weekend_store, "latest", return_value=weekend):
+            brief = self.render_current(close)
+        record = self.record(brief)
+        intro = next(row for row in brief.splitlines() if row.startswith("The takeaway:"))
+        self.assertIn("Monday's rebound erased Friday's losses for both", intro)
+        self.assertIn("6.51 percent after falling 5.28 percent", intro)
+        self.assertIn("4.2 percent below its November 13 close", intro)
+        self.assertNotIn("watchlist", intro.lower())
+        answer = record["analyst_review"]["evidence"]["intraday_answer"]
+        self.assertIn("2:32 p.m. ET brief had 18 of 19 quoted names higher", answer)
+        self.assertIn("At the close, 18 of 19 finished higher", answer)
+        self.assertLess(brief.index(answer), brief.index("What We're Watching"))
+        self.assertIn(prior_id, editor.build_editor_status())
+        voice = daily_voiceover.checked(record)
+        self.assertIn("benchmark_history", voice["segments"][0]["source_ids"])
+        self.assertIn("Gains held their breadth", voice["script"])
+        self.assertEqual(len(voice["sources"]["benchmark_history"]), 3)
+        with self.assertRaises(ValueError):
+            analysis.validate_review(record["analyst_review"], close, brief.replace(answer, "Breadth held."), [])
+
+    def test_intraday_answers_compare_shares_with_changing_coverage(self):
+        from src.intelligence import market_priority, session_followup as follow
+        now = datetime(2026, 11, 23, 22, tzinfo=timezone.utc)
+        for before, after, expected in [
+            ((18, 1, 19), (18, 2, 20), "Gains narrowed"),
+            ((1, 8, 10), (1, 4, 5), "held steady"),
+            ((1, 8, 10), (6, 4, 10), "Selling eased"),
+            ((5, 5, 10), (6, 4, 10), "Advancers took a majority"),
+        ]:
+            counts = dict(zip(("up", "down", "total"), before))
+            earlier = {"is_open": True, "moves": {}, "breadth": counts}
+            proof = {"edition": "a"*20, "at": now.replace(hour=18).isoformat(), "breadth": counts,
+                     "moves": {}, "question": market_priority.breadth_read(earlier)}
+            current = {"session": "2026-11-23", "is_open": False, "breadth": dict(zip(counts, after))}
+            self.assertIn(expected, follow.breadth_answer(proof, current, now))
+            with self.assertRaises(ValueError):
+                follow.breadth_answer(proof, {**current, "is_open": True}, now)
+            with self.assertRaises(ValueError):
+                follow.breadth_answer(proof, current, now + timedelta(days=1))
+            with self.assertRaises(ValueError):
+                follow.breadth_answer({**proof, "question": "Another question"}, current, now)
+
+    def test_recovery_uses_index_levels_and_skips_incomplete_or_conflicting_closes(self):
+        from src.intelligence import session_followup as follow
+        now = datetime(2026, 11, 23, 22, tzinfo=timezone.utc)
+        indexes = {symbol: self.index_history(symbol, [19, 20, 23], [100, 90, 99]) for symbol in follow.INDEXES}
+        evidence = {"session": "2026-11-23", "is_open": False, "moves": {"Nasdaq": 10., "S&P": 10.}}
+        self.assertIn("Both still closed below", follow.reversal_text({"indexes": indexes}, evidence, now))
+        # Equal percentage moves in opposite directions do not cancel.
+        indexes["^IXIC"] = self.index_history("^IXIC", [19, 20, 23], [100, 90, 101])
+        evidence["moves"]["Nasdaq"] = indexes["^IXIC"]["move"]
+        self.assertIn("The Nasdaq recovered Friday's loss", follow.reversal_text({"indexes": indexes}, evidence, now))
+        for invalid in (self.index_history("^IXIC", [18, 20, 23], [100, 90, 101]),
+                        self.index_history("^IXIC", [19, 20, 20, 23], [100, 90, 90, 101]),
+                        {**indexes["^IXIC"], "move": 1}):
+            with self.assertRaises(ValueError):
+                follow.reversal_text({"indexes": {**indexes, "^IXIC": invalid}}, evidence, now)
+
+    def test_published_clock_and_last_trade_must_both_support_the_closing_comparison(self):
+        from src.intelligence import session_followup as follow
+        now = datetime(2026, 11, 23, 22, tzinfo=timezone.utc)
+        rows = [self.index_history(symbol, [19, 20, 23], [100, 90, 99]) for symbol in follow.INDEXES]
+        current = {"session": "2026-11-23", "is_open": False, "moves": {"Nasdaq": 10., "S&P": 10.}}
+        late_price = deepcopy(rows[0])
+        early = now.replace(hour=19)
+        late_price.update(asof=early.isoformat())
+        late_price["quote_evidence"]["meta"]["regularMarketTime"] = early.timestamp()
+        with self.assertRaisesRegex(ValueError, "regular close"):
+            follow.closing_prices(late_price, "^IXIC", now.date(), 10., now)
+        with patch.object(follow.research_context, "load_market_payload", return_value={"market_moves": rows + rows}):
+            self.assertIsNone(follow.capture({**current, "breadth": None}, [], [], now))
+        with self.assertRaises(ValueError):
+            follow.reversal_text({"indexes": {row["symbol"]: row for row in rows}}, {**current, "is_open": True}, now)
 
     def test_takeaway_follows_greeting_and_precedes_every_news_section(self):
         text = self.render()

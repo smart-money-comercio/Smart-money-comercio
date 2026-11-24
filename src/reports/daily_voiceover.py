@@ -324,7 +324,7 @@ def build(record, report, research, *, schema=2):
             raise ValueError("Earnings watch lost its original source link")
         if earnings_watch.has_answer(watch):
             comparison = earnings_watch.comparison_text(watch)
-            follow_up = "\n\n".join(row for row in (comparison, watchlist_outcome, sector_outcome) if row)
+            follow_up = "\n\n".join(row for row in (comparison, watchlist_outcome, evidence.get("intraday_answer"), sector_outcome) if row)
             if (groups.get(earnings_watch.COMPARISON_HEADER) != follow_up
                     or watch.get("guidance") and report.count(earnings_watch.guidance_source_line(watch)) != 1):
                 raise ValueError("Earnings follow-up narration needs its original guidance and written comparison")
@@ -403,6 +403,17 @@ def build(record, report, research, *, schema=2):
         lead = compose(evidence)
         edition_intro = " "
         opening_sources = list(lead["story_ids"])
+        if history := (review.get("session_context") or {}).get("market"):
+            from urllib.parse import quote
+            links = [{"url": "https://finance.yahoo.com/quote/" + quote(symbol, safe="") + "/history/",
+                      "publisher": "Yahoo Finance historical prices", "published_at": row["asof"],
+                      "verified_at": record["generated_at"]} for symbol, row in sorted(history["indexes"].items())]
+            if weekly := history.get("week"):
+                proof = weekly["price"]
+                links.append({"url": proof["url"], "publisher": "Yahoo Finance chart",
+                              "published_at": proof["quote_asof"], "verified_at": proof["observed"]})
+            sources["benchmark_history"] = links
+            opening_sources.append("benchmark_history")
         if lead["calendar"]:
             from src.intelligence.daily_takeaway import CALENDAR_ID
             event = review["takeaway_calendar"]
@@ -592,6 +603,8 @@ def build(record, report, research, *, schema=2):
             narration = sector_outcome + " " + narration
             if "sector_closes" in sources:
                 watch_sources.append("sector_closes")
+        if answer := evidence.get("intraday_answer"):
+            narration = answer + " " + narration
         if watchlist_outcome:
             narration = watchlist_outcome + " " + narration
         if futures and any(early_futures.SOURCE_SECTION in row["sources"] for row in watch_rows):

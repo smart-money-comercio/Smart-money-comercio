@@ -262,6 +262,9 @@ def _takeaway_sources(evidence):
         sources = []
         if lead["market"]:
             sources.extend([early_futures.SOURCE_SECTION] if evidence.get("premarket_futures") else ["Market Snapshot", "Executive Summary"])
+        if evidence.get("reversal") and lead["market"]:
+            from src.intelligence.session_followup import MARKET_SOURCE
+            sources.append(MARKET_SOURCE)
         if lead["calendar"]:
             from src.intelligence.daily_takeaway import CALENDAR_SECTION
             sources.append(CALENDAR_SECTION)
