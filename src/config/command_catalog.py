@@ -169,6 +169,7 @@ ADMIN_COMMANDS = [
 
 
 ALIASES = [
+    ("/command", "/commands"),
     ("/brief", "/report"),
     ("/stock", "/ticker"),
     ("/watch", "/watchlist"),

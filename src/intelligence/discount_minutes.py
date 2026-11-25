@@ -88,11 +88,13 @@ def review(evidence):
     day = evidence["source_text"].splitlines()[0].split(",")[0]
     rate = evidence["facts"][0]["value"]
     first = f"On {day}, the Fed Board kept its primary lending rate for banks at {rate} percent."
+    opening = f"On {day}, the cost of primary credit at the Fed's discount window held steady"
     second = ""
     if len(evidence["facts"]) == 2:
+        opening += ", even as Reserve Bank directors sought an increase"
         vote = evidence["facts"][1]
         count = vote["count"]
         second = f" Directors at {count} Reserve {'Bank' if count == 1 else 'Banks'} had requested {vote['value']} percent."
     watch = "Watch the next Board decision for a change in what banks pay to borrow at the discount window."
-    return {"evidence": evidence, "facts": first + second, "body": first + second, "opening": first + second,
+    return {"evidence": evidence, "facts": first + second, "body": first + second, "opening": opening + ".",
             "why": "The primary credit rate sets the cost of borrowing at the Fed's discount window.", "watch": watch}

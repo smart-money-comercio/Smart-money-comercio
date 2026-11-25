@@ -816,8 +816,10 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Selected story needs a material original-source report")
         if story["kind"] == "company" or story.get("event_evidence") is not None:
             checked_evidence(story)
-        if report.count(paragraphs[story["id"]]) != 1:
-            raise ValueError("Selected story evidence or qualification changed during narration")
+        copies = report.count(paragraphs[story["id"]])
+        if copies != 1:
+            raise ValueError(f"Selected story evidence or qualification changed during narration "
+                             f"({story['source']}, story {story['id']}, expected one copy, found {copies})")
         if broadcast:
             if comparison_text and story["id"] == watch["story_id"]:
                 expected = comparison_text

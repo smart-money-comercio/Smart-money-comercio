@@ -417,17 +417,17 @@ class MinutesChecks(IsolatedChecks):
             values, _ = editor.cache_candidates(NOW, [], cache={source["url"]: enriched})
         return values, calls
 
-    def test_discount_window_decision_uses_the_linked_pdf_and_distinguishes_bank_requests(self):
+    def board_minutes_pdf(self, *, with_requests):
         from io import BytesIO
         from pypdf import PdfWriter
         from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
-        from src.intelligence import fomc_minutes
         self.title = "Minutes of the Board's discount rate meetings on October 1 and October 7, 2026"
         self.document = self.notice.replace("/pressreleases/", "/pressreleases/files/")[:-4] + "1.pdf"
+        request = (" The directors of the Federal Reserve Banks of Boston and Cleveland had voted "
+                   "on October 1, 2026, to establish the primary credit rate at 3.25 percent "
+                   "(an increase from 3 percent).") if with_requests else ""
         text = ("Approved. October 7, 2026. The Board approved the establishment of the primary credit rate "
-                "at the existing level of 3 percent. The directors of the Federal Reserve Banks of Boston and "
-                "Cleveland had voted on October 1, 2026, to establish the primary credit rate at 3.25 percent "
-                "(an increase from 3 percent). Voting for this action: All governors.")
+                "at the existing level of 3 percent." + request + " Voting for this action: All governors.")
         writer = PdfWriter()
         page = writer.add_blank_page(width=640, height=800)
         font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
@@ -438,7 +438,11 @@ class MinutesChecks(IsolatedChecks):
         page[NameObject("/Contents")] = writer._add_object(stream)
         output = BytesIO()
         writer.write(output)
-        rows, calls = self.enrich(minutes=output.getvalue())
+        return output.getvalue()
+
+    def test_discount_window_decision_uses_the_linked_pdf_and_distinguishes_bank_requests(self):
+        from src.intelligence import fomc_minutes
+        rows, calls = self.enrich(minutes=self.board_minutes_pdf(with_requests=True))
         self.assertEqual(calls, [self.notice,self.document])
         selected, = editor.selected_stories(editor.build_editorial_plan({"rows": []}, NOW, rows))
         review = fomc_minutes.review(analysis.checked_evidence(selected))
@@ -447,6 +451,31 @@ class MinutesChecks(IsolatedChecks):
         self.assertNotIn("federal funds", review["body"])
         rows, _ = self.enrich(minutes=b"not a PDF")
         self.assertFalse(editor.selected_stories(editor.build_editorial_plan({"rows": []}, NOW, rows)))
+
+    def test_discount_minutes_can_lead_the_daily_brief_and_pass_recorded_narration(self):
+        from src.reports import daily_report
+        for with_requests in (True, False):
+            with self.subTest(with_requests=with_requests):
+                rows, _ = self.enrich(minutes=self.board_minutes_pdf(with_requests=with_requests))
+                with patch.object(editor, "cache_candidates", return_value=(rows, [])), \
+                        patch.object(daily_report, "build_research_report", return_value=self.research()), \
+                        patch.object(daily_report, "DAILY_REPORT_LIVE_QUOTES", False), \
+                        patch("src.intelligence.pce_followup.prepare", return_value=None):
+                    report = daily_report.build_daily_report()
+                record = store.read_editions(report=report)[0]
+                fed, = editor.selected_stories(record)
+                body = analysis.investor_read(fed)["body"]
+                policy = voice.sections(report)["Policy & Economy"]
+                self.assertIn(body, policy)
+                self.assertEqual(report.count(body), 1)
+                opening = next(line for line in report.splitlines() if line.startswith("The takeaway:"))
+                self.assertIn("October 7", opening)
+                self.assertIn("discount window", opening)
+                self.assertEqual("sought an increase" in opening, with_requests)
+                self.assertEqual("requested" in policy, with_requests)
+                self.assertIn("3 percent", policy)
+                spoken = voice.checked(record, NOW)
+                self.assertEqual({r["url"] for r in spoken["sources"][fed["id"]]}, {self.document, self.notice})
 
     def test_announcement_to_full_minutes_to_published_brief(self):
         rows, calls = self.enrich()
