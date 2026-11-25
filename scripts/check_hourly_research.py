@@ -3,7 +3,7 @@
 import argparse
 from contextlib import closing, ExitStack
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -110,6 +110,53 @@ class MarketReportingChecks(ResearchFixture):
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["details"]["market_reports"], 1)
         return reporting.cached(NOW)[0], client
+
+    def test_ipo_benchmark_is_a_dated_observation_and_survives_a_fresh_morning_read(self):
+        evening = datetime(2026, 11, 24, 23, 2, tzinfo=timezone.utc)
+        morning = evening + timedelta(hours=13)
+        line = "Anthropic traded below its IPO price of $83."
+        body = line + " The report also covered spending and the market outlook as investors waited for Wednesday’s economic figures."
+        title = "AI shares trade below their offering price"
+        url = "https://www.reuters.com/markets/us/ai-shares-2026-11-24/"
+        lead = {"url": url, "title": title, "topic": "markets"}
+        def read(url):
+            return market_html(text=body, title=title, published=(evening - timedelta(minutes=4)).isoformat(),
+                               modified=evening.isoformat())
+        self.run_desk(Client([lead], quote=line), now=evening, fetch=read)
+        self.assertFalse(reporting.cached(evening - timedelta(minutes=10)))
+        self.assertFalse(reporting.cached(morning))
+        result = self.run_desk(Client([], quote=line), now=morning, fetch=read)
+        self.assertEqual(result["details"]["overnight_rereads"], 1)
+        self.assertEqual(result["details"]["market_reports"], 1)
+        value, = reporting.cached(morning)
+        self.assertIn("Reuters described Anthropic trading below its $83 IPO price", reporting.summary(value))
+        from src.reports import daily_voiceover
+        from src.intelligence.daily_takeaway import VERSION
+        from src.intelligence import news_editor_store
+        brief = build_daily_news_brief(self.research(now=morning), market_reporting_version=1, takeaway_version=VERSION)
+        self.assertIn("Reuters described Anthropic trading below its $83 IPO price", brief)
+        voice = daily_voiceover.checked(news_editor_store.read_editions(report=brief)[0], morning)
+        segment = next(s for s in voice["segments"] if s["heading"] == "Market Update")
+        self.assertIn("reported_ipo_trade", segment["source_ids"])
+        self.assertEqual(voice["sources"]["reported_ipo_trade"][0]["url"], url)
+        unrelated = deepcopy(value)
+        unrelated["research_review"]["quote"] = body[len(line)+1:]
+        with self.assertRaisesRegex(ValueError, "trading evidence"):
+            reporting.retain([unrelated], morning)
+        self.assertEqual(value["source_checked_at"], morning.isoformat())
+        self.assertEqual(value["published"], (evening - timedelta(minutes=4)).isoformat())
+        with self.assertRaises(ValueError):
+            reporting.checked(value, morning - timedelta(seconds=1))
+        with self.assertRaises(ValueError):
+            self.read(modified=(NOW + timedelta(minutes=2)).isoformat())
+
+    def test_reported_ipo_comparison_needs_a_specific_trade_and_an_unambiguous_level(self):
+        line = "Anthropic fell more than 6% to more than $1 below its IPO price of $83, a striking drop days after the debut."
+        self.assertIn("$83 IPO price", reporting.connection(line)["summary"])
+        self.assertIsNone(reporting.connection(line, schema=1))
+        for bad in ("Anthropic could trade below its IPO price of $83.", "The forecast puts Anthropic below $83.",
+                    "Anthropic traded below its IPO price of $83 last year.", line + " Anthropic rose above its IPO price of $83."):
+            self.assertIsNone(reporting.connection(bad))
 
     def test_market_body_is_dated_attributed_and_never_an_official_company_disclosure(self):
         value = self.read()

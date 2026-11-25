@@ -3,7 +3,7 @@
 from datetime import date
 
 
-VERSION = 3
+VERSION = 4
 INDEXES = (("Nasdaq", "the Nasdaq Composite"), ("S&P", "the S&P 500"), ("Russell", "the Russell 2000"))
 
 
@@ -19,7 +19,7 @@ CALENDAR_SECTION = "Upcoming publisher release"
 CALENDAR_ID = "takeaway_calendar"
 
 
-def calendar_text(row, now):
+def calendar_text(row, now, version=3):
     from datetime import timedelta
     from src.intelligence import calendar_context as calendar, calendar_sources as publishers
     at = calendar.checked_time(row["event_at"]).astimezone(publishers.NY)
@@ -28,22 +28,28 @@ def calendar_text(row, now):
     family = publishers.category(row["eventName"])
     if (row["time_status"] != "verified" or row.get("timing_cached") or (publisher, family) not in CALENDAR_TESTS
             or row["timing_url"] != publishers.SOURCE_URLS[publisher] or at.date().isoformat() != row["source_date"]
+            or version >= 4 and observed > now
             or not now < at <= now + timedelta(days=7) or not -60 <= (now - observed).total_seconds() <= 86400):
         raise ValueError("Upcoming release needs a current verified publisher schedule")
+    if version >= 4 and (publisher, family) == ("BEA", "pce"):
+        clock = at.strftime("%I:%M %p %Z").lstrip("0")
+        return f"On {at:%A} at {clock}, we’ll see whether prices rose more slowly once food and energy are excluded."
     label, question = CALENDAR_TESTS[publisher, family]
     return f"{at:%A}'s {label} will help show {question}."
 
 
-def next_calendar(rows, now):
+def next_calendar(rows, now, version=3):
     from src.intelligence.calendar_context import checked_time
     eligible = []
     for row in rows:
         try:
-            calendar_text(row, now)
+            calendar_text(row, now, version)
             eligible.append(row)
         except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
             continue
-    return min(eligible, key=lambda row: (checked_time(row["event_at"]), row["publisher"], row["eventName"]), default=None)
+    from src.intelligence.calendar_sources import category
+    return min(eligible, key=lambda row: (checked_time(row["event_at"]),
+               version >= 4 and category(row["eventName"]) != "pce", row["publisher"], row["eventName"]), default=None)
 
 
 def _cash_lead(evidence):
@@ -70,12 +76,21 @@ def _futures_lead(value, version):
 
     nasdaq, broad = (round(row["change"], 2) for row in value["quotes"])
     lead = "Early losses were steeper in tech-heavy futures. " if nasdaq < broad < 0 else ""
-    if version == 3:
+    if version in (3, 4):
         lead = ""
         if broad < 0 and round(broad - nasdaq, 2) >= .15:
             lead = "Tech-heavy futures led the early decline. "
         elif broad > 0 and round(nasdaq - broad, 2) >= .15:
             lead = "Tech-heavy futures led the early gains. "
+    if version == 4:
+        then = [row["prior_bar_change"] for row in value["quotes"]]
+        changes = [row["change"] for row in value["quotes"]]
+        # Speak only when both contracts' moves since the prior cash close
+        # changed materially in the same direction over the same five minutes.
+        if all(round(current, 2) < 0 and prior < 0 and round(prior - current, 6) >= .15 for current, prior in zip(changes, then)):
+            return early_futures.opening(value) + " Both contracts slipped further over the preceding five minutes."
+        if all(round(current, 2) < 0 and round(current - prior, 6) >= .15 for current, prior in zip(changes, then)):
+            return early_futures.opening(value) + " Both contracts trimmed their losses over the preceding five minutes."
     return lead + early_futures.opening(value)
 
 
@@ -111,7 +126,7 @@ def market_read(evidence):
         if during:
             return f"The Nasdaq Composite is leading {day}'s decline, down {abs(nasdaq):.2f} percent as large companies and small caps also lose ground."
         return f"The Nasdaq Composite led {day}'s selloff, falling {abs(nasdaq):.2f} percent as large companies and small caps also lost ground."
-    if evidence.get("takeaway_version") == 3:
+    if evidence.get("takeaway_version") in (3, 4):
         if nasdaq > broad > 0 and small > 0:
             return (f"Small caps joined the rally. The Nasdaq Composite "
                     f"{'is up' if during else 'rose'} {nasdaq:.2f} percent {when}, "
@@ -147,14 +162,20 @@ def compose(evidence):
     futures = evidence.get("premarket_futures")
     watch = evidence.get("earnings_watch")
     reversal = evidence.get("reversal")
+    if evidence.get("core_pce_lead"):
+        market = _futures_lead(futures, 4) if futures else ""
+        return {"text": " ".join(filter(None, (evidence["core_pce_lead"], market))),
+                "market": bool(market), "earnings": False, "recent_result": False, "calendar": False,
+                "point": None, "story_ids": []}
     if reversal and not futures:
-        return {"text": reversal, "market": True, "earnings": False, "recent_result": False,
-                "calendar": False, "point": None, "story_ids": []}
+        calendar = evidence.get("takeaway_calendar_text") if evidence.get("takeaway_version") == 4 else None
+        return {"text": " ".join(filter(None, (reversal, calendar))), "market": True, "earnings": False, "recent_result": False,
+                "calendar": bool(calendar), "point": None, "story_ids": []}
     market_first = bool(futures) or selloff(evidence)
     context = evidence.get("earnings_takeaway_text")
     point = opening_source(evidence) if not (market_first or watch or context) else None
     use_context = bool(context and not point and (not watch or watch["phase"] == "results"))
-    modern = evidence.get("takeaway_version") in (2, 3)
+    modern = evidence.get("takeaway_version") in (2, 3, 4)
     market = ""
     if futures:
         market = _futures_lead(futures, evidence.get("takeaway_version"))

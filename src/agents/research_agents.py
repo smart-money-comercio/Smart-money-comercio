@@ -76,7 +76,7 @@ def discover(client, model: str, now: str, symbols: list[str], domains: list[str
         input=json.dumps({"now_utc": now, "prior_run": previous, "research_symbols": symbols,
             "recently_reviewed_urls": (seen_urls or [])[:16], "search_tasks": [
                 "AI infrastructure, chips, cloud and IPO/capital markets: search original issuer, investor-relations and SEC announcements for material business developments.",
-                "Defense, drones, autonomy, cyber and macro/global risk: funded procurement and production; Treasury yields, dollar, gold, copper, oil and supply disruptions. Seek material cross-market changes, using original disclosures and at most two dated Reuters/AP/Yahoo market reports."],
+                "Defense, drones, autonomy, cyber and macro/global risk: funded procurement and production; Treasury yields, dollar, gold, copper, oil and supply disruptions. Look for market reversals and newly listed AI companies trading across their IPO price. Seek material cross-market changes, using original disclosures and at most two dated Reuters/AP/Yahoo market reports."],
             "publisher_reports_already_collected": (publisher_hints or [])[:3], "market_event_attention": (event_hints or [])[:3]}))
     value = plain(response)
     payload, metadata = result(value)
@@ -142,7 +142,7 @@ def review(client, model: str, candidates: list[dict], symbols: list[str]) -> tu
             "For every candidate ID return exactly one accept, hold or skip decision and an integer relevance score from 0 to 100. "
             "Prioritize material AI, IPO, defense, drones, autonomy, cybersecurity, rates, currencies, commodities, macro, trade and energy developments that can change investor research. "
             "An accept recommendation requires a discrete material development and a supporting passage from its evidence_options. "
-            "For original disclosures, require original-source verification. For the explicit reported market context role, a verified dated reporting body may be accepted for attributed macro context only. "
+            "For original disclosures, require original-source verification. For the explicit reported market context role, a verified dated reporting body may be accepted for attributed market context. For an IPO trading comparison, select the passage naming the issuer and its offer price. "
             "Return the ID of one supporting passage in evidence_ref; code will retain that exact original text. "
             "Do not return a quote, combine passages, add ellipses, paraphrase or invent an ID. Use an empty evidence_ref if no supplied passage supports the decision. "
             "Hold unverified secondary reports or missing/unverified original dates for source confirmation. Skip opinion, repetition, promotions and irrelevant items. "

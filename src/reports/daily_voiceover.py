@@ -403,7 +403,11 @@ def build(record, report, research, *, schema=2):
         lead = compose(evidence)
         edition_intro = " "
         opening_sources = list(lead["story_ids"])
-        if history := (review.get("session_context") or {}).get("market"):
+        if evidence.get("core_pce_lead"):
+            if review.get("pce_lead") != pce:
+                raise ValueError("Inflation opening differs from its BEA release")
+            opening_sources.append(pce_followup.SOURCE_ID)
+        if not evidence.get("core_pce_lead") and (history := (review.get("session_context") or {}).get("market")):
             from urllib.parse import quote
             links = [{"url": "https://finance.yahoo.com/quote/" + quote(symbol, safe="") + "/history/",
                       "publisher": "Yahoo Finance historical prices", "published_at": row["asof"],
@@ -472,6 +476,25 @@ def build(record, report, research, *, schema=2):
         from src.intelligence.market_priority import selloff
         if selloff(evidence):
             market_sources = []
+    reported = next(iter(evidence.get("market_context") or []), {})
+    proof = reported.get("reporting_evidence") or {}
+    if evidence.get("takeaway_version") == 4 and proof.get("connection", {}).get("family") == "ipo_benchmark":
+        from src.intelligence.market_reporting import summary
+        # Keep the attributed IPO observation audible even on mornings when
+        # the last completed cash session is the only available equity quote.
+        market = (summary(reported) + " The offer price tells us what the original IPO buyers paid for a share. "
+                  "The next regular close gives us a way to check whether that gap has widened, narrowed or disappeared.")
+        market_keys = ()
+        if evidence.get("session") and "S&P" in evidence["moves"]:
+            value = evidence["moves"]["S&P"]
+            day = datetime.fromisoformat(evidence["session"]).strftime("%A")
+            clock = f"during {day}'s regular session" if evidence["is_open"] else f"at {day}'s close"
+            move = "was flat" if value == 0 else f"{'fell' if value < 0 else 'rose'} {abs(value):g} percent"
+            market = f"The S&P 500 {move} {clock}. " + market
+            market_keys = ("S&P",)
+        sources["reported_ipo_trade"] = [{"url": proof["url"], "publisher": proof["publisher"],
+                                         "published_at": proof["published"], "verified_at": proof["observed"]}]
+        market_sources = ["reported_ipo_trade"]
     add("Market Update", market,
         [f"{key}: {evidence['moves'][key]:+.2f}%" for key in market_keys if key in evidence["moves"]], market_sources)
     if pce and pce["phase"] == "answer":

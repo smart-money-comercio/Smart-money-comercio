@@ -125,12 +125,26 @@ def closing_prices(row, symbol, day, reported, now):
     return before, last, quote["price"]
 
 
-def reversal_text(packet, evidence, now):
+def reversal_text(packet, evidence, now, version=3):
     if not close_today(evidence, now):
         raise ValueError("A closing comparison requires today's completed cash session")
     day = date.fromisoformat(evidence["session"])
+    if version >= 4 and set(packet["indexes"]) != set(INDEXES):
+        raise ValueError("Unexpected closing benchmark source")
     prices = [closing_prices(packet["indexes"][sym], sym, day, evidence["moves"][key], now)
               for sym, key in INDEXES.items()]
+    if (version >= 4 and all(evidence["moves"][key] < 0 for key in INDEXES.values())
+            and all(last / before >= 1.01 and current < last for before, last, current in prices)):
+        if "week" in packet:
+            raise ValueError("Pullback comparison uses only the consecutive index closes")
+        before, last, current = prices[0]
+        prior = prior_weekday(day)
+        part = ("gave back part of" if current > before else "gave back all of" if current == before
+                else "more than erased")
+        gain = 100 * (last / before - 1)
+        loss = abs(evidence["moves"]["Nasdaq"])
+        return (f"The Nasdaq {part} {prior:%A}'s rally. After gaining {gain:.2f} percent, "
+                f"it fell {loss:.2f} percent at {day:%A}'s close.")
     # A two-index reversal is material enough to lead only after a substantial prior move.
     if not all(last / before <= .99 and current > last for before, last, current in prices):
         return ""
@@ -161,7 +175,7 @@ def reversal_text(packet, evidence, now):
     return lead
 
 
-def capture(evidence, editions, confirmed, now):
+def capture(evidence, editions, confirmed, now, version=3):
     if not close_today(evidence, now):
         return None
     result = {}
@@ -178,10 +192,13 @@ def capture(evidence, editions, confirmed, now):
     indexes = {row["symbol"]: row for row in matching}
     market = {"indexes": indexes}
     try:
-        if not reversal_text(market, evidence, now):
+        if not reversal_text(market, evidence, now, version):
             return result or None
     except (ValueError, KeyError, IndexError, TypeError, AttributeError, OverflowError):
         return result or None
+    if evidence["moves"]["Nasdaq"] < 0:
+        result["market"] = market
+        return result
     weekend = weekend_store.latest() or {}
     for row in weekend.get("inputs", {}).get("prices", []):
         if row.get("symbol") == "^IXIC" and row.get("status") == "available":

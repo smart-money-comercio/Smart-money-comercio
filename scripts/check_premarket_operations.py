@@ -146,6 +146,27 @@ class SchedulerChecks(Isolated,unittest.IsolatedAsyncioTestCase):
         self.mock();context=self.context();await scheduler.premarket_job(context)
         context.bot.send_message.assert_awaited_once();self.assertEqual(store.receipts("2026-11-05")[0]["status"],"sent")
 
+    async def test_fast_broad_decline_sends_once_with_the_bar_evidence(self):
+        from scripts.check_premarket_risk import chart
+        from src.intelligence import premarket_sources
+        from src.config.premarket import settings
+
+        rows = quotes()
+        for symbol in ("SPY", "QQQ"):
+            raw = chart(symbol, -.65)
+            raw["indicators"]["quote"][0]["close"][1] = 99.80
+            rows[symbol] = premarket_sources.packet(symbol, raw, NOW, settings(), rows["SPY"]["session"])
+        value = risk.snapshot(rows, [], [], NOW, settings(), "08:45")
+        self.mock(value)
+        context = self.context()
+        await scheduler.premarket_job(context)
+        await scheduler.premarket_job(context)
+        context.bot.send_message.assert_awaited_once()
+        text = context.bot.send_message.await_args.kwargs["text"]
+        self.assertIn("Risk: WATCH", text)
+        self.assertIn("0.35 percentage points", text)
+        self.assertEqual(store.receipts(value["day"])[0]["status"], "sent")
+
     async def test_a_duplicate_job_does_not_refetch_or_resend(self):
         collect=self.mock();context=self.context();await scheduler.premarket_job(context);await scheduler.premarket_job(context)
         self.assertEqual(collect.call_count,1);context.bot.send_message.assert_awaited_once()

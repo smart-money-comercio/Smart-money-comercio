@@ -103,7 +103,41 @@ def facts(text: str) -> dict:
     return result
 
 
-def connection(text: str) -> dict | None:
+# An attributed trading observation, distinct from verified terms of a filing.
+IPO_LEVEL = re.compile(
+    r"(?P<name>Anthropic|OpenAI)(?: (?:shares|stock))? (?:fell|dropped|slid|traded|rose|climbed|rebounded)"
+    r"(?: (?:more than |about |nearly )?\d+(?:\.\d+)?% to)?"
+    r"(?: (?:more than |about |nearly )?\$\d+(?:\.\d{1,2})?)?"
+    r" (?P<side>below|above) (?:its|the) IPO price of \$(?P<price>[1-9]\d{0,3}(?:\.\d{1,2})?)"
+    r"(?=[,.]?(?:\s|$))",
+)
+
+
+def ipo_benchmark(text):
+    observations = {}
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+        match = IPO_LEVEL.match(sentence.strip())
+        if not match or len(sentence) > 500:
+            continue
+        tail = sentence.strip()[match.end():].strip()
+        if tail not in ("", ".") and not tail.startswith(","):
+            continue
+        if re.search(r"\b(?:last (?:year|month|week)|yesterday|in 20\d\d|if|would|could|before|earlier|but|correction)\b", sentence, re.I):
+            continue
+        key = (match["name"], match["side"], match["price"])
+        observations[key] = sentence.strip()
+    if len(observations) != 1:
+        return None
+    (name, side, price), passage = next(iter(observations.items()))
+    return {"family": "ipo_benchmark", "summary": f"{name} trading {side} its ${price} IPO price",
+            "implication": "The offer price gives readers a benchmark for how demand has changed since the debut.",
+            "watch": "Compare the next regular close with the price paid by IPO investors.",
+            "facts": {"reported_ipo_comparison": passage}}
+
+
+def connection(text: str, *, schema=2) -> dict | None:
+    if schema == 2 and (benchmark := ipo_benchmark(text)):
+        return benchmark
     evidence = facts(text)
     for family, needed, summary, implication, watch in RECIPES:
         if needed <= evidence.keys():
@@ -147,6 +181,9 @@ def article(lead: dict, now: datetime, fetch) -> dict:
     published = publication_time(raw, title, url=url)
     if timestamp(node["datePublished"]) != published or not 0 <= (now-published).total_seconds() <= 86400:
         raise SourceRejected("Market report is future-dated or outside the 24-hour news window", status="expired", published=published.isoformat())
+    modified = timestamp(node.get("dateModified"))
+    if "dateModified" in node and (modified is None or not published <= modified <= now):
+        raise ValueError("Article update clock is invalid or after the cutoff")
     text = node.get("articleBody")
     if not isinstance(text, str) or not text.strip():
         from src.intelligence.news_original_sources import ArticleBody
@@ -177,13 +214,20 @@ def article(lead: dict, now: datetime, fetch) -> dict:
     link = connection(text)
     if not link:
         raise SourceRejected("No supported cross-market development extracted from the article body", status="rejected")
-    proof = {"schema": 1, "url": url, "title": title, "published": published.isoformat(), "observed": now.isoformat(),
+    proof = {"schema": 2, "url": url, "title": title, "published": published.isoformat(), "observed": now.isoformat(),
              "publisher": publisher, "text": text, "sha256": hashlib.sha256(text.encode()).hexdigest(), "connection": link}
+    if modified:
+        proof["modified"] = modified.isoformat()
     value = {"url": url, "title": title, "published": proof["published"], "source_checked_at": proof["observed"],
              "source": publisher, "official": False, "kind": "macro", "publisher_symbol": "", "symbol": "", "symbols": [],
              "relevant": True, "source_excerpt": text, "excerpt_scope": "reported article body", "reporting_evidence": proof}
     checked(value, now)
     return value
+
+
+def supports_benchmark(proof, quote):
+    link = proof.get("connection", {})
+    return link.get("family") != "ipo_benchmark" or quote == link["facts"]["reported_ipo_comparison"]
 
 
 def checked(value: dict, now: datetime | None = None) -> dict:
@@ -192,7 +236,7 @@ def checked(value: dict, now: datetime | None = None) -> dict:
     allowed = {HOSTS[urlsplit(url).hostname]}
     if "Yahoo Finance" in allowed:
         allowed |= {"Reuters", "Associated Press"}
-    if (not isinstance(proof, dict) or type(proof.get("schema")) is not int or proof.get("schema") != 1 or value.get("official") is not False
+    if (not isinstance(proof, dict) or type(proof.get("schema")) is not int or proof.get("schema") not in (1, 2) or value.get("official") is not False
             or value.get("kind") != "macro" or value.get("symbols") != [] or value.get("publisher_symbol") != ""
             or proof.get("url") != url or value["url"] != url or proof.get("title") != value.get("title")
             or proof.get("published") != value.get("published") or proof.get("observed") != value.get("source_checked_at")
@@ -200,17 +244,25 @@ def checked(value: dict, now: datetime | None = None) -> dict:
             or not isinstance(proof.get("text"), str) or not 120 <= len(proof["text"]) <= 6000
             or proof["text"] != value.get("source_excerpt") or value.get("excerpt_scope") != "reported article body"
             or proof.get("sha256") != hashlib.sha256(proof["text"].encode()).hexdigest()
-            or not proof.get("connection") or proof["connection"] != connection(proof["text"])):
+            or not proof.get("connection") or proof["connection"] != connection(proof["text"], schema=proof["schema"])):
         raise ValueError("Market reporting proof or extracted connection changed")
     published, observed = timestamp(proof["published"]), timestamp(proof["observed"])
     if (published is None or observed is None or not 0 <= (observed-published).total_seconds() <= 86400
             or now is not None and (not 0 <= (now-published).total_seconds() <= 86400 or not -60 <= (now-observed).total_seconds() <= 21600)):
         raise ValueError("Market reporting clocks are unavailable or stale")
+    if now is not None and proof["schema"] == 2 and observed > now:
+        raise ValueError("Article observation is after the edition cutoff")
+    if "modified" in proof:
+        updated = timestamp(proof["modified"])
+        if updated is None or not published <= updated <= observed:
+            raise ValueError("Article update clock differs from the observed edition")
     review = value.get("research_review")
     if review is not None and (not isinstance(review, dict) or not isinstance(review.get("response_id"), str) or not review["response_id"]
             or type(review.get("score")) is not int or not 65 <= review["score"] <= 100
             or not isinstance(review.get("quote"), str) or not 20 <= len(review["quote"]) <= 500 or review["quote"] not in proof["text"]):
         raise ValueError("Market reporting lost its independent relevance review")
+    if review and not supports_benchmark(proof, review["quote"]):
+        raise ValueError("IPO benchmark needs review of the quoted trading evidence")
     return proof
 
 

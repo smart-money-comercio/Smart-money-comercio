@@ -262,6 +262,9 @@ def _takeaway_sources(evidence):
         sources = []
         if lead["market"]:
             sources.extend([early_futures.SOURCE_SECTION] if evidence.get("premarket_futures") else ["Market Snapshot", "Executive Summary"])
+        if evidence.get("core_pce_lead"):
+            from src.intelligence.pce_followup import ANSWER
+            sources.append(ANSWER)
         if evidence.get("reversal") and lead["market"]:
             from src.intelligence.session_followup import MARKET_SOURCE
             sources.append(MARKET_SOURCE)

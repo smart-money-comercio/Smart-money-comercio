@@ -20,6 +20,7 @@ def status():
         "Checks: 08:45 and 09:15 America/New_York; outcome review 16:20. Weekdays; fresh session evidence required.",
         f"Destinations: {len(destinations())} · instruments: {len(SYMBOLS)}",
         "Grades: WATCH / ELEVATED / SEVERE. Missing coverage is LIMITED, not a calm signal.",
+        "Aligned five-minute bars check whether pressure is spreading. A broad and tech ETF slide can trigger an early WATCH.",
         "Delivery: one warning per level/day/destination; a higher level can alert again. Failed delivery can retry at the next scheduled slot.",
         "Futures changes use the prior US cash closing bar, not settlement. Continuous-contract roll windows are withheld.",
         "Latest recorded check: "+(rows[0]["observed_at"]+" · "+rows[0]["assessment"]["level"] if rows else "none")]

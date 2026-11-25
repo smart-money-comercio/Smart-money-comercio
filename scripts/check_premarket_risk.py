@@ -248,6 +248,34 @@ class EarlyFuturesChecks(unittest.TestCase):
 
 
 class AssessmentChecks(unittest.TestCase):
+    def path_quotes(self, pairs, delayed=None):
+        values = quotes()
+        for symbol, (before, current) in pairs.items():
+            raw = chart(symbol, current, now=NOW - timedelta(minutes=5) if symbol == delayed else NOW)
+            raw["indicators"]["quote"][0]["close"][1] = 100 + before
+            values[symbol] = sources.packet(symbol, raw, NOW, settings(), values["SPY"]["session"])
+        return values
+
+    def test_widening_etf_gaps_trigger_one_watch_with_matched_clocks(self):
+        values = self.path_quotes({"SPY": (-.10, -.55), "QQQ": (-.20, -.80)})
+        value = risk.snapshot(values, [], [], NOW, settings(), "08:45")
+        self.assertEqual(value["assessment"]["level"], "WATCH")
+        self.assertEqual([r["id"] for r in value["assessment"]["signals"]], ["deepening"])
+        self.assertIn("0.35 percentage points", risk.render(value))
+        legacy = {**value, "schema": 1, "assessment": risk.assess(values, [], NOW, settings(), schema=1)}
+        legacy.pop("id")
+        legacy["id"] = risk.digest(legacy)
+        self.assertEqual(risk.checked(legacy)["assessment"]["level"], "NONE")
+
+    def test_offsets_and_an_unconfirmed_relative_move_cannot_grade_a_warning(self):
+        values = self.path_quotes({"SPY": (-.10, -.55), "QQQ": (-.20, -.80)}, delayed="QQQ")
+        self.assertEqual(risk.assess(values, [], NOW, settings())["level"], "LIMITED")
+        values = self.path_quotes({"NQ=F": (-.6, -.9), "ES=F": (-.7, -.1)})
+        self.assertEqual(risk.assess(values, [], NOW, settings())["level"], "NONE")
+        self.assertEqual(risk.assess(values, [], NOW, settings(), schema=1)["level"], "WATCH")
+        values = self.path_quotes({"SMH": (-1.7, -1.8)}, delayed="SMH")
+        self.assertEqual(risk.assess(values, [], NOW, settings())["level"], "LIMITED")
+
     def test_chip_futures_divergence_and_group_weakness_support_elevated_sector_risk(self):
         value=snapshot(PRESSURE);a=value["assessment"]
         self.assertEqual(a["level"],"ELEVATED");self.assertIn("semiconductors",a["scope"])

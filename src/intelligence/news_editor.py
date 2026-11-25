@@ -756,6 +756,8 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
             raise ValueError("Market reporting does not match the analyst edition")
     from src.intelligence.market_priority import order_in_takeaway
     from src.intelligence import pce_followup, sentiment_followup
+    if (analyst_review or {}).get("pce_lead") and analyst_review["pce_lead"] != plan.get("pce_watch"):
+        raise ValueError("Inflation opening lost its edition evidence")
     pce_followup.validate(plan.get("pce_watch"), report, dated(plan["generated_at"]))
     sentiment_followup.validate_report(plan.get("sentiment_watch"), report, dated(plan["generated_at"]))
     company_story_facts.validate_edition(plan)
@@ -1089,13 +1091,14 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")
                 if analysis.get("reader_version") in {1, 2, 3, 4}:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
-                    if analysis.get("evidence", {}).get("takeaway_version") in (2, 3):
+                    if analysis.get("evidence", {}).get("takeaway_version") in (2, 3, 4):
                         from src.intelligence import daily_takeaway
                         lead = daily_takeaway.compose(analysis["evidence"])
-                        basis = ("benchmark closing history" if closing.get("market") else
+                        basis = ("delivered inflation question and BEA release" if analysis.get("pce_lead") else
+                                 "benchmark closing history" if closing.get("market") else
                                  "dated earnings comparison" if lead["recent_result"] else "issuer earnings watch" if lead["earnings"]
                                  else "original disclosure" if lead["story_ids"] else "upcoming publisher release" if lead["calendar"]
-                                 else "dated market indicators" if lead["market"]
+                                 else "aligned premarket futures" if analysis["evidence"].get("premarket_futures") else "dated market indicators" if lead["market"]
                                  else "limited market coverage")
                         lines.append("Takeaway basis: " + basis)
                     lines.append(f"Reader brief: opening takeaway and {signals} evidence-grounded watch signals; each explains the next check and why it matters.")

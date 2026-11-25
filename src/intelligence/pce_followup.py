@@ -93,11 +93,18 @@ def capture(payload, schedule, now):
                 break
             pairs.append([v.replace("−", "-") for v in found[0]])
         if len(pairs) == 2:
+            core = [r[1:] for r in rows if r and r[0] in {"PCE price index excluding food and energy", "PCE price index, excluding food and energy"}]
+            if len(core) == 1 and len(core[0]) == 2:
+                values = [cell.replace("−", "-") for cell in core[0]]
+                if all(NUMBER.fullmatch(cell) for cell in values):
+                    pairs.append(values)
             tables.append(pairs)
     if len(tables) != 1:
         raise ValueError("No unique official monthly price and spending table")
     result = {"url": url, "title": title, "unit": UNIT, "columns": columns, "published": published.isoformat(),
               "observed": observed.isoformat(), "inflation": tables[0][0], "real_spending": tables[0][1]}
+    if len(tables[0]) == 3:
+        result["core_inflation"] = tables[0][2]
     check_result(result, schedule, now)
     return result
 
@@ -111,9 +118,28 @@ def check_result(result, row, now):
             or result["columns"] != [(period - timedelta(days=1)).strftime("%B"), period.strftime("%B")]
             or result["unit"] != UNIT or not due <= published <= seen <= now or now - due > WINDOW):
         raise ValueError("BEA release identity, monthly columns or evidence clocks changed")
-    for pair in (result["inflation"], result["real_spending"]):
+    for pair in [result["inflation"], result["real_spending"]] + ([result["core_inflation"]] if "core_inflation" in result else []):
         if not isinstance(pair, list) or len(pair) != 2 or any(not NUMBER.fullmatch(v) for v in pair):
             raise ValueError("Invalid month-over-month percentage")
+
+
+def core_read(result):
+    before, current = map(Decimal, result["core_inflation"])
+    if before == current:
+        return f"core PCE inflation held steady at {current}% month over month."
+    verb = "slowed" if current < before else "picked up"
+    return f"core PCE inflation {verb} from {before}% to {current}% month over month."
+
+
+def core_opening(item, now):
+    checked_text(item, now)
+    if item["phase"] != "answer" or not item.get("prior_edition"):
+        raise ValueError("Core inflation lead requires an answered, delivered question")
+    confirmed = cache.timestamp(item["confirmed_at"]).astimezone(NY)
+    yesterday = now.astimezone(NY).date() - timedelta(days=1)
+    lead = "Yesterday we asked about inflation." if confirmed.date() == yesterday else "We asked about inflation in an earlier brief."
+    period = period_for(item["schedule"])
+    return f"{lead} In {period:%B}, {core_read(item['result'])}"
 
 
 def checked_text(item, now):
@@ -126,7 +152,9 @@ def checked_text(item, now):
     phase = item["phase"]
     if phase == "preview" and now < due and now - seen <= timedelta(days=1):
         at = due.astimezone(NY)
-        return (f"{QUESTION} — Did monthly inflation slow, and did households spend more after inflation? "
+        question = ("Did underlying inflation ease, and did households spend more after inflation?" if item.get("core_question")
+                    else "Did monthly inflation slow, and did households spend more after inflation?")
+        return (f"{QUESTION} — {question} "
                 f"BEA’s figures are due {at:%A}, {at:%B} {at.day} at {at.strftime('%I:%M %p %Z').lstrip('0')}.")
     if phase == "pending" and now >= due:
         return f"{PENDING} — The scheduled release time has passed. We’re still checking BEA’s monthly inflation and spending figures."
@@ -149,6 +177,10 @@ def checked_text(item, now):
                 or not cache.timestamp(item["confirmed_at"]) < due):
             raise ValueError("Missing original question delivery")
         lead = f"Our earlier question has an answer. In {period:%B}, "
+    if result.get("core_inflation") and "prior_edition" not in item:
+        spending += " Excluding food and energy, " + core_read(result)
+    if result.get("core_inflation") and "prior_edition" in item:
+        lead = f"In {period:%B}, "
     return f"{ANSWER} — {lead}{prices} {spending}"
 
 
@@ -206,7 +238,7 @@ def prepare(now, fetch, editions=None):
                 validate(item, edition["report_text"], built)
                 period = period_for(row)
                 states = delivered.setdefault(period, {})
-                states.setdefault(item["phase"], (edition["id"], confirmed, row))
+                states.setdefault(item["phase"], (edition["id"], confirmed, row, item.get("core_question") is True))
         for period in sorted(fresh.keys() | delivered.keys(), reverse=True):
             prior = delivered.get(period, {})
             if "answer" in prior or len(fresh.get(period, {})) > 1:
@@ -223,7 +255,7 @@ def prepare(now, fetch, editions=None):
             if now < due:
                 if previous and cache.timestamp(previous[2]["at"]) == due:
                     continue
-                item = {"phase": "preview", "schedule": row}
+                item = {"phase": "preview", "schedule": row, "core_question": True}
                 checked_text(item, now)
                 return item
             item = {"phase": "pending", "schedule": row}
@@ -231,9 +263,11 @@ def prepare(now, fetch, editions=None):
                 try:
                     payload = fetch(release_url(period, due))
                     result = capture(payload, row, cache.utc_now())
+                    if "preview" in prior and prior["preview"][3] and "core_inflation" not in result:
+                        raise ValueError("The delivered underlying inflation question still needs the BEA core row")
                     item.update(phase="answer", result=result)
                     if "preview" in prior:
-                        edition_id, confirmed, _ = prior["preview"]
+                        edition_id, confirmed, _, _ = prior["preview"]
                         if confirmed < due:
                             item.update(prior_edition=edition_id, confirmed_at=confirmed.isoformat())
                 except (KeyError, TypeError, ValueError, OverflowError, OSError) as exc:

@@ -280,6 +280,20 @@ def latest_findings(records: list[dict]) -> dict[str, dict]:
     return result
 
 
+def overnight_benchmark(row, now):
+    from src.intelligence.premarket_sources import futures_window, NY
+    proof = (row.get("verified") or {}).get("reporting_evidence") or {}
+    if (row["review"]["final"] != "approved" or proof.get("connection", {}).get("family") != "ipo_benchmark"
+            or not futures_window(now)):
+        return False
+    published, seen = timestamp(proof.get("published")), timestamp(proof.get("observed"))
+    if not published or not seen:
+        return False
+    local = published.astimezone(NY)
+    return (local.hour >= 16 and local.date() < now.astimezone(NY).date()
+            and 21600 < (now - seen).total_seconds() <= (now - published).total_seconds() <= 86400)
+
+
 def retry_candidates(now: datetime, fresh: list[dict], history: list[dict]) -> list[dict]:
     """Read-only bounded follow-up queue; rechecks never change the first-seen clock."""
     current = {finding_key(lead["url"]) for lead in fresh}
@@ -295,7 +309,8 @@ def retry_candidates(now: datetime, fresh: list[dict], history: list[dict]) -> l
             discovered = timestamp(row["discovered_at"])
             attempted = timestamp(row.get("last_attempt_at", row["discovered_at"]))
             retries = row.get("retry_count", 0)
-            if (aliases & current or row["review"]["final"] != "hold" or discovered is None or attempted is None
+            if (aliases & current or (row["review"]["final"] != "hold" and not overnight_benchmark(row, now))
+                    or discovered is None or attempted is None
                     or not 0 <= (now-discovered).total_seconds() <= 86400
                     or int(attempted.timestamp() // 3600) >= int(now.timestamp() // 3600)
                     or type(retries) is not int or not 0 <= retries < MAX_HELD_RETRIES):
@@ -412,7 +427,8 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
         for value in additions:
             topic = "company" if value["kind"] == "company" else "macro"
             work.append(({key: value[key] for key in ("title", "url")} | {"topic": topic}, latest.get(finding_key(value["url"])), False))
-        details.update(candidates=len(work), search_leads=len(leads), retried=len(pending), publisher_candidates=len(additions), publisher_cache_used=0, resolved_releases=0)
+        overnight = sum(row["review"]["final"] == "approved" for row in pending)
+        details.update(candidates=len(work), search_leads=len(leads), retried=len(pending) - overnight, overnight_rereads=overnight, publisher_candidates=len(additions), publisher_cache_used=0, resolved_releases=0)
         reads, market_reads = 0, 0
         def bounded_fetch(url):
             nonlocal reads
@@ -433,6 +449,8 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                       "discovery_response_id": (parent or {}).get("discovery_response_id", "") if retry else details["agents"][0]["response_id"],
                       "prior_review_response_id": (parent or {}).get("review_response_id", ""), "lead": lead,
                       "verified": None, "verification": "Original source not verified", "review": {"final": "hold"}}
+            if retry and parent["review"]["final"] == "approved":
+                record["origin"] = "overnight market recheck"
             cached_value = resolver.reference(lead)
             if cached_value and cached_value["url"] == lead["url"]:
                 record["origin"] = "dated publisher cache"
@@ -502,11 +520,16 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
                 record = by_id[decision["id"]]
                 evidence = (record["verified"] or {}).get("source_excerpt", "")
                 eligible = bool(record["verified"] and 20 <= len(decision["evidence_quote"]) <= 500 and decision["evidence_quote"] in evidence)
+                from src.intelligence.market_reporting import supports_benchmark
+                proof = (record["verified"] or {}).get("reporting_evidence") or {}
+                benchmark_supported = supports_benchmark(proof, decision["evidence_quote"])
+                eligible = eligible and benchmark_supported
                 final = "approved" if decision["decision"] == "accept" and decision["score"] >= 65 and eligible else "skip" if decision["decision"] == "skip" else "hold"
                 record["review"] = {**decision, "final": final}
                 if decision["decision"] == "accept" and final != "approved":
                     record["review"]["publication_gate"] = ("Original source verification is required" if not record["verified"] else
                         "Relevance score is below the approval threshold" if decision["score"] < 65 else
+                        "Reviewer did not select the reported IPO trading comparison" if not benchmark_supported else
                         "Supporting evidence is not an exact passage from this candidate's original source; publication withheld")
                 record["review_response_id"] = metadata["response_id"]
         details.update(approved=sum(row["review"]["final"] == "approved" for row in records),
@@ -531,8 +554,9 @@ def run(now: datetime | None = None, *, client=None, fetch=fetch_original) -> di
 def summary() -> str:
     value = status()
     details = value.get("details", {})
+    rechecks = f"{details['overnight_rereads']} overnight articles rechecked, " if details.get("overnight_rereads") else ""
     return (f"Hourly Research Desk: {value['status']}; {details.get('search_leads', details.get('candidates', 0))} search leads, "
-            f"{details.get('publisher_candidates', 0)} publisher candidates, {details.get('retried', 0)} held leads revisited, {details.get('approved', 0)} approved, "
+            f"{details.get('publisher_candidates', 0)} publisher candidates, {details.get('retried', 0)} held leads revisited, {rechecks}{details.get('approved', 0)} approved, "
             f"{details.get('source_verified', 0)} source-verified. Cached review only.")
 
 

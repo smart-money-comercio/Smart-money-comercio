@@ -101,6 +101,10 @@ class ReaderChecks(IsolatedChecks):
         at = due + timedelta(minutes=2)
         answer = build(at, self.bea_payload(at))
         record = self.record(answer)
+        lead = next(line for line in answer.splitlines() if line.startswith("The takeaway:"))
+        self.assertIn("Yesterday we asked about inflation", lead)
+        self.assertIn("core PCE inflation slowed from 0.7% to 0.5% month over month", lead)
+        self.assertIn(pce.SOURCE_ID, daily_voiceover.checked(record, at)["segments"][0]["source_ids"])
         self.assertIn("inflation slowed from 0.4% to 0.2%", answer)
         self.assertIn("Households spent 0.1% less after inflation", answer)
         self.assertEqual(record["pce_watch"]["prior_edition"], self.record(question)["id"])
@@ -113,6 +117,25 @@ class ReaderChecks(IsolatedChecks):
         with patch.object(cache, "utc_now", return_value=at + timedelta(minutes=1)):
             self.assertIn("1/1 delivered questions answered", pce.delivery_summary())
         self.assertNotIn(pce.ANSWER, build(at + timedelta(minutes=2), self.bea_payload(at)))
+
+    def test_core_question_waits_for_two_real_monthly_cells(self):
+        from src.intelligence import pce_followup as pce, calendar_source_cache as cache
+        due = datetime(2026, 11, 25, 13, 30, tzinfo=timezone.utc)
+        earlier = due - timedelta(hours=16)
+        self.bea_schedule(earlier, due)
+        with patch.object(cache, "utc_now", return_value=earlier):
+            question = self.render_current(self.research(now=earlier))
+        self.assertIn("Did underlying inflation ease", question)
+        self.assertTrue(self.deliver(question, earlier + timedelta(seconds=1)))
+        with patch.object(cache, "utc_now", return_value=due):
+            for substitute in ("PCE price index for goods", "Year-over-year PCE excluding food and energy"):
+                payload = self.bea_payload(due)
+                payload["body"] = payload["body"].replace("PCE price index excluding food and energy", substitute)
+                self.assertEqual(pce.prepare(due, lambda url: payload)["phase"], "pending")
+            payload = self.bea_payload(due)
+            payload["body"] = payload["body"].replace("0.7</td><td>0.5", "0.0</td><td>0.0")
+            answer = pce.prepare(due, lambda url: payload)
+            self.assertIn("held steady at 0.0%", pce.core_opening(answer, due))
 
     def test_bea_standalone_result_never_claims_an_unsent_question(self):
         from src.intelligence import calendar_source_cache as cache, pce_followup as pce
@@ -513,6 +536,37 @@ class ReaderChecks(IsolatedChecks):
                 follow.breadth_answer(proof, current, now + timedelta(days=1))
             with self.assertRaises(ValueError):
                 follow.breadth_answer({**proof, "question": "Another question"}, current, now)
+
+    def test_tuesday_giveback_reaches_the_brief_with_a_dated_release(self):
+        from src.intelligence import session_followup as follow, calendar_sources as publishers
+        at = datetime(2026, 11, 24, 22, 30, tzinfo=timezone.utc)
+        charts = [self.index_history("^IXIC", [20, 23, 24], [100, 106.51, 106.51 * .9852]),
+                  self.index_history("^GSPC", [20, 23, 24], [100, 104.73, 104.73 * .995])]
+        research = self.close_report(at, "2026-11-24", "2026-11-23", {"MSFT": -1, "AMD": 1}).replace(
+            "S&P -0.52%, Nasdaq -0.21%", "S&P -0.50%, Nasdaq -1.48%")
+        macro = {"eventName": "Personal Income and Outlays", "time_status": "verified", "publisher": "BEA",
+                 "event_at": "2026-11-25T13:30:00+00:00", "source_date": "2026-11-25",
+                 "timing_checked_at": at.isoformat(), "timing_url": publishers.BEA_URL}
+        original = news.build_company_catalyst_brief
+        def with_calendar(*args, **kwargs):
+            return {**original(*args, **kwargs), "macro": [macro]}
+        with patch.object(follow.research_context, "load_market_payload", return_value={"market_moves": charts}), \
+                patch.object(news, "build_company_catalyst_brief", side_effect=with_calendar):
+            text = self.render_current(research)
+        record = self.record(text)
+        opening = next(row for row in text.splitlines() if row.startswith("The takeaway:"))
+        self.assertIn("gave back part of Monday's rally", opening)
+        self.assertIn("6.51 percent", opening)
+        self.assertIn("1.48 percent", opening)
+        self.assertIn("Wednesday at 8:30 AM EST", opening)
+        self.assertNotIn("watchlist", opening.lower())
+        scene = daily_voiceover.checked(record, at)["segments"][0]
+        self.assertTrue({"benchmark_history", "takeaway_calendar"} <= set(scene["source_ids"]))
+        evidence = record["analyst_review"]["evidence"]
+        self.assertFalse(follow.reversal_text({"indexes": {c["symbol"]: c for c in charts}}, evidence, at, 3))
+        updated = self.index_history("^IXIC", [20, 23, 24], [100, 110, 99])
+        self.assertIn("more than erased", follow.reversal_text({"indexes": {"^GSPC": charts[1], "^IXIC": updated}},
+                      {**evidence, "moves": {**evidence["moves"], "Nasdaq": updated["move"]}}, at, 4))
 
     def test_recovery_uses_index_levels_and_skips_incomplete_or_conflicting_closes(self):
         from src.intelligence import session_followup as follow

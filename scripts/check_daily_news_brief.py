@@ -673,6 +673,27 @@ class EarlyBriefChecks(IsolatedChecks):
         with self.assertRaisesRegex(ValueError, "lost their source links"):
             validate_review(review, research, altered, news_editor.selected_stories(record))
 
+    def test_five_minute_follow_through_uses_both_futures_in_the_daily_entry_point(self):
+        from src.intelligence import early_futures, news_editor, news_editor_store
+        from src.reports import daily_voiceover
+
+        for symbol in ("NQ=F", "ES=F"):
+            self.charts[symbol]["indicators"]["quote"][0]["close"][1] = 99.90
+        with patch.object(daily_report, "build_research_report", return_value=self.early_research()), \
+                patch.object(early_futures.sources, "fetch", side_effect=self.charts.__getitem__), \
+                patch.object(news_editor, "cache_candidates", return_value=([], [])):
+            text = daily_report.build_daily_report()
+        lead = next(line for line in text.splitlines() if line.startswith("The takeaway:"))
+        self.assertIn("Both contracts slipped further over the preceding five minutes.", lead)
+        voice = daily_voiceover.checked(news_editor_store.read_editions(report=text)[0], self.now)
+        self.assertIn(early_futures.SOURCE_ID, voice["segments"][0]["source_ids"])
+        from src.intelligence import daily_takeaway
+        pair = news_editor_store.read_editions(report=text)[0]["analyst_review"]["evidence"]["premarket_futures"]
+        pair["quotes"][0]["prior_bar_change"] = -1.50
+        self.assertNotIn("five minutes", daily_takeaway._futures_lead(pair, 4))
+        pair["quotes"][1]["prior_bar_change"] = -.80
+        self.assertIn("trimmed their losses", daily_takeaway._futures_lead(pair, 4))
+
     def test_premarket_voice_follows_the_pair_and_preserves_prior_editions(self):
         from src.intelligence import daily_takeaway, early_futures
         pair = {"quotes": [{"change": -.97}, {"change": -.36}]}

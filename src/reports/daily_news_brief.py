@@ -301,9 +301,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     except (OSError, ValueError, TypeError, SQLiteError):
         past_editions = []
     from src.intelligence import daily_takeaway
-    calendar_lead = daily_takeaway.next_calendar(brief.get("macro", []), now) if takeaway_version in (2, 3) else None
+    calendar_lead = daily_takeaway.next_calendar(brief.get("macro", []), now, takeaway_version) if takeaway_version in (2, 3, 4) else None
     earnings_context = None
-    if takeaway_version in (2, 3) and (not initial_stories or any(s.get("event_evidence", {}).get("schema") == 17 for s in initial_stories)):
+    if takeaway_version in (2, 3, 4) and (not initial_stories or any(s.get("event_evidence", {}).get("schema") == 17 for s in initial_stories)):
         from src.intelligence import earnings_takeaway, weekend_store
         weekend = now.astimezone(earnings_takeaway.NY).weekday() >= 5
         nvidia_move = any(row["symbol"] == "NVDA" and row["status"] == "rechecked" for row in event_context["events"])
@@ -331,9 +331,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     if watchlist_baseline:
         plan["watchlist_baseline"] = watchlist_baseline
     session_options = [None]
-    if takeaway_version == 3 and snapshot.startswith("Market Session: Closed"):
+    if takeaway_version in (3, 4) and snapshot.startswith("Market Session: Closed"):
         from src.intelligence import session_followup
-        context = session_followup.capture(report_evidence(research_report), past_editions, confirmed, now)
+        context = session_followup.capture(report_evidence(research_report), past_editions, confirmed, now, takeaway_version)
         if context:
             session_options = [context]
             if "intraday" in context and "market" in context:
@@ -411,13 +411,19 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                     row["id"] == watch["story_id"] and row["url"] == packet["url"] for row in retained)):
                 packet = None
             comparison = earnings_watch.comparison_text(watch) if earnings_watch.has_answer(watch) else ""
+            core_lead = (pce if takeaway_version == 4 and pce and pce.get("prior_edition")
+                         and pce.get("result", {}).get("core_inflation") else None)
+            reversal = (session_context or {}).get("market")
+            allow_calendar = not (retained or packet or watch or reversal)
+            if takeaway_version == 4 and reversal and not (packet or watch):
+                allow_calendar = True
             analysis = analyze_report(
                 research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit},
                 narration_version=2, event_context=event_context, reader_version=4, reader_limit=reader_limit,
                 earnings_context=context_values, disclosure_version=2, business_version=plan.get("business_version", 0),
                 intel_results_baseline=intel_baseline, earnings_watch=watch, watchlist_baseline=watchlist_baseline,
                 premarket_futures=futures, takeaway_version=takeaway_version, earnings_takeaway=packet,
-                takeaway_calendar=calendar_packet if not (retained or packet or watch or (session_context or {}).get("market")) else None,
+                takeaway_calendar=calendar_packet if allow_calendar and not core_lead else None, pce_lead=core_lead,
                 watchlist_checkpoint_version=watchlist_checkpoint_version, watchlist_checkpoint=watchlist_checkpoint,
                 session_context=session_context,
                 market_context=market_context, sector_checkpoint=sector_checkpoint, defense_context_version=defense_context_version,
