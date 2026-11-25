@@ -210,7 +210,7 @@ def enrich_feed(source: dict, payload: dict, parse_feed, fetch, now: datetime, *
     profiles = {"INTC": 5, "AMD": 4, "NVDA": 7}
     profile = profiles.get(source.get("company_symbol"), 6 if source.get("company_symbol") else 3)
     if fed:
-        profile = 8
+        profile = 9
     from src.intelligence import fomc_minutes
     agency = source.get("name") in {"EIA", "DARPA"}
     if (not source.get("company_symbol") and not fed and not agency) or source.get("format") or payload.get("status") != "ok" or payload.get("release_excerpt_schema") == profile:

@@ -569,6 +569,21 @@ class SECResearchChecks(ResearchFixture):
             self.fail("Unexpected original URL: " + url)
         return get
 
+    def test_completed_subsidiary_notes_and_planned_redemption_remain_distinct(self):
+        issued = ("Item 8.01. On April 1, 2026, Example Mining (EM), a 60%-owned subsidiary of "
+                  "Example Orbital (EO), announced the completion of its previously announced offering "
+                  "(the Notes Offering) of US$200 million aggregate principal amount of 5.5% senior notes due 2034.")
+        notice = (" EM also announced that a notice has been issued to redeem on May 1, 2026, "
+                  "all of its outstanding US$180 million aggregate principal amount of 3.7% Senior Notes due 2028.")
+        row = sec.verify(SEC_INDEX, NOW, self.fetch(document=sec_document(text=issued + notice)))
+        self.assertIn("Example Mining issued $200 million", sec.narration(row))
+        self.assertIn("plans to redeem $180 million", sec.narration(row))
+        self.assertNotIn("redemption_notice", sec.note_terms(issued + notice.replace("EM also", "ZZ also")))
+        self.assertFalse(sec.note_terms(issued.replace("announced the completion", "expects the completion") + notice))
+        row["sec_filing"]["notes"]["coupon"] = "1.0"
+        with self.assertRaises(ValueError):
+            sec.narration(row)
+
     def test_sec_index_is_resolved_using_issuer_submissions_and_primary_document(self):
         calls = []; value = desk.verified({"url": SEC_INDEX}, NOW, self.fetch(calls=calls))
         self.assertEqual(value["url"], SEC_PRIMARY); self.assertEqual(len(calls), 2)

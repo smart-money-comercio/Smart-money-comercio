@@ -6,6 +6,7 @@ import math
 import re
 from urllib.parse import urljoin
 
+from src.intelligence import discount_minutes
 from src.intelligence.policy_analysis import rate_facts, release_clock
 from src.intelligence.special_alert_sources import NY, timestamp
 
@@ -28,10 +29,12 @@ AI = re.compile(
 
 
 def is_minutes(story):
-    return story.get("source") == "Federal Reserve" and story.get("title", "").startswith(HEADING + ", ")
+    return discount_minutes.matches(story) or (story.get("source") == "Federal Reserve" and story.get("title", "").startswith(HEADING + ", "))
 
 
 def reference(story):
+    if discount_minutes.matches(story):
+        return discount_minutes.reference(story)
     title = story.get("title", "")
     match = re.fullmatch(re.escape(HEADING) + ", " + MEETING, title)
     at = timestamp(story.get("published"))
@@ -77,10 +80,10 @@ class Page(HTMLParser):
             self.parts.append(re.sub(r"\s+", " ", data))
 
 
-def read_time(payload, expected_url, published, now):
+def read_time(payload, expected_url, published, now, *, binary=False):
     stamp = payload.get("fetched_at_epoch")
     if (payload.get("status") != "ok" or payload.get("final_url", payload.get("url")) != expected_url
-            or not isinstance(payload.get("body"), str) or type(stamp) not in (float, int) or not math.isfinite(stamp)
+            or not isinstance(payload.get("body"), bytes if binary else str) or type(stamp) not in (float, int) or not math.isfinite(stamp)
             or not -60 <= now.timestamp()-stamp <= 21600 or stamp < published.timestamp()-60):
         raise ValueError("Fed minutes page unavailable, redirected or outside the observation window")
     return stamp
@@ -94,6 +97,8 @@ def decision_facts(line):
 
 
 def facts(story, text):
+    if discount_minutes.matches(story):
+        return discount_minutes.facts(story, text)
     _, doc_url = reference(story)
     dates = story["title"].split(", ", 1)[1]
     if story.get("document_url") != doc_url:
@@ -127,7 +132,7 @@ def facts(story, text):
 
 def read(row, notice, fetch, now, budget):
     story = {"source": "Federal Reserve", "url": row["link"], "title": row["title"], "published": row["published"]}
-    _, url = reference(story)
+    end, url = reference(story)
     published = timestamp(row["published"])
     first = read_time(notice, story["url"], published, now)
     page = Page(notice["body"])
@@ -142,7 +147,13 @@ def read(row, notice, fetch, now, budget):
     if budget is not None and not budget.take():
         raise ValueError("Fed minutes document deferred by the shared refresh budget")
     document = fetch(url)
-    second = read_time(document, url, published, now)
+    binary = discount_minutes.matches(story)
+    second = read_time(document, url, published, now, binary=binary)
+    if binary:
+        excerpt = discount_minutes.decision_section(document["body"], end)
+        facts({**story, "document_url": url}, excerpt)
+        return {"title": row["title"], "url": row["link"], "published": row["published"], "text": excerpt,
+                "document_url": url, "checked_at_epoch": min(first, second)}
     lines = Page(document["body"]).lines
     dates = story["title"].split(", ", 1)[1]
     if not any(line == HEADING and any(norm(v) == norm(dates) for v in lines[i+1:i+4]) for i, line in enumerate(lines)):
@@ -174,6 +185,8 @@ def read(row, notice, fetch, now, budget):
 
 
 def review(evidence):
+    if evidence["source_url"].endswith(".pdf"):
+        return discount_minutes.review(evidence)
     fields = {row["field"]: row["value"] for row in evidence["facts"]}
     end = datetime.strptime(evidence["source_url"].split("fomcminutes")[1][:8], "%Y%m%d")
     when = f"{end:%B} {end.day}"

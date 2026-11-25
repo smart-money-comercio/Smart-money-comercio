@@ -352,13 +352,95 @@ class ReaderRefreshChecks(unittest.TestCase):
             self.assertIs(morning_brief_intro.ensure_morning_brief_cache_is_fresh(), self.payload)
         self.refresh.assert_not_called()
 
-    def test_scheduled_weekday_build_refreshes_before_building_the_brief(self):
-        actions = []
-        with patch.object(scheduler, "ensure_morning_brief_cache_is_fresh", side_effect=lambda: actions.append("refresh")), \
-                patch.object(scheduler, "build_daily_report", side_effect=lambda: actions.append("build") or REPORT):
-            result = asyncio.run(scheduler.build_daily_report_safe())
-        self.assertEqual(actions, ["refresh", "build"])
-        self.assertEqual(result, REPORT)
+
+class ScheduleChecks(unittest.TestCase):
+    def registrations(self, **settings):
+        app = SimpleNamespace(job_queue=Mock())
+        with patch.dict(os.environ, {"TELEGRAM_DAILY_REPORT_CHAT_ID": "-123", **settings}, clear=True):
+            scheduler.schedule_daily_report(app)
+        return [call.kwargs for call in app.job_queue.run_daily.call_args_list]
+
+    def test_both_times_run_every_day_in_the_market_zone(self):
+        morning, evening = self.registrations()
+        self.assertEqual([row["time"].strftime("%H:%M") for row in (morning, evening)], ["08:30", "17:30"])
+        for row in (morning, evening):
+            self.assertIs(row["callback"], scheduler.daily_report_job)
+            self.assertEqual(row.get("days", tuple(range(7))), tuple(range(7)))
+            self.assertEqual(str(row["time"].tzinfo), "America/New_York")
+            self.assertEqual(row["job_kwargs"]["id"], row["name"])
+            self.assertTrue(row["job_kwargs"]["replace_existing"])
+        self.assertNotEqual(morning["name"], evening["name"])
+
+    def test_real_cron_triggers_follow_new_york_through_both_clock_changes(self):
+        from telegram.ext import Application
+        from zoneinfo import ZoneInfo
+        app = Application.builder().token("12345:offline").build()
+        zone = ZoneInfo("America/New_York")
+        with patch.dict(os.environ, {"TELEGRAM_DAILY_REPORT_CHAT_ID": "-123"}, clear=True):
+            scheduler.schedule_daily_report(app)
+        jobs = sorted(app.job_queue.jobs(), key=lambda job: job.name)
+        self.assertEqual(len(jobs), 2)
+        for job, hour in zip(jobs, (8, 17)):
+            trigger = job.job.trigger
+            for day in (datetime(2026,3,7,0,tzinfo=zone), datetime(2026,10,31,0,tzinfo=zone)):
+                prior = None
+                for offset in range(3):
+                    at = trigger.get_next_fire_time(prior, day if prior is None else prior + timedelta(seconds=1))
+                    self.assertEqual(at.astimezone(zone).date(), (day + timedelta(days=offset)).date())
+                    self.assertEqual(at.astimezone(zone).strftime("%H:%M"), f"{hour:02d}:30")
+                    prior = at
+
+    def test_custom_slots_duplicate_time_disabled_and_missing_recipients(self):
+        settings = {"TELEGRAM_DAILY_REPORT_TIME": "07:45", "TELEGRAM_DAILY_REPORT_EVENING_TIME": "18:15",
+                    "TELEGRAM_DAILY_REPORT_TIMEZONE": "America/Chicago"}
+        slots = self.registrations(**settings)
+        self.assertEqual([str(row["time"])[:5] for row in slots], ["07:45", "18:15"])
+        self.assertEqual(str(slots[1]["time"].tzinfo), "America/Chicago")
+        settings["TELEGRAM_DAILY_REPORT_EVENING_TIME"] = "07:45"
+        self.assertEqual(len(self.registrations(**settings)), 1)
+        self.assertEqual(self.registrations(TELEGRAM_DAILY_REPORT_ENABLED="no"), [])
+        self.assertEqual(self.registrations(TELEGRAM_DAILY_REPORT_CHAT_ID=""), [])
+
+    def test_each_slot_runs_the_full_agent_and_sends_one_copy_per_recipient(self):
+        bot = SimpleNamespace(send_message=AsyncMock())
+        morning, evening = self.registrations()
+        values = [{"success": True, "report": "Morning edition"}, {"success": True, "report": "Evening edition"}]
+        with patch.dict(os.environ, {"TELEGRAM_DAILY_REPORT_CHAT_ID": "4,4,5"}), \
+                patch.object(scheduler, "utc_now", return_value=NOW), \
+                patch.object(scheduler, "run_daily_agent", side_effect=values) as agent, \
+                patch.object(scheduler, "confirm_watchlist_delivery") as confirm:
+            for slot in (morning, evening):
+                asyncio.run(slot["callback"](SimpleNamespace(bot=bot, job=SimpleNamespace(name=slot["name"]))))
+        self.assertEqual(agent.call_count, 2)
+        self.assertTrue(all(call.args == (False,) for call in agent.call_args_list))
+        self.assertEqual([(c.kwargs["chat_id"], c.kwargs["text"]) for c in bot.send_message.await_args_list],
+                         [(4,"Morning edition"), (5,"Morning edition"), (4,"Evening edition"), (5,"Evening edition")])
+        self.assertEqual(confirm.call_count, 4)
+
+    def test_failed_quality_check_withholds_brief_for_all_destinations(self):
+        bot = SimpleNamespace(send_message=AsyncMock())
+        with patch.object(scheduler, "utc_now", return_value=NOW), \
+                patch.object(scheduler, "get_daily_report_chat_ids", return_value=[1, 2]), \
+                patch.object(scheduler, "run_daily_agent", return_value={"success": False, "report": "unchecked"}) as agent, \
+                patch.object(scheduler, "confirm_watchlist_delivery") as confirm, self.assertLogs(scheduler.LOG, "ERROR"):
+            asyncio.run(scheduler.daily_report_job(SimpleNamespace(bot=bot)))
+        agent.assert_called_once_with(False)
+        self.assertEqual([c.kwargs for c in bot.send_message.await_args_list],
+                         [{"chat_id": chat, "text": "The Daily Brief is unavailable for this scheduled run."} for chat in (1, 2)])
+        confirm.assert_not_called()
+
+    def test_evening_weekends_refresh_the_day_specific_edition(self):
+        evening = self.registrations()[1]
+        for at in (datetime(2026,11,21,22,30,tzinfo=timezone.utc), datetime(2026,11,22,22,30,tzinfo=timezone.utc)):
+            bot = SimpleNamespace(send_message=AsyncMock())
+            with patch.object(scheduler, "utc_now", return_value=at), \
+                    patch.object(scheduler, "get_daily_report_chat_ids", return_value=[1]), \
+                    patch.object(scheduler, "build_weekend_delivery_report", return_value="Weekend edition") as build, \
+                    patch.object(scheduler, "run_daily_agent") as weekday:
+                asyncio.run(evening["callback"](SimpleNamespace(bot=bot, job=SimpleNamespace(name=evening["name"]))))
+            build.assert_called_once_with(at, refresh=True)
+            weekday.assert_not_called()
+            self.assertEqual(bot.send_message.await_args.kwargs["text"], "Weekend edition")
 
 
 class MacroFreshnessChecks(unittest.TestCase):

@@ -5,9 +5,11 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any, Callable
 
 
+_WORKFLOW_LOCK = Lock()
 STATUS_PATH = Path("data/daily_agent_status.json")
 
 REQUIRED_DAILY_REPORT_TERMS = [
@@ -285,6 +287,12 @@ def validate_daily_report(report: str) -> str:
 
 
 def run_daily_agent(dry_run: bool = False) -> dict[str, Any]:
+    # Scheduled and manual requests share the agent's mutable research caches.
+    with _WORKFLOW_LOCK:
+        return _run_daily_agent(dry_run)
+
+
+def _run_daily_agent(dry_run: bool) -> dict[str, Any]:
     started_at = utc_now()
     steps: list[dict[str, Any]] = []
     report = ""

@@ -1,12 +1,11 @@
 import os
 import platform
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
+from src.jobs.daily_report_scheduler import report_times
 from src.utils.watchlist_store import load_watchlist
 
 
-DEFAULT_TIMEZONE = "America/Lima"
 DEFAULT_STARTUP_ALERT_ENABLED = "true"
 
 
@@ -53,15 +52,11 @@ def get_startup_alert_chat_ids() -> list[int | str]:
 
 
 def build_startup_message() -> str:
-    timezone_name = os.getenv("TELEGRAM_DAILY_REPORT_TIMEZONE", DEFAULT_TIMEZONE)
-    daily_report_time = os.getenv("TELEGRAM_DAILY_REPORT_TIME", "08:30")
+    slots = report_times()
+    timezone_name = str(slots[0].tzinfo)
+    daily_report_time = " and ".join(slot.strftime("%H:%M") for slot in slots)
     daily_report_enabled = os.getenv("TELEGRAM_DAILY_REPORT_ENABLED", "true")
-
-    try:
-        now = datetime.now(ZoneInfo(timezone_name))
-    except Exception:
-        timezone_name = DEFAULT_TIMEZONE
-        now = datetime.now(ZoneInfo(timezone_name))
+    now = datetime.now(slots[0].tzinfo)
 
     try:
         watchlist_count = len(load_watchlist())
@@ -79,7 +74,7 @@ Environment: {environment}
 Time: {now.strftime("%Y-%m-%d %H:%M:%S")} {timezone_name}
 
 Daily report: {daily_report_enabled}
-Daily report time: {daily_report_time} {timezone_name}
+Daily report times: {daily_report_time} {timezone_name}
 Watchlist symbols: {watchlist_count}
 
 Service: smart-money-ai-bot

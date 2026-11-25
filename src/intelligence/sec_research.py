@@ -69,6 +69,42 @@ def entity_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.casefold())
 
 
+NOTE_TERMS = (r"US\$(?P<amount>\d[\d,]*(?:\.\d+)? (?:million|billion)) aggregate principal amount of "
+              r"(?P<coupon>\d{1,2}(?:\.\d+)?)% [Ss]enior [Nn]otes due (?P<due>20\d\d)")
+ISSUED = re.compile(
+    r"\b(?P<issuer>[A-Z][\w&-]*(?: [A-Z][\w&-]*){1,8}) \((?P<alias>[A-Z0-9]{2,10})\), "
+    r"a [\d.]+%-owned subsidiary of [^;\n]{1,100}?, announced the completion of its "
+    r"(?:previously announced )?offering(?: \(the [Nn]otes [Oo]ffering\))? of " + NOTE_TERMS)
+REDEMPTION = re.compile(
+    r"\b(?P<alias>[A-Z0-9]{2,10}) (?:also )?announced that a notice has been issued to redeem on "
+    r"(?P<date>[A-Z][a-z]+ \d{1,2}, 20\d\d), all of its outstanding " + NOTE_TERMS)
+
+
+def note_terms(text):
+    issues = list(ISSUED.finditer(text))
+    if len(issues) != 1:
+        return {}
+    issue = issues[0]
+    terms = issue.groupdict()
+    notices = list(REDEMPTION.finditer(text))
+    if len(notices) == 1 and notices[0]["alias"] == issue["alias"]:
+        try:
+            datetime.strptime(notices[0]["date"], "%B %d, %Y")
+        except ValueError:
+            return terms
+        terms["redemption_notice"] = notices[0].groupdict()
+    return terms
+
+
+def notes_narration(terms):
+    name = terms["issuer"]
+    text = f"{name} issued ${terms['amount']} of senior notes due {terms['due']} at {terms['coupon']} percent."
+    if notice := terms.get("redemption_notice"):
+        text += (f" It gave notice that it plans to redeem ${notice['amount']} of {notice['coupon']} percent "
+                 f"notes due {notice['due']} on {notice['date']}.")
+    return text
+
+
 def disclosure(text: str) -> dict:
     gpu_lease = bool(re.search(r"\b(?:GPU|graphics processing unit)\b", text, re.I) and re.search(r"\b(?:finance lease|lease financing)\b", text, re.I))
     topic = "AI infrastructure financing" if gpu_lease else "financing disclosure" if re.search(r"\b(?:credit agreement|debt financing|notes offering|finance lease)\b", text, re.I) else ""
@@ -131,6 +167,8 @@ def verify(url: str, now: datetime, fetch) -> dict:
                "primary_document": primary, "url": canonical, "published": published.isoformat(), "observed": now.isoformat(),
                "identity": identity, "symbols": symbols, "text": text, "sha256": hashlib.sha256(text.encode()).hexdigest(),
                "disclosure": disclosure(text)}
+    if terms := note_terms(text):
+        profile["notes"] = terms
     title = f"{profile['issuer']}: Form {profile['form']} — {profile['disclosure']['topic'] or 'current company report'}"
     return {"title": title, "original_title": title, "url": canonical, "published": profile["published"], "source_checked_at": profile["observed"],
             "source": "SEC EDGAR", "official": True, "publisher_symbol": "", "symbols": symbols, "kind": "macro", "relevant": True,
@@ -148,6 +186,8 @@ def checked(value: dict, now: datetime | None = None) -> dict:
             or value.get("official") is not True or value.get("source") != "SEC EDGAR"
             or ("source_excerpt" in value and value["source_excerpt"] != p["text"])):
         raise ValueError("SEC filing proof does not match the candidate")
+    if "notes" in p and (not p["notes"] or p["notes"] != note_terms(p["text"])):
+        raise ValueError("Financing terms differ from the original filing")
     ids = p["identity"]
     if (ids.get("DocumentType") != [p["form"]] or len(ids.get("EntityRegistrantName", [])) != 1
             or entity_key(ids["EntityRegistrantName"][0]) != entity_key(p["issuer"])
@@ -165,6 +205,8 @@ def checked(value: dict, now: datetime | None = None) -> dict:
 
 def narration(value: dict) -> str:
     p = checked(value)
+    if "notes" in p:
+        return notes_narration(p["notes"])
     detail = p["disclosure"]
     text = ("The filing describes GPU equipment lease financing." if detail["gpu_lease"] else "Review the original current report for the disclosed financing terms.")
     for fact in detail["facts"]:

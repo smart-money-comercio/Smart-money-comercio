@@ -788,7 +788,9 @@ def fetch_news_live_context(force_refresh: bool = False) -> dict:
         def read_release(pair):
             source, payload = pair
             result = originals.enrich_feed(source, payload, parse_rss_items,
-                lambda url: fetch_url(url, force_refresh, cache_result=False), datetime.now(timezone.utc), budget=article_budget)
+                lambda url: fetch_url(url, force_refresh, cache_result=False,
+                    **({"binary": True} if source.get("category") == "fed" and url.endswith(".pdf") else {})),
+                datetime.now(timezone.utc), budget=article_budget)
             if result is not payload:
                 set_cached_source(source["url"], result)
             return result

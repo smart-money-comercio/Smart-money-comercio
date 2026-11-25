@@ -417,6 +417,37 @@ class MinutesChecks(IsolatedChecks):
             values, _ = editor.cache_candidates(NOW, [], cache={source["url"]: enriched})
         return values, calls
 
+    def test_discount_window_decision_uses_the_linked_pdf_and_distinguishes_bank_requests(self):
+        from io import BytesIO
+        from pypdf import PdfWriter
+        from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
+        from src.intelligence import fomc_minutes
+        self.title = "Minutes of the Board's discount rate meetings on October 1 and October 7, 2026"
+        self.document = self.notice.replace("/pressreleases/", "/pressreleases/files/")[:-4] + "1.pdf"
+        text = ("Approved. October 7, 2026. The Board approved the establishment of the primary credit rate "
+                "at the existing level of 3 percent. The directors of the Federal Reserve Banks of Boston and "
+                "Cleveland had voted on October 1, 2026, to establish the primary credit rate at 3.25 percent "
+                "(an increase from 3 percent). Voting for this action: All governors.")
+        writer = PdfWriter()
+        page = writer.add_blank_page(width=640, height=800)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
+                                 NameObject("/BaseFont"): NameObject("/Helvetica")})
+        page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})})
+        stream = DecodedStreamObject()
+        stream.set_data(("BT /F1 10 Tf (" + text.replace("(", r"\(").replace(")", r"\)") + ") Tj ET").encode())
+        page[NameObject("/Contents")] = writer._add_object(stream)
+        output = BytesIO()
+        writer.write(output)
+        rows, calls = self.enrich(minutes=output.getvalue())
+        self.assertEqual(calls, [self.notice,self.document])
+        selected, = editor.selected_stories(editor.build_editorial_plan({"rows": []}, NOW, rows))
+        review = fomc_minutes.review(analysis.checked_evidence(selected))
+        self.assertIn("kept its primary lending rate for banks at 3 percent", review["body"])
+        self.assertIn("2 Reserve Banks had requested 3.25 percent", review["body"])
+        self.assertNotIn("federal funds", review["body"])
+        rows, _ = self.enrich(minutes=b"not a PDF")
+        self.assertFalse(editor.selected_stories(editor.build_editorial_plan({"rows": []}, NOW, rows)))
+
     def test_announcement_to_full_minutes_to_published_brief(self):
         rows, calls = self.enrich()
         self.assertEqual(calls, [self.notice, self.document])
