@@ -102,8 +102,9 @@ class ReaderChecks(IsolatedChecks):
         answer = build(at, self.bea_payload(at))
         record = self.record(answer)
         lead = next(line for line in answer.splitlines() if line.startswith("The takeaway:"))
-        self.assertIn("Yesterday we asked about inflation", lead)
-        self.assertIn("core PCE inflation slowed from 0.7% to 0.5% month over month", lead)
+        self.assertIn("monthly inflation rate fell from 0.4% to 0.2% in October", lead)
+        self.assertIn("Excluding food and energy, the rate fell from 0.7% to 0.5%", lead)
+        self.assertIn("Yesterday we asked about inflation", pce.core_opening(record["pce_watch"], at, 4))
         self.assertIn(pce.SOURCE_ID, daily_voiceover.checked(record, at)["segments"][0]["source_ids"])
         self.assertIn("inflation slowed from 0.4% to 0.2%", answer)
         self.assertIn("Households spent 0.1% less after inflation", answer)
@@ -111,12 +112,38 @@ class ReaderChecks(IsolatedChecks):
         self.assertIn(pce.SOURCE_ID, daily_voiceover.checked(record, at)["sources"])
         self.assertIn("less after inflation", daily_voiceover.checked(record, at)["script"])
         with self.assertRaisesRegex(ValueError, "text, section or source"):
-            pce.validate(record["pce_watch"], answer.replace("0.4%", "0.9%", 1), at)
+            pce.validate(record["pce_watch"], answer.replace("monthly PCE inflation slowed from 0.4%", "monthly PCE inflation slowed from 0.9%", 1), at)
         self.assertIn(pce.ANSWER, build(at + timedelta(seconds=1), self.bea_payload(at)))
         self.assertTrue(self.deliver(answer, at + timedelta(seconds=3)))
         with patch.object(cache, "utc_now", return_value=at + timedelta(minutes=1)):
             self.assertIn("1/1 delivered questions answered", pce.delivery_summary())
         self.assertNotIn(pce.ANSWER, build(at + timedelta(minutes=2), self.bea_payload(at)))
+
+    def test_wednesday_intraday_brief_answers_tuesdays_question_with_current_session(self):
+        from src.intelligence import calendar_source_cache as cache, news_live_sources
+        due = datetime(2026, 11, 25, 13, 30, tzinfo=timezone.utc)
+        prior = due - timedelta(hours=15)
+        self.bea_schedule(prior, due)
+        with patch.object(cache, "utc_now", return_value=prior):
+            first = self.render_current(self.research(now=prior))
+        self.assertTrue(self.deliver(first, prior + timedelta(seconds=1)))
+        now = due.replace(hour=19, minute=48)
+        page = self.bea_payload(now)
+        page["body"] = page["body"].replace("<td>0.4</td><td>0.2", "<td>0.5</td><td>0.3").replace(
+            "<td>0.7</td><td>0.5", "<td>0.3</td><td>0.3")
+        current = self.close_report(now, "2026-11-25", "2026-11-24", {"MSFT": 1}, timing="regular_session")
+        current = current.replace("Nasdaq -0.21%", "Nasdaq -0.91%")
+        with patch.object(cache, "utc_now", return_value=now), \
+                patch.object(news_live_sources, "fetch_url", return_value=page), \
+                patch.object(news_live_sources, "get_cached_source", return_value=page):
+            text = self.render_current(current)
+        opening = next(line for line in text.splitlines() if line.startswith("The takeaway:"))
+        self.assertIn("Good afternoon.", text)
+        self.assertEqual(opening, "The takeaway: The monthly inflation rate fell from 0.5% to 0.3% in October. "
+                         "Excluding food and energy, prices rose 0.3% for a second straight month. "
+                         "In Wednesday's session, the Nasdaq was down 0.91%.")
+        scene = daily_voiceover.checked(self.record(text), now)["segments"][0]
+        self.assertIn("second straight month", scene["narration"])
 
     def test_core_question_waits_for_two_real_monthly_cells(self):
         from src.intelligence import pce_followup as pce, calendar_source_cache as cache
@@ -541,7 +568,8 @@ class ReaderChecks(IsolatedChecks):
         from src.intelligence import session_followup as follow, calendar_sources as publishers
         at = datetime(2026, 11, 24, 22, 30, tzinfo=timezone.utc)
         charts = [self.index_history("^IXIC", [20, 23, 24], [100, 106.51, 106.51 * .9852]),
-                  self.index_history("^GSPC", [20, 23, 24], [100, 104.73, 104.73 * .995])]
+                  self.index_history("^GSPC", [20, 23, 24], [100, 104.73, 104.73 * .995]),
+                  self.index_history("^DJI", [20, 23, 24], [100, 100, 100.85])]
         research = self.close_report(at, "2026-11-24", "2026-11-23", {"MSFT": -1, "AMD": 1}).replace(
             "S&P -0.52%, Nasdaq -0.21%", "S&P -0.50%, Nasdaq -1.48%")
         macro = {"eventName": "Personal Income and Outlays", "time_status": "verified", "publisher": "BEA",
@@ -555,14 +583,28 @@ class ReaderChecks(IsolatedChecks):
             text = self.render_current(research)
         record = self.record(text)
         opening = next(row for row in text.splitlines() if row.startswith("The takeaway:"))
-        self.assertIn("gave back part of Monday's rally", opening)
-        self.assertIn("6.51 percent", opening)
-        self.assertIn("1.48 percent", opening)
-        self.assertIn("Wednesday at 8:30 AM EST", opening)
+        self.assertIn("Good evening.", text)
+        self.assertEqual(opening, "The takeaway: The tech-heavy Nasdaq gave back a slice of Monday's rally. "
+                         "After gaining nearly 7%, it fell 1.48% on Tuesday, while the Dow gained 0.85%. "
+                         "Tomorrow at 8:30 a.m. ET, attention shifts to inflation. We’ll be watching whether "
+                         "underlying prices rose more slowly than they did a month earlier.")
         self.assertNotIn("watchlist", opening.lower())
         scene = daily_voiceover.checked(record, at)["segments"][0]
         self.assertTrue({"benchmark_history", "takeaway_calendar"} <= set(scene["source_ids"]))
+        self.assertIn("Takeaway format: 5", editor.build_editor_status())
+        history = record["voiceover"]["sources"]["benchmark_history"]
+        self.assertTrue(any("%5EDJI" in source["url"] for source in history))
         evidence = record["analyst_review"]["evidence"]
+        last_version = {"indexes": {row["symbol"]: row for row in charts[:2]}}
+        self.assertIn("gave back part of Monday's rally", follow.reversal_text(last_version, evidence, at, 4))
+        for missing_or_invalid in ([], [self.index_history("^DJI", [19, 20, 23], [100, 104, 105])],
+                                   [dict(charts[2], move=9.9)], [charts[2], charts[2]]):
+            with patch.object(follow.research_context, "load_market_payload",
+                              return_value={"market_moves": [charts[0], *missing_or_invalid]}):
+                packet = follow.capture(evidence, [], set(), at, 5)["market"]
+            copy = follow.reversal_text(packet, evidence, at, 5)
+            self.assertIn("fell 1.48% on Tuesday", copy)
+            self.assertNotIn("Dow", copy)
         self.assertFalse(follow.reversal_text({"indexes": {c["symbol"]: c for c in charts}}, evidence, at, 3))
         updated = self.index_history("^IXIC", [20, 23, 24], [100, 110, 99])
         self.assertIn("more than erased", follow.reversal_text({"indexes": {"^GSPC": charts[1], "^IXIC": updated}},

@@ -265,7 +265,7 @@ def _takeaway_sources(evidence):
         if evidence.get("core_pce_lead"):
             from src.intelligence.pce_followup import ANSWER
             sources.append(ANSWER)
-        if evidence.get("reversal") and lead["market"]:
+        if evidence.get("reversal") and lead["market"] and not evidence.get("core_pce_lead"):
             from src.intelligence.session_followup import MARKET_SOURCE
             sources.append(MARKET_SOURCE)
         if lead["calendar"]:

@@ -123,7 +123,7 @@ def analyze_report(
     if takeaway_version:
         from src.intelligence.daily_takeaway import VERSION
 
-        if type(takeaway_version) is not int or takeaway_version not in (1, 2, 3, VERSION) or reader_version != 4:
+        if type(takeaway_version) is not int or takeaway_version not in (1, 2, 3, 4, VERSION) or reader_version != 4:
             raise ValueError("Unknown dated takeaway presentation")
         evidence["takeaway_version"] = takeaway_version
     if disclosure_version:
@@ -143,13 +143,20 @@ def analyze_report(
         evidence["source_sections"].append("Market event checks")
     if pce_lead is not None:
         from src.intelligence import pce_followup
-        if takeaway_version != 4 or event_context is None:
+        if takeaway_version not in (4, 5) or event_context is None:
             raise ValueError("Inflation takeaway needs a dated edition")
-        evidence["core_pce_lead"] = pce_followup.core_opening(pce_lead, now)
+        evidence["core_pce_lead"] = pce_followup.core_opening(pce_lead, now, takeaway_version)
+        if (takeaway_version == 5 and evidence["is_open"]
+                and evidence["session"] == now.astimezone(pce_followup.NY).date().isoformat()
+                and "Nasdaq" in evidence["moves"]):
+            move = evidence["moves"]["Nasdaq"]
+            reading = f"{'down' if move < 0 else 'up'} {abs(move):.2f}%" if move else "flat"
+            day = now.astimezone(pce_followup.NY).strftime("%A")
+            evidence["core_pce_market_text"] = f"In {day}'s session, the Nasdaq was {reading}."
         evidence["source_sections"].append(pce_followup.ANSWER)
     if session_context is not None:
         from src.intelligence import session_followup
-        if takeaway_version not in (3, 4) or event_context is None:
+        if takeaway_version not in (3, 4, 5) or event_context is None:
             raise ValueError("Session follow-up needs a dated closing edition")
         if prior := session_context.get("intraday"):
             evidence["intraday_answer"] = session_followup.breadth_answer(prior, evidence, now)
@@ -161,13 +168,13 @@ def analyze_report(
             evidence["source_sections"].append(session_followup.MARKET_SOURCE)
     if takeaway_calendar is not None:
         from src.intelligence import daily_takeaway
-        if takeaway_version not in (2, 3, 4) or event_context is None:
+        if takeaway_version not in (2, 3, 4, 5) or event_context is None:
             raise ValueError("Publisher release needs a dated daily edition")
         evidence["takeaway_calendar_text"] = daily_takeaway.calendar_text(takeaway_calendar, now, takeaway_version)
         evidence["source_sections"].append(daily_takeaway.CALENDAR_SECTION)
     if earnings_takeaway is not None:
         from src.intelligence import earnings_takeaway as issuer
-        if takeaway_version not in (2, 3, 4) or event_context is None:
+        if takeaway_version not in (2, 3, 4, 5) or event_context is None:
             raise ValueError("Earnings comparison needs a dated daily edition")
         evidence["earnings_takeaway_text"] = issuer.opening(earnings_takeaway, now)
         evidence["source_sections"].append(issuer.SOURCE_SECTION)

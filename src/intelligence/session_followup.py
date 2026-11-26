@@ -1,6 +1,7 @@
 """Close an intraday breadth question and put a market reversal in perspective."""
 
 from datetime import date, timedelta
+from math import ceil
 import re
 
 from src.intelligence import market_priority, research_context, weekend_inputs, weekend_store
@@ -125,15 +126,47 @@ def closing_prices(row, symbol, day, reported, now):
     return before, last, quote["price"]
 
 
+def pullback_text(packet, evidence, day, now):
+    rows = packet["indexes"]
+    if set(packet) != {"indexes"} or set(rows) not in ({"^IXIC"}, {"^IXIC", "^DJI"}):
+        raise ValueError("Unexpected sources for the Nasdaq pullback")
+    loss = -evidence["moves"]["Nasdaq"]
+    before, last, current = closing_prices(rows["^IXIC"], "^IXIC", day, -loss, now)
+    gain = round(100 * (last / before - 1), 2)
+    if gain < 1 or loss <= 0 or current >= last:
+        return ""
+    if current < before:
+        part = "more than erased"
+    elif current == before:
+        part = "gave back all of"
+    elif last - current > (last - before) / 2:
+        part = "gave back most of"
+    else:
+        part = "gave back a slice of"
+    upper = ceil(gain)
+    prior_gain = f"nearly {upper}%" if upper >= 3 and 0 < upper - gain <= .5 else f"{gain:g}%"
+    comparison = ""
+    if "^DJI" in rows:
+        dow = rows["^DJI"]["move"]
+        closing_prices(rows["^DJI"], "^DJI", day, dow, now)
+        if dow <= 0:
+            raise ValueError("Dow comparison needs a gain at the same close")
+        comparison = f", while the Dow gained {dow:.2f}%"
+    return (f"The tech-heavy Nasdaq {part} {prior_weekday(day):%A}'s rally. "
+            f"After gaining {prior_gain}, it fell {loss:.2f}% on {day:%A}{comparison}.")
+
+
 def reversal_text(packet, evidence, now, version=3):
     if not close_today(evidence, now):
         raise ValueError("A closing comparison requires today's completed cash session")
     day = date.fromisoformat(evidence["session"])
+    if version == 5 and "^GSPC" not in packet["indexes"]:
+        return pullback_text(packet, evidence, day, now)
     if version >= 4 and set(packet["indexes"]) != set(INDEXES):
         raise ValueError("Unexpected closing benchmark source")
     prices = [closing_prices(packet["indexes"][sym], sym, day, evidence["moves"][key], now)
               for sym, key in INDEXES.items()]
-    if (version >= 4 and all(evidence["moves"][key] < 0 for key in INDEXES.values())
+    if (version == 4 and all(evidence["moves"][key] < 0 for key in INDEXES.values())
             and all(last / before >= 1.01 and current < last for before, last, current in prices)):
         if "week" in packet:
             raise ValueError("Pullback comparison uses only the consecutive index closes")
@@ -185,6 +218,22 @@ def capture(evidence, editions, confirmed, now, version=3):
             result["intraday"] = prior
     rows = research_context.load_market_payload().get("market_moves", [])
     if not isinstance(rows, list):
+        return result or None
+    if version == 5 and evidence["moves"].get("Nasdaq", 0) < 0:
+        by_symbol = {}
+        for symbol in ("^IXIC", "^DJI"):
+            matches = [row for row in rows if isinstance(row, dict) and row.get("symbol") == symbol]
+            if len(matches) == 1:
+                by_symbol[symbol] = matches[0]
+        if "^IXIC" in by_symbol:
+            for indexes in (by_symbol, {"^IXIC": by_symbol["^IXIC"]}):
+                market = {"indexes": indexes}
+                try:
+                    if reversal_text(market, evidence, now, version):
+                        result["market"] = market
+                        break
+                except (ValueError, KeyError, IndexError, TypeError, AttributeError, OverflowError):
+                    continue
         return result or None
     matching = [row for row in rows if isinstance(row, dict) and row.get("symbol") in INDEXES]
     if len(matching) != len(INDEXES):

@@ -131,10 +131,25 @@ def core_read(result):
     return f"core PCE inflation {verb} from {before}% to {current}% month over month."
 
 
-def core_opening(item, now):
+def core_opening(item, now, version=4):
     checked_text(item, now)
     if item["phase"] != "answer" or not item.get("prior_edition"):
         raise ValueError("Core inflation lead requires an answered, delivered question")
+    if version >= 5:
+        result = item["result"]
+        month = period_for(item["schedule"]).strftime("%B")
+        before, current = map(Decimal, result["inflation"])
+        core_before, core = map(Decimal, result["core_inflation"])
+        direction = "fell" if current < before else "rose"
+        headline = (f"The monthly inflation rate {direction} from {before}% to {current}% in {month}."
+                    if current != before else f"The monthly inflation rate held at {current}% in {month}.")
+        if core != core_before:
+            direction = "fell" if core < core_before else "rose"
+            return f"{headline} Excluding food and energy, the rate {direction} from {core_before}% to {core}%."
+        if core == 0:
+            return f"{headline} Excluding food and energy, prices were flat for a second straight month."
+        return (f"{headline} Excluding food and energy, prices {'rose' if core > 0 else 'fell'} "
+                f"{abs(core)}% for a second straight month.")
     confirmed = cache.timestamp(item["confirmed_at"]).astimezone(NY)
     yesterday = now.astimezone(NY).date() - timedelta(days=1)
     lead = "Yesterday we asked about inflation." if confirmed.date() == yesterday else "We asked about inflation in an earlier brief."

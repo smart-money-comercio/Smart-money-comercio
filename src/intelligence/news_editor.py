@@ -1091,7 +1091,7 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                                  + "; source clock " + context["published"] + "; context only, excluded from fresh-story counts")
                 if analysis.get("reader_version") in {1, 2, 3, 4}:
                     signals = sum(row["section"] == "watch" for row in analysis["insights"])
-                    if analysis.get("evidence", {}).get("takeaway_version") in (2, 3, 4):
+                    if analysis.get("evidence", {}).get("takeaway_version") in (2, 3, 4, 5):
                         from src.intelligence import daily_takeaway
                         lead = daily_takeaway.compose(analysis["evidence"])
                         basis = ("delivered inflation question and BEA release" if analysis.get("pce_lead") else
@@ -1101,6 +1101,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                                  else "aligned premarket futures" if analysis["evidence"].get("premarket_futures") else "dated market indicators" if lead["market"]
                                  else "limited market coverage")
                         lines.append("Takeaway basis: " + basis)
+                        if analysis["evidence"]["takeaway_version"] == 5:
+                            lines.append("Takeaway format: 5")
                     lines.append(f"Reader brief: opening takeaway and {signals} evidence-grounded watch signals; each explains the next check and why it matters.")
                 if analysis.get("business_version", 0) >= 2:
                     lines.append(f"Brief narrative revision: {analysis['business_version']}")

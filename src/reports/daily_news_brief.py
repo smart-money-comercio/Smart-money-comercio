@@ -218,7 +218,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     moves = dict(re.findall(r"(S&P|Nasdaq|Russell|VIX|Oil|TLT)\s+([+-]?\d+(?:\.\d+)?%)", executive))
     if quote_day is None:
         moves = {}
-    prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now)}"
+    closing_edition = takeaway_version >= 5 and data_label == "completed regular session " + now.date().isoformat()
+    prefix = f"{TITLE}\nDate: {dated[1]}\nGenerated: {generated[1]} {generated[2]}\nMarket data: {data_label}\n\n{report_greeting(now, closing_edition=closing_edition)}"
     breadth = re.search(r"Breadth: (\d+) up / (\d+) down / (\d+) quoted", snapshot)
     from src.intelligence.market_event_desk import context_for_report
     event_context = context_for_report(research_report, now)
@@ -301,9 +302,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     except (OSError, ValueError, TypeError, SQLiteError):
         past_editions = []
     from src.intelligence import daily_takeaway
-    calendar_lead = daily_takeaway.next_calendar(brief.get("macro", []), now, takeaway_version) if takeaway_version in (2, 3, 4) else None
+    calendar_lead = daily_takeaway.next_calendar(brief.get("macro", []), now, takeaway_version) if takeaway_version in (2, 3, 4, 5) else None
     earnings_context = None
-    if takeaway_version in (2, 3, 4) and (not initial_stories or any(s.get("event_evidence", {}).get("schema") == 17 for s in initial_stories)):
+    if takeaway_version in (2, 3, 4, 5) and (not initial_stories or any(s.get("event_evidence", {}).get("schema") == 17 for s in initial_stories)):
         from src.intelligence import earnings_takeaway, weekend_store
         weekend = now.astimezone(earnings_takeaway.NY).weekday() >= 5
         nvidia_move = any(row["symbol"] == "NVDA" and row["status"] == "rechecked" for row in event_context["events"])
@@ -331,7 +332,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     if watchlist_baseline:
         plan["watchlist_baseline"] = watchlist_baseline
     session_options = [None]
-    if takeaway_version in (3, 4) and snapshot.startswith("Market Session: Closed"):
+    if takeaway_version in (3, 4, 5) and snapshot.startswith("Market Session: Closed"):
         from src.intelligence import session_followup
         context = session_followup.capture(report_evidence(research_report), past_editions, confirmed, now, takeaway_version)
         if context:
@@ -390,7 +391,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
     if earnings_context:
         lead_options.append((earnings_context, None))
     if calendar_lead:
-        lead_options.append((None, calendar_lead))
+        history = (session_options[0] or {}).get("market", {})
+        if takeaway_version == 5 and "^IXIC" in history.get("indexes", {}) and "^GSPC" not in history["indexes"]:
+            lead_options.insert(0, (None, calendar_lead))
+        else:
+            lead_options.append((None, calendar_lead))
     lead_options.append((None, None))
     pce_options = (pce_watch, None) if pce_watch else (None,)
     for pce, session_context, count, survey, (earnings_packet, calendar_packet) in product(pce_options, session_options, range(len(initial_stories), -1, -1), survey_options, lead_options):
@@ -411,11 +416,11 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                     row["id"] == watch["story_id"] and row["url"] == packet["url"] for row in retained)):
                 packet = None
             comparison = earnings_watch.comparison_text(watch) if earnings_watch.has_answer(watch) else ""
-            core_lead = (pce if takeaway_version == 4 and pce and pce.get("prior_edition")
+            core_lead = (pce if takeaway_version in (4, 5) and pce and pce.get("prior_edition")
                          and pce.get("result", {}).get("core_inflation") else None)
             reversal = (session_context or {}).get("market")
             allow_calendar = not (retained or packet or watch or reversal)
-            if takeaway_version == 4 and reversal and not (packet or watch):
+            if reversal and (takeaway_version == 5 or takeaway_version == 4 and not (packet or watch)):
                 allow_calendar = True
             analysis = analyze_report(
                 research_report, retained, presentation="news", focus_context={**focus_history, "limit": focus_limit},

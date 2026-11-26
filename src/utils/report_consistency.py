@@ -18,12 +18,14 @@ def score_risk_label(stock: dict) -> str:
     return label
 
 
-def report_greeting(now: datetime) -> str:
+def report_greeting(now: datetime, *, closing_edition: bool = False) -> str:
     """Use the same local clock as the report's Generated timestamp."""
     if now.hour < 5:
         return "Hello."
     if now.hour < 12:
         return "Good morning."
+    if closing_edition and now.hour == 17 and now.minute >= 30:
+        return "Good evening."
     if now.hour < 18:
         return "Good afternoon."
     return "Good evening."
@@ -48,6 +50,10 @@ def validate_report_greeting(report: str) -> list[str]:
         if line.strip().rstrip(".!")
         in {"Good morning", "Good afternoon", "Good evening", "Hello"}
     ]
+    closing = f"Market data: completed regular session {generated.date()}" in report.splitlines()
+    # Older saved closing briefs used the general 6 p.m. greeting.
+    if closing and greetings == [report_greeting(generated, closing_edition=True).rstrip(".")]:
+        return []
     expected = report_greeting(generated).rstrip(".")
     if greetings != [expected]:
         return [f"Greeting must be '{expected}' for the Generated timestamp."]

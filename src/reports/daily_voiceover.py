@@ -478,7 +478,7 @@ def build(record, report, research, *, schema=2):
             market_sources = []
     reported = next(iter(evidence.get("market_context") or []), {})
     proof = reported.get("reporting_evidence") or {}
-    if evidence.get("takeaway_version") == 4 and proof.get("connection", {}).get("family") == "ipo_benchmark":
+    if evidence.get("takeaway_version") in (4, 5) and proof.get("connection", {}).get("family") == "ipo_benchmark":
         from src.intelligence.market_reporting import summary
         # Keep the attributed IPO observation audible even on mornings when
         # the last completed cash session is the only available equity quote.

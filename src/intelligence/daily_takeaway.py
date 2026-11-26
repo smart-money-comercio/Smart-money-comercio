@@ -3,7 +3,7 @@
 from datetime import date
 
 
-VERSION = 4
+VERSION = 5
 INDEXES = (("Nasdaq", "the Nasdaq Composite"), ("S&P", "the S&P 500"), ("Russell", "the Russell 2000"))
 
 
@@ -31,6 +31,12 @@ def calendar_text(row, now, version=3):
             or version >= 4 and observed > now
             or not now < at <= now + timedelta(days=7) or not -60 <= (now - observed).total_seconds() <= 86400):
         raise ValueError("Upcoming release needs a current verified publisher schedule")
+    if version >= 5 and (publisher, family) == ("BEA", "pce"):
+        gap = (at.date() - now.astimezone(publishers.NY).date()).days
+        when = "Today" if gap == 0 else "Tomorrow" if gap == 1 else at.strftime("%A")
+        clock = at.strftime("%I:%M %p").lstrip("0").replace("AM", "a.m.").replace("PM", "p.m.")
+        return (f"{when} at {clock} ET, attention shifts to inflation. "
+                "We’ll be watching whether underlying prices rose more slowly than they did a month earlier.")
     if version >= 4 and (publisher, family) == ("BEA", "pce"):
         clock = at.strftime("%I:%M %p %Z").lstrip("0")
         return f"On {at:%A} at {clock}, we’ll see whether prices rose more slowly once food and energy are excluded."
@@ -76,13 +82,13 @@ def _futures_lead(value, version):
 
     nasdaq, broad = (round(row["change"], 2) for row in value["quotes"])
     lead = "Early losses were steeper in tech-heavy futures. " if nasdaq < broad < 0 else ""
-    if version in (3, 4):
+    if version in (3, 4, 5):
         lead = ""
         if broad < 0 and round(broad - nasdaq, 2) >= .15:
             lead = "Tech-heavy futures led the early decline. "
         elif broad > 0 and round(nasdaq - broad, 2) >= .15:
             lead = "Tech-heavy futures led the early gains. "
-    if version == 4:
+    if version in (4, 5):
         then = [row["prior_bar_change"] for row in value["quotes"]]
         changes = [row["change"] for row in value["quotes"]]
         # Speak only when both contracts' moves since the prior cash close
@@ -126,7 +132,7 @@ def market_read(evidence):
         if during:
             return f"The Nasdaq Composite is leading {day}'s decline, down {abs(nasdaq):.2f} percent as large companies and small caps also lose ground."
         return f"The Nasdaq Composite led {day}'s selloff, falling {abs(nasdaq):.2f} percent as large companies and small caps also lost ground."
-    if evidence.get("takeaway_version") in (3, 4):
+    if evidence.get("takeaway_version") in (3, 4, 5):
         if nasdaq > broad > 0 and small > 0:
             return (f"Small caps joined the rally. The Nasdaq Composite "
                     f"{'is up' if during else 'rose'} {nasdaq:.2f} percent {when}, "
@@ -163,19 +169,19 @@ def compose(evidence):
     watch = evidence.get("earnings_watch")
     reversal = evidence.get("reversal")
     if evidence.get("core_pce_lead"):
-        market = _futures_lead(futures, 4) if futures else ""
+        market = _futures_lead(futures, 4) if futures else evidence.get("core_pce_market_text", "")
         return {"text": " ".join(filter(None, (evidence["core_pce_lead"], market))),
                 "market": bool(market), "earnings": False, "recent_result": False, "calendar": False,
                 "point": None, "story_ids": []}
     if reversal and not futures:
-        calendar = evidence.get("takeaway_calendar_text") if evidence.get("takeaway_version") == 4 else None
+        calendar = evidence.get("takeaway_calendar_text") if evidence.get("takeaway_version") in (4, 5) else None
         return {"text": " ".join(filter(None, (reversal, calendar))), "market": True, "earnings": False, "recent_result": False,
                 "calendar": bool(calendar), "point": None, "story_ids": []}
     market_first = bool(futures) or selloff(evidence)
     context = evidence.get("earnings_takeaway_text")
     point = opening_source(evidence) if not (market_first or watch or context) else None
     use_context = bool(context and not point and (not watch or watch["phase"] == "results"))
-    modern = evidence.get("takeaway_version") in (2, 3, 4)
+    modern = evidence.get("takeaway_version") in (2, 3, 4, 5)
     market = ""
     if futures:
         market = _futures_lead(futures, evidence.get("takeaway_version"))
