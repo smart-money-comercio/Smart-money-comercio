@@ -10,7 +10,7 @@ from src.intelligence.premarket_review import report as review_report
 from src.jobs.premarket_scheduler import active,collect_snapshot,destinations
 from src.utils.telegram_messages import reply_long_message
 
-LAST_PREVIEW=0.0
+LAST_PREVIEW = None
 PREVIEW_LOCK=asyncio.Lock()
 
 
@@ -49,9 +49,10 @@ async def premarket_command(update,context):
         elif action=="review":text=review_report()
         elif action=="preview":
             async with PREVIEW_LOCK:
-                if monotonic()-LAST_PREVIEW<180:
+                requested_at = monotonic()
+                if LAST_PREVIEW is not None and requested_at - LAST_PREVIEW < 180:
                     await update.message.reply_text("Preview cooldown: wait three minutes between live checks.",parse_mode=None);return
-                LAST_PREVIEW=monotonic()
+                LAST_PREVIEW = requested_at
                 value=await asyncio.to_thread(collect_snapshot)
                 text="Preview only; no scheduled ledger or channel delivery changes.\n\n"+risk.render(value)
         else:text="Use /premarket [status|history|review|preview|on|off]"

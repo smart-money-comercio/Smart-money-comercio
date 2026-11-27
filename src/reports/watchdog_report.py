@@ -159,7 +159,7 @@ def build_watchdog_payload() -> dict[str, Any]:
     return {
         "watchdog_status": watchdog_status,
         "current_time_ny": current_ny.strftime("%Y-%m-%d %H:%M:%S %Z"),
-        "expected_run": "Monday-Friday 8:15 AM New York time",
+        "expected_run": "Monday-Friday 8:30 AM New York time",
         "watchdog_check": "Monday-Friday 8:45 AM New York time",
         "ran_today": ran_today,
         "agent_success": agent_success,

@@ -336,4 +336,7 @@ def insights(evidence):
         rows.append({"id": "watch_earnings_result", "section": "watch",
                      "text": "Earnings follow-up — " + earnings_watch.opening(watch, NAMES),
                      "story_id": watch["story_id"], "sources": [earnings_watch.SOURCE_SECTION]})
+    if "subscriber_movers" in evidence:
+        from src.intelligence.subscriber_brief import watch_rows
+        return [rows[0], *watch_rows(rows[1:], evidence)]
     return rows

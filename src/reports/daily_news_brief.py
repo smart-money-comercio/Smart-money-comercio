@@ -194,7 +194,7 @@ def validate_news_brief(text: str) -> dict:
 
 def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = None, *, futures_provider=None,
                            require_company_facts=False, takeaway_version=0, watchlist_checkpoint_version=0,
-                           market_reporting_version=0, resolve_watches=False, sector_price_reader=None, defense_context_version=0, pce_watch=None) -> str:
+                           subscriber_edition=False, market_reporting_version=0, resolve_watches=False, sector_price_reader=None, defense_context_version=0, pce_watch=None) -> str:
     from src.intelligence import pce_followup, sentiment_followup
     from src.intelligence.defense_coverage import global_policy
     from src.reports.report_quality import describe_quality_failure, split_report_sections, validate_daily_report_quality
@@ -316,6 +316,10 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             for edition in past_editions:
                 leads.extend(editor.selected_stories(edition))
             earnings_context = earnings_takeaway.capture(leads, now, editor.feeds.fetch_url)
+    subscriber = None
+    if subscriber_edition:
+        from src.intelligence import subscriber_brief
+        subscriber = subscriber_brief.capture(research_report, event_context, past_editions, now)
     focus_history = history_context(now, past_editions)
     watchlist_checkpoint = None
     confirmed = []
@@ -430,7 +434,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 premarket_futures=futures, takeaway_version=takeaway_version, earnings_takeaway=packet,
                 takeaway_calendar=calendar_packet if allow_calendar and not core_lead else None, pce_lead=core_lead,
                 watchlist_checkpoint_version=watchlist_checkpoint_version, watchlist_checkpoint=watchlist_checkpoint,
-                session_context=session_context,
+                session_context=session_context, subscriber_context=subscriber,
                 market_context=market_context, sector_checkpoint=sector_checkpoint, defense_context_version=defense_context_version,
             )
             insights = analysis["insights"]
@@ -447,6 +451,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             for story in sorted(retained, key=editor.news_order):
                 if comparison and story["id"] == watch["story_id"]:
                     narrations[story["id"]] = comparison
+                    if subscriber_edition:
+                        company_body.append(comparison)
                     continue
                 if story["id"] == opening_order_id:
                     narrations[opening_order_id] = opening_order["text"]
@@ -519,7 +525,9 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 notes_body.insert(-1, "Publisher schedule — " + calendar_lead["timing_url"])
             if packet:
                 notes_body.insert(-1, earnings_takeaway.source_line(packet))
-            if sector_checkpoint and sector_checkpoint["quotes"]:
+            if subscriber_edition and analysis["evidence"].get("subscriber_disclosure") in global_body:
+                notes_body.insert(-1, "Earlier defense disclosure — " + subscriber["disclosure"]["story"]["url"])
+            if not subscriber_edition and sector_checkpoint and sector_checkpoint["quotes"]:
                 notes_body.insert(-1, sector_followup.source_line())
             if futures:
                 notes_body.insert(-1, early_futures.source_line(futures))
@@ -545,7 +553,7 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
                 follow_up.append(answer)
             if sector_checkpoint:
                 follow_up.append(analysis["evidence"]["sector_verdict"])
-            if follow_up:
+            if follow_up and not subscriber_edition:
                 groups.insert(int(broad_selloff), (earnings_watch.COMPARISON_HEADER, follow_up))
 
             def render():
@@ -555,7 +563,8 @@ def build_daily_news_brief(research_report: str, catalyst_brief: dict | None = N
             text = render()
             extras = [(ahead_body, paragraph) for paragraph in macro[2:]
                       if not pce or "schedule lists PCE inflation and personal income" not in paragraph]
-            extras += [(watching, paragraph) for paragraph in market_detail(moves, breadth if quote_day else None)]
+            if not subscriber_edition:
+                extras += [(watching, paragraph) for paragraph in market_detail(moves, breadth if quote_day else None)]
             for body, paragraph in extras:
                 if narration_metrics(text)["spoken_words"] >= MIN_NARRATION_WORDS:
                     break

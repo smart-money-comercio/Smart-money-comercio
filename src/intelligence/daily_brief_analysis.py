@@ -105,7 +105,7 @@ def analyze_report(
     takeaway_version: int = 0, pce_lead: dict | None = None, earnings_takeaway: dict | None = None, takeaway_calendar: dict | None = None,
     watchlist_checkpoint_version: int = 0, watchlist_checkpoint: dict | None = None,
     session_context: dict | None = None,
-    market_context: list[dict] | None = None, sector_checkpoint: dict | None = None, defense_context_version: int = 0,
+    subscriber_context: dict | None = None, market_context: list[dict] | None = None, sector_checkpoint: dict | None = None, defense_context_version: int = 0,
 ) -> dict:
     if presentation not in {"full", "news"}:
         raise ValueError("Unknown analyst presentation")
@@ -141,6 +141,11 @@ def analyze_report(
         now = datetime.strptime(generated[1], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo(generated[2]))
         evidence["market_event_context"] = deepcopy(checked_context(event_context, report, now))
         evidence["source_sections"].append("Market event checks")
+    if subscriber_context is not None:
+        if event_context is None or reader_version != 4:
+            raise ValueError("Subscriber layout needs a dated news edition")
+        from src.intelligence import subscriber_brief
+        subscriber_brief.apply(subscriber_context, evidence, report, now)
     if pce_lead is not None:
         from src.intelligence import pce_followup
         if takeaway_version not in (4, 5) or event_context is None:
@@ -309,6 +314,8 @@ def analyze_report(
         evidence["source_sections"].append(early_futures.SOURCE_SECTION)
     value = {"schema": 1, "research_sha256": hashlib.sha256(report.encode()).hexdigest(),
              "evidence": evidence, "insights": review_daily_brief(deepcopy(evidence), presentation=presentation), "score_changes": False}
+    if subscriber_context is not None:
+        value["subscriber_context"] = deepcopy(subscriber_context)
     if presentation != "full":
         value["presentation"] = presentation
     if focus_context is not None:
@@ -370,7 +377,7 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
         takeaway_version=analysis.get("evidence", {}).get("takeaway_version", 0),
         watchlist_checkpoint_version=analysis.get("evidence", {}).get("watchlist_checkpoint_version", 0),
         watchlist_checkpoint=analysis.get("watchlist_checkpoint"), session_context=analysis.get("session_context"),
-        market_context=analysis.get("market_context"), sector_checkpoint=analysis.get("sector_checkpoint"),
+        subscriber_context=analysis.get("subscriber_context"), market_context=analysis.get("market_context"), sector_checkpoint=analysis.get("sector_checkpoint"),
         defense_context_version=analysis.get("evidence", {}).get("defense_context_version", 0),
     )
     if any(analysis.get(key) != expected.get(key) for key in (
@@ -388,18 +395,27 @@ def validate_review(analysis: dict, research_report: str, report: str, stories: 
     required = {key for key, row in allowed.items() if key not in {"model_support", "company_price", "participation"} or row["text"] in report}
     if seen != required:
         raise ValueError("Available analyst evidence was omitted from the brief")
-    if answer := expected["evidence"].get("intraday_answer"):
+    subscriber = "subscriber_context" in analysis
+    if subscriber:
+        from src.intelligence.earnings_watch import COMPARISON_HEADER
+        if COMPARISON_HEADER in report.splitlines():
+            raise ValueError("Subscriber brief contains the full-report comparison")
+        if expected["evidence"].get("subscriber_disclosure") in report.splitlines():
+            url = analysis["subscriber_context"]["disclosure"]["story"]["url"]
+            if "Earlier defense disclosure — " + url not in report.splitlines():
+                raise ValueError("Dated defense disclosure lost its original source")
+    if not subscriber and (answer := expected["evidence"].get("intraday_answer")):
         from src.intelligence.earnings_watch import COMPARISON_HEADER
         from src.reports.daily_voiceover import sections
         if answer not in sections(report).get(COMPARISON_HEADER, "").split("\n\n") or report.count(answer) != 1:
             raise ValueError("Closing breadth answer lost its original wording or section")
-    if sector := expected["evidence"].get("sector_verdict"):
+    if not subscriber and (sector := expected["evidence"].get("sector_verdict")):
         from src.intelligence import earnings_watch, sector_followup
         from src.reports.daily_voiceover import sections
         if (sector not in sections(report).get(earnings_watch.COMPARISON_HEADER, "").split("\n\n") or report.count(sector) != 1
                 or analysis["sector_checkpoint"]["quotes"] and report.count(sector_followup.source_line()) != 1):
             raise ValueError("Closing-price answer lost its written outcome or sources")
-    if verdict := expected["evidence"].get("watchlist_verdict"):
+    if not subscriber and (verdict := expected["evidence"].get("watchlist_verdict")):
         from src.intelligence import earnings_watch, watchlist_breadth
         from src.reports.daily_voiceover import sections
 

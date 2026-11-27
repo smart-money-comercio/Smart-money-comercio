@@ -97,7 +97,9 @@ def main() -> int:
 
     print(status_message)
 
-    if args.send_telegram:
+    if args.send_telegram and not sys.stdin.isatty():
+        print("Unattended Daily Brief delivery belongs to the bot scheduler.")
+    elif args.send_telegram:
         report = result.get("report", "")
 
         if not result.get("success"):

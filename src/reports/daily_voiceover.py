@@ -309,7 +309,8 @@ def build(record, report, research, *, schema=2):
 
         watchlist_outcome = verdict_copy(verdict)
     sector_outcome = evidence.get("sector_verdict", "")
-    if sector_outcome:
+    subscriber = review.get("subscriber_context")
+    if sector_outcome and not subscriber:
         quotes = review["sector_checkpoint"]["quotes"]
         if quotes:
             from src.intelligence import sector_followup
@@ -325,7 +326,9 @@ def build(record, report, research, *, schema=2):
         if earnings_watch.has_answer(watch):
             comparison = earnings_watch.comparison_text(watch)
             follow_up = "\n\n".join(row for row in (comparison, watchlist_outcome, evidence.get("intraday_answer"), sector_outcome) if row)
-            if (groups.get(earnings_watch.COMPARISON_HEADER) != follow_up
+            comparison_present = (comparison in groups.get("Companies in Focus", "").split("\n\n") if subscriber else
+                                  groups.get(earnings_watch.COMPARISON_HEADER) == follow_up)
+            if (not comparison_present
                     or watch.get("guidance") and report.count(earnings_watch.guidance_source_line(watch)) != 1):
                 raise ValueError("Earnings follow-up narration needs its original guidance and written comparison")
         if guide := watch.get("guidance"):
@@ -574,7 +577,17 @@ def build(record, report, research, *, schema=2):
     if not any("defense" in story_topics(story) for story in selected):
         if evidence.get("defense_context_version"):
             if not any(global_policy(story) for story in selected):
-                add("Defense Watch", quiet_copy(evidence["defense_price"]))
+                if subscriber:
+                    from src.intelligence.subscriber_brief import quiet_defense
+                    ids = []
+                    if evidence.get("subscriber_disclosure"):
+                        item = subscriber["disclosure"]["story"]
+                        sources["earlier_defense"] = [{"url": item["url"], "publisher": item["source"],
+                            "published_at": item["published"], "verified_at": item["source_checked_at"]}]
+                        ids.append("earlier_defense")
+                    add("Defense Watch", quiet_defense(evidence), source_ids=ids)
+                else:
+                    add("Defense Watch", quiet_copy(evidence["defense_price"]))
         elif evidence.get("business_version", 0) >= 7:
             from src.intelligence.market_brief import defense_segment
             add("Defense Watch", defense_segment([], business_version=7))
@@ -622,13 +635,13 @@ def build(record, report, research, *, schema=2):
     watch_rows = [row for row in review["insights"] if row["section"] == "watch"]
     if evidence.get("business_version", 0) >= 3:
         narration, bullets, watch_sources = named_watch_scene(watch_rows, sources, evidence.get("earnings_context", []))
-        if sector_outcome:
+        if sector_outcome and not subscriber:
             narration = sector_outcome + " " + narration
             if "sector_closes" in sources:
                 watch_sources.append("sector_closes")
-        if answer := evidence.get("intraday_answer"):
+        if not subscriber and (answer := evidence.get("intraday_answer")):
             narration = answer + " " + narration
-        if watchlist_outcome:
+        if watchlist_outcome and not subscriber:
             narration = watchlist_outcome + " " + narration
         if futures and any(early_futures.SOURCE_SECTION in row["sources"] for row in watch_rows):
             watch_sources.append(early_futures.SOURCE_ID)

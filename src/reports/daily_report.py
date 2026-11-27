@@ -2160,6 +2160,6 @@ def build_daily_report() -> str:
     pce = pce_followup.prepare(calendar_source_cache.utc_now(), news_live_sources.fetch_url)
     return build_daily_news_brief(build_research_report(), pce_watch=pce,
                                   futures_provider=early_futures.capture if DAILY_REPORT_LIVE_QUOTES else None,
-                                  require_company_facts=True, takeaway_version=VERSION,
+                                  require_company_facts=True, takeaway_version=VERSION, subscriber_edition=True,
                                   watchlist_checkpoint_version=CHECKPOINT_VERSION, market_reporting_version=1, resolve_watches=True, defense_context_version=2,
                                   sector_price_reader=news_live_sources.fetch_url if DAILY_REPORT_LIVE_QUOTES else None)

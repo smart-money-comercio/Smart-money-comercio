@@ -33,7 +33,14 @@ def review_daily_brief(evidence: dict, *, presentation: str = "full") -> list[di
         from src.intelligence.defense_coverage import global_policy, quiet_copy
         if not any(global_policy(story) for story in stories):
             quote = evidence["defense_price"]
-            add("defense_watch", "global", quiet_copy(quote), ["Market Snapshot"] if quote else ["Research coverage policy"])
+            copy = quiet_copy(quote)
+            sources = ["Market Snapshot"] if quote else ["Research coverage policy"]
+            if "subscriber_movers" in evidence:
+                from src.intelligence.subscriber_brief import quiet_defense
+                copy = quiet_defense(evidence)
+                if evidence.get("subscriber_disclosure"):
+                    sources = ["Earlier defense disclosure"]
+            add("defense_watch", "global", copy, sources)
     else:
         add("defense_watch", "global", defense_segment(stories, broadcast=broadcast, business_version=evidence.get("business_version", 0)),
             ["Verified story decisions"] if stories else ["Research coverage policy"])

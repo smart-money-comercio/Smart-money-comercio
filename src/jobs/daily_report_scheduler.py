@@ -119,11 +119,11 @@ def get_daily_report_time(setting="TELEGRAM_DAILY_REPORT_TIME", default=DEFAULT_
 
 
 def report_times() -> list[time]:
-    morning = get_daily_report_time()
+    morning = time(8, 30, tzinfo=MARKET_TIMEZONE)
     evening = get_daily_report_time("TELEGRAM_DAILY_REPORT_EVENING_TIME", DEFAULT_EVENING_TIME)
-    if evening == morning:
-        LOG.warning("Both daily report times are identical. Scheduling one run at %s.", morning.strftime("%H:%M"))
-        return [morning]
+    if evening.hour < 12:
+        LOG.warning("Ignoring a second morning Daily Brief slot; using the evening default.")
+        evening = time(17, 30, tzinfo=MARKET_TIMEZONE)
     return [morning, evening]
 
 
@@ -299,6 +299,8 @@ def schedule_daily_report(app) -> None:
                         "coalesce": True, "misfire_grace_time": 300},
         )
 
+    schedule_label = (", ".join(slot.strftime("%H:%M") for slot in times) + f" {times[0].tzinfo}"
+                      if times[0].tzinfo == times[-1].tzinfo else
+                      ", ".join(f"{slot:%H:%M} {slot.tzinfo}" for slot in times))
     print("Daily report automation scheduled.\n"
-          + "Times: " + ", ".join(slot.strftime("%H:%M") for slot in times)
-          + f" {times[0].tzinfo} every day\nRecipient count: {len(chat_ids)}", flush=True)
+          + f"Times: {schedule_label} every day\nRecipient count: {len(chat_ids)}", flush=True)

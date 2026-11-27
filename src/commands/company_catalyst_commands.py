@@ -26,4 +26,13 @@ async def fullreport_command(update, context) -> None:
         return
     await asyncio.to_thread(ensure_morning_brief_cache_is_fresh)
     text = await asyncio.to_thread(build_research_report)
+    from src.intelligence import news_editor_store, subscriber_brief
+    from sqlite3 import Error as StorageError
+    try:
+        from datetime import datetime, timezone
+        confirmed = await asyncio.to_thread(news_editor_store.confirmed_watchlist_ids, datetime.now(timezone.utc))
+        editions = await asyncio.to_thread(news_editor_store.read_editions, news_editor_store.MAX_EDITIONS)
+    except (OSError, StorageError):
+        editions, confirmed = [], []
+    text = subscriber_brief.full_report(text, editions, confirmed)
     await reply_long_message(update, text, title="Detailed Research Report", parse_mode=None)

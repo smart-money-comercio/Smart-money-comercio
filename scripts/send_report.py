@@ -2,7 +2,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
 
 import requests
 from dotenv import load_dotenv
@@ -14,6 +13,7 @@ sys.path.append(str(ROOT_DIR))
 load_dotenv(ROOT_DIR / ".env")
 
 from src.reports.daily_report import build_daily_report
+from src.reports.morning_brief_intro import ensure_morning_brief_cache_is_fresh
 
 
 TELEGRAM_MAX_MESSAGE_LENGTH = 3900
@@ -122,6 +122,10 @@ def send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
 
 
 def main() -> None:
+    if not sys.stdin.isatty():
+        print("Unattended Daily Brief delivery belongs to the bot scheduler.")
+        return
+
     bot_token = get_env_value("TELEGRAM_BOT_TOKEN")
     chat_ids = get_chat_ids()
 

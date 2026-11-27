@@ -808,7 +808,12 @@ def review_and_record(plan: dict, report: str, paragraphs: dict[str, str], resea
                 raise ValueError("Earnings watch lost its original source link")
             if earnings_watch.has_answer(watch):
                 comparison_text = earnings_watch.comparison_text(watch)
-                if (report.count(earnings_watch.COMPARISON_HEADER + "\n" + comparison_text) != 1
+                if analyst_review.get("subscriber_context"):
+                    from src.reports.daily_voiceover import sections
+                    bound = comparison_text in sections(report).get("Companies in Focus", "").split("\n\n")
+                else:
+                    bound = report.count(earnings_watch.COMPARISON_HEADER + "\n" + comparison_text) == 1
+                if (not bound
                         or watch.get("guidance") and report.count(earnings_watch.guidance_source_line(watch)) != 1):
                     raise ValueError("Earnings comparison lost its original guidance or written section")
     for story in selected:
@@ -1100,6 +1105,8 @@ def build_editor_status(symbol: str = "", history: bool = False) -> str:
                                  else "original disclosure" if lead["story_ids"] else "upcoming publisher release" if lead["calendar"]
                                  else "aligned premarket futures" if analysis["evidence"].get("premarket_futures") else "dated market indicators" if lead["market"]
                                  else "limited market coverage")
+                        if analysis.get("subscriber_context"):
+                            lines.append("Subscriber brief: named movers when verified; prior-brief comparisons in /fullreport")
                         lines.append("Takeaway basis: " + basis)
                         if analysis["evidence"]["takeaway_version"] == 5:
                             lines.append("Takeaway format: 5")

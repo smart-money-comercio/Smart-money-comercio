@@ -354,18 +354,18 @@ class ReaderChecks(IsolatedChecks):
         friday_moves = dict.fromkeys(names, -1) | {"SONY": 1}
         report = self.close_report(friday + timedelta(days=1), "2026-11-20", "2026-11-19", friday_moves)
         with patch.object(watchlist_breadth, "CHECKPOINT_VERSION", 1):
-            baseline = self.record(self.render_current(report))
+            baseline = self.record(self.render_legacy(report))
         self.assertIn("19 lower", baseline["report_text"])
         self.assertEqual(store.confirmed_watchlist_ids(monday), [])
         monday_moves = dict.fromkeys(names, 1) | dict.fromkeys(names[:8], -1) | {"SONY": -1}
         # A rotation in the premarket rebuild still quotes the Friday session.
         premarket = self.close_report(monday.replace(hour=13), "2026-11-20", "2026-11-19",
                                       {"NVDA": -1, "TSM": -1, "XYZ": 2})
-        self.render_current(premarket)
+        self.render_legacy(premarket)
         live = self.close_report(monday.replace(hour=17), "2026-11-23", "2026-11-20", monday_moves, timing="regular_session")
-        self.assertNotIn("fell again", self.render_current(live))
+        self.assertNotIn("fell again", self.render_legacy(live))
         closing = self.close_report(monday, "2026-11-23", "2026-11-20", monday_moves)
-        brief = self.render_current(closing)
+        brief = self.render_legacy(closing)
         record = self.record(brief)
         watch = section(brief, "What We're Watching")
         self.assertIn("selling narrowed from 19 decliners on Friday to 9 on Monday", watch)
@@ -382,22 +382,22 @@ class ReaderChecks(IsolatedChecks):
         with self.assertRaisesRegex(ValueError, "evidence does not match"):
             analysis.validate_review(altered, closing, brief, editor.selected_stories(record))
         next_morning = self.close_report(monday + timedelta(hours=15), "2026-11-23", "2026-11-20", monday_moves)
-        self.assertIn("8 fell again", self.render_current(next_morning))
+        self.assertIn("8 fell again", self.render_legacy(next_morning))
 
     def test_changing_watchlist_scopes_partial_and_unchanged_counts(self):
         friday = datetime(2026, 10, 23, 21, tzinfo=timezone.utc)
         monday = friday + timedelta(days=3)
         friday_moves = {"NVDA": -1, "MSFT": -1, "META": -1, "CIBR": 1, "AMD": 0}
-        self.render_current(self.close_report(friday, "2026-10-23", "2026-10-22", friday_moves))
+        self.render_legacy(self.close_report(friday, "2026-10-23", "2026-10-22", friday_moves))
         # META drops out. Both previous decliners stop falling; two different names fall.
         moves = {"NVDA": 0, "MSFT": 1, "CIBR": -1, "AMD": -1, "NEW": -1}
-        brief = self.render_current(self.close_report(monday, "2026-10-26", "2026-10-23", moves))
+        brief = self.render_legacy(self.close_report(monday, "2026-10-26", "2026-10-23", moves))
         self.assertIn("covered 4 of Friday's 5 watchlist names", brief)
         self.assertIn("number of decliners stayed at 2 from Friday to Monday", brief)
         self.assertIn("None of the names that fell on Friday fell again", brief)
         self.assertIn("0 of 2 prior decliners | 4/5 prior names matched", editor.build_editor_status())
         moves["NVDA"] = -1
-        update = self.render_current(self.close_report(monday + timedelta(minutes=2), "2026-10-26", "2026-10-23", moves))
+        update = self.render_legacy(self.close_report(monday + timedelta(minutes=2), "2026-10-26", "2026-10-23", moves))
         self.assertIn("selling spread from 2 decliners on Friday to 3 on Monday", update)
         self.assertIn("1 fell again", update)
 
@@ -407,7 +407,14 @@ class ReaderChecks(IsolatedChecks):
         symbols = {"NVDA": -1, "MSFT": -1, "GOOGL": -1, "CIBR": -1}
         self.render(report=self.close_report(friday, "2026-10-23", "2026-10-22", symbols))
         report = self.close_report(monday, "2026-10-26", "2026-10-23", symbols)
-        return monday, symbols, self.render_current(report)
+        return monday, symbols, self.render_legacy(report)
+
+    def render_legacy(self, report):
+        original = news.build_daily_news_brief
+        def earlier_layout(*args, **kwargs):
+            return original(*args, **{**kwargs, "subscriber_edition": False})
+        with patch.object(news, "build_daily_news_brief", side_effect=earlier_layout):
+            return self.render_current(report)
 
     def render_current(self, report):
         with patch.object(editor, "cache_candidates", return_value=([], [])), \
@@ -429,12 +436,12 @@ class ReaderChecks(IsolatedChecks):
         self.assertIn("2 or fewer", brief)
         research = self.close_report(tuesday, "2026-10-27", "2026-10-26",
                                      {"NVDA": -2, "MSFT": 2, "GOOGL": -1, "CIBR": 0, "AMD": -2})
-        text = self.render_current(research)
+        text = self.render_legacy(research)
         self.assertNotIn("What Changed Since Our Last Brief", text)
         self.assertTrue(self.deliver(brief, monday + timedelta(seconds=1)))
         self.assertTrue(self.deliver(brief, monday + timedelta(seconds=2)))
         self.assertEqual(store.confirmed_watchlist_ids(tuesday), [self.record(brief)["id"]])
-        text = self.render_current(research)
+        text = self.render_legacy(research)
         body = section(text, "What Changed Since Our Last Brief")
         self.assertEqual(body, "At the October 27 close, 2 of the same 4 watchlist names fell, down from 4. "
                                "That met our target of 2 or fewer decliners.")
@@ -453,15 +460,15 @@ class ReaderChecks(IsolatedChecks):
         self.assertTrue(self.deliver(brief, monday + timedelta(seconds=1)))
         partial = self.close_report(tuesday, "2026-10-27", "2026-10-26",
                                     {**{key: -1 for key in symbols if key != "CIBR"}, "AMD": 1})
-        text = self.render_current(partial)
+        text = self.render_legacy(partial)
         self.assertIn("Comparable quotes covered 3 of the 4 names", section(text, "What Changed Since Our Last Brief"))
         self.assertIn("Watchlist checkpoint: LIMITED", editor.build_editor_status())
         full = self.close_report(tuesday + timedelta(minutes=5), "2026-10-27", "2026-10-26", {**symbols, "MSFT": 1})
-        self.assertIn("That missed our target of 2 or fewer decliners", self.render_current(full))
+        self.assertIn("That missed our target of 2 or fewer decliners", self.render_legacy(full))
         intraday = self.close_report(tuesday.replace(hour=18), "2026-10-27", "2026-10-26", symbols, timing="regular_session")
         skipped = self.close_report(tuesday + timedelta(days=1), "2026-10-28", "2026-10-27", symbols)
         for report in (intraday, skipped):
-            self.assertNotIn("What Changed Since Our Last Brief", self.render_current(report))
+            self.assertNotIn("What Changed Since Our Last Brief", self.render_legacy(report))
 
     def test_revision_42_delivered_target_survives_new_comparison_wording(self):
         with patch.object(watchlist_breadth, "CHECKPOINT_VERSION", 1):
@@ -469,10 +476,10 @@ class ReaderChecks(IsolatedChecks):
         self.assertTrue(self.deliver(brief, monday + timedelta(seconds=1)))
         # A later unsent rebuild rotates one of the four names.
         rotated = {key: -1 for key in symbols if key != "CIBR"} | {"META": -1}
-        self.render_current(self.close_report(monday + timedelta(minutes=5), "2026-10-26", "2026-10-23", rotated))
+        self.render_legacy(self.close_report(monday + timedelta(minutes=5), "2026-10-26", "2026-10-23", rotated))
         tuesday = monday + timedelta(days=1)
         report = self.close_report(tuesday, "2026-10-27", "2026-10-26", symbols | {"CIBR": 1})
-        text = self.render_current(report)
+        text = self.render_legacy(report)
         record = self.record(text)
         self.assertEqual(record["analyst_review"]["watchlist_baseline"]["edition_id"], self.record(brief)["id"])
         self.assertIn("selling narrowed from 4 decliners on Monday to 3 on Tuesday", text)
@@ -509,7 +516,7 @@ class ReaderChecks(IsolatedChecks):
         def research(at, timing):
             return self.close_report(at, "2026-11-23", "2026-11-20", moves, timing=timing).replace(
                 "S&P -0.52%, Nasdaq -0.21%, Russell -0.29%", "S&P +4.73%, Nasdaq +6.51%, Russell +3.10%")
-        first = self.render_current(research(midday, "regular_session"))
+        first = self.render_legacy(research(midday, "regular_session"))
         self.assertIn("Watch whether the share of advancers holds by the close", first)
         prior_id = self.record(first)["id"]
         close = research(monday, "completed_session")
@@ -523,7 +530,7 @@ class ReaderChecks(IsolatedChecks):
             {"status": "available", "symbol": "^IXIC", "proof": proof}]}}
         with patch.object(follow.research_context, "load_market_payload", return_value={"market_moves": charts}), \
                 patch.object(follow.weekend_store, "latest", return_value=weekend):
-            brief = self.render_current(close)
+            brief = self.render_legacy(close)
         record = self.record(brief)
         intro = next(row for row in brief.splitlines() if row.startswith("The takeaway:"))
         self.assertIn("Monday's rebound erased Friday's losses for both", intro)
@@ -563,6 +570,70 @@ class ReaderChecks(IsolatedChecks):
                 follow.breadth_answer(proof, current, now + timedelta(days=1))
             with self.assertRaises(ValueError):
                 follow.breadth_answer({**proof, "question": "Another question"}, current, now)
+
+    def test_subscriber_movers_cover_both_sides_and_keep_last_close_dated(self):
+        from src.intelligence import subscriber_brief as sub
+        at = datetime(2026, 11, 25, 22, 30, tzinfo=timezone.utc)
+        prices = {"MSFT": 2.1, "AMD": -3.4, "NVDA": -1.2, "TSM": .8}
+        research = self.close_report(at, "2026-11-25", "2026-11-24", prices)
+        text = self.render_current(research)
+        record = self.record(text)
+        watch = section(text, "What We're Watching")
+        self.assertIn("November 25, at the close", watch)
+        self.assertIn("Higher — Microsoft (MSFT) +2.10%", watch)
+        self.assertIn("Lower — Advanced Micro Devices (AMD) -3.40%", watch)
+        self.assertNotIn("our watchlist", watch)
+        self.assertNotIn("What Changed Since Our Last Brief", text)
+        self.assertIn("Microsoft", daily_voiceover.checked(record, at)["script"])
+        holiday = at + timedelta(hours=20)
+        unavailable = self.research(now=holiday, replacements={"Market Snapshot": "Market Session: Closed — no usable session."})
+        follow = self.render_current(unavailable)
+        self.assertIn("November 25, at the close", section(follow, "What We're Watching"))
+        self.assertNotIn("November 26, at the close", follow)
+        self.assertIn(section(follow, "Global and Defense Watch"), sub.RESEARCH_QUESTIONS)
+        self.assertNotIn("No fresh global or defense", follow)
+        ctx = record["analyst_review"]["event_context"]
+        self.assertFalse(sub.mover_copy(research, ctx, at + timedelta(days=5), archived=True))
+        gainers = self.close_report(at, "2026-11-25", "2026-11-24", {"MSFT": 1.2,"NVDA": 2.1})
+        self.assertNotIn("Lower —", sub.mover_copy(gainers, {"events":[]}, at))
+        large = self.close_report(at, "2026-11-25", "2026-11-24", {"MSFT": -10.0, "NVDA": 1.0})
+        self.assertNotIn("MSFT", sub.mover_copy(large, {"events":[]}, at))
+
+    def test_full_report_owns_comparison_using_confirmed_prior_close(self):
+        from src.intelligence import subscriber_brief as sub
+        first_at = datetime(2026, 11, 24, 22, 30, tzinfo=timezone.utc)
+        first = self.render_current(self.close_report(first_at, "2026-11-24", "2026-11-23", {"AMD": -1, "MSFT": -2}))
+        first_record = self.record(first)
+        next_at = first_at + timedelta(days=1)
+        research = self.close_report(next_at, "2026-11-25", "2026-11-24", {"AMD": -1, "MSFT": 1})
+        second = self.render_current(research)
+        second_record = self.record(second)
+        self.assertNotIn("What Changed Since Our Last Brief", second)
+        self.assertNotIn("What Changed Since Our Last Brief", sub.full_report(research, [first_record]))
+        full = sub.full_report(research, [second_record, first_record], [first_record["id"]])
+        self.assertIn("What Changed Since Our Last Brief", full)
+        self.assertIn("2 fell on 2026-11-24 and 1 fell on 2026-11-25", full)
+
+    def test_quiet_defense_uses_dated_primary_source_and_validates_voice_link(self):
+        from scripts.check_weekend_outlook import TelegramEditionChecks, telegram_edition, NOW as week
+        from src.intelligence import weekend_store
+        _, dividend = TelegramEditionChecks().earnings_and_dividend()
+        record = telegram_edition(week, raw=[dividend])
+        at = week + timedelta(days=2)
+        with patch.object(weekend_store, "latest", return_value=record):
+            text = self.render_current(self.research(now=at))
+        defense = section(text, "Global and Defense Watch")
+        self.assertIn("Earlier disclosure · November 6", defense)
+        self.assertIn("Northrop Grumman", defense)
+        voice = daily_voiceover.checked(self.record(text), at)
+        self.assertIn(dividend["url"], text)
+        self.assertEqual(voice["sources"]["earlier_defense"][0]["url"], dividend["url"])
+        expired = at + timedelta(days=9)
+        with patch.object(weekend_store, "latest", return_value=record):
+            stale = self.render_current(self.research(now=expired))
+        self.assertNotIn(dividend["url"], stale)
+        from src.intelligence.subscriber_brief import RESEARCH_QUESTIONS
+        self.assertIn(section(stale, "Global and Defense Watch"), RESEARCH_QUESTIONS)
 
     def test_tuesday_giveback_reaches_the_brief_with_a_dated_release(self):
         from src.intelligence import session_followup as follow, calendar_sources as publishers

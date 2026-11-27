@@ -653,7 +653,7 @@ class EarlyBriefChecks(IsolatedChecks):
         self.assertNotIn("watchlist", intro.lower())
         self.assertIn("Friday, November 13", market)
         self.assertIn("the S&P 500 fell 0.52 percent", market)
-        self.assertIn("At the open — Check how many of the stocks and funds we track open lower.", market)
+        self.assertIn("At the open — Compare the Nasdaq-100 fund (QQQ)", market)
         self.assertIn("Premarket futures source (Yahoo Finance, may be delayed)", market)
         self.assertTrue(validate_news_brief(text)["passes"])
         self.assertIn("Premarket futures: PASS | 5:50 AM EST | prior cash close 2026-11-13", news_editor.build_editor_status())
@@ -705,7 +705,7 @@ class EarlyBriefChecks(IsolatedChecks):
                 pair["quotes"][0]["change"], pair["quotes"][1]["change"] = first, second
                 self.assertEqual(daily_takeaway._futures_lead(pair, 3), lead + "Verified futures pair.")
 
-    def test_after_hours_selloff_keeps_breadth_in_watching_and_the_catalyst_in_the_takeaway(self):
+    def test_after_hours_selloff_keeps_named_benchmark_check_and_catalyst_in_takeaway(self):
         from src.intelligence import early_futures, news_editor, news_editor_store
         from src.reports import daily_voiceover
 
@@ -725,7 +725,7 @@ class EarlyBriefChecks(IsolatedChecks):
         self.assertIn("The Nasdaq Composite fell 2.49 percent, and the Russell 2000 lost 1.70 percent.", intro)
         self.assertIn("Nvidia's Tuesday earnings are the next test", intro)
         self.assertNotIn("watchlist", intro.lower())
-        self.assertIn("Of the 20 quoted stocks and funds on our watchlist", report.split("What We're Watching", maxsplit=1)[1])
+        self.assertIn("Compare the S&P 500 fund (SPY)", report.split("What We're Watching", maxsplit=1)[1])
         record, = news_editor_store.read_editions(report=text)
         scene = daily_voiceover.checked(record, now)["segments"][0]
         self.assertNotIn("watchlist", scene["narration"].lower())

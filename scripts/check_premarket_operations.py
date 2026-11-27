@@ -215,9 +215,12 @@ class SchedulerChecks(Isolated,unittest.IsolatedAsyncioTestCase):
     async def test_preview_replies_without_recording_or_channel_delivery(self):
         update=SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()),effective_chat=SimpleNamespace(type="private"))
         context=SimpleNamespace(args=["preview"])
-        with patch.object(commands,"is_admin",return_value=True),patch.object(commands,"LAST_PREVIEW",0),patch.object(commands,"collect_snapshot",return_value=snapshot(PRESSURE,slot="preview")),patch.object(commands,"reply_long_message",new=AsyncMock()) as reply:
+        with patch.object(commands,"is_admin",return_value=True),patch.object(commands,"LAST_PREVIEW",None),patch.object(commands,"monotonic",return_value=0.0),patch.object(commands,"collect_snapshot",return_value=snapshot(PRESSURE,slot="preview")),patch.object(commands,"reply_long_message",new=AsyncMock()) as reply:
             await commands.premarket_command(update,context)
             reply.assert_awaited_once()
+            await commands.premarket_command(update,context)
+            reply.assert_awaited_once()
+            self.assertIn("cooldown",update.message.reply_text.await_args.args[0])
         self.assertFalse(self.path.exists())
 
     async def test_public_preview_and_nonadmin_toggle_are_denied(self):

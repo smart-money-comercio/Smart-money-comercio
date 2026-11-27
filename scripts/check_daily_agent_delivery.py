@@ -360,6 +360,37 @@ class ScheduleChecks(unittest.TestCase):
             scheduler.schedule_daily_report(app)
         return [call.kwargs for call in app.job_queue.run_daily.call_args_list]
 
+    def test_legacy_0815_timer_and_cli_leave_the_send_to_the_service(self):
+        from scripts import run_daily_agent as cli
+        legacy = self.registrations(TELEGRAM_DAILY_REPORT_TIME="08:15", TELEGRAM_DAILY_REPORT_EVENING_TIME="08:15")
+        self.assertEqual([row["time"].strftime("%H:%M") for row in legacy], ["08:30", "17:30"])
+        with patch.object(cli.sys, "argv", ["run_daily_agent.py", "--send-telegram"]), \
+                patch.object(cli.sys.stdin, "isatty", return_value=False), \
+                patch.object(cli, "run_daily_agent", return_value={"success":True, "report":"Morning brief"}), \
+                patch.object(cli, "format_daily_agent_result", return_value="PASS"), \
+                patch.object(cli, "send_to_telegram", new_callable=AsyncMock) as send:
+            self.assertEqual(cli.main(), 0)
+            send.assert_not_called()
+        wrapper = Path(__file__).resolve().parents[1] / "deployment/run_daily_agent_cron.sh"
+        self.assertNotIn("--send-telegram", wrapper.read_text(encoding="utf-8-sig"))
+
+    def test_legacy_send_report_only_publishes_for_an_interactive_operator(self):
+        from scripts import send_report
+
+        with patch.object(send_report.sys.stdin, "isatty", return_value=False) as terminal, \
+                patch.object(send_report, "get_env_value", return_value="offline"), \
+                patch.object(send_report, "get_chat_ids", return_value=["test"]), \
+                patch.object(send_report, "refresh_morning_brief_safely"), \
+                patch.object(send_report, "ensure_morning_brief_cache_is_fresh"), \
+                patch.object(send_report, "build_daily_report", return_value="Brief") as build, \
+                patch.object(send_report, "send_telegram_message") as send:
+            send_report.main()
+            build.assert_not_called()
+            send.assert_not_called()
+            terminal.return_value = True
+            send_report.main()
+            send.assert_called_once_with(bot_token="offline", chat_id="test", text="Brief")
+
     def test_both_times_run_every_day_in_the_market_zone(self):
         morning, evening = self.registrations()
         self.assertEqual([row["time"].strftime("%H:%M") for row in (morning, evening)], ["08:30", "17:30"])
@@ -394,10 +425,10 @@ class ScheduleChecks(unittest.TestCase):
         settings = {"TELEGRAM_DAILY_REPORT_TIME": "07:45", "TELEGRAM_DAILY_REPORT_EVENING_TIME": "18:15",
                     "TELEGRAM_DAILY_REPORT_TIMEZONE": "America/Chicago"}
         slots = self.registrations(**settings)
-        self.assertEqual([str(row["time"])[:5] for row in slots], ["07:45", "18:15"])
+        self.assertEqual([str(row["time"])[:5] for row in slots], ["08:30", "18:15"])
         self.assertEqual(str(slots[1]["time"].tzinfo), "America/Chicago")
         settings["TELEGRAM_DAILY_REPORT_EVENING_TIME"] = "07:45"
-        self.assertEqual(len(self.registrations(**settings)), 1)
+        self.assertEqual([x["time"].strftime("%H:%M") for x in self.registrations(**settings)], ["08:30", "17:30"])
         self.assertEqual(self.registrations(TELEGRAM_DAILY_REPORT_ENABLED="no"), [])
         self.assertEqual(self.registrations(TELEGRAM_DAILY_REPORT_CHAT_ID=""), [])
 
